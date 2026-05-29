@@ -22,6 +22,27 @@ export default function Login() {
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  function handlePasswordReset() {
+    setErrorMessage(
+      email.trim()
+        ? `Password reset instructions were prepared for ${email.trim().toLowerCase()}.`
+        : "Enter your email first so we know where to send reset instructions.",
+    );
+  }
+
+  function handleGoogleSignIn() {
+    signIn({
+      token: "demo-google-session",
+      user: {
+        email: "demo@flowher.app",
+        firstName: "Flow",
+        isProfileComplete: true,
+        lastName: "User",
+      },
+    });
+    router.replace("/(app)/(dashboard)/home");
+  }
+
   async function handleLogin() {
     setErrorMessage("");
 
@@ -53,7 +74,7 @@ export default function Login() {
           ? { ...user, isProfileComplete }
           : { email: email.trim().toLowerCase(), isProfileComplete },
       });
-      router.replace("./home");
+      router.replace("/(app)/(dashboard)/home");
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "Unable to login right now.",
@@ -165,10 +186,13 @@ export default function Login() {
               />
             </View>
 
-            <TouchableOpacity className="mb-6 self-end">
+            <TouchableOpacity
+              className="mb-6 self-end"
+              onPress={handlePasswordReset}
+            >
               <Text
                 className="text-sm font-medium underline"
-                style={{ color: colors.foreground }}
+                style={{ color: colors.primary }}
               >
                 Forgot Password?
               </Text>
@@ -180,7 +204,7 @@ export default function Login() {
               onPress={handleLogin}
               className="rounded-xl py-4"
               style={{
-                backgroundColor: colors.button,
+                backgroundColor: colors.primary,
                 opacity: isSubmitting ? 0.65 : 1,
               }}
             >
@@ -220,6 +244,7 @@ export default function Login() {
 
             <TouchableOpacity
               className="flex-row items-center justify-center rounded-xl border py-4"
+              onPress={handleGoogleSignIn}
               style={{
                 backgroundColor: colors.surface,
                 borderColor: colors.border,
@@ -243,11 +268,11 @@ export default function Login() {
           <View className="mt-8 flex-row justify-center">
             <Text style={{ color: colors.foreground }}>No account yet?</Text>
 
-            <Link href="./signup" asChild>
+            <Link href="/(tabs)/signup" asChild>
               <TouchableOpacity>
                 <Text
                   className="ml-2 font-bold underline"
-                  style={{ color: colors.foreground }}
+                  style={{ color: colors.primary }}
                 >
                   Sign Up
                 </Text>

@@ -1,7 +1,6 @@
-import { Ionicons } from "@expo/vector-icons";
 import { Link, useRouter } from "expo-router";
 import React, { useEffect } from "react";
-import { StatusBar, Text, TouchableOpacity, View } from "react-native";
+import { Image, StatusBar, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../components/auth-context";
 import { ThemeToggle, useTheme } from "../components/theme";
@@ -13,7 +12,7 @@ export default function Index() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      router.replace("./home");
+      router.replace("/(app)/(dashboard)/home");
     }
   }, [isAuthenticated, router]);
 
@@ -35,16 +34,19 @@ export default function Index() {
         <View className="flex-1 justify-center px-6">
           <View className="mb-12 items-center">
             <View
-              className="mb-5 h-20 w-20 items-center justify-center rounded-full border-2"
+              className="mb-5 h-20 w-20 items-center justify-center rounded-full border-2 overflow-hidden"
               style={{
                 backgroundColor: colors.surface,
                 borderColor: colors.border,
               }}
             >
-              <Ionicons
-                name="water-outline"
-                size={38}
-                color={colors.foreground}
+              <Image
+                source={require("../assets/images/logo.png")}
+                resizeMode="contain"
+                style={{
+                  width: 200,
+                  height: 200,
+                }}
               />
             </View>
 
@@ -52,22 +54,22 @@ export default function Index() {
               className="text-4xl font-bold"
               style={{ color: colors.foreground }}
             >
-              FlowHer
+              Nura
             </Text>
 
             <Text
               className="mt-3 text-center text-base leading-6"
               style={{ color: colors.foreground }}
             >
-              Simple care for your wellness journey
+              Feel the flow with Nura - Your ultimate productivity companion
             </Text>
           </View>
 
           <View className="gap-4">
-            <Link href="/login" asChild>
+            <Link href="/(tabs)/login" asChild>
               <TouchableOpacity
-                className="rounded-xl py-4"
-                style={{ backgroundColor: colors.button }}
+                className="rounded-3xl py-4 "
+                style={{ backgroundColor: colors.primary }}
               >
                 <Text
                   className="text-center text-lg font-bold"
@@ -78,9 +80,9 @@ export default function Index() {
               </TouchableOpacity>
             </Link>
 
-            <Link href="./signup" asChild>
+            <Link href="/(tabs)/signup" asChild>
               <TouchableOpacity
-                className="rounded-xl border py-4"
+                className="rounded-3xl border py-4"
                 style={{
                   backgroundColor: colors.surface,
                   borderColor: colors.border,

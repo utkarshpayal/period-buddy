@@ -2,17 +2,17 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect } from "react";
 import {
-  ScrollView,
-  StatusBar,
-  Text,
-  TouchableOpacity,
-  View,
+    ScrollView,
+    StatusBar,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../components/auth-context";
 import {
-  ProfileOnboarding,
-  type ProfileOnboardingValues,
+    ProfileOnboarding,
+    type ProfileOnboardingValues,
 } from "../../components/profile-onboarding";
 import { ThemeToggle, useTheme } from "../../components/theme";
 import { submitOnboarding } from "../../lib/auth";
@@ -42,9 +42,7 @@ export default function Home() {
     const response = await submitOnboarding(values, token);
     const updatedUser = response.data ?? response.user;
     const isProfileComplete =
-      response.isProfileComplete ??
-      updatedUser?.isProfileComplete ??
-      true;
+      response.isProfileComplete ?? updatedUser?.isProfileComplete ?? true;
 
     signIn({
       token,
@@ -157,7 +155,7 @@ export default function Home() {
               activeOpacity={0.85}
               className="mt-6 rounded-xl py-4"
               onPress={handleLogout}
-              style={{ backgroundColor: colors.button }}
+              style={{ backgroundColor: colors.primary }}
             >
               <Text
                 className="text-center text-lg font-bold"

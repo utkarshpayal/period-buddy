@@ -2,12 +2,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { Link, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
-  ScrollView,
-  StatusBar,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ScrollView,
+    StatusBar,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../components/auth-context";
@@ -68,7 +68,7 @@ export default function SignUp() {
         user: { ...signedInUser, isProfileComplete },
       });
 
-      router.replace("./home");
+      router.replace("/(app)/(dashboard)/home");
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -217,7 +217,7 @@ export default function SignUp() {
             onPress={handleSignup}
             className="rounded-xl py-4"
             style={{
-              backgroundColor: colors.button,
+              backgroundColor: colors.primary,
               opacity: isSubmitting ? 0.65 : 1,
             }}
           >
@@ -244,11 +244,11 @@ export default function SignUp() {
             Already have an account?
           </Text>
 
-          <Link href="/login" asChild>
+          <Link href="/(tabs)/login" asChild>
             <TouchableOpacity>
               <Text
                 className="ml-2 font-bold underline"
-                style={{ color: colors.foreground }}
+                style={{ color: colors.primary }}
               >
                 Login
               </Text>
