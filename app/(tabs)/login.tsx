@@ -95,13 +95,13 @@ export default function Login() {
         className="flex-1"
         style={{ backgroundColor: colors.background }}
       >
-        <View className="absolute right-6 top-4 z-10">
+        <View className="absolute right-6 top-8 z-10">
           <ThemeToggle />
         </View>
 
         <View className="flex-1 justify-center px-6">
           <View className="mb-10 items-center">
-            <View
+            {/* <View
               className="mb-5 h-20 w-20 items-center justify-center rounded-full border-2"
               style={{
                 backgroundColor: colors.surface,
@@ -113,7 +113,7 @@ export default function Login() {
                 size={38}
                 color={colors.foreground}
               />
-            </View>
+            </View> */}
 
             <Text
               className="text-4xl font-bold"
@@ -126,7 +126,7 @@ export default function Login() {
               className="mt-3 text-center text-base leading-6"
               style={{ color: colors.foreground }}
             >
-              Welcome back to FlowHer
+              Welcome back to The Nura
             </Text>
           </View>
 
@@ -163,7 +163,7 @@ export default function Login() {
             </View>
 
             <View
-              className="mb-4 flex-row items-center rounded-xl border px-4 py-4"
+              className="mb-4 flex-row items-center rounded-xl border px-4 py-2"
               style={{
                 backgroundColor: colors.surface,
                 borderColor: colors.border,
@@ -200,19 +200,16 @@ export default function Login() {
 
             <TouchableOpacity
               activeOpacity={0.85}
-              disabled={isSubmitting}
+                 disabled={isSubmitting}
               onPress={handleLogin}
-              className="rounded-xl py-4"
-              style={{
-                backgroundColor: colors.primary,
-                opacity: isSubmitting ? 0.65 : 1,
-              }}
+              className="rounded-2xl py-4 shadow-md items-center justify-center"
+              style={{ backgroundColor: colors.primary }}
             >
               <Text
-                className="text-center text-lg font-bold"
+                className="text-center text-base font-semibold tracking-wide"
                 style={{ color: colors.buttonText }}
               >
-                {isSubmitting ? "Logging in..." : "Login"}
+                {isSubmitting ? "Logging in..." : "Log In"}
               </Text>
             </TouchableOpacity>
 
@@ -243,7 +240,7 @@ export default function Login() {
             </View>
 
             <TouchableOpacity
-              className="flex-row items-center justify-center rounded-xl border py-4"
+              className="flex-row rounded-2xl py-4 shadow-md items-center border justify-center"
               onPress={handleGoogleSignIn}
               style={{
                 backgroundColor: colors.surface,

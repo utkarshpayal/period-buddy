@@ -1,5 +1,5 @@
 import { Link, useRouter } from "expo-router";
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { Image, StatusBar, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../components/auth-context";
@@ -9,10 +9,17 @@ export default function Index() {
   const router = useRouter();
   const { isAuthenticated } = useAuth();
   const { colors, isDark } = useTheme();
+  const hasNavigated = useRef(false);
 
   useEffect(() => {
-    if (isAuthenticated) {
-      router.replace("/(app)/(dashboard)/home");
+    if (isAuthenticated && !hasNavigated.current) {
+      hasNavigated.current = true;
+      const timer = setTimeout(() => {
+        router.replace("/(app)/(dashboard)/home");
+      }, 100);
+      return () => clearTimeout(timer);
+    } else if (!isAuthenticated) {
+      hasNavigated.current = false;
     }
   }, [isAuthenticated, router]);
 
@@ -27,7 +34,7 @@ export default function Index() {
         className="flex-1"
         style={{ backgroundColor: colors.background }}
       >
-        <View className="absolute right-6 top-4 z-10">
+        <View className="absolute right-6 top-8 z-10 ">
           <ThemeToggle />
         </View>
 
@@ -51,48 +58,52 @@ export default function Index() {
             </View>
 
             <Text
-              className="text-4xl font-bold"
+              className="text-4xl font-bold pb-4"
               style={{ color: colors.foreground }}
             >
-              Nura
+              The Nura
             </Text>
 
             <Text
-              className="mt-3 text-center text-base leading-6"
+              className="mt-3 text-center text-base leading-6 pb-12"
               style={{ color: colors.foreground }}
             >
               Feel the flow with Nura - Your ultimate productivity companion
             </Text>
           </View>
 
-          <View className="gap-4">
+          <View className="gap-4 w-full">
+            {/* Primary Action Button (Login) */}
             <Link href="/(tabs)/login" asChild>
               <TouchableOpacity
-                className="rounded-3xl py-4 "
+                activeOpacity={0.85}
+                className="rounded-2xl py-4 shadow-md items-center justify-center"
                 style={{ backgroundColor: colors.primary }}
               >
                 <Text
-                  className="text-center text-lg font-bold"
+                  className="text-center text-base font-semibold tracking-wide"
                   style={{ color: colors.buttonText }}
                 >
-                  Login
+                  Log In
                 </Text>
               </TouchableOpacity>
             </Link>
 
+            {/* Secondary Action Button (Sign Up) */}
             <Link href="/(tabs)/signup" asChild>
               <TouchableOpacity
-                className="rounded-3xl border py-4"
+                activeOpacity={0.75}
+                className="rounded-2xl border py-4 items-center justify-center"
                 style={{
                   backgroundColor: colors.surface,
                   borderColor: colors.border,
                 }}
               >
                 <Text
-                  className="text-center text-lg font-bold"
-                  style={{ color: colors.foreground }}
+                  className="text-center text-base font-semibold tracking-wide"
+                  style={{ color: colors.text }}
                 >
-                  Sign Up
+                  Create Account
                 </Text>
               </TouchableOpacity>
             </Link>

@@ -138,30 +138,44 @@ export function ThemeToggle() {
     <TouchableOpacity
       accessibilityLabel={`Switch to ${isDark ? "light" : "dark"} theme`}
       accessibilityRole="button"
-      activeOpacity={0.85}
-      className="flex-row items-center gap-2 rounded-full border px-3 py-2"
+      activeOpacity={0.9}
       onPress={toggleTheme}
+      className="flex-row items-center relative rounded-full p-1 border"
       style={{
-        backgroundColor: colors.button,
+        backgroundColor: colors.surface,
         borderColor: colors.border,
+        width: 76, // Perfectly sized capsule for two icons
+        height: 38,
       }}
     >
-      <Ionicons
-        name={isDark ? "sunny-outline" : "sunny"}
-        size={18}
-        color={colors.buttonText}
-      />
-
+      {/* Dynamic Background Indicator (Sliding Effect) */}
       <View
-        className="h-4 w-[1px]"
-        style={{ backgroundColor: colors.buttonText }}
+        className="absolute top-1 bottom-1 rounded-full"
+        style={{
+          backgroundColor: colors.primary, // UI design ke mutabik active selection background pink hoga
+          left: isDark ? 39 : 6, // Dark mode me right shift hoga, light mode me left
+          width: 28,
+          height: 28,
+        }}
       />
 
-      <Ionicons
-        name={isDark ? "moon" : "moon-outline"}
-        size={18}
-        color={colors.buttonText}
-      />
+      {/* Light Mode Icon Section */}
+      <View className="flex-1 items-center justify-center z-10">
+        <Ionicons
+          name="sunny"
+          size={16}
+          color={!isDark ? colors.buttonText : colors.mutedText}
+        />
+      </View>
+
+      {/* Dark Mode Icon Section */}
+      <View className="flex-1 items-center justify-center z-10">
+        <Ionicons
+          name="moon"
+          size={16}
+          color={isDark ? colors.buttonText : colors.mutedText}
+        />
+      </View>
     </TouchableOpacity>
   );
 }

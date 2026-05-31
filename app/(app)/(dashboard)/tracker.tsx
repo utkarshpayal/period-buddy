@@ -1,4 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useMemo, useState } from "react";
 import {
   ScrollView,
@@ -54,7 +54,6 @@ function getDateKey(date: Date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
-
   return `${year}-${month}-${day}`;
 }
 
@@ -71,7 +70,6 @@ function getCycleDay(date: Date, cycleStartDate: Date) {
     (startOfDay(date).getTime() - startOfDay(cycleStartDate).getTime()) /
       MS_PER_DAY,
   );
-
   return (((difference % CYCLE_LENGTH) + CYCLE_LENGTH) % CYCLE_LENGTH) + 1;
 }
 
@@ -87,6 +85,7 @@ export default function Tracker() {
   const [selectedDate, setSelectedDate] = useState<SelectedDate | null>(null);
   const [dayDetailsVisible, setDayDetailsVisible] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(() => new Date());
+
   const cycleStartDate = useMemo(
     () => addDays(new Date(), -(CURRENT_CYCLE_DAY - 1)),
     [],
@@ -103,26 +102,31 @@ export default function Tracker() {
   );
 
   const { dayEntries, dayNotes, earnTokens, saveDayEntry } = useAppState();
+
   const phaseStyles = useMemo(
     () => ({
       follicular: {
         color: "#fbbf24",
+        bg: isDark ? "#382914" : "#fef3c7",
         label: "Follicular",
       },
       luteal: {
         color: "#8b5cf6",
+        bg: isDark ? "#231942" : "#f3e8ff",
         label: "Luteal",
       },
       ovulation: {
         color: colors.primary,
+        bg: isDark ? "#3b1a2d" : "#fff0f6",
         label: "Ovulation",
       },
       period: {
         color: "#ef4444",
+        bg: isDark ? "#361e12" : "#fee2e2",
         label: "Period",
       },
     }),
-    [colors.primary],
+    [colors.primary, isDark],
   );
 
   const days = useMemo<CalendarCell[]>(() => {
@@ -130,10 +134,12 @@ export default function Tracker() {
     const month = currentMonth.getMonth();
     const firstWeekday = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
+
     const blanks: CalendarCell[] = Array.from(
       { length: firstWeekday },
       (_, index) => ({ key: `blank-${index}`, kind: "blank" }),
     );
+
     const monthDays: CalendarCell[] = Array.from(
       { length: daysInMonth },
       (_, index) => {
@@ -170,16 +176,15 @@ export default function Tracker() {
       dateKey: getDateKey(date),
       dateLabel: getDateLabel(date),
       day: date.getDate(),
-      phaseLabel: `${phaseStyles[phase].label} - Cycle day ${cycleDay}`,
+      phaseLabel: `${phaseStyles[phase].label} Phase • Day ${cycleDay}`,
     });
-    setDayDetailsVisible(true);
   }
 
   function openToday() {
     const today = new Date();
-
     setCurrentMonth(new Date(today.getFullYear(), today.getMonth(), 1));
     openDate(today);
+    setDayDetailsVisible(true);
   }
 
   return (
@@ -193,79 +198,138 @@ export default function Tracker() {
         className="flex-1"
         style={{ backgroundColor: colors.background }}
       >
-        <ScrollView contentContainerClassName="pb-20">
-          <View className="px-6 pt-6">
-            <Text
-              className="text-3xl font-bold"
-              style={{ color: colors.foreground }}
-            >
-              Period Tracker
-            </Text>
-            <Text className="mt-2 text-sm" style={{ color: colors.mutedText }}>
-              Track your cycle and symptoms — tap a day for details
-            </Text>
-          </View>
-
-          <View className="mx-6 mt-6">
-            <View className="flex-row items-center justify-between">
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 140 }}
+        >
+          {/* Header Bar */}
+          <View className="px-6 pt-6 flex-row justify-between items-start">
+            <View>
               <Text
-                className="text-lg font-bold"
+                className="text-3xl font-extrabold tracking-tight"
                 style={{ color: colors.foreground }}
               >
-                {monthLabel}
+                Period Tracker
               </Text>
-              <View className="flex-row gap-2">
-                <TouchableOpacity
-                  className="rounded-lg p-2"
-                  onPress={() => changeMonth(-1)}
-                  style={{ backgroundColor: colors.surface }}
-                >
-                  <Ionicons
-                    name="chevron-back"
-                    size={20}
-                    color={colors.primary}
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  className="rounded-lg p-2"
-                  onPress={() => changeMonth(1)}
-                  style={{ backgroundColor: colors.surface }}
-                >
-                  <Ionicons
-                    name="chevron-forward"
-                    size={20}
-                    color={colors.primary}
-                  />
-                </TouchableOpacity>
-              </View>
+              <Text
+                className="mt-1 text-xs font-semibold"
+                style={{ color: colors.mutedText }}
+              >
+                Track your cycle, flow & dynamic symptoms
+              </Text>
             </View>
-
-            <View
-              className="mt-4 rounded-2xl border-2 p-4"
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={openToday}
+              className="p-2.5 rounded-full border shadow-2xs"
               style={{
                 backgroundColor: colors.surface,
                 borderColor: colors.border,
               }}
             >
-              <View className="flex-row justify-between">
+              <MaterialCommunityIcons
+                name="calendar-heart"
+                size={20}
+                color={colors.primary}
+              />
+            </TouchableOpacity>
+          </View>
+
+          {/* Elegant Horizontal Legend Row */}
+          <View className="px-6 mt-5 flex-row flex-wrap gap-2">
+            {(Object.keys(phaseStyles) as CyclePhase[]).map((key) => (
+              <View
+                key={key}
+                className="flex-row items-center px-3 py-1.5 rounded-full border"
+                style={{
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                }}
+              >
+                <View
+                  className="w-2.5 h-2.5 rounded-full mr-2"
+                  style={{ backgroundColor: phaseStyles[key].color }}
+                />
+                <Text
+                  className="text-[10px] font-bold tracking-wide"
+                  style={{ color: colors.foreground }}
+                >
+                  {phaseStyles[key].label}
+                </Text>
+              </View>
+            ))}
+          </View>
+
+          {/* Calendar Body Area */}
+          <View className="mx-6 mt-6">
+            <View className="flex-row items-center justify-between px-1">
+              <Text
+                className="text-lg font-extrabold tracking-tight"
+                style={{ color: colors.foreground }}
+              >
+                {monthLabel}
+              </Text>
+              <View className="flex-row gap-1.5">
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  className="rounded-full p-2 border"
+                  onPress={() => changeMonth(-1)}
+                  style={{
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  }}
+                >
+                  <Feather
+                    name="chevron-left"
+                    size={16}
+                    color={colors.foreground}
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  className="rounded-full p-2 border"
+                  onPress={() => changeMonth(1)}
+                  style={{
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  }}
+                >
+                  <Feather
+                    name="chevron-right"
+                    size={16}
+                    color={colors.foreground}
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Clean Rounded Calendar Matrix */}
+            <View
+              className="mt-4 rounded-3xl border p-5 shadow-2xs"
+              style={{
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+              }}
+            >
+              <View className="flex-row justify-between mb-4">
                 {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
                   <Text
                     key={d}
-                    className="text-center text-xs font-bold"
+                    className="text-center text-xs font-bold uppercase tracking-widest"
                     style={{ color: colors.mutedText, width: `${100 / 7}%` }}
                   >
-                    {d}
+                    {d.substring(0, 1)}
                   </Text>
                 ))}
               </View>
 
-              <View className="mt-4 flex-row flex-wrap">
+              <View className="flex-row flex-wrap row-gap-3">
                 {days.map((cell) => {
                   if (cell.kind === "blank") {
                     return (
                       <View
                         key={cell.key}
-                        style={{ padding: 3, width: `${100 / 7}%` }}
+                        style={{ width: `${100 / 7}%`, aspectRatio: 1 }}
                       />
                     );
                   }
@@ -286,76 +350,58 @@ export default function Tracker() {
                   return (
                     <TouchableOpacity
                       key={cell.key}
-                      accessibilityLabel={`${getDateLabel(cell.date)}, ${phaseStyle.label}, cycle day ${cell.cycleDay}`}
-                      className="mb-2 items-center justify-center"
-                      activeOpacity={0.85}
+                      className="items-center justify-center p-1 relative"
+                      activeOpacity={0.8}
                       onPress={() => openDate(cell.date)}
-                      style={{ padding: 3, width: `${100 / 7}%` }}
+                      style={{ width: `${100 / 7}%`, aspectRatio: 1 }}
                     >
                       <View
+                        className="w-full h-full rounded-full items-center justify-center border relative"
                         style={{
-                          alignItems: "center",
-                          alignSelf: "center",
-                          aspectRatio: 1,
                           backgroundColor: isSelected
                             ? colors.primary
                             : isToday
                               ? colors.primaryLight
-                              : colors.background,
+                              : "transparent",
                           borderColor: isSelected
                             ? colors.primary
-                            : phaseStyle.color,
-                          borderRadius: 10,
-                          borderWidth: isSelected || isToday ? 2 : 1,
-                          justifyContent: "center",
-                          maxWidth: 40,
-                          position: "relative",
-                          width: "100%",
+                            : isToday
+                              ? colors.primary
+                              : "transparent",
                         }}
                       >
+                        {/* Soft colored under-dot for matching the phase organically */}
+                        {!isSelected && !isToday && (
+                          <View
+                            className="absolute bottom-1 w-1.5 h-1.5 rounded-full"
+                            style={{ backgroundColor: phaseStyle.color }}
+                          />
+                        )}
+
                         <Text
+                          className="text-sm font-bold"
                           style={{
                             color: isSelected
                               ? colors.buttonText
-                              : colors.foreground,
-                            fontWeight: "700",
+                              : isToday
+                                ? colors.primary
+                                : colors.foreground,
                           }}
                         >
                           {cell.day}
                         </Text>
-                        {hasLog ? (
+
+                        {/* Top corner smart token logging indicator dot */}
+                        {hasLog && (
                           <View
+                            className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full"
                             style={{
                               backgroundColor: isSelected
                                 ? colors.buttonText
                                 : colors.accent,
-                              borderRadius: 5,
-                              height: 5,
-                              position: "absolute",
-                              right: 5,
-                              top: 5,
-                              width: 5,
                             }}
                           />
-                        ) : null}
-                      </View>
-
-                      <View
-                        style={{
-                          height: 6,
-                          alignItems: "center",
-                          justifyContent: "center",
-                          marginTop: 5,
-                        }}
-                      >
-                        <View
-                          style={{
-                            backgroundColor: phaseStyle.color,
-                            borderRadius: 4,
-                            height: 4,
-                            width: cell.phase === "luteal" ? 10 : 18,
-                          }}
-                        />
+                        )}
                       </View>
                     </TouchableOpacity>
                   );
@@ -363,88 +409,74 @@ export default function Tracker() {
               </View>
             </View>
 
-            {selectedDate ? (
-              <View
-                className="mt-4 rounded-xl border px-4 py-3"
+            {/* Clean Functional Dashboard Row Integration Preview */}
+            {selectedDate && (
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={() => setDayDetailsVisible(true)}
+                className="mt-5 rounded-2xl border p-4 flex-row items-center justify-between shadow-3xs"
                 style={{
                   backgroundColor: colors.surface,
                   borderColor: colors.border,
                 }}
               >
-                <Text
-                  className="font-bold"
-                  style={{ color: colors.foreground }}
-                >
-                  {selectedDate.dateLabel}
-                </Text>
-                <Text
-                  className="mt-1 text-sm"
-                  style={{ color: colors.mutedText }}
-                >
-                  {selectedDate.phaseLabel}
-                </Text>
-                {dayEntries[selectedDate.dateKey]?.symptoms.length ? (
+                <View className="flex-1">
                   <Text
-                    className="mt-2 text-sm"
+                    className="text-sm font-bold"
                     style={{ color: colors.foreground }}
                   >
-                    {dayEntries[selectedDate.dateKey].symptoms.length} symptoms
-                    logged
+                    {selectedDate.dateLabel}
                   </Text>
-                ) : null}
-              </View>
-            ) : null}
+                  <Text
+                    className="text-xs font-semibold mt-0.5"
+                    style={{ color: colors.mutedText }}
+                  >
+                    {selectedDate.phaseLabel}
+                  </Text>
 
-            {/* Legend */}
-            <View className="mt-6 gap-3">
-              <View className="flex-row items-center gap-3">
-                <View
-                  className="h-6 w-6 rounded"
-                  style={{ backgroundColor: "#ef4444" }}
-                />
-                <Text style={{ color: colors.foreground }}>Period</Text>
-              </View>
-              <View className="flex-row items-center gap-3">
-                <View
-                  className="h-6 w-6 rounded"
-                  style={{ backgroundColor: "#fbbf24" }}
-                />
-                <Text style={{ color: colors.foreground }}>Follicular</Text>
-              </View>
-              <View className="flex-row items-center gap-3">
-                <View
-                  className="h-6 w-6 rounded"
-                  style={{ backgroundColor: colors.primary }}
-                />
-                <Text style={{ color: colors.foreground }}>Ovulation</Text>
-              </View>
-              <View className="flex-row items-center gap-3">
-                <View
-                  className="h-6 w-6 rounded"
-                  style={{ backgroundColor: "#8b5cf6" }}
-                />
-                <Text style={{ color: colors.foreground }}>Luteal</Text>
-              </View>
-            </View>
+                  {dayEntries[selectedDate.dateKey]?.symptoms.length ? (
+                    <View className="flex-row gap-1.5 mt-2 flex-wrap">
+                      {dayEntries[selectedDate.dateKey].symptoms.map(
+                        (s, idx) => (
+                          <View
+                            key={idx}
+                            className="bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded-md"
+                          >
+                            <Text
+                              className="text-[10px] font-bold"
+                              style={{ color: "white" }}
+                            >
+                              {s}
+                            </Text>
+                          </View>
+                        ),
+                      )}
+                    </View>
+                  ) : (
+                    <Text
+                      className="text-[11px] font-medium mt-1.5 italic"
+                      style={{ color: colors.mutedText }}
+                    >
+                      No symptoms logged for this date. Tap to log.
+                    </Text>
+                  )}
+                </View>
+                <Feather name="edit-3" size={16} color={colors.primary} />
+              </TouchableOpacity>
+            )}
 
-            {/* Log Today */}
+            {/* Core Action Button */}
             <TouchableOpacity
               activeOpacity={0.85}
-              accessibilityRole="button"
-              accessibilityLabel="Log today's symptoms"
-              className="mt-8 rounded-xl"
-              style={{
-                backgroundColor: colors.primary,
-                paddingVertical: 14,
-                paddingHorizontal: 16,
-              }}
+              className="mt-6 rounded-2xl py-4 items-center justify-center shadow-md"
+              style={{ backgroundColor: colors.primary }}
               onPress={openToday}
             >
               <Text
-                className="text-center text-lg font-bold"
+                className="text-center text-base font-bold tracking-wide"
                 style={{ color: colors.buttonText }}
               >
-                {"Log Today's Symptoms"}
+                Log Today's Symptoms
               </Text>
             </TouchableOpacity>
           </View>
@@ -471,7 +503,6 @@ export default function Tracker() {
               previousEntry?.mood ||
               previousEntry?.energy,
             );
-
             saveDayEntry(selectedDate.dateKey, entry);
             if (!hadLog) earnTokens(5);
           }
@@ -479,7 +510,6 @@ export default function Tracker() {
         onLogSymptom={(symptom) => {
           if (selectedDate) {
             const previousEntry = dayEntries[selectedDate.dateKey];
-
             saveDayEntry(selectedDate.dateKey, {
               energy: previousEntry?.energy,
               flow: previousEntry?.flow,

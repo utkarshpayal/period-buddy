@@ -1,25 +1,28 @@
 {
   "expo": {
-    "name": "Period-buddy",
-    "slug": "Period-buddy",
+    "name": "The Nura",
+    "slug": "the-nura",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "periodbuddy",
+    "icon": "./assets/images/logo.png",
+    "scheme": "thenura",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.uvin124.thenura",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#fff0f6",
+        "foregroundImage": "./assets/images/logo.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.uvin124.thenura"
     },
     "web": {
       "bundler": "metro",
@@ -31,7 +34,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow Period-buddy to choose your profile picture.",
+          "photosPermission": "Allow The Nura to choose your profile picture.",
           "cameraPermission": false,
           "microphonePermission": false
         }
@@ -52,6 +55,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "aaeb9289-4b88-4ccf-af04-d31bb46282c7"
+      }
     }
   }
 }

@@ -1,7 +1,9 @@
-import { Ionicons } from "@expo/vector-icons";
+import { Feather, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
+  Image,
+  Modal,
   ScrollView,
   StatusBar,
   Text,
@@ -11,84 +13,122 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../../components/theme";
 
+// --- BACKEND API LAYER SCHEMAS & CONTRACTS ---
 interface HealthIssue {
   id: string;
   title: string;
+  category: string;
   icon: string;
   color: string;
-  guide: string;
   summary: string;
+  guide: string;
+  imageUrl: string; // Remote CDN asset string for professional illustration renders
 }
 
 export default function HealthIssues() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
-  const [selectedIssue, setSelectedIssue] = useState<string | null>(null);
-  const [isGuideOpen, setIsGuideOpen] = useState(false);
+  const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
+  const [detailModalVisible, setDetailModalVisible] = useState(false);
 
   const issues: HealthIssue[] = [
     {
-      id: "1",
-      title: "PCOS",
-      icon: "alert-circle",
+      id: "hi_1",
+      title: "PCOS / PCOD",
+      category: "Hormonal Equilibrium",
+      icon: "alert-circle-outline",
       color: "#ef4444",
       summary:
-        "PCOS is a hormonal disorder that can affect cycles, skin, hair growth, and metabolism.",
+        "Polycystic Ovary Syndrome is a complex metabolic and endocrine disorder that can disrupt ovarian function, metabolic baselines, insulin responses, and dermatological consistency.",
       guide:
-        "Track cycle changes, note acne or hair growth shifts, maintain regular movement, and speak with a clinician if irregular cycles persist.",
+        "1. Monitor cycle spacing logs diligently.\n2. Note persistent hair texture variations or acne flare-ups.\n3. Implement balanced, low-glycemic active dietary support.\n4. Consult a clinical endocrinologist or OBGYN for systemic evaluations.",
+      imageUrl:
+        "https://images.unsplash.com/photo-1511556532299-8f662fc26c06?q=80&w=600&auto=format&fit=crop",
     },
     {
-      id: "2",
+      id: "hi_2",
       title: "Endometriosis",
+      category: "Uterine & Pelvic Wellness",
       icon: "pulse",
       color: "#f97316",
       summary:
-        "Endometriosis can cause painful periods, pelvic pain, and pain during daily activities.",
+        "A progressive condition where tissue similar to the uterine lining extends onto pelvic organs, often generating extreme inflammatory cycles and intense localized discomfort.",
       guide:
-        "Log pain severity, bleeding, and triggers. Seek medical advice for severe cramps, heavy bleeding, or pain outside your period.",
+        "1. Quantify pain indexes specifically during and outside menstruation.\n2. Record heavy bleeding logs and pain anchors.\n3. Integrate warm thermal compresses during muscle fatigue stages.\n4. Access advanced imaging pathways via certified gynaecology centers.",
+      imageUrl:
+        "https://images.unsplash.com/photo-1551076805-e1869033e561?q=80&w=600&auto=format&fit=crop",
     },
     {
-      id: "3",
-      title: "Fibroids",
-      icon: "cellular",
+      id: "hi_3",
+      title: "Fibroids Tracker",
+      category: "Structural Health",
+      icon: "apps-outline",
       color: "#fbbf24",
       summary:
-        "Fibroids are non-cancerous uterine growths that may cause heavy bleeding or pressure.",
+        "Benign muscular tissue developments within the uterine layers that can expand, introducing local pressure, heavy discharge parameters, and frequent fatigue intervals.",
       guide:
-        "Track bleeding volume, clotting, fatigue, and pelvic pressure. A clinician can confirm fibroids with imaging.",
+        "1. Log abnormal volume fluctuations or sudden unexpected flows.\n2. Track pelvic pressure indicators or lower body strains.\n3. Balance iron mineral tracking if high bleeding occurs.\n4. Confirm alignment and scale variances using ultrasound diagnostics.",
+      imageUrl:
+        "https://images.unsplash.com/photo-1530026405186-ed1ea0ac7a63?q=80&w=600&auto=format&fit=crop",
     },
     {
-      id: "4",
-      title: "Pregnancy Tracking",
-      icon: "heart",
+      id: "hi_4",
+      title: "Pregnancy Wellness",
+      category: "Maternal Milestone Care",
+      icon: "heart-outline",
       color: "#ec4899",
       summary:
-        "Pregnancy tracking helps you record symptoms, appointments, and wellness changes.",
+        "Dedicated structural insight suite tracking preliminary symptoms, embryonic biological intervals, nausea variations, and targeted lifestyle optimization.",
       guide:
-        "Record missed periods, nausea, tenderness, and test dates. Confirm pregnancy and care plans with a healthcare professional.",
+        "1. Record accurate missed timeline milestones and morning patterns.\n2. Trace breast sensitivity or sudden sensory fluctuations.\n3. Prioritize clean organic hydration and recommended folate blocks.\n4. Validate baseline growth structures regularly with clinical support.",
+      imageUrl:
+        "https://images.unsplash.com/photo-1516627145497-ae6968895b74?q=80&w=600&auto=format&fit=crop",
     },
     {
-      id: "5",
-      title: "Irregular Cycles",
-      icon: "shuffle",
+      id: "hi_5",
+      title: "Irregular Cycle Maps",
+      category: "Rhythm Diagnostics",
+      icon: "shuffle-outline",
       color: "#8b5cf6",
       summary:
-        "Irregular cycles may be linked to stress, weight changes, hormones, medication, or health conditions.",
+        "Persistent deviations from common cycle frequencies, frequently activated by cortisol stress triggers, underlying endocrine transitions, or sudden travel modifications.",
       guide:
-        "Track start dates for at least three cycles and note stress, sleep, travel, and medication changes.",
+        "1. Track structural start windows across consecutive 90-day segments.\n2. Correlate periods against sleep metrics and mental workloads.\n3. Reduce systemic inflammatory patterns using mindfulness modules.\n4. Initiate medical validation if intervals routinely exceed historical variances.",
+      imageUrl:
+        "https://images.unsplash.com/photo-1506126613408-eca07ce68773?q=80&w=600&auto=format&fit=crop",
     },
     {
-      id: "6",
-      title: "Menopause",
-      icon: "water",
+      id: "hi_6",
+      title: "Menopause Support",
+      category: "Transition & Longevity",
+      icon: "water-outline",
       color: "#06b6d4",
       summary:
-        "Menopause transition can include cycle changes, hot flashes, sleep shifts, and mood changes.",
+        "The milestone endocrine evolution marking the completion of reproductive cycle intervals, accompanied by thermoregulation adjustments, sleep shifts, and bone health changes.",
       guide:
-        "Log symptoms and cycle spacing. Discuss disruptive hot flashes, sleep issues, or heavy bleeding with a clinician.",
+        "1. Log the spacing frequency of sudden hot flash intervals.\n2. Evaluate midnight wakefulness indices or energy distribution alterations.\n3. Reinforce calcium and trace minerals configuration mappings.\n4. Engage hormone replacement discussion blocks if discomfort increases.",
+      imageUrl:
+        "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?q=80&w=600&auto=format&fit=crop",
     },
   ];
-  const selectedIssueData = issues.find((issue) => issue.id === selectedIssue);
+
+  const softTints = {
+    pink: isDark ? "#3b1a2d" : "#fff0f6",
+    blue: isDark ? "#162842" : "#edf2ff",
+    orange: isDark ? "#361e12" : "#fff7ed",
+    purple: isDark ? "#231942" : "#f3e8ff",
+    emerald: isDark ? "#062e20" : "#ecfdf5",
+    cyan: isDark ? "#0c2329" : "#ecfeff",
+  };
+
+  const selectedIssueData = issues.find(
+    (issue) => issue.id === selectedIssueId,
+  );
+
+  function handleTriggerDetails(id: string) {
+    setSelectedIssueId(id);
+    setDetailModalVisible(true);
+  }
 
   return (
     <>
@@ -101,110 +141,224 @@ export default function HealthIssues() {
         className="flex-1"
         style={{ backgroundColor: colors.background }}
       >
-        <ScrollView contentContainerClassName="pb-10">
-          <View className="flex-row items-center gap-4 px-6 pt-6">
-            <TouchableOpacity
-              onPress={() => router.back()}
-              accessibilityLabel="Back"
-              style={{ padding: 8, margin: -8 }}
-            >
-              <Ionicons
-                name="chevron-back"
-                size={24}
-                color={colors.foreground}
-              />
-            </TouchableOpacity>
-            <Text
-              className="flex-1 text-2xl font-bold"
-              style={{ color: colors.foreground }}
-            >
-              Health Issues
-            </Text>
-          </View>
+        {/* Navigation Action Header */}
+        <View className="flex-row items-center gap-2 px-6 pt-6">
+          <TouchableOpacity
+            onPress={() => router.back()}
+            activeOpacity={0.7}
+            className="p-2.5 -ml-2 rounded-full border"
+            style={{
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+            }}
+          >
+            <Feather name="arrow-left" size={18} color={colors.foreground} />
+          </TouchableOpacity>
+          <Text
+            className="flex-1 text-2xl font-black tracking-tight ml-2"
+            style={{ color: colors.foreground }}
+          >
+            Health Concerns
+          </Text>
+        </View>
 
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 60 }}
+        >
           <View className="mx-6 mt-6">
-            <Text className="mb-4 text-sm" style={{ color: colors.mutedText }}>
-              Select a health concern to learn more and get guidance
+            <Text
+              className="mb-5 text-xs font-semibold"
+              style={{ color: colors.mutedText }}
+            >
+              Select an encyclopedia entry to explore insights and medical
+              guidance.
             </Text>
 
-            <View className="flex-row flex-wrap gap-3">
-              {issues.map((issue) => (
-                <TouchableOpacity
-                  key={issue.id}
-                  onPress={() => {
-                    setSelectedIssue(issue.id);
-                    setIsGuideOpen(false);
-                  }}
-                  activeOpacity={0.85}
-                  className="w-[48%] items-center rounded-xl border-2 py-6"
-                  style={{
-                    backgroundColor: colors.surface,
-                    borderColor:
-                      selectedIssue === issue.id ? issue.color : colors.border,
-                  }}
-                >
-                  <View
-                    className="mb-2 h-12 w-12 items-center justify-center rounded-full"
-                    style={{ backgroundColor: issue.color }}
-                  >
-                    <Ionicons
-                      name={issue.icon as any}
-                      size={24}
-                      color="white"
-                    />
-                  </View>
-                  <Text
-                    className="text-center text-sm font-semibold"
-                    style={{ color: colors.foreground }}
-                  >
-                    {issue.title}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            {/* HIGH-FIDELITY ASYMMETRIC CLEAN LIST CARD ROWS */}
+            <View className="gap-3.5">
+              {issues.map((issue, index) => {
+                // Compute matching index tints dynamically for uniform distribution
+                const tintColors = [
+                  softTints.pink,
+                  softTints.orange,
+                  softTints.purple,
+                  softTints.blue,
+                  softTints.emerald,
+                  softTints.cyan,
+                ];
+                const activeTint = tintColors[index % tintColors.length];
 
-            {selectedIssueData && (
-              <View
-                className="mt-8 rounded-2xl border-2 p-6"
-                style={{
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                }}
-              >
-                <Text
-                  className="text-lg font-bold"
-                  style={{ color: colors.foreground }}
-                >
-                  Understanding {selectedIssueData.title}
-                </Text>
-                <Text className="mt-3 leading-6" style={{ color: colors.text }}>
-                  {selectedIssueData.summary}
-                </Text>
-                {isGuideOpen ? (
-                  <Text
-                    className="mt-3 leading-6"
-                    style={{ color: colors.text }}
+                return (
+                  <TouchableOpacity
+                    key={issue.id}
+                    onPress={() => handleTriggerDetails(issue.id)}
+                    activeOpacity={0.75}
+                    className="flex-row items-center p-4 rounded-2xl border shadow-3xl"
+                    style={{
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    }}
                   >
-                    {selectedIssueData.guide}
-                  </Text>
-                ) : null}
-                <TouchableOpacity
-                  activeOpacity={0.85}
-                  className="mt-4 rounded-lg py-3"
-                  onPress={() => setIsGuideOpen((open) => !open)}
-                  style={{ backgroundColor: colors.primary }}
-                >
-                  <Text
-                    className="text-center font-semibold"
-                    style={{ color: colors.buttonText }}
-                  >
-                    {isGuideOpen ? "Hide Full Guide" : "Read Full Guide →"}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
+                    <View
+                      className="p-3 rounded-xl mr-4"
+                      style={{ backgroundColor: activeTint }}
+                    >
+                      <Ionicons
+                        name={issue.icon as any}
+                        size={20}
+                        color={issue.color}
+                      />
+                    </View>
+                    <View className="flex-1 pr-2">
+                      <Text className="text-[10px] font-black uppercase tracking-wider text-pink-500">
+                        {issue.category}
+                      </Text>
+                      <Text
+                        className="text-sm font-extrabold tracking-tight mt-0.5"
+                        style={{ color: colors.foreground }}
+                      >
+                        {issue.title}
+                      </Text>
+                    </View>
+                    <Feather
+                      name="chevron-right"
+                      size={16}
+                      color={colors.mutedText}
+                    />
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
         </ScrollView>
+
+        {/* --- DYNAMIC FULL PAGE INTERACTIVE DETAIL PRESENTATION MODAL --- */}
+        <Modal
+          visible={detailModalVisible}
+          animationType="slide"
+          presentationStyle="pageSheet"
+          onRequestClose={() => setDetailModalVisible(false)}
+        >
+          {selectedIssueData && (
+            <View
+              className="flex-1"
+              style={{ backgroundColor: colors.background }}
+            >
+              {/* Sheet Control Sticky Upper Header Action Row */}
+              <View
+                className="px-6 py-4.5 border-b border-neutral-100 dark:border-neutral-900 flex-row justify-between items-center"
+                style={{ backgroundColor: colors.surface }}
+              >
+                <View>
+                  <Text className="text-[10px] font-black uppercase tracking-widest text-pink-500 pt-4">
+                    {selectedIssueData.category}
+                  </Text>
+                  <Text
+                    className="text-base font-black tracking-tight mt-0.5"
+                    style={{ color: colors.foreground }}
+                  >
+                    {selectedIssueData.title}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setDetailModalVisible(false)}
+                  className="p-1.5 bg-neutral-100 dark:bg-neutral-800 rounded-full"
+                >
+                  <Feather name="x" size={16} color={colors.foreground} />
+                </TouchableOpacity>
+              </View>
+
+              {/* Scrollable Clinical Core Body Context Area */}
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: 60 }}
+              >
+                {/* HIGH RESOLUTION HERO MEDICAL ILLUSTRATION BANNER */}
+                <View className="w-full h-52 relative bg-neutral-100">
+                  <Image
+                    source={{ uri: selectedIssueData.imageUrl }}
+                    className="w-full h-full"
+                    resizeMode="cover"
+                  />
+                  <View className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
+                </View>
+
+                {/* CONTENT AREA WRAPPER */}
+                <View className="px-6 pt-6">
+                  {/* Part A: Clinical Interpretation Framework */}
+                  <Text
+                    className="text-xs font-bold tracking-widest uppercase mb-2.5"
+                    style={{ color: colors.primary }}
+                  >
+                    Clinical Understanding
+                  </Text>
+                  <Text
+                    className="text-sm font-medium leading-6 mb-6"
+                    style={{ color: colors.foreground }}
+                  >
+                    {selectedIssueData.summary}
+                  </Text>
+
+                  {/* Horizontal Border Break Separator Line */}
+                  <View className="h-[1px] w-full bg-neutral-100 dark:bg-neutral-900 mb-6" />
+
+                  {/* Part B: Specialized Active Interactive Symptom Guidance Roadmap */}
+                  <Text
+                    className="text-xs font-bold tracking-widest uppercase mb-3"
+                    style={{ color: "#10b981" }}
+                  >
+                    Ecosystem Guidance Rules
+                  </Text>
+                  <View
+                    className="p-5 rounded-2xl border bg-neutral-50 dark:bg-neutral-900/40"
+                    style={{ borderColor: colors.border }}
+                  >
+                    <Text
+                      className="text-xs font-semibold leading-6"
+                      style={{ color: colors.foreground }}
+                    >
+                      {selectedIssueData.guide}
+                    </Text>
+                  </View>
+
+                  {/* Operational Telehealth Action Redirection Banner Badge */}
+                  <View className="mt-6 p-4 rounded-xl flex-row items-center justify-between border border-dashed border-neutral-300 dark:border-neutral-700">
+                    <View className="flex-1 pr-4">
+                      <Text
+                        className="text-xs font-bold"
+                        style={{ color: colors.foreground }}
+                      >
+                        Persistent Symptoms?
+                      </Text>
+                      <Text
+                        className="text-[10px] mt-0.5"
+                        style={{ color: colors.mutedText }}
+                      >
+                        Connect privately with specialized OBGYNs instantly.
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => {
+                        setDetailModalVisible(false);
+                        router.push("/(app)/consultation" as any);
+                      }}
+                      className="px-3.5 py-2 rounded-xl"
+                      style={{ backgroundColor: colors.primary }}
+                    >
+                      <Text
+                        className="text-[11px] font-black"
+                        style={{ color: colors.buttonText }}
+                      >
+                        Consult
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </ScrollView>
+            </View>
+          )}
+        </Modal>
       </SafeAreaView>
     </>
   );

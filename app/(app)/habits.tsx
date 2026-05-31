@@ -1,4 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
+import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -13,6 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppState } from "../../components/AppState";
 import { useTheme } from "../../components/theme";
 
+// --- BACKEND SPECIFIC API DATA SCHEMAS ---
 interface Habit {
   id: string;
   title: string;
@@ -32,36 +33,36 @@ const HABITS_STORAGE_KEY = "period-buddy.habits";
 
 const defaultHabits: Habit[] = [
   {
-    id: "1",
-    title: "Log Period Tracking",
-    icon: "calendar",
+    id: "h_1",
+    title: "Log Period Tracking Data",
+    icon: "calendar-outline",
     color: "#d946a6",
-    completed: true,
+    completed: false,
     tokens: 50,
     streak: 12,
   },
   {
-    id: "2",
-    title: "Drink 8 Glasses Water",
-    icon: "water",
+    id: "h_2",
+    title: "Drink 8 Glasses of Water",
+    icon: "water-outline",
     color: "#06b6d4",
     completed: false,
     tokens: 30,
     streak: 8,
   },
   {
-    id: "3",
-    title: "Exercise 30 Minutes",
-    icon: "fitness",
+    id: "h_3",
+    title: "Exercise or Sync Movement",
+    icon: "fitness-outline",
     color: "#22c55e",
-    completed: true,
+    completed: false,
     tokens: 60,
     streak: 5,
   },
   {
-    id: "4",
-    title: "Meditation Session",
-    icon: "heart",
+    id: "h_4",
+    title: "Mindfulness Meditation",
+    icon: "heart-outline",
     color: "#ec4899",
     completed: false,
     tokens: 40,
@@ -71,20 +72,20 @@ const defaultHabits: Habit[] = [
 
 const habitIdeas = [
   {
-    title: "Sleep 8 Hours",
-    icon: "moon",
+    title: "Sleep 8 Hours Comfortably",
+    icon: "moon-outline",
     color: "#6366f1",
     tokens: 45,
   },
   {
-    title: "Eat Iron-Rich Food",
-    icon: "nutrition",
+    title: "Consume Iron-Rich Nutritional Foods",
+    icon: "nutrition-outline",
     color: "#f97316",
     tokens: 35,
   },
   {
-    title: "Stretch for 10 Minutes",
-    icon: "body",
+    title: "Light Pelvic Stretch for 10 Mins",
+    icon: "body-outline",
     color: "#14b8a6",
     tokens: 25,
   },
@@ -123,7 +124,10 @@ export default function Habits() {
     );
 
     if (!nextIdea) {
-      Alert.alert("Habit list is full", "You have added all starter habits.");
+      Alert.alert(
+        "Ecosystem Slots Full",
+        "You have already integrated all available structural habits.",
+      );
       return;
     }
 
@@ -143,6 +147,55 @@ export default function Habits() {
     0,
   );
 
+  // --- DYNAMIC LIFESTYLE TREE GROWTH ENGINE ---
+  const maxPossibleTokens = 180;
+  const growthPercentage = Math.min(
+    (totalTokens / maxPossibleTokens) * 100,
+    100,
+  );
+
+  function computeTreeStageLabel(percentage: number): {
+    label: string;
+    icon: string;
+    motivation: string;
+  } {
+    if (percentage === 0) {
+      return {
+        label: "Dormant Seed",
+        icon: "seed-outline",
+        motivation: "Complete today's habits to nurture your cycle tree.",
+      };
+    }
+    if (percentage <= 35) {
+      return {
+        label: "Sprouting Seedling 🌱",
+        icon: "sprout-outline",
+        motivation:
+          "Clean hydration and basic routines are giving roots to your wellness tree.",
+      };
+    }
+    if (percentage <= 75) {
+      return {
+        label: "Active Budding Branch 🌿",
+        icon: "tree-outline",
+        motivation:
+          "Amazing energy! Your hormone cycles are balancing beautifully today.",
+      };
+    }
+    return {
+      label: "Blooming Blossom 🌸",
+      icon: "flower-tulip-outline",
+      motivation:
+        "Peak wellness tree growth attained! Your dynamic system is fully nourished.",
+    };
+  }
+
+  const currentTreeState = computeTreeStageLabel(growthPercentage);
+
+  const softTints = {
+    pink: isDark ? "#3b1a2d" : "#fff0f6",
+  };
+
   return (
     <>
       <StatusBar
@@ -154,172 +207,223 @@ export default function Habits() {
         className="flex-1"
         style={{ backgroundColor: colors.background }}
       >
-        <ScrollView contentContainerClassName="pb-10">
-          <View className="flex-row items-center gap-4 px-6 pt-6">
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 60 }}
+        >
+          {/* Header Action Row */}
+          <View className="flex-row items-center gap-2 px-6 pt-6">
             <TouchableOpacity
               onPress={() => router.back()}
-              accessibilityLabel="Back"
-              style={{ padding: 8, margin: -8 }}
+              activeOpacity={0.7}
+              className="p-2.5 -ml-2 rounded-full border"
+              style={{
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+              }}
             >
-              <Ionicons
-                name="chevron-back"
-                size={24}
-                color={colors.foreground}
-              />
+              <Feather name="arrow-left" size={18} color={colors.foreground} />
             </TouchableOpacity>
             <Text
-              className="flex-1 text-2xl font-bold"
+              className="flex-1 text-2xl font-black tracking-tight ml-2"
               style={{ color: colors.foreground }}
             >
-              Build Habits
+              Habit Tracker
             </Text>
           </View>
 
-          {/* Daily Goal */}
-          <View
-            className="mx-6 mt-6 rounded-2xl border-2 p-6"
-            style={{
-              backgroundColor: colors.surface,
-              borderColor: colors.primary,
-            }}
-          >
-            <View className="flex-row items-center justify-between">
-              <View>
-                <Text
-                  className="text-sm font-semibold"
-                  style={{ color: colors.mutedText }}
-                >
-                  {"Today's Tokens"}
-                </Text>
-                <Text
-                  className="mt-2 text-3xl font-bold"
-                  style={{ color: colors.primary }}
-                >
-                  {totalTokens}
-                </Text>
-                <Text
-                  className="mt-1 text-xs"
-                  style={{ color: colors.mutedText }}
-                >
-                  Out of 180 possible
-                </Text>
-              </View>
-              <View
-                className="h-24 w-24 items-center justify-center rounded-full"
-                style={{ backgroundColor: colors.primaryLight }}
-              >
-                <Text className="text-3xl">🏆</Text>
-              </View>
-            </View>
-            <View
-              className="mt-4 h-2 overflow-hidden rounded-full"
-              style={{ backgroundColor: colors.border }}
-            >
-              <View
-                className="h-full"
-                style={{
-                  width: `${(totalTokens / 180) * 100}%`,
-                  backgroundColor: colors.primary,
-                }}
-              />
-            </View>
-          </View>
-
-          {/* Habits List */}
+          {/* DYNAMIC INTERACTIVE CYCLE TREE GROW HUB PANEL */}
           <View className="mx-6 mt-6">
-            <Text
-              className="mb-4 text-base font-bold"
-              style={{ color: colors.foreground }}
+            <View
+              className="rounded-3xl border p-5 shadow-2xl relative overflow-hidden"
+              style={{
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+              }}
             >
-              Daily Habits
+              {/* Subtle ambient pink glow tracking background element overlay */}
+              <View
+                className="absolute -right-6 -top-6 w-20 h-20 rounded-full opacity-35"
+                style={{ backgroundColor: softTints.pink }}
+              />
+
+              <View className="flex-row items-center justify-between">
+                <View className="flex-1 pr-2">
+                  <Text className="text-[10px] font-black tracking-widest uppercase text-pink-500">
+                    Current Cycle Tree
+                  </Text>
+                  <Text
+                    className="mt-1 text-base font-black tracking-tight"
+                    style={{ color: colors.foreground }}
+                  >
+                    {currentTreeState.label}
+                  </Text>
+                  <Text
+                    className="mt-1 text-[11px] font-medium leading-4"
+                    style={{ color: colors.mutedText }}
+                  >
+                    {currentTreeState.motivation}
+                  </Text>
+                </View>
+
+                {/* Animated Dynamic Graphic Icon Shield Badge */}
+                <View
+                  className="h-20 w-20 items-center justify-center rounded-2xl border border-dashed border-pink-300"
+                  style={{ backgroundColor: softTints.pink }}
+                >
+                  <MaterialCommunityIcons
+                    name={currentTreeState.icon as any}
+                    size={36}
+                    color={colors.primary}
+                  />
+                </View>
+              </View>
+
+              {/* Progress Core Bar Systems */}
+              <View className="mt-5">
+                <View className="flex-row justify-between items-center mb-1.5 px-0.5">
+                  <Text
+                    className="text-[10px] font-bold"
+                    style={{ color: colors.mutedText }}
+                  >
+                    Score: {totalTokens} / {maxPossibleTokens} Tokens
+                  </Text>
+                  <Text className="text-[10px] font-black text-pink-500">
+                    {Math.round(growthPercentage)}% Growth
+                  </Text>
+                </View>
+
+                <View className="h-2.5 overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
+                  <View
+                    className="h-full rounded-full"
+                    style={{
+                      width: `${growthPercentage}%`,
+                      backgroundColor: colors.primary,
+                    }}
+                  />
+                </View>
+              </View>
+            </View>
+          </View>
+
+          {/* HABITS ACCORDION CORE LIST SYSTEM */}
+          <View className="mx-6 mt-8">
+            <Text
+              className="mb-4 text-xs font-black tracking-widest uppercase px-1"
+              style={{ color: colors.primary }}
+            >
+              Daily Routines Checklist
             </Text>
 
-            <View className="gap-3">
+            <View className="gap-3.5">
               {habits.map((habit) => (
-                <View
+                <TouchableOpacity
                   key={habit.id}
-                  className="overflow-hidden rounded-xl border-2"
+                  activeOpacity={0.8}
+                  onPress={() => toggleHabit(habit.id)}
+                  className="rounded-2xl border shadow-3xs overflow-hidden"
                   style={{
                     backgroundColor: colors.surface,
-                    borderColor: habit.completed ? habit.color : colors.border,
+                    borderColor: habit.completed
+                      ? `${habit.color}30`
+                      : colors.border,
                   }}
                 >
-                  <View className="flex-row items-center justify-between p-4">
-                    <TouchableOpacity
-                      onPress={() => toggleHabit(habit.id)}
-                      className="flex-row items-center flex-1 gap-4"
-                    >
+                  <View className="flex-row items-center justify-between p-4.5">
+                    <View className="flex-row items-center flex-1 gap-4">
+                      {/* Check Sphere Indicator Boxes */}
                       <View
-                        className="h-12 w-12 items-center justify-center rounded-full border-2"
+                        className="h-10 w-10 items-center justify-center rounded-xl border"
                         style={{
                           backgroundColor: habit.completed
                             ? habit.color
                             : "transparent",
-                          borderColor: habit.color,
+                          borderColor: habit.completed
+                            ? habit.color
+                            : colors.border,
                         }}
                       >
-                        {habit.completed && (
-                          <Ionicons name="checkmark" size={24} color="white" />
-                        )}
-                        {!habit.completed && (
+                        {habit.completed ? (
+                          <Feather name="check" size={16} color="white" />
+                        ) : (
                           <Ionicons
                             name={habit.icon as any}
-                            size={24}
-                            color={habit.color}
+                            size={18}
+                            color={colors.mutedText}
                           />
                         )}
                       </View>
 
                       <View className="flex-1">
                         <Text
-                          className="font-semibold"
+                          className="text-sm font-bold tracking-tight"
                           style={{
-                            color: colors.foreground,
+                            color: habit.completed
+                              ? colors.mutedText
+                              : colors.foreground,
                             textDecorationLine: habit.completed
                               ? "line-through"
                               : "none",
+                            opacity: habit.completed ? 0.6 : 1,
                           }}
                         >
                           {habit.title}
                         </Text>
-                        <Text
-                          className="mt-1 text-xs"
-                          style={{ color: colors.mutedText }}
-                        >
-                          🔥 {habit.streak} day streak
-                        </Text>
+                        <View className="flex-row items-center gap-1 mt-0.5">
+                          <MaterialCommunityIcons
+                            name="fire"
+                            size={12}
+                            color="#f97316"
+                          />
+                          <Text
+                            className="text-[10px] font-bold"
+                            style={{ color: colors.mutedText }}
+                          >
+                            {habit.streak} day streak
+                          </Text>
+                        </View>
                       </View>
-                    </TouchableOpacity>
+                    </View>
 
+                    {/* Reward Multi-Multiplier Tokens Value Tags */}
                     <View
-                      className="rounded-lg px-3 py-1"
-                      style={{ backgroundColor: habit.color }}
+                      className="rounded-lg px-2.5 py-1"
+                      style={{
+                        backgroundColor: habit.completed
+                          ? colors.border
+                          : `${habit.color}15`,
+                      }}
                     >
-                      <Text className="text-xs font-bold text-white">
-                        +{habit.tokens}
+                      <Text
+                        className="text-[10px] font-black"
+                        style={{
+                          color: habit.completed
+                            ? colors.mutedText
+                            : habit.color,
+                        }}
+                      >
+                        +{habit.tokens} pts
                       </Text>
                     </View>
                   </View>
-                </View>
+                </TouchableOpacity>
               ))}
             </View>
 
-            {/* Add New Habit */}
+            {/* CURATED ADD CUSTOM HABIT IDEA ACTION COMPONENT */}
             <TouchableOpacity
-              activeOpacity={0.85}
-              className="mt-6 rounded-xl border-2 border-dashed py-4"
+              activeOpacity={0.7}
+              className="mt-6 rounded-2xl border border-dashed py-4 items-center justify-center bg-neutral-50/40 dark:bg-neutral-900/10"
               onPress={addHabit}
-              style={{
-                borderColor: colors.border,
-              }}
+              style={{ borderColor: colors.border }}
             >
-              <View className="flex-row items-center justify-center gap-2">
-                <Ionicons name="add-circle" size={20} color={colors.primary} />
+              <View className="flex-row items-center gap-2">
+                <Feather name="plus-circle" size={15} color={colors.primary} />
                 <Text
-                  className="font-semibold"
+                  className="text-xs font-black tracking-wide"
                   style={{ color: colors.primary }}
                 >
-                  Add New Habit
+                  Expand Habit Spectrum
                 </Text>
               </View>
             </TouchableOpacity>
@@ -330,24 +434,20 @@ export default function Habits() {
   );
 }
 
+// --- LOCAL PERSISTENCE STORAGE LAYER HANDLERS ---
 function getStorage() {
   const globalWithStorage = globalThis as typeof globalThis & {
     localStorage?: BrowserStorage;
   };
-
   return globalWithStorage.localStorage;
 }
 
 function readStoredHabits() {
   try {
     const rawHabits = getStorage()?.getItem(HABITS_STORAGE_KEY);
-
-    if (!rawHabits) {
-      return defaultHabits;
-    }
+    if (!rawHabits) return defaultHabits;
 
     const habits = JSON.parse(rawHabits) as Habit[];
-
     return Array.isArray(habits) && habits.length > 0 ? habits : defaultHabits;
   } catch {
     return defaultHabits;
@@ -357,7 +457,5 @@ function readStoredHabits() {
 function writeStoredHabits(habits: Habit[]) {
   try {
     getStorage()?.setItem(HABITS_STORAGE_KEY, JSON.stringify(habits));
-  } catch {
-    // Habit changes still work in memory if storage is blocked.
-  }
+  } catch {}
 }

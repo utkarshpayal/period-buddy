@@ -11,6 +11,8 @@ export type AuthUser = {
   phone?: string;
   profilePicture?: string;
   role?: string;
+  streakCount?: number;
+  tokenEarned?: number;
 };
 
 export type AuthResponse = {

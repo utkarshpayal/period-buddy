@@ -1,18 +1,18 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect } from "react";
 import {
-    ScrollView,
-    StatusBar,
-    Text,
-    TouchableOpacity,
-    View,
+  Image,
+  ScrollView,
+  StatusBar,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../components/auth-context";
 import {
-    ProfileOnboarding,
-    type ProfileOnboardingValues,
+  ProfileOnboarding,
+  type ProfileOnboardingValues,
 } from "../../components/profile-onboarding";
 import { ThemeToggle, useTheme } from "../../components/theme";
 import { submitOnboarding } from "../../lib/auth";
@@ -93,23 +93,26 @@ export default function Home() {
         className="flex-1"
         style={{ backgroundColor: colors.background }}
       >
-        <View className="absolute right-6 top-4 z-10">
+        <View className="absolute right-6 top-8 z-10">
           <ThemeToggle />
         </View>
 
         <View className="flex-1 justify-center px-6">
           <View className="mb-10 items-center">
             <View
-              className="mb-5 h-20 w-20 items-center justify-center rounded-full border-2"
+              className="mb-5 h-20 w-20 items-center justify-center rounded-full border-2 overflow-hidden"
               style={{
                 backgroundColor: colors.surface,
                 borderColor: colors.border,
               }}
             >
-              <Ionicons
-                name="home-outline"
-                size={36}
-                color={colors.foreground}
+              <Image
+                source={require("../../assets/images/logo.png")}
+                resizeMode="contain"
+                style={{
+                  width: 200,
+                  height: 200,
+                }}
               />
             </View>
 
@@ -117,7 +120,7 @@ export default function Home() {
               className="text-4xl font-bold"
               style={{ color: colors.foreground }}
             >
-              Home
+              The Nura
             </Text>
 
             <Text

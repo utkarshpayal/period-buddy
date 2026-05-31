@@ -84,7 +84,7 @@ export default function SignUp() {
     return (
       <>
         <View className="mb-10 items-center">
-          <View
+          {/* <View
             className="mb-5 h-20 w-20 items-center justify-center rounded-full border-2"
             style={{
               backgroundColor: colors.surface,
@@ -96,7 +96,7 @@ export default function SignUp() {
               size={34}
               color={colors.foreground}
             />
-          </View>
+          </View> */}
 
           <Text
             className="text-4xl font-bold"
@@ -109,7 +109,7 @@ export default function SignUp() {
             className="mt-3 text-center text-base leading-6"
             style={{ color: colors.foreground }}
           >
-            Create your FlowHer account
+            Create your The Nura account
           </Text>
         </View>
 
@@ -167,7 +167,7 @@ export default function SignUp() {
           </View>
 
           <View
-            className="mb-5 flex-row items-center rounded-xl border px-4 py-4"
+            className="mb-5 flex-row items-center rounded-xl border px-4 py-2"
             style={{
               backgroundColor: colors.surface,
               borderColor: colors.border,
@@ -270,7 +270,7 @@ export default function SignUp() {
         className="flex-1"
         style={{ backgroundColor: colors.background }}
       >
-        <View className="absolute right-6 top-4 z-10">
+        <View className="absolute right-6 top-8 z-10">
           <ThemeToggle />
         </View>
 
