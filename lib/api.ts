@@ -1,7 +1,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-export const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_BASE_URL?.trim() || "http://localhost:5000";
+const LOCAL_DEV_API_BASE_URL = "http://localhost:5000";
+const envApiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
+
+export const API_BASE_URL = (
+  envApiBaseUrl || (__DEV__ ? LOCAL_DEV_API_BASE_URL : "")
+).replace(/\/+$/, "");
 export const AUTH_SESSION_KEY = "period-buddy.auth-session";
 
 type QueryValue = boolean | number | string | null | undefined;
@@ -452,6 +456,12 @@ export async function apiEnvelopeRequest<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<ApiEnvelope<T>> {
+  if (!API_BASE_URL) {
+    throw new Error(
+      "Missing EXPO_PUBLIC_API_BASE_URL. Set it in .env or eas.json before building the app.",
+    );
+  }
+
   const token = options.skipAuth ? null : await getToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",

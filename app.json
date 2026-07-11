@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "The Nura",
-    "slug": "the-nura",
+    "slug": "period-budddy",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/logo.png",
@@ -59,8 +59,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "aaeb9289-4b88-4ccf-af04-d31bb46282c7"
+        "projectId": "2408bc3b-233d-4a15-9218-a0b495e1df03"
       }
-    }
+    },
+    "owner": "utkarsh-payals-team"
   }
 }

@@ -10,11 +10,28 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    npm install
    ```
 
-2. Start the app
+2. Set up environment variables
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   `EXPO_PUBLIC_API_BASE_URL` must point to a reachable backend URL for installed builds.
+
+3. Start the app
 
    ```bash
    npx expo start
    ```
+
+## Build
+
+The EAS build profiles in `eas.json` include the public API base URL used by the app bundle.
+
+```bash
+eas build --platform android --profile preview
+eas build --platform ios --profile preview_ios
+```
 
 In the output, you'll find options to open the app in a
 
