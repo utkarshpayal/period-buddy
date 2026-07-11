@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, {
   createContext,
   useContext,
@@ -10,19 +11,41 @@ import { TouchableOpacity, View } from "react-native";
 
 type ThemeMode = "light" | "dark";
 
-type ThemeColors = {
+export type ThemeColors = {
   background: string;
   surface: string;
+  surfaceSoft: string;
+  surfaceStrong: string;
   primary: string;
+  primaryDark: string;
   primaryLight: string;
   secondary: string;
+  secondaryLight: string;
   accent: string;
+  accentLight: string;
   foreground: string;
   border: string;
   button: string;
   buttonText: string;
   text: string;
   mutedText: string;
+  input: string;
+  success: string;
+  successLight: string;
+  warning: string;
+  warningLight: string;
+  danger: string;
+  dangerLight: string;
+  info: string;
+  infoLight: string;
+  rose: string;
+  roseLight: string;
+  lavender: string;
+  lavenderLight: string;
+  mint: string;
+  mintLight: string;
+  shadow: string;
+  overlay: string;
 };
 
 type ThemeContextValue = {
@@ -35,45 +58,85 @@ type ThemeContextValue = {
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 const THEME_STORAGE_KEY = "period-buddy.theme-mode";
 
-type BrowserStorage = {
-  getItem: (key: string) => string | null;
-  setItem: (key: string, value: string) => void;
-};
-
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [mode, setMode] = useState<ThemeMode>(readStoredTheme);
+  const [mode, setMode] = useState<ThemeMode>("light");
+  const [hasHydrated, setHasHydrated] = useState(false);
   const isDark = mode === "dark";
 
   const value = useMemo<ThemeContextValue>(
     () => ({
       colors: isDark
         ? {
-            background: "#111113",
-            surface: "#1d1d22",
-            primary: "#f472b6",
-            primaryLight: "#4a1738",
-            secondary: "#60a5fa",
-            accent: "#fbbf24",
-            foreground: "#ffffff",
-            border: "#35353d",
-            button: "#f472b6",
-            buttonText: "#111113",
-            text: "#e7e7ea",
-            mutedText: "#a1a1aa",
+            background: "#141118",
+            surface: "#211c29",
+            surfaceSoft: "#2b2534",
+            surfaceStrong: "#31283c",
+            primary: "#f472a6",
+            primaryDark: "#d9467d",
+            primaryLight: "#3f2332",
+            secondary: "#5eead4",
+            secondaryLight: "#173c3a",
+            accent: "#a78bfa",
+            accentLight: "#2f264f",
+            foreground: "#faf7fb",
+            border: "#373040",
+            button: "#f472a6",
+            buttonText: "#ffffff",
+            text: "#f4eef6",
+            mutedText: "#b8aebe",
+            input: "#2a2432",
+            success: "#34d399",
+            successLight: "#173b2d",
+            warning: "#fbbf24",
+            warningLight: "#3f2f14",
+            danger: "#fb7185",
+            dangerLight: "#42212b",
+            info: "#7dd3fc",
+            infoLight: "#17344a",
+            rose: "#fb7185",
+            roseLight: "#3c202c",
+            lavender: "#c4b5fd",
+            lavenderLight: "#30274d",
+            mint: "#6ee7b7",
+            mintLight: "#173a2b",
+            shadow: "#050408",
+            overlay: "rgba(7, 5, 12, 0.58)",
           }
         : {
-            background: "#fbfbfd",
+            background: "#f8fafc",
             surface: "#ffffff",
-            primary: "#c0267d",
-            primaryLight: "#fde7f3",
-            secondary: "#2563eb",
-            accent: "#f59e0b",
-            foreground: "#18181b",
-            border: "#e4e4e7",
-            button: "#c0267d",
+            surfaceSoft: "#f1f5f9",
+            surfaceStrong: "#eef2ff",
+            primary: "#d9467d",
+            primaryDark: "#be185d",
+            primaryLight: "#fce7f0",
+            secondary: "#0f766e",
+            secondaryLight: "#dff7f1",
+            accent: "#7c3aed",
+            accentLight: "#eee7ff",
+            foreground: "#172033",
+            border: "#e2e8f0",
+            button: "#d9467d",
             buttonText: "#ffffff",
-            text: "#3f3f46",
-            mutedText: "#71717a",
+            text: "#263244",
+            mutedText: "#64748b",
+            input: "#f8fafc",
+            success: "#059669",
+            successLight: "#dcfce7",
+            warning: "#d97706",
+            warningLight: "#fef3c7",
+            danger: "#e11d48",
+            dangerLight: "#ffe4e6",
+            info: "#2563eb",
+            infoLight: "#dbeafe",
+            rose: "#e11d48",
+            roseLight: "#ffe4ec",
+            lavender: "#7c3aed",
+            lavenderLight: "#f1edff",
+            mint: "#0d9488",
+            mintLight: "#ccfbf1",
+            shadow: "#0f172a",
+            overlay: "rgba(15, 23, 42, 0.36)",
           },
       isDark,
       mode,
@@ -85,8 +148,33 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   );
 
   useEffect(() => {
-    writeStoredTheme(mode);
-  }, [mode]);
+    let isMounted = true;
+
+    AsyncStorage.getItem(THEME_STORAGE_KEY)
+      .then((storedMode) => {
+        if (
+          isMounted &&
+          (storedMode === "dark" || storedMode === "light")
+        ) {
+          setMode(storedMode);
+        }
+      })
+      .finally(() => {
+        if (isMounted) setHasHydrated(true);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hasHydrated) return;
+
+    AsyncStorage.setItem(THEME_STORAGE_KEY, mode).catch(() => {
+      // Theme toggle still works in memory if storage is unavailable.
+    });
+  }, [hasHydrated, mode]);
 
   return (
     <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
@@ -103,34 +191,6 @@ export function useTheme() {
   return value;
 }
 
-function getStorage() {
-  const globalWithStorage = globalThis as typeof globalThis & {
-    localStorage?: BrowserStorage;
-  };
-
-  return globalWithStorage.localStorage;
-}
-
-function readStoredTheme(): ThemeMode {
-  try {
-    const storedMode = getStorage()?.getItem(THEME_STORAGE_KEY);
-
-    return storedMode === "dark" || storedMode === "light"
-      ? storedMode
-      : "light";
-  } catch {
-    return "light";
-  }
-}
-
-function writeStoredTheme(mode: ThemeMode) {
-  try {
-    getStorage()?.setItem(THEME_STORAGE_KEY, mode);
-  } catch {
-    // Theme toggle still works in memory if storage is blocked.
-  }
-}
-
 export function ThemeToggle() {
   const { colors, isDark, toggleTheme } = useTheme();
 
@@ -144,22 +204,20 @@ export function ThemeToggle() {
       style={{
         backgroundColor: colors.surface,
         borderColor: colors.border,
-        width: 76, // Perfectly sized capsule for two icons
+        width: 74,
         height: 38,
       }}
     >
-      {/* Dynamic Background Indicator (Sliding Effect) */}
       <View
         className="absolute top-1 bottom-1 rounded-full"
         style={{
-          backgroundColor: colors.primary, // UI design ke mutabik active selection background pink hoga
-          left: isDark ? 39 : 6, // Dark mode me right shift hoga, light mode me left
+          backgroundColor: colors.primary,
+          left: isDark ? 38 : 6,
           width: 28,
           height: 28,
         }}
       />
 
-      {/* Light Mode Icon Section */}
       <View className="flex-1 items-center justify-center z-10">
         <Ionicons
           name="sunny"
@@ -168,7 +226,6 @@ export function ThemeToggle() {
         />
       </View>
 
-      {/* Dark Mode Icon Section */}
       <View className="flex-1 items-center justify-center z-10">
         <Ionicons
           name="moon"

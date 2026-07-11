@@ -1,8 +1,11 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import { LinearGradient } from "expo-linear-gradient";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Modal,
+  RefreshControl,
   ScrollView,
   StatusBar,
   Text,
@@ -11,191 +14,168 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useAppState } from "../../components/AppState";
 import { useTheme } from "../../components/theme";
+import { getSoftTints } from "../../components/ui-tokens";
+import {
+  consultationApi,
+  type Consultation,
+  type ConsultationMessage,
+  type Doctor,
+} from "../../lib/api";
 
-// --- CLINICAL ENDPOINT SCHEMAS ---
-interface Doctor {
-  id: string;
-  name: string;
-  specialty: string;
-  rating: number;
-  availability: string;
-  price: string;
-  rawPrice: number;
-  avatarEmoji: string;
+const AVATAR_EMOJIS = ["👩‍⚕️", "🧑‍⚕️", "👨‍⚕️"];
+
+function getDoctorDisplayName(doctor: Doctor) {
+  const legacyName = (doctor as Doctor & { name?: string }).name;
+
+  return (
+    legacyName ||
+    [doctor.firstName, doctor.lastName].filter(Boolean).join(" ") ||
+    "Clinical specialist"
+  );
 }
 
-interface Message {
-  id: string;
-  sender: "user" | "doctor";
-  text: string;
-  time: string;
-}
-
-export default function Consultation() {
+export default function ConsultationScreen() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
-  const { earnTokens } = useAppState();
+  const chatScrollRef = useRef<ScrollView>(null);
 
-  // Functional States
+  // Lists
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [myConsultations, setMyConsultations] = useState<Consultation[]>([]);
+  const [loadingDoctors, setLoadingDoctors] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Booking
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
-  const [activeChatDoctor, setActiveChatDoctor] = useState<Doctor | null>(null);
-
-  // Modals Visibility Controllers
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
+  const [booking, setBooking] = useState(false);
+
+  // Chat
+  const [activeConsultation, setActiveConsultation] = useState<Consultation | null>(null);
+  const [chatMessages, setChatMessages] = useState<ConsultationMessage[]>([]);
   const [chatModalVisible, setChatModalVisible] = useState(false);
-
-  // States handling transactional records
-  const [paidDoctorIds, setPaidDoctorIds] = useState<Set<string>>(new Set());
-  const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [typedMessage, setTypedMessage] = useState("");
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const [loadingMessages, setLoadingMessages] = useState(false);
 
-  const doctors: Doctor[] = [
-    {
-      id: "d1",
-      name: "Dr. Sarah Johnson",
-      specialty: "Gynecologist",
-      rating: 4.8,
-      availability: "Available today",
-      price: "$45",
-      rawPrice: 45,
-      avatarEmoji: "👩‍⚕️",
-    },
-    {
-      id: "d2",
-      name: "Dr. Priya Sharma",
-      specialty: "OBGYN Expert",
-      rating: 4.9,
-      availability: "Tomorrow 2 PM",
-      price: "$60",
-      rawPrice: 60,
-      avatarEmoji: "👩‍⚕️",
-    },
-    {
-      id: "d3",
-      name: "Dr. Maria Lopez",
-      specialty: "Reproductive Health",
-      rating: 4.7,
-      availability: "Available today",
-      price: "$50",
-      rawPrice: 50,
-      avatarEmoji: "👩‍⚕️",
-    },
-  ];
+  const softTints = getSoftTints(colors);
 
-  const softTints = {
-    pink: isDark ? "#3b1a2d" : "#fff0f6",
-    purple: isDark ? "#231942" : "#f3e8ff",
-    emerald: isDark ? "#062e20" : "#ecfdf5",
-    orange: isDark ? "#361e12" : "#fff7ed",
-  };
+  const load = useCallback(async (isRefresh = false) => {
+    try {
+      if (isRefresh) setRefreshing(true);
+      else setLoadingDoctors(true);
+      const [doctorList, consultList] = await Promise.all([
+        consultationApi.getDoctors(searchQuery || undefined),
+        consultationApi.getMyConsultations(),
+      ]);
+      setDoctors(doctorList);
+      setMyConsultations(consultList);
+    } catch {
+      // fail silently — show empty states
+    } finally {
+      setLoadingDoctors(false);
+      setRefreshing(false);
+    }
+  }, [searchQuery]);
 
-  const filteredDoctors = doctors.filter((doctor) =>
-    [doctor.name, doctor.specialty]
-      .join(" ")
-      .toLowerCase()
-      .includes(searchQuery.trim().toLowerCase()),
-  );
+  useEffect(() => {
+    load();
+  }, [load]);
 
-  // --- WORKFLOW CONTROLLER ACTIONS ---
-  function handleInitiateBooking(doctor: Doctor) {
-    if (paidDoctorIds.has(doctor.id)) {
-      // If consultation session already unlocked, direct pass onto conversation thread
-      handleOpenChatWindow(doctor);
+  const getConsultationForDoctor = (doctorId: string) =>
+    myConsultations.find((c) => {
+      const id = typeof c.doctorId === "string" ? c.doctorId : c.doctorId._id;
+      return id === doctorId && (c.status === "paid" || c.status === "active");
+    });
+
+  const handleInitiateBooking = (doctor: Doctor) => {
+    const existing = getConsultationForDoctor(doctor._id);
+    if (existing) {
+      openChat(existing);
       return;
     }
     setSelectedDoctor(doctor);
     setPaymentModalVisible(true);
-  }
+  };
 
-  function handleProcessPayment() {
+  const handleProcessPayment = async () => {
     if (!selectedDoctor) return;
+    setBooking(true);
+    try {
+      const consultation = await consultationApi.bookConsultation(selectedDoctor._id);
+      setMyConsultations((prev) => [consultation, ...prev]);
+      setPaymentModalVisible(false);
+      setSelectedDoctor(null);
+      setTimeout(() => openChat(consultation), 400);
+    } catch {
+      // Keep modal open with error handling
+    } finally {
+      setBooking(false);
+    }
+  };
 
-    // Persisting the verified authorization transaction locally
-    setPaidDoctorIds((prev) => new Set([...prev, selectedDoctor.id]));
-    earnTokens(10); // Incentivize health actions
-
-    const configuredDoctor = selectedDoctor;
-    setPaymentModalVisible(false);
-    setSelectedDoctor(null);
-
-    // Deep routing switch into live telehealth environment instantly
-    setTimeout(() => {
-      handleOpenChatWindow(configuredDoctor);
-    }, 400);
-  }
-
-  function handleOpenChatWindow(doctor: Doctor) {
-    setActiveChatDoctor(doctor);
-    // Setting up clear initial onboarding context greetings from the clinical specialist
-    setChatMessages([
-      {
-        id: "m1",
-        sender: "doctor",
-        text: `Hello! I am ${doctor.name}. Your confidential dashboard log has been successfully shared. How can I guide your wellness milestones today?`,
-        time: "Just now",
-      },
-    ]);
+  const openChat = async (consultation: Consultation) => {
+    setActiveConsultation(consultation);
     setChatModalVisible(true);
-  }
+    setLoadingMessages(true);
+    try {
+      const messages = await consultationApi.getMessages(consultation._id);
+      setChatMessages(messages);
+    } catch {
+      setChatMessages(consultation.messages ?? []);
+    } finally {
+      setLoadingMessages(false);
+      setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: false }), 100);
+    }
+  };
 
-  function handleSendMessage() {
-    if (!typedMessage.trim() || !activeChatDoctor) return;
-
-    const freshMessage: Message = {
-      id: `msg_${Date.now()}`,
-      sender: "user",
-      text: typedMessage.trim(),
-      time: "Just now",
-    };
-
-    setChatMessages((prev) => [...prev, freshMessage]);
+  const handleSendMessage = async () => {
+    if (!typedMessage.trim() || !activeConsultation || sendingMessage) return;
+    const text = typedMessage.trim();
     setTypedMessage("");
+    setSendingMessage(true);
 
-    // Simulation response generation logic modeling asynchronous cloud callback actions
-    setTimeout(() => {
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          id: `msg_reply_${Date.now()}`,
-          sender: "doctor",
-          text: "Understood. Our logging engine is checking your cycle history trend structures to fine-tune diagnostic assessments. Please provide any related physical updates.",
-          time: "Just now",
-        },
-      ]);
-    }, 1500);
-  }
+    // Optimistic UI
+    const optimistic: ConsultationMessage = { sender: "user", text, sentAt: new Date().toISOString() };
+    setChatMessages((prev) => [...prev, optimistic]);
+    setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 50);
+
+    try {
+      const latest = await consultationApi.sendMessage(activeConsultation._id, text);
+      setChatMessages((prev) => [...prev.slice(0, -1), ...latest]);
+    } catch {
+      // message stays optimistically
+    } finally {
+      setSendingMessage(false);
+      setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 100);
+    }
+  };
+
+  const filteredDoctors = doctors.filter((d) =>
+    [getDoctorDisplayName(d), d.specialty]
+      .join(" ")
+      .toLowerCase()
+      .includes(searchQuery.toLowerCase()),
+  );
 
   return (
     <>
-      <StatusBar
-        barStyle={isDark ? "light-content" : "dark-content"}
-        backgroundColor={colors.background}
-      />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
 
-      <SafeAreaView
-        className="flex-1"
-        style={{ backgroundColor: colors.background }}
-      >
-        {/* Navigation Action Bar */}
+      <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
+        {/* Nav */}
         <View className="flex-row items-center gap-2 px-6 pt-6">
           <TouchableOpacity
             onPress={() => router.back()}
             activeOpacity={0.7}
             className="p-2.5 -ml-2 rounded-full border"
-            style={{
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-            }}
+            style={{ backgroundColor: colors.surface, borderColor: colors.border }}
           >
             <Feather name="arrow-left" size={18} color={colors.foreground} />
           </TouchableOpacity>
-          <Text
-            className="flex-1 text-2xl font-black tracking-tight ml-2"
-            style={{ color: colors.foreground }}
-          >
+          <Text className="flex-1 text-2xl font-black tracking-tight ml-2" style={{ color: colors.foreground }}>
             Consultation
           </Text>
         </View>
@@ -203,159 +183,167 @@ export default function Consultation() {
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 60 }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={colors.primary} />
+          }
         >
           <View className="mx-6 mt-6">
-            {/* Modern Clean Search Wrapper */}
+            {/* Search bar */}
             <View
-              className="flex-row items-center rounded-2xl border px-4 shadow-3xs"
-              style={{
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-              }}
+              className="flex-row items-center rounded-2xl border px-4 shadow-sm"
+              style={{ backgroundColor: colors.surface, borderColor: colors.border }}
             >
               <Feather name="search" size={16} color={colors.mutedText} />
               <TextInput
-                placeholder="Find clinical specialists, OBGYNs..."
+                placeholder="Find gynecologists, OBGYNs, or specialists..."
                 placeholderTextColor={colors.mutedText}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 className="ml-3 flex-1 py-4 text-sm"
                 style={{ color: colors.foreground }}
               />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchQuery("")}>
+                  <Feather name="x" size={16} color={colors.mutedText} />
+                </TouchableOpacity>
+              )}
             </View>
 
-            {/* CLINICAL TELEHEALTH SPECIALISTS LIST */}
-            <View className="mt-6 gap-4">
-              {filteredDoctors.map((doctor) => {
-                const hasSessionUnlocked = paidDoctorIds.has(doctor.id);
-
-                return (
-                  <View
-                    key={doctor.id}
-                    className="rounded-3xl border p-5 shadow-2xs relative overflow-hidden"
-                    style={{
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                    }}
-                  >
-                    <View className="flex-row items-start">
-                      {/* Avatar Wrapper Panel */}
-                      <View className="h-14 w-14 items-center justify-center rounded-full bg-neutral-100 dark:bg-neutral-800 border border-neutral-200/50">
-                        <Text className="text-2xl">{doctor.avatarEmoji}</Text>
-                      </View>
-
-                      {/* Doctor Credentials Details column */}
-                      <View className="ml-4 flex-1">
-                        <Text
-                          className="text-base font-extrabold tracking-tight"
-                          style={{ color: colors.foreground }}
+            {/* Active consultations */}
+            {myConsultations.filter((c) => c.status === "paid" || c.status === "active").length > 0 && (
+              <View className="mt-6">
+                <Text className="text-xs font-black tracking-widest uppercase mb-3" style={{ color: colors.primary }}>
+                  Your Active Sessions
+                </Text>
+                {myConsultations
+                  .filter((c) => c.status === "paid" || c.status === "active")
+                  .map((c) => {
+                    const doc = typeof c?.doctorId === "object" ? c.doctorId : null;
+                    return (
+                      <TouchableOpacity
+                        key={c._id}
+                        onPress={() => openChat(c)}
+                        activeOpacity={0.8}
+                        className="mb-3 rounded-2xl border overflow-hidden"
+                        style={{ backgroundColor: colors.surface, borderColor: `${colors.primary}40` }}
+                      >
+                        <LinearGradient
+                          colors={[colors.surface, colors.primaryLight]}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 0 }}
+                          className="flex-row items-center p-4 gap-3"
                         >
-                          {doctor.name}
-                        </Text>
-                        <Text
-                          className="text-xs font-semibold mt-0.5"
-                          style={{ color: colors.mutedText }}
-                        >
-                          {doctor.specialty}
-                        </Text>
-
-                        {/* Badges Info Horizontal Segment */}
-                        <View className="mt-2.5 flex-row items-center gap-2">
-                          <View className="flex-row items-center gap-1 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md">
-                            <Ionicons name="star" size={11} color="#eab308" />
-                            <Text
-                              className="text-[10px] font-black"
-                              style={{ color: colors.foreground }}
-                            >
-                              {doctor.rating}
+                          <View className="h-10 w-10 rounded-full items-center justify-center" style={{ backgroundColor: softTints.pink }}>
+                            <Text className="text-lg">👩‍⚕️</Text>
+                          </View>
+                          <View className="flex-1">
+                            <Text className="text-sm font-bold" style={{ color: colors.foreground }}>
+                              {doc ? `${doc?.firstName ?? ""} ${doc?.lastName ?? ""}`.trim() || "Your Doctor" : "Your Doctor"}
+                            </Text>
+                            <Text className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest mt-0.5">
+                              Session active - tap to chat
                             </Text>
                           </View>
-                          <Text
-                            className="text-[11px] font-semibold"
-                            style={{ color: colors.mutedText }}
-                          >
-                            • {doctor.availability}
+                          <Feather name="message-circle" size={18} color={colors.primary} />
+                        </LinearGradient>
+                      </TouchableOpacity>
+                    );
+                  })}
+              </View>
+            )}
+
+            {/* Doctors list */}
+            <View className="mt-6 gap-4">
+              <Text className="text-xs font-black tracking-widest uppercase" style={{ color: colors.primary }}>
+                {loadingDoctors ? "Loading specialists…" : `${filteredDoctors.length} Available Specialists`}
+              </Text>
+
+              {loadingDoctors ? (
+                <ActivityIndicator color={colors.primary} />
+              ) : (
+                filteredDoctors.map((doctor, i) => {
+                  const hasSession = Boolean(getConsultationForDoctor(doctor._id));
+                  return (
+                    <View
+                      key={doctor._id}
+                      className="rounded-3xl border p-5 shadow-sm relative overflow-hidden"
+                      style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+                    >
+                      <View className="flex-row items-start">
+                        {/* Avatar */}
+                        <View className="h-14 w-14 items-center justify-center rounded-full bg-neutral-100 dark:bg-neutral-800 border border-neutral-200/50">
+                          <Text className="text-2xl">{AVATAR_EMOJIS[i % AVATAR_EMOJIS.length]}</Text>
+                        </View>
+
+                        <View className="ml-4 flex-1">
+                          <Text className="text-base font-extrabold tracking-tight" style={{ color: colors.foreground }}>
+                            {getDoctorDisplayName(doctor)}
+                          </Text>
+                          <Text className="text-xs font-semibold mt-0.5" style={{ color: colors.mutedText }}>
+                            {doctor.specialty}
+                          </Text>
+                          <View className="mt-2.5 flex-row items-center gap-2">
+                            <View className="flex-row items-center gap-1 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md">
+                              <Ionicons name="star" size={11} color={colors.warning} />
+                              <Text className="text-[10px] font-black" style={{ color: colors.foreground }}>
+                                {doctor.rating}
+                              </Text>
+                            </View>
+                            {doctor.isAvailable && (
+                              <Text className="text-[11px] font-semibold text-emerald-500">
+                                Available now
+                              </Text>
+                            )}
+                          </View>
+                        </View>
+
+                        <View className="items-end">
+                          <Text className="text-base font-black" style={{ color: colors.primary }}>
+                            ${doctor.pricePerSession}
+                          </Text>
+                          <Text className="text-[9px] font-bold tracking-wide uppercase mt-0.5" style={{ color: colors.mutedText }}>
+                            / session
                           </Text>
                         </View>
                       </View>
 
-                      {/* Price Element */}
-                      <View className="items-end">
-                        <Text
-                          className="text-base font-black"
-                          style={{ color: colors.primary }}
-                        >
-                          {doctor.price}
-                        </Text>
-                        <Text
-                          className="text-[9px] font-bold tracking-wide uppercase mt-0.5"
-                          style={{ color: colors.mutedText }}
-                        >
-                          / session
-                        </Text>
-                      </View>
-                    </View>
-
-                    {/* Integrated CTA Workflow Trigger */}
-                    <TouchableOpacity
-                      activeOpacity={0.8}
-                      className="mt-5 w-full rounded-xl py-3.5 items-center justify-center shadow-3xs"
-                      onPress={() => handleInitiateBooking(doctor)}
-                      style={{
-                        backgroundColor: hasSessionUnlocked
-                          ? "#10b981"
-                          : colors.primary,
-                      }}
-                    >
-                      <Text
-                        className="text-sm font-bold tracking-wide"
-                        style={{ color: colors.buttonText }}
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        className="mt-5 w-full rounded-xl py-3.5 items-center justify-center shadow-sm"
+                        onPress={() => handleInitiateBooking(doctor)}
+                        style={{ backgroundColor: hasSession ? colors.success : colors.primary }}
                       >
-                        {hasSessionUnlocked
-                          ? "Open Consultation Chat"
-                          : "Book Consultation Session"}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                );
-              })}
+                        <Text className="text-sm font-bold tracking-wide" style={{ color: colors.buttonText }}>
+                          {hasSession ? "Open Consultation Chat" : "Book Consultation Session"}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })
+              )}
             </View>
 
-            {/* Privacy Compliance Footer Notification Footer Tag */}
+            {/* Privacy footer */}
             <View className="flex-row items-center justify-center gap-2 mt-8 opacity-70">
-              <MaterialCommunityIcons
-                name="shield-check-outline"
-                size={14}
-                color={colors.mutedText}
-              />
-              <Text
-                className="text-[11px] font-semibold tracking-wide text-center"
-                style={{ color: colors.mutedText }}
-              >
-                All consultations are fully encrypted, private & secure.
+              <MaterialCommunityIcons name="shield-check-outline" size={14} color={colors.mutedText} />
+              <Text className="text-[11px] font-semibold tracking-wide text-center" style={{ color: colors.mutedText }}>
+                Private consultation chat for sensitive health questions.
               </Text>
             </View>
           </View>
         </ScrollView>
 
-        {/* --- CHECKOUT MODULE LAYER 1: PAYMENT SHEET MODAL --- */}
+        {/* Payment Modal */}
         <Modal
           visible={paymentModalVisible}
           animationType="slide"
           presentationStyle="pageSheet"
           onRequestClose={() => setPaymentModalVisible(false)}
         >
-          <View
-            className="flex-1 px-6 pt-6 justify-between pb-10"
-            style={{ backgroundColor: colors.background }}
-          >
+          <View className="flex-1 px-6 pt-6 justify-between pb-10" style={{ backgroundColor: colors.background }}>
             <View>
-              {/* Sheet Navigation Header row */}
               <View className="flex-row justify-between items-center mb-8">
-                <Text
-                  className="text-xl font-black"
-                  style={{ color: colors.foreground }}
-                >
+                <Text className="text-xl font-black" style={{ color: colors.foreground }}>
                   Secure Checkout
                 </Text>
                 <TouchableOpacity
@@ -366,197 +354,145 @@ export default function Consultation() {
                 </TouchableOpacity>
               </View>
 
-              {/* Order Transaction Context details */}
-              <Text
-                className="text-xs font-bold tracking-widest uppercase mb-3"
-                style={{ color: colors.primary }}
-              >
+              <Text className="text-xs font-bold tracking-widest uppercase mb-3" style={{ color: colors.primary }}>
                 Consultation Summary
               </Text>
               {selectedDoctor && (
                 <View
                   className="p-5 rounded-2xl border flex-row items-center justify-between mb-6"
-                  style={{
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  }}
+                  style={{ backgroundColor: colors.surface, borderColor: colors.border }}
                 >
                   <View>
-                    <Text
-                      className="text-base font-extrabold"
-                      style={{ color: colors.foreground }}
-                    >
-                      {selectedDoctor.name}
+                    <Text className="text-base font-extrabold" style={{ color: colors.foreground }}>
+                      {getDoctorDisplayName(selectedDoctor)}
                     </Text>
-                    <Text
-                      className="text-xs font-semibold mt-0.5"
-                      style={{ color: colors.mutedText }}
-                    >
+                    <Text className="text-xs font-semibold mt-0.5" style={{ color: colors.mutedText }}>
                       {selectedDoctor.specialty}
                     </Text>
                   </View>
-                  <Text
-                    className="text-lg font-black"
-                    style={{ color: colors.foreground }}
-                  >
-                    {selectedDoctor.price}.00
+                  <Text className="text-lg font-black" style={{ color: colors.foreground }}>
+                    ${selectedDoctor.pricePerSession}
                   </Text>
                 </View>
               )}
 
-              {/* Secure transactional compliance statement notification block */}
-              <View
-                className="p-4 rounded-xl flex-row items-start gap-3"
-                style={{ backgroundColor: softTints.emerald }}
-              >
-                <MaterialCommunityIcons
-                  name="lock-check-outline"
-                  size={18}
-                  color="#10b981"
-                />
-                <Text
-                  className="text-xs leading-4 flex-1 font-medium"
-                  style={{ color: colors.mutedText }}
-                >
-                  Telemetry channels are sandbox tokens encrypted. Completing
-                  verification releases live private messaging tunnels
-                  instantly.
+              <View className="p-4 rounded-xl flex-row items-start gap-3" style={{ backgroundColor: softTints.emerald }}>
+                <MaterialCommunityIcons name="lock-check-outline" size={18} color={colors.success} />
+                <Text className="text-xs leading-4 flex-1 font-medium" style={{ color: colors.mutedText }}>
+                  Booking opens a private chat with your specialist. Payment is
+                  handled before the session starts.
                 </Text>
               </View>
             </View>
 
-            {/* Execute Payment Process Button */}
             <TouchableOpacity
               activeOpacity={0.85}
+              disabled={booking}
               onPress={handleProcessPayment}
               className="w-full rounded-2xl py-4 items-center justify-center shadow-md"
-              style={{ backgroundColor: colors.primary }}
+              style={{ backgroundColor: colors.primary, opacity: booking ? 0.7 : 1 }}
             >
-              <Text
-                className="text-sm font-extrabold tracking-wide"
-                style={{ color: colors.buttonText }}
-              >
-                Pay & Start Consultation
-              </Text>
+              {booking ? (
+                <ActivityIndicator color={colors.buttonText} />
+              ) : (
+                <Text className="text-sm font-extrabold tracking-wide" style={{ color: colors.buttonText }}>
+                  Pay & Start Consultation
+                </Text>
+              )}
             </TouchableOpacity>
           </View>
         </Modal>
 
-        {/* --- SYSTEM TELEHEALTH MODULE LAYER 2: CHAT INTERFACE OVERLAY MODAL --- */}
+        {/* Chat Modal */}
         <Modal
           visible={chatModalVisible}
           animationType="slide"
           presentationStyle="pageSheet"
-          onRequestClose={(closeCommentsSheet) => setChatModalVisible(false)}
+          onRequestClose={() => setChatModalVisible(false)}
         >
-          <View
-            className="flex-1"
-            style={{ backgroundColor: colors.background }}
-          >
-            {/* Telehealth Chat Room Navbar Header section */}
+          <View className="flex-1" style={{ backgroundColor: colors.background }}>
+            {/* Chat header */}
             <View
-              className="px-6 py-4 border-b border-neutral-100 dark:border-neutral-900/60 flex-row justify-between items-center"
-              style={{ backgroundColor: colors.surface }}
+              className="px-6 py-4 border-b flex-row justify-between items-center"
+              style={{ backgroundColor: colors.surface, borderColor: colors.border }}
             >
               <View className="flex-row items-center gap-3">
-                <TouchableOpacity
-                  onPress={() => setChatModalVisible(false)}
-                  className="p-1 -ml-1"
-                >
-                  <Feather
-                    name="chevron-down"
-                    size={20}
-                    color={colors.foreground}
-                  />
+                <TouchableOpacity onPress={() => setChatModalVisible(false)} className="p-1 -ml-1">
+                  <Feather name="chevron-down" size={20} color={colors.foreground} />
                 </TouchableOpacity>
                 <View>
-                  <Text
-                    className="text-sm font-black"
-                    style={{ color: colors.foreground }}
-                  >
-                    {activeChatDoctor?.name || "Clinical Support Desk"}
+                  <Text className="text-sm font-black" style={{ color: colors.foreground }}>
+                    Clinical Specialist
                   </Text>
                   <Text className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest mt-0.5">
-                    Secure Session Active
+                    Secure session active
                   </Text>
                 </View>
               </View>
-              <MaterialCommunityIcons
-                name="shield-account-outline"
-                size={20}
-                color={colors.primary}
-              />
+              <MaterialCommunityIcons name="shield-account-outline" size={20} color={colors.primary} />
             </View>
 
-            {/* Scrollable Conversation Stream Thread area */}
+            {/* Messages */}
             <ScrollView
+              ref={chatScrollRef}
               showsVerticalScrollIndicator={false}
               className="flex-1 px-6 pt-4"
-              contentContainerStyle={{ paddingBottom: 40 }}
+              contentContainerStyle={{ paddingBottom: 20 }}
             >
-              <View className="gap-4">
-                {chatMessages.map((msg) => {
-                  const isDoctor = msg.sender === "doctor";
-                  return (
-                    <View
-                      key={msg.id}
-                      className={`max-w-[80%] p-4 rounded-2xl ${
-                        isDoctor
-                          ? "self-start rounded-tl-none border border-neutral-100 dark:border-neutral-800"
-                          : "self-end rounded-tr-none"
-                      }`}
-                      style={{
-                        backgroundColor: isDoctor
-                          ? colors.surface
-                          : colors.primary,
-                      }}
-                    >
-                      <Text
-                        className="text-xs font-medium leading-5"
+              {loadingMessages ? (
+                <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
+              ) : (
+                <View className="gap-4">
+                  {chatMessages.map((msg, i) => {
+                    const isDoctor = msg.sender === "doctor";
+                    return (
+                      <View
+                        key={msg._id ?? i}
+                        className={`max-w-[80%] p-4 rounded-2xl ${isDoctor ? "self-start rounded-tl-none border" : "self-end rounded-tr-none"}`}
                         style={{
-                          color: isDoctor
-                            ? colors.foreground
-                            : colors.buttonText,
+                          backgroundColor: isDoctor ? colors.surface : colors.primary,
+                          borderColor: isDoctor ? colors.border : undefined,
                         }}
                       >
-                        {msg.text}
-                      </Text>
-                    </View>
-                  );
-                })}
-              </View>
+                        <Text
+                          className="text-xs font-medium leading-5"
+                          style={{ color: isDoctor ? colors.foreground : colors.buttonText }}
+                        >
+                          {msg.text}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
             </ScrollView>
 
-            {/* Persistent Input Row Bar */}
+            {/* Input row */}
             <View
-              className="px-4 py-3.5 border-t border-neutral-100 dark:border-neutral-900/60 flex-row items-center gap-3"
-              style={{ backgroundColor: colors.surface }}
+              className="px-4 py-3.5 border-t flex-row items-center gap-3"
+              style={{ backgroundColor: colors.surface, borderColor: colors.border }}
             >
               <TextInput
-                placeholder="Type your encrypted response message..."
+                placeholder="Type your message…"
                 placeholderTextColor={colors.mutedText}
                 value={typedMessage}
                 onChangeText={setTypedMessage}
-                className="flex-1 bg-neutral-100 dark:bg-neutral-800/80 px-4 py-3 rounded-xl text-sm"
-                style={{ color: colors.foreground }}
+                className="flex-1 px-4 py-3 rounded-xl text-sm"
+                style={{ backgroundColor: colors.input, color: colors.foreground }}
+                onSubmitEditing={handleSendMessage}
+                returnKeyType="send"
               />
               <TouchableOpacity
-                disabled={!typedMessage.trim()}
+                disabled={!typedMessage.trim() || sendingMessage}
                 onPress={handleSendMessage}
                 className="p-2.5 rounded-full items-center justify-center"
-                style={{
-                  backgroundColor: typedMessage.trim()
-                    ? colors.primary
-                    : colors.border,
-                }}
+                style={{ backgroundColor: typedMessage.trim() ? colors.primary : colors.border }}
               >
-                <Feather
-                  name="send"
-                  size={15}
-                  color={
-                    typedMessage.trim() ? colors.buttonText : colors.mutedText
-                  }
-                />
+                {sendingMessage ? (
+                  <ActivityIndicator size="small" color={colors.buttonText} />
+                ) : (
+                  <Feather name="send" size={15} color={typedMessage.trim() ? colors.buttonText : colors.mutedText} />
+                )}
               </TouchableOpacity>
             </View>
           </View>

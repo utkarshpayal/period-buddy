@@ -1,6 +1,6 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   Image,
@@ -16,6 +16,13 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppState } from "../../../components/AppState";
 import OptionsModal from "../../../components/OptionsModal";
 import { useTheme } from "../../../components/theme";
+import { getSoftTints } from "../../../components/ui-tokens";
+import {
+  blogsApi,
+  communityApi,
+  type CommunityPost,
+  type ContentFeedItem,
+} from "../../../lib/api";
 
 // --- BACKEND API LAYER SCHEMAS & INTERFACES ---
 interface Comment {
@@ -58,13 +65,13 @@ const initialPosts: Post[] = [
     id: "1",
     author: "Sarah M.",
     avatar: "👧",
-    content: "Just tracked my period consistently for 3 months! Amazing insights on my body 🎉",
+    content: "I tracked my cycle consistently for 3 months and finally understand my energy patterns better.",
     likes: 234,
     commentsCount: 2,
     time: "2h ago",
     comments: [
-      { id: "c_1", author: "Jessica T.", avatar: "👩", content: "So proud of you! Consistency is key 💖", time: "1h ago" },
-      { id: "c_2", author: "Lily R.", avatar: "👱‍♀️", content: "Can't wait to reach my 3-month mark too!", time: "45m ago" }
+      { id: "c_1", author: "Jessica T.", avatar: "👩", content: "That is such a helpful milestone. Consistency really changes the picture.", time: "1h ago" },
+      { id: "c_2", author: "Lily R.", avatar: "👱‍♀️", content: "I am trying to reach that 3-month mark too.", time: "45m ago" }
     ]
   },
   {
@@ -81,17 +88,17 @@ const initialPosts: Post[] = [
   },
 ];
 
-const blogsData: Blog[] = [
+const fallbackBlogsData: Blog[] = [
   {
     id: "b1",
     title: "Period Myths Debunked",
-    subtitle: "Separating clinical science from traditional generation misconceptions.",
+    subtitle: "Clear answers to common myths around periods, hygiene, and movement.",
     readTime: "5 min read",
     thumbnailUrl: "https://images.unsplash.com/photo-1516627145497-ae6968895b74?q=80&w=600&auto=format&fit=crop",
   },
 ];
 
-const reelsData: Reel[] = [
+const fallbackReelsData: Reel[] = [
   {
     id: "r1",
     title: "Hormonal Health Tips",
@@ -100,14 +107,68 @@ const reelsData: Reel[] = [
   },
 ];
 
+function mapCommunityPost(post: CommunityPost): Post {
+  return {
+    id: post.id ?? post._id,
+    author: post.isAnonymous ? "Anonymous member" : "Community member",
+    avatar: "NU",
+    content: post.content,
+    likes: post.likes,
+    commentsCount: post.commentsCount ?? post.comments?.length ?? 0,
+    time: formatRelativeTime(post.createdAt),
+    comments:
+      post.comments?.map((comment) => ({
+        id: comment.id ?? comment._id ?? `comment_${Math.random()}`,
+        author: comment.isAnonymous ? "Anonymous member" : "Community member",
+        avatar: "NU",
+        content: comment.content,
+        time: formatRelativeTime(comment.createdAt),
+      })) ?? [],
+  };
+}
+
+function mapFeedBlog(item: ContentFeedItem): Blog {
+  return {
+    id: item.sourceId,
+    title: item.title,
+    subtitle: item.summary,
+    readTime: item.time,
+    thumbnailUrl: item.imageUrl,
+  };
+}
+
+function mapFeedReel(item: ContentFeedItem): Reel {
+  return {
+    id: item.sourceId,
+    title: item.title,
+    videoDuration: item.time,
+    thumbnailUrl: item.imageUrl,
+  };
+}
+
+function formatRelativeTime(value?: string) {
+  if (!value) return "Just now";
+  const diffMinutes = Math.max(
+    0,
+    Math.round((Date.now() - new Date(value).getTime()) / 60000),
+  );
+  if (diffMinutes < 1) return "Just now";
+  if (diffMinutes < 60) return `${diffMinutes}m ago`;
+  if (diffMinutes < 1440) return `${Math.round(diffMinutes / 60)}h ago`;
+  return `${Math.round(diffMinutes / 1440)}d ago`;
+}
+
 export default function Community() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
+  const softTints = getSoftTints(colors);
   
   // UI States
   const [activeTab, setActiveTab] = useState<"posts" | "buddy" | "blogs">("posts");
   const [posts, setPosts] = useState<Post[]>(initialPosts);
   const [likedPostIds, setLikedPostIds] = useState<Set<string>>(new Set());
+  const [blogsData, setBlogsData] = useState<Blog[]>(fallbackBlogsData);
+  const [reelsData, setReelsData] = useState<Reel[]>(fallbackReelsData);
   
   // Modals Controller States
   const [optionsVisible, setOptionsVisible] = useState(false);
@@ -127,6 +188,60 @@ export default function Community() {
     reportedPosts,
     toggleSavedPost,
   } = useAppState();
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadCommunity() {
+      try {
+        const [postsResponse, feedResponse] = await Promise.all([
+          communityApi.getPosts({ limit: 20 }),
+          blogsApi.getFeed({ limit: 10, type: "all" }),
+        ]);
+
+        if (!isMounted) return;
+
+        if (postsResponse.posts.length > 0) {
+          setPosts(postsResponse.posts.map(mapCommunityPost));
+          setLikedPostIds(
+            new Set(
+              postsResponse.posts
+                .filter((post) => post.likedByMe)
+                .map((post) => post.id ?? post._id),
+            ),
+          );
+        }
+
+        const blogItems = feedResponse.items.filter(
+          (item): item is ContentFeedItem & { type: "blog" } =>
+            item.type === "blog",
+        );
+        const reelItems = feedResponse.items.filter(
+          (item): item is ContentFeedItem & { type: "reel" } =>
+            item.type === "reel",
+        );
+
+        if (blogItems.length > 0) {
+          setBlogsData(blogItems.map(mapFeedBlog));
+        }
+        if (reelItems.length > 0) {
+          setReelsData(reelItems.map(mapFeedReel));
+        }
+      } catch {
+        if (isMounted) {
+          setPosts(initialPosts);
+          setBlogsData(fallbackBlogsData);
+          setReelsData(fallbackReelsData);
+        }
+      }
+    }
+
+    loadCommunity();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // --- ACTIONS HANDLERS ---
   function openOptions(post: Post) {
@@ -150,7 +265,7 @@ export default function Community() {
     setNewCommentContent("");
   }
 
-  function toggleLike(post: Post) {
+  async function toggleLike(post: Post) {
     const isAlreadyLiked = likedPostIds.has(post.id);
     setLikedPostIds((current) => {
       const next = new Set(current);
@@ -167,10 +282,27 @@ export default function Community() {
       )
     );
     if (!isAlreadyLiked) earnTokens(1);
+
+    try {
+      const result = await communityApi.toggleLike(post.id);
+      setPosts((current) =>
+        current.map((item) =>
+          item.id === post.id ? { ...item, likes: result.likes } : item,
+        ),
+      );
+      setLikedPostIds((current) => {
+        const next = new Set(current);
+        if (result.likedByMe) next.add(post.id);
+        else next.delete(post.id);
+        return next;
+      });
+    } catch {
+      // Optimistic local state is kept when the API is unavailable.
+    }
   }
 
   // Threads style real-time sub-array append mutation
-  function handlePublishPost() {
+  async function handlePublishPost() {
     if (!newPostContent.trim()) {
       Alert.alert("Empty Post", "Please type something before sharing with the community.");
       return;
@@ -190,11 +322,29 @@ export default function Community() {
     setPosts([payload, ...posts]);
     setNewPostContent("");
     setCreatePostVisible(false);
-    earnTokens(5); // Higher incentive tier for content curation
-    Alert.alert("Success 🎉", "Your post has been live streamed to the community feed.");
+    earnTokens(5);
+
+    try {
+      const createdPost = await communityApi.createPost({
+        content: payload.content,
+        isAnonymous: true,
+      });
+      setPosts((current) => [
+        mapCommunityPost(createdPost),
+        ...current.filter((post) => post.id !== payload.id),
+      ]);
+    } catch {
+      Alert.alert(
+        "Saved locally",
+        "Your post is visible here. It will need the backend online to sync.",
+      );
+      return;
+    }
+
+    Alert.alert("Shared", "Your post is now visible in the community feed.");
   }
 
-  function handlePublishComment() {
+  async function handlePublishComment() {
     if (!newCommentContent.trim() || !activePost) return;
 
     const freshComment: Comment = {
@@ -224,6 +374,35 @@ export default function Community() {
     setPosts(updatedPosts);
     setNewCommentContent("");
     earnTokens(2);
+
+    try {
+      const createdComment = await communityApi.addComment(
+        activePost.id,
+        freshComment.content,
+        true,
+      );
+      const syncedComment: Comment = {
+        id: createdComment.id ?? createdComment._id ?? freshComment.id,
+        author: createdComment.isAnonymous
+          ? "Anonymous member"
+          : "Community member",
+        avatar: "NU",
+        content: createdComment.content,
+        time: formatRelativeTime(createdComment.createdAt),
+      };
+      setPosts((current) =>
+        current.map((item) =>
+          item.id === activePost.id
+            ? {
+                ...item,
+                comments: [...item.comments.slice(0, -1), syncedComment],
+              }
+            : item,
+        ),
+      );
+    } catch {
+      // Keep local comment as an offline draft.
+    }
   }
 
   async function shareCommunityPost(post: Post) {
@@ -231,17 +410,28 @@ export default function Community() {
     earnTokens(2);
   }
 
-  function saveActivePost() {
+  async function saveActivePost() {
     if (!activePost) return;
     const wasSaved = savedPosts.has(activePost.id);
     toggleSavedPost(activePost.id);
     if (!wasSaved) earnTokens(3);
+    try {
+      const result = await communityApi.toggleSave(activePost.id);
+      if (result.tokensAwarded) earnTokens(result.tokensAwarded);
+    } catch {
+      // Local saved state remains useful offline.
+    }
     closeOptions();
   }
 
-  function reportActivePost() {
+  async function reportActivePost() {
     if (!activePost) return;
     reportPost(activePost.id);
+    try {
+      await communityApi.report(activePost.id, "Reported from mobile app");
+    } catch {
+      // Local report flag remains visible offline.
+    }
     closeOptions();
   }
 
@@ -262,12 +452,17 @@ export default function Community() {
                 Community
               </Text>
               <Text className="text-xs font-semibold mt-1" style={{ color: colors.mutedText }}>
-                Safe private hub for shared experiences & clinical logs
+                Share experiences, ask questions, and find care resources safely
               </Text>
             </View>
 
             {/* Segmented Controls Tabs */}
-            <View className="mt-5 flex-row gap-2 px-6">
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              className="mt-5"
+              contentContainerStyle={{ gap: 8, paddingHorizontal: 24 }}
+            >
               {[
                 { id: "posts", label: "Posts" },
                 { id: "buddy", label: "Period Buddy" },
@@ -279,7 +474,7 @@ export default function Community() {
                     key={tab.id}
                     onPress={() => setActiveTab(tab.id as any)}
                     activeOpacity={0.8}
-                    className="rounded-full px-5 py-2 border shadow-2xs"
+                    className="rounded-full px-5 py-2.5 border"
                     style={{
                       backgroundColor: isSelected ? colors.primary : colors.surface,
                       borderColor: isSelected ? colors.primary : colors.border,
@@ -291,7 +486,7 @@ export default function Community() {
                   </TouchableOpacity>
                 );
               })}
-            </View>
+            </ScrollView>
 
             {/* FEED CONTAINER */}
             {activeTab === "posts" && (
@@ -312,7 +507,13 @@ export default function Community() {
                     >
                       <View className="flex-row items-center justify-between">
                         <View className="flex-row items-center gap-3">
-                          <View className="w-11 h-11 bg-neutral-100 dark:bg-neutral-800 rounded-full items-center justify-center border border-neutral-200/40">
+                          <View
+                            className="w-11 h-11 rounded-full items-center justify-center border"
+                            style={{
+                              backgroundColor: colors.surfaceSoft,
+                              borderColor: colors.border,
+                            }}
+                          >
                             <Text className="text-xl">{post.avatar}</Text>
                           </View>
                           <View>
@@ -372,11 +573,11 @@ export default function Community() {
             {activeTab === "buddy" && (
               <View className="mt-6 px-6">
                 <View className="rounded-3xl border p-6 items-center shadow-xs" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
-                  <View className="p-4 rounded-2xl bg-pink-50 dark:bg-pink-950/30 mb-4">
+                  <View className="p-4 rounded-2xl mb-4" style={{ backgroundColor: softTints.pink }}>
                     <MaterialCommunityIcons name="star-face" size={36} color={colors.primary} />
                   </View>
                   <Text className="text-lg font-extrabold" style={{ color: colors.foreground }}>Nominate Period Buddy</Text>
-                  <Text className="mt-2 text-xs text-center px-4 leading-4" style={{ color: colors.mutedText }}>Match instantly with a sister sharing your specific cycle phases.</Text>
+                  <Text className="mt-2 text-xs text-center px-4 leading-4" style={{ color: colors.mutedText }}>Find a private buddy with a similar cycle phase and care routine.</Text>
                   <TouchableOpacity activeOpacity={0.85} className="mt-6 w-full rounded-xl py-3.5 items-center justify-center" onPress={() => router.push("/(app)/buddy-nomination" as any)} style={{ backgroundColor: colors.primary }}>
                     <Text className="text-sm font-bold" style={{ color: colors.buttonText }}>Nominate Now</Text>
                   </TouchableOpacity>
@@ -393,6 +594,20 @@ export default function Community() {
                     <View className="flex-1 p-3 justify-center">
                       <Text className="font-extrabold text-sm" style={{ color: colors.foreground }}>{blog.title}</Text>
                       <Text className="text-[11px] mt-1" style={{ color: colors.mutedText }} numberOfLines={2}>{blog.subtitle}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+                {reelsData.map((reel) => (
+                  <TouchableOpacity key={reel.id} className="overflow-hidden rounded-3xl border flex-row h-28" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+                    <View className="w-28 h-full relative">
+                      <Image source={{ uri: reel.thumbnailUrl }} className="w-full h-full bg-neutral-200" />
+                      <View className="absolute inset-0 items-center justify-center bg-black/20">
+                        <Ionicons name="play-circle" size={26} color="white" />
+                      </View>
+                    </View>
+                    <View className="flex-1 p-3 justify-center">
+                      <Text className="font-extrabold text-sm" style={{ color: colors.foreground }}>{reel.title}</Text>
+                      <Text className="text-[11px] mt-1" style={{ color: colors.mutedText }}>{reel.videoDuration}</Text>
                     </View>
                   </TouchableOpacity>
                 ))}
@@ -461,10 +676,10 @@ export default function Community() {
             {/* Primary Render Target Focused Post Header Context info segment */}
             {activePost && (
               <View className="pb-5 border-b border-neutral-100 dark:border-neutral-900">
-                <g className="flex-row items-center gap-3">
+                <View className="flex-row items-center gap-3">
                   <Text className="text-2xl">{activePost.avatar}</Text>
                   <Text className="text-sm font-bold" style={{ color: colors.foreground }}>{activePost.author}</Text>
-                </g>
+                </View>
                 <Text className="mt-3 text-sm leading-5" style={{ color: colors.foreground }}>{activePost.content}</Text>
               </View>
             )}

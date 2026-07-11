@@ -1,6 +1,6 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Modal,
   ScrollView,
@@ -12,6 +12,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppState } from "../../components/AppState";
 import { useTheme } from "../../components/theme";
+import { getSoftTints } from "../../components/ui-tokens";
+import { wellbeingApi, type WellbeingResource } from "../../lib/api";
 
 // --- STRUCTURAL BACKEND API CONTRACTS ---
 interface ResourceCategory {
@@ -22,6 +24,86 @@ interface ResourceCategory {
   items: number;
   summary: string;
   extendedGuide: string[]; // Dynamic checklist nodes inside the detail modal sheet
+}
+
+type PositionCard = {
+  focus: string;
+  name: string;
+  tip: string;
+};
+
+type PositionCardLike = Partial<PositionCard> & {
+  question?: unknown;
+  text?: unknown;
+};
+
+const fallbackSparkCards = [
+  "What is one small, non-physical gesture that always makes you feel deeply loved or secure by me?",
+  "If we could try any brand new couple's habit or routine together this month, what would it be?",
+  "What's a clean or easy boundary you want to talk about regarding intimacy during heavy period flows?",
+  "Describe your absolute favorite memory of a cozy, relaxed night spent together.",
+];
+
+const fallbackPositionCards: PositionCard[] = [
+  {
+    name: "The Mission Comfort",
+    focus: "Comfort, closeness, and lower pressure",
+    tip: "Use a soft pillow under the hips if it reduces pelvic pressure. Pause or change position if anything feels uncomfortable.",
+  },
+  {
+    name: "The Lotus Variant",
+    focus: "Closeness and easy pacing",
+    tip: "A relaxed seated posture can make pacing easier and allow either partner to slow down whenever needed.",
+  },
+  {
+    name: "The Side Spoon Wrap",
+    focus: "Low pressure and low effort",
+    tip: "Side-lying can feel easier on crampy or tired days because it reduces pressure and body weight.",
+  },
+];
+
+function normalizeTextCard(card: unknown, fallback: string) {
+  if (typeof card === "string") return card;
+  if (card && typeof card === "object") {
+    const objectCard = card as PositionCardLike;
+    if (typeof objectCard.text === "string") return objectCard.text;
+    if (typeof objectCard.question === "string") return objectCard.question;
+    if (typeof objectCard.tip === "string") return objectCard.tip;
+    if (typeof objectCard.name === "string") return objectCard.name;
+  }
+  return fallback;
+}
+
+function normalizePositionCard(card: unknown, index: number): PositionCard {
+  if (card && typeof card === "object") {
+    const objectCard = card as PositionCardLike;
+    return {
+      name:
+        typeof objectCard.name === "string"
+          ? objectCard.name
+          : `Comfort Card ${index + 1}`,
+      focus:
+        typeof objectCard.focus === "string"
+          ? objectCard.focus
+          : "Comfort, consent, and communication",
+      tip:
+        typeof objectCard.tip === "string"
+          ? objectCard.tip
+          : normalizeTextCard(
+              card,
+              "Pause, check comfort, and choose what feels safe for both people.",
+            ),
+    };
+  }
+
+  return {
+    name: `Comfort Card ${index + 1}`,
+    focus: "Comfort, consent, and communication",
+    tip: normalizeTextCard(
+      card,
+      "Pause, check comfort, and choose what feels safe for both people.",
+    ),
+  };
 }
 
 export default function SexualWellbeing() {
@@ -41,114 +123,160 @@ export default function SexualWellbeing() {
     useState<ResourceCategory | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
 
-  // Gamified Card Decks Pool Arrays
-  const intimacyPromptsPool = [
-    "What is one small, non-physical gesture that always makes you feel deeply loved or secure by me?",
-    "If we could try any brand new couple's habit or routine together this month, what would it be?",
-    "What's a clean or easy boundary you want to talk about regarding intimacy during heavy period flows?",
-    "Describe your absolute favorite memory of a cozy, relaxed night spent together.",
-  ];
-
-  const positionsPool = [
-    {
-      name: "The Mission Comfort",
-      focus: "High Clitoral Contact & Proximity",
-      tip: "Place a soft pillow under the lower hips to perfectly ease pelvic pressure and elevate deep comfort structures smoothly.",
-    },
-    {
-      name: "The Lotus Variant",
-      focus: "Intense Eye Contact & Deep Sync",
-      tip: "An incredibly relaxed sitting posture that shifts full body workload speed control directly to the female partner. Perfect for fatigue stages.",
-    },
-    {
-      name: "The Side Spoon Wrap",
-      focus: "Zero Pelvic Pressure & Low Fatigue",
-      tip: "The absolute best medical-wellness position for cramping period days. Allows comforting full body contact from behind with zero weight strains.",
-    },
-  ];
-
   const categories: ResourceCategory[] = [
     {
       id: "sw_1",
       title: "Intimacy & Periods",
       icon: "heart-outline",
-      color: "#d946a6",
+      color: colors.primary,
       items: 8,
       summary:
-        "Science-backed guidance on comfort parameters, physical safety maps, and clear boundary setup during active flows.",
+        "Guidance on comfort, consent, and clear boundaries during periods.",
       extendedGuide: [
-        "Communication Hub: Discuss energy levels and flow intensity before establishing intimate touch.",
-        "Natural Relief: Endorphins released during climax can act as an organic painkiller for heavy tracking cramps.",
-        "Preparation: Place a dark comfort towel down to eliminate staining concerns or friction drops entirely.",
+        "Talk about energy, flow, and comfort before intimacy.",
+        "Protection still matters during periods because pregnancy and infection risks can remain.",
+        "Use a towel, pause when needed, and never continue through pain.",
       ],
     },
     {
       id: "sw_2",
       title: "STI Prevention Guide",
       icon: "shield-checkmark-outline",
-      color: "#10b981",
+      color: colors.success,
       items: 12,
       summary:
-        "Clear clinical barrier method breakdowns, routine health panel checkpoints, and stigma-free screening data.",
+        "Clear guidance on barrier protection, routine screening, and stigma-free conversations.",
       extendedGuide: [
-        "Barrier Mechanics: Always ensure compatible protective barriers are deployed sequentially from the start.",
-        "Routine Testing: Clinical panels are recommended every 6 months for active partners.",
-        "Asymptomatic Spreads: Remember that many micro-bacterial pathways transfer tracking loops without physical signs.",
+        "Use protection from the start of sex, not halfway through.",
+        "Consider routine testing every 6 months with active partners.",
+        "Many STIs can have no symptoms, so testing is part of care.",
       ],
     },
     {
       id: "sw_3",
       title: "Contraception Matrix",
       icon: "apps-outline",
-      color: "#8b5cf6",
+      color: colors.accent,
       items: 15,
       summary:
-        "Compare hormonal adjustments, physical barriers, effectiveness indices, and what to discuss with an OBGYN.",
+        "Compare hormonal options, barriers, emergency contraception, and what to discuss with an OBGYN.",
       extendedGuide: [
-        "Double Shielding: Combine barrier tracking with hormonal tracking loops for up to 99% accuracy.",
-        "Emergency Window: Pill methods are most active when deployed within 72 hours of unprotected loops.",
-        "OBGYN Alignment: Consult our clinical desk before modifying regular hormonal prescription cycles.",
+        "Combining condoms with another method can improve protection.",
+        "Emergency contraception works best as soon as possible after unprotected sex.",
+        "Ask a clinician before starting or changing hormonal contraception.",
       ],
     },
     {
       id: "sw_4",
-      title: "Consent & Safety Cores",
+      title: "Consent & Safety",
       icon: "checkmark-circle-outline",
-      color: "#f97316",
+      color: colors.warning,
       items: 6,
       summary:
-        "Navigating personal physiological choices, digital tracking security, boundaries, and affirmative verification.",
+        "Boundaries, communication, privacy, and enthusiastic consent.",
       extendedGuide: [
-        "Affirmative Choice: Clear, conscious, and enthusiastic confirmation must be present at every level.",
-        "Reversible Steps: Consent can be securely paused or changed at any point during active intimacy.",
-        "Digital Boundaries: Establish clear privacy layouts before sharing media assets over public chains.",
+        "Consent should be clear, conscious, and enthusiastic.",
+        "Anyone can pause, change their mind, or stop at any point.",
+        "Discuss privacy before sharing photos, messages, or intimate details.",
       ],
     },
   ];
+  const [apiCategories, setApiCategories] = useState<ResourceCategory[]>([]);
+  const [sparkCards, setSparkCards] = useState(fallbackSparkCards);
+  const [positionCards, setPositionCards] = useState(fallbackPositionCards);
 
-  const softTints = {
-    pink: isDark ? "#3b1a2d" : "#fff0f6",
-    emerald: isDark ? "#062e20" : "#ecfdf5",
-    purple: isDark ? "#231942" : "#f3e8ff",
-    orange: isDark ? "#361e12" : "#fff7ed",
-  };
+  const softTints = getSoftTints(colors);
+  const visibleCategories =
+    apiCategories.length > 0 ? apiCategories : categories;
 
-  // Deck Shuffle Controller Mechanics
-  function handleNextSparkCard() {
-    setCurrentPromptIdx((prev) => (prev + 1) % intimacyPromptsPool.length);
-    earnTokens(1);
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadWellbeing() {
+      try {
+        const [resources, sparkDeck, positionsDeck] = await Promise.all([
+          wellbeingApi.getResources("sexual_wellbeing"),
+          wellbeingApi.getGameDecks("spark"),
+          wellbeingApi.getGameDecks("positions"),
+        ]);
+
+        if (!isMounted) return;
+
+        if (resources.length > 0) {
+          setApiCategories(resources.map(mapWellbeingResource));
+        }
+        if (sparkDeck.cards.length > 0) {
+          setSparkCards(
+            sparkDeck.cards.map((card, index) =>
+              normalizeTextCard(
+                card,
+                fallbackSparkCards[index % fallbackSparkCards.length],
+              ),
+            ),
+          );
+        }
+        if (positionsDeck.cards.length > 0) {
+          setPositionCards(positionsDeck.cards.map(normalizePositionCard));
+        }
+      } catch {
+        if (isMounted) {
+          setApiCategories([]);
+          setSparkCards(fallbackSparkCards);
+          setPositionCards(fallbackPositionCards);
+        }
+      }
+    }
+
+    loadWellbeing();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  function mapWellbeingResource(resource: WellbeingResource): ResourceCategory {
+    return {
+      id: resource._id ?? resource.id ?? resource.title,
+      title: resource.title,
+      icon: resource.icon,
+      color: resource.color,
+      items: resource.items,
+      summary: resource.summary,
+      extendedGuide:
+        resource.extendedGuide.length > 0
+          ? resource.extendedGuide
+          : [resource.summary],
+    };
   }
 
-  function handleNextPositionCard() {
-    setCurrentPositionIdx((prev) => (prev + 1) % positionsPool.length);
+  // Deck Shuffle Controller Mechanics
+  async function handleNextSparkCard() {
+    const nextIndex = (currentPromptIdx + 1) % sparkCards.length;
+    setCurrentPromptIdx(nextIndex);
+    earnTokens(1);
+    try {
+      await wellbeingApi.drawGameCard("spark", nextIndex);
+    } catch {
+      // The deck can still be used offline.
+    }
+  }
+
+  async function handleNextPositionCard() {
+    const nextIndex = (currentPositionIdx + 1) % positionCards.length;
+    setCurrentPositionIdx(nextIndex);
     earnTokens(2);
+    try {
+      await wellbeingApi.drawGameCard("positions", nextIndex);
+    } catch {
+      // The deck can still be used offline.
+    }
   }
 
   // MODAL TRIGGER ACTION INSTEAD OF REDIRECT HOOKS
   function handleOpenArticleModal(category: ResourceCategory) {
     setSelectedCategory(category);
     setModalVisible(true);
-    earnTokens(3); // Reward reading interaction metrics
+    earnTokens(3);
   }
 
   return (
@@ -192,8 +320,8 @@ export default function SexualWellbeing() {
               className="text-xs font-semibold"
               style={{ color: colors.mutedText }}
             >
-              Science-backed biological insights, intimacy metrics, and
-              relational gamified tools.
+              Consent-centered intimacy guidance, safety resources, and private
+              partner conversation tools.
             </Text>
           </View>
 
@@ -224,7 +352,7 @@ export default function SexualWellbeing() {
                     style={{ color: colors.mutedText }}
                   >
                     Choose a specialized conversational or physical card deck to
-                    explore intimacy levels dynamically together.
+                    explore comfort, boundaries, and communication together.
                   </Text>
 
                   <View className="flex-row gap-3 w-full mt-5">
@@ -241,7 +369,7 @@ export default function SexualWellbeing() {
                         className="text-xs font-bold"
                         style={{ color: colors.primary }}
                       >
-                        💬 Play Spark
+                        Play Spark
                       </Text>
                     </TouchableOpacity>
 
@@ -250,15 +378,15 @@ export default function SexualWellbeing() {
                       onPress={() => setActiveGameMode("positions")}
                       className="flex-1 rounded-xl py-3 items-center justify-center border"
                       style={{
-                        backgroundColor: softTints.purple,
+                        backgroundColor: softTints.lavender,
                         borderColor: colors.border,
                       }}
                     >
                       <Text
                         className="text-xs font-bold"
-                        style={{ color: "#8b5cf6" }}
+                        style={{ color: colors.accent }}
                       >
-                        🔥 Positions
+                        Comfort Cards
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -295,7 +423,7 @@ export default function SexualWellbeing() {
                       className="text-xs font-bold text-center leading-5 italic"
                       style={{ color: colors.foreground }}
                     >
-                      "{intimacyPromptsPool[currentPromptIdx]}"
+                      {sparkCards[currentPromptIdx]}
                     </Text>
                   </View>
 
@@ -331,7 +459,7 @@ export default function SexualWellbeing() {
                       <MaterialCommunityIcons
                         name="fire"
                         size={16}
-                        color="#ef4444"
+                        color={colors.danger}
                       />
                       <Text
                         className="text-xs font-black tracking-widest uppercase"
@@ -351,21 +479,21 @@ export default function SexualWellbeing() {
 
                   <View className="bg-neutral-50 dark:bg-neutral-900/40 border border-neutral-100 p-4.5 rounded-2xl">
                     <Text className="text-sm font-black tracking-tight text-center text-pink-500">
-                      {positionsPool[currentPositionIdx].name}
+                      {positionCards[currentPositionIdx].name}
                     </Text>
                     <View className="my-2.5 px-3 py-1 bg-neutral-100 dark:bg-neutral-800 self-center rounded-md">
                       <Text
                         className="text-[10px] font-bold uppercase tracking-wider text-center"
                         style={{ color: colors.foreground }}
                       >
-                        🎯 Focus: {positionsPool[currentPositionIdx].focus}
+                        Focus: {positionCards[currentPositionIdx].focus}
                       </Text>
                     </View>
                     <Text
                       className="text-xs font-medium text-center leading-4 mt-1"
                       style={{ color: colors.mutedText }}
                     >
-                      {positionsPool[currentPositionIdx].tip}
+                      {positionCards[currentPositionIdx].tip}
                     </Text>
                   </View>
 
@@ -409,12 +537,12 @@ export default function SexualWellbeing() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ paddingHorizontal: 24, gap: 14 }}
           >
-            {categories.map((category, index) => {
+            {visibleCategories.map((category, index) => {
               const categoryTints = [
                 softTints.pink,
                 softTints.emerald,
-                softTints.purple,
-                softTints.orange,
+                softTints.lavender,
+                softTints.amber,
               ];
               const currentTint = categoryTints[index % categoryTints.length];
 
@@ -494,7 +622,7 @@ export default function SexualWellbeing() {
               <MaterialCommunityIcons
                 name="shield-account-outline"
                 size={18}
-                color="#10b981"
+                color={colors.success}
               />
             </View>
             <View className="flex-1">
@@ -502,7 +630,7 @@ export default function SexualWellbeing() {
                 className="text-xs font-bold"
                 style={{ color: colors.foreground }}
               >
-                Ecosystem Verification Framework
+                Verified Guidance
               </Text>
               <Text
                 className="mt-1 text-[11px] font-semibold leading-4"
@@ -583,7 +711,7 @@ export default function SexualWellbeing() {
                 <View className="gap-3.5">
                   <Text
                     className="text-xs font-bold tracking-widest uppercase mb-1"
-                    style={{ color: "#10b981" }}
+                    style={{ color: colors.success }}
                   >
                     Verified Care Strategies
                   </Text>
@@ -597,7 +725,7 @@ export default function SexualWellbeing() {
                         <Ionicons
                           name="shield-checkmark"
                           size={14}
-                          color="#10b981"
+                          color={colors.success}
                         />
                       </View>
                       <Text

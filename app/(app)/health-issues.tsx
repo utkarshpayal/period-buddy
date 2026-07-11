@@ -1,6 +1,6 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Image,
   Modal,
@@ -12,6 +12,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../../components/theme";
+import { getSoftTints } from "../../components/ui-tokens";
+import { healthIssuesApi, type HealthIssue as ApiHealthIssue } from "../../lib/api";
 
 // --- BACKEND API LAYER SCHEMAS & CONTRACTS ---
 interface HealthIssue {
@@ -25,101 +27,131 @@ interface HealthIssue {
   imageUrl: string; // Remote CDN asset string for professional illustration renders
 }
 
+const fallbackIssues: HealthIssue[] = [
+  {
+    id: "hi_1",
+    title: "PCOS / PCOD",
+    category: "Hormonal Equilibrium",
+    icon: "alert-circle-outline",
+    color: "#ef4444",
+    summary:
+      "PCOS/PCOD can affect periods, skin, hair growth, insulin response, and energy. Tracking patterns makes it easier to discuss changes with a doctor.",
+    guide:
+      "1. Track cycle gaps and missed periods.\n2. Note acne, hair growth, weight, and fatigue changes.\n3. Prioritize balanced meals, movement, and sleep.\n4. Consult an endocrinologist or OBGYN for evaluation.",
+    imageUrl:
+      "https://images.unsplash.com/photo-1511556532299-8f662fc26c06?q=80&w=600&auto=format&fit=crop",
+  },
+  {
+    id: "hi_2",
+    title: "Endometriosis",
+    category: "Uterine & Pelvic Wellness",
+    icon: "pulse",
+    color: "#f97316",
+    summary:
+      "Endometriosis can cause severe pelvic pain, painful periods, fatigue, and pain outside menstruation. Persistent pain deserves medical attention.",
+    guide:
+      "1. Track pain level during and outside periods.\n2. Record heavy bleeding or pain during intimacy.\n3. Use warmth and rest for short-term relief.\n4. Ask a gynecologist about imaging or treatment options.",
+    imageUrl:
+      "https://images.unsplash.com/photo-1551076805-e1869033e561?q=80&w=600&auto=format&fit=crop",
+  },
+  {
+    id: "hi_3",
+    title: "Fibroids Tracker",
+    category: "Structural Health",
+    icon: "apps-outline",
+    color: "#fbbf24",
+    summary:
+      "Fibroids are usually non-cancerous growths that can cause heavy bleeding, pelvic pressure, frequent urination, or fatigue.",
+    guide:
+      "1. Log heavy flow or bleeding between periods.\n2. Track pelvic pressure and lower back pain.\n3. Ask about iron if bleeding is heavy.\n4. Confirm size and location with medical imaging.",
+    imageUrl:
+      "https://images.unsplash.com/photo-1530026405186-ed1ea0ac7a63?q=80&w=600&auto=format&fit=crop",
+  },
+  {
+    id: "hi_4",
+    title: "Pregnancy Wellness",
+    category: "Maternal Milestone Care",
+    icon: "heart-outline",
+    color: "#ec4899",
+    summary:
+      "Pregnancy support helps track early symptoms, missed periods, nausea, food changes, and care milestones.",
+    guide:
+      "1. Record missed periods and test dates.\n2. Track nausea, breast tenderness, and fatigue.\n3. Stay hydrated and discuss folate with a clinician.\n4. Schedule regular prenatal care if pregnancy is confirmed.",
+    imageUrl:
+      "https://images.unsplash.com/photo-1516627145497-ae6968895b74?q=80&w=600&auto=format&fit=crop",
+  },
+  {
+    id: "hi_5",
+    title: "Irregular Cycle Maps",
+    category: "Rhythm Diagnostics",
+    icon: "shuffle-outline",
+    color: "#8b5cf6",
+    summary:
+      "Irregular cycles can be influenced by stress, sleep, travel, weight changes, hormones, or underlying conditions.",
+    guide:
+      "1. Track start dates for at least 3 months.\n2. Compare changes with sleep, stress, travel, or illness.\n3. Notice spotting, pain, or very heavy flow.\n4. Seek care if cycles are consistently very short, long, or absent.",
+    imageUrl:
+      "https://images.unsplash.com/photo-1506126613408-eca07ce68773?q=80&w=600&auto=format&fit=crop",
+  },
+  {
+    id: "hi_6",
+    title: "Menopause Support",
+    category: "Transition & Longevity",
+    icon: "water-outline",
+    color: "#06b6d4",
+    summary:
+      "Menopause and perimenopause can bring hot flashes, sleep changes, mood shifts, vaginal dryness, and bone health changes.",
+    guide:
+      "1. Track hot flashes and night sweats.\n2. Note sleep, mood, and energy changes.\n3. Discuss calcium, vitamin D, and bone health.\n4. Ask a clinician about treatment options if symptoms disrupt daily life.",
+    imageUrl:
+      "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?q=80&w=600&auto=format&fit=crop",
+  },
+];
+
+function mapHealthIssue(issue: ApiHealthIssue): HealthIssue {
+  return {
+    id: issue.id ?? issue._id ?? issue.title,
+    title: issue.title,
+    category: issue.category,
+    icon: issue.icon,
+    color: issue.color,
+    summary: issue.summary,
+    guide: issue.guide,
+    imageUrl:
+      issue.imageUrl ||
+      "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?q=80&w=600&auto=format&fit=crop",
+  };
+}
+
 export default function HealthIssues() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
+  const [issues, setIssues] = useState<HealthIssue[]>(fallbackIssues);
 
-  const issues: HealthIssue[] = [
-    {
-      id: "hi_1",
-      title: "PCOS / PCOD",
-      category: "Hormonal Equilibrium",
-      icon: "alert-circle-outline",
-      color: "#ef4444",
-      summary:
-        "Polycystic Ovary Syndrome is a complex metabolic and endocrine disorder that can disrupt ovarian function, metabolic baselines, insulin responses, and dermatological consistency.",
-      guide:
-        "1. Monitor cycle spacing logs diligently.\n2. Note persistent hair texture variations or acne flare-ups.\n3. Implement balanced, low-glycemic active dietary support.\n4. Consult a clinical endocrinologist or OBGYN for systemic evaluations.",
-      imageUrl:
-        "https://images.unsplash.com/photo-1511556532299-8f662fc26c06?q=80&w=600&auto=format&fit=crop",
-    },
-    {
-      id: "hi_2",
-      title: "Endometriosis",
-      category: "Uterine & Pelvic Wellness",
-      icon: "pulse",
-      color: "#f97316",
-      summary:
-        "A progressive condition where tissue similar to the uterine lining extends onto pelvic organs, often generating extreme inflammatory cycles and intense localized discomfort.",
-      guide:
-        "1. Quantify pain indexes specifically during and outside menstruation.\n2. Record heavy bleeding logs and pain anchors.\n3. Integrate warm thermal compresses during muscle fatigue stages.\n4. Access advanced imaging pathways via certified gynaecology centers.",
-      imageUrl:
-        "https://images.unsplash.com/photo-1551076805-e1869033e561?q=80&w=600&auto=format&fit=crop",
-    },
-    {
-      id: "hi_3",
-      title: "Fibroids Tracker",
-      category: "Structural Health",
-      icon: "apps-outline",
-      color: "#fbbf24",
-      summary:
-        "Benign muscular tissue developments within the uterine layers that can expand, introducing local pressure, heavy discharge parameters, and frequent fatigue intervals.",
-      guide:
-        "1. Log abnormal volume fluctuations or sudden unexpected flows.\n2. Track pelvic pressure indicators or lower body strains.\n3. Balance iron mineral tracking if high bleeding occurs.\n4. Confirm alignment and scale variances using ultrasound diagnostics.",
-      imageUrl:
-        "https://images.unsplash.com/photo-1530026405186-ed1ea0ac7a63?q=80&w=600&auto=format&fit=crop",
-    },
-    {
-      id: "hi_4",
-      title: "Pregnancy Wellness",
-      category: "Maternal Milestone Care",
-      icon: "heart-outline",
-      color: "#ec4899",
-      summary:
-        "Dedicated structural insight suite tracking preliminary symptoms, embryonic biological intervals, nausea variations, and targeted lifestyle optimization.",
-      guide:
-        "1. Record accurate missed timeline milestones and morning patterns.\n2. Trace breast sensitivity or sudden sensory fluctuations.\n3. Prioritize clean organic hydration and recommended folate blocks.\n4. Validate baseline growth structures regularly with clinical support.",
-      imageUrl:
-        "https://images.unsplash.com/photo-1516627145497-ae6968895b74?q=80&w=600&auto=format&fit=crop",
-    },
-    {
-      id: "hi_5",
-      title: "Irregular Cycle Maps",
-      category: "Rhythm Diagnostics",
-      icon: "shuffle-outline",
-      color: "#8b5cf6",
-      summary:
-        "Persistent deviations from common cycle frequencies, frequently activated by cortisol stress triggers, underlying endocrine transitions, or sudden travel modifications.",
-      guide:
-        "1. Track structural start windows across consecutive 90-day segments.\n2. Correlate periods against sleep metrics and mental workloads.\n3. Reduce systemic inflammatory patterns using mindfulness modules.\n4. Initiate medical validation if intervals routinely exceed historical variances.",
-      imageUrl:
-        "https://images.unsplash.com/photo-1506126613408-eca07ce68773?q=80&w=600&auto=format&fit=crop",
-    },
-    {
-      id: "hi_6",
-      title: "Menopause Support",
-      category: "Transition & Longevity",
-      icon: "water-outline",
-      color: "#06b6d4",
-      summary:
-        "The milestone endocrine evolution marking the completion of reproductive cycle intervals, accompanied by thermoregulation adjustments, sleep shifts, and bone health changes.",
-      guide:
-        "1. Log the spacing frequency of sudden hot flash intervals.\n2. Evaluate midnight wakefulness indices or energy distribution alterations.\n3. Reinforce calcium and trace minerals configuration mappings.\n4. Engage hormone replacement discussion blocks if discomfort increases.",
-      imageUrl:
-        "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?q=80&w=600&auto=format&fit=crop",
-    },
-  ];
+  useEffect(() => {
+    let isMounted = true;
 
-  const softTints = {
-    pink: isDark ? "#3b1a2d" : "#fff0f6",
-    blue: isDark ? "#162842" : "#edf2ff",
-    orange: isDark ? "#361e12" : "#fff7ed",
-    purple: isDark ? "#231942" : "#f3e8ff",
-    emerald: isDark ? "#062e20" : "#ecfdf5",
-    cyan: isDark ? "#0c2329" : "#ecfeff",
-  };
+    async function loadIssues() {
+      try {
+        const response = await healthIssuesApi.getIssues();
+        if (isMounted && response.length > 0) {
+          setIssues(response.map(mapHealthIssue));
+        }
+      } catch {
+        if (isMounted) setIssues(fallbackIssues);
+      }
+    }
+
+    loadIssues();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const softTints = getSoftTints(colors);
 
   const selectedIssueData = issues.find(
     (issue) => issue.id === selectedIssueId,
@@ -181,11 +213,11 @@ export default function HealthIssues() {
                 // Compute matching index tints dynamically for uniform distribution
                 const tintColors = [
                   softTints.pink,
-                  softTints.orange,
-                  softTints.purple,
+                  softTints.amber,
+                  softTints.lavender,
                   softTints.blue,
                   softTints.emerald,
-                  softTints.cyan,
+                  softTints.mint,
                 ];
                 const activeTint = tintColors[index % tintColors.length];
 
@@ -211,7 +243,10 @@ export default function HealthIssues() {
                       />
                     </View>
                     <View className="flex-1 pr-2">
-                      <Text className="text-[10px] font-black uppercase tracking-wider text-pink-500">
+                      <Text
+                        className="text-[10px] font-black uppercase tracking-wider"
+                        style={{ color: colors.primary }}
+                      >
                         {issue.category}
                       </Text>
                       <Text
@@ -251,7 +286,10 @@ export default function HealthIssues() {
                 style={{ backgroundColor: colors.surface }}
               >
                 <View>
-                  <Text className="text-[10px] font-black uppercase tracking-widest text-pink-500 pt-4">
+                  <Text
+                    className="text-[10px] font-black uppercase tracking-widest pt-4"
+                    style={{ color: colors.primary }}
+                  >
                     {selectedIssueData.category}
                   </Text>
                   <Text
@@ -306,9 +344,9 @@ export default function HealthIssues() {
                   {/* Part B: Specialized Active Interactive Symptom Guidance Roadmap */}
                   <Text
                     className="text-xs font-bold tracking-widest uppercase mb-3"
-                    style={{ color: "#10b981" }}
+                    style={{ color: colors.success }}
                   >
-                    Ecosystem Guidance Rules
+                    Care Guidance
                   </Text>
                   <View
                     className="p-5 rounded-2xl border bg-neutral-50 dark:bg-neutral-900/40"

@@ -1,6 +1,6 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   ScrollView,
   StatusBar,
@@ -9,40 +9,98 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import { useAppState } from "../../../components/AppState";
 import { useAuth } from "../../../components/auth-context";
 import { useTheme } from "../../../components/theme";
+import {
+  getHeroGradient,
+  getShadow,
+  getSoftTints,
+  getSurfaceGradient,
+} from "../../../components/ui-tokens";
+import {
+  authApi,
+  cycleApi,
+  type DashboardSummary,
+  type Predictions,
+} from "../../../lib/api";
 
 export default function Home() {
   const { colors, isDark } = useTheme();
   const { user } = useAuth();
   const router = useRouter();
   const { tokens, trackedDays } = useAppState();
+  const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
+  const [predictions, setPredictions] = useState<Predictions | null>(null);
 
-  // following data will come from backend
-  let expectedEndDate = "12 June 2026";
-  let periodLength = 5;
-  let fertileWindow = 5;
+  useEffect(() => {
+    let isMounted = true;
 
-  // Mock cycle trends data for the minimalist bar graph
-  const analyticGraphData = [
-    { month: "Jan", length: 27, heightClass: "h-20" },
-    { month: "Feb", length: 28, heightClass: "h-24" },
-    { month: "Mar", length: 30, heightClass: "h-28" },
-    { month: "Apr", length: 29, heightClass: "h-26" },
-    { month: "May", length: 28, heightClass: "h-24" },
+    async function loadDashboard() {
+      try {
+        const [dashboardSummary, cyclePredictions] = await Promise.all([
+          authApi.getDashboard(),
+          cycleApi.getPredictions(),
+        ]);
+
+        if (isMounted) {
+          setDashboard(dashboardSummary);
+          setPredictions(cyclePredictions);
+        }
+      } catch {
+        if (isMounted) {
+          setDashboard(null);
+          setPredictions(null);
+        }
+      }
+    }
+
+    loadDashboard();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const loggedDays = Math.max(dashboard?.trackedDays ?? trackedDays, 0);
+  const dashboardTokens = dashboard?.tokens ?? tokens;
+  const cycleDay = Math.max(
+    predictions?.currentCycleDay ??
+      dashboard?.predictions?.currentCycleDay ??
+      (loggedDays || 1),
+    1,
+  );
+  const expectedEndDate =
+    predictions?.nextPeriodDate ??
+    dashboard?.predictions?.nextPeriodDate ??
+    "soon";
+  const periodLength = predictions?.periodLength ?? 5;
+  const fertileWindow = predictions?.fertileWindowDuration ?? "6 day window";
+
+  const analyticGraphData =
+    predictions?.analyticsData?.length
+      ? predictions.analyticsData.map((item) => ({
+          ...item,
+          height: Math.max(56, Math.min(112, item.length * 3.4)),
+        }))
+      : [
+          { month: "Mar", length: 27, height: 76 },
+          { month: "Apr", length: 28, height: 88 },
+          { month: "May", length: 30, height: 104 },
+          { month: "Jun", length: 29, height: 94 },
+          { month: "Jul", length: 28, height: 88 },
+        ];
+
+  const treeHealth =
+    dashboard?.forestHealth ?? Math.min(100, Math.max(45, 55 + loggedDays * 6));
+  const softTints = getSoftTints(colors);
+  const surfaceGradient = getSurfaceGradient(colors, isDark) as [string, string];
+  const heroGradient = getHeroGradient(colors, isDark) as [
+    string,
+    string,
+    string,
   ];
-
-  const treeHealth = Math.min(100, Math.max(45, 55 + trackedDays * 6));
-
-  const softTints = {
-    pink: isDark ? "#3b1a2d" : "#fff0f6",
-    purple: isDark ? "#231942" : "#f3e8ff",
-    orange: isDark ? "#361e12" : "#fff7ed",
-    cyan: isDark ? "#0c2329" : "#ecfeff",
-    emerald: isDark ? "#062e20" : "#ecfdf5",
-    amber: isDark ? "#362312" : "#fef3c7",
-  };
 
   return (
     <>
@@ -64,18 +122,17 @@ export default function Home() {
             <View>
               <View className="flex-row items-center gap-1">
                 <Text
-                  className="text-2xl font-extrabold tracking-tight"
+                  className="text-2xl font-black tracking-tight"
                   style={{ color: colors.foreground }}
                 >
-                  Hey {user?.firstName || "Utkarsh"}!
+                  Hey {user?.firstName || "there"}!
                 </Text>
-                <Text className="text-xl">👋</Text>
               </View>
               <Text
                 className="mt-1 text-xs font-semibold tracking-wide"
                 style={{ color: colors.mutedText }}
               >
-                Cycle Day {trackedDays} • Expected: {expectedEndDate}
+                Cycle day {cycleDay} • Next period around {expectedEndDate}
               </Text>
             </View>
 
@@ -96,7 +153,7 @@ export default function Home() {
                 className="text-xs font-bold tracking-wider"
                 style={{ color: colors.foreground }}
               >
-                {tokens || 1064}
+                {dashboardTokens}
               </Text>
             </View>
           </View>
@@ -104,161 +161,185 @@ export default function Home() {
           {/* FOREST STATUS CORE CARD */}
           <View className="mx-6 my-6">
             <View
-              className="rounded-3xl border p-6 flex-row items-center justify-between shadow-xs overflow-hidden"
+              className="rounded-3xl border overflow-hidden shadow-lg"
               style={{
-                backgroundColor: colors.surface,
                 borderColor: colors.border,
+                ...getShadow(colors, isDark),
               }}
             >
-              {/* Left Column: Context Text */}
-              <View className="flex-1 pr-4">
-                <Text
-                  className="text-xs font-bold tracking-widest uppercase mb-1"
-                  style={{ color: colors.primary }}
-                >
-                  Forest Status
-                </Text>
-                <Text
-                  className="text-lg font-extrabold tracking-tight leading-6"
-                  style={{ color: colors.foreground }}
-                >
-                  Your Ecosystem is{" "}
-                  {treeHealth > 75
-                    ? "Thriving"
-                    : treeHealth > 50
-                      ? "Healthy"
-                      : "Needs Attention"}
-                </Text>
-                <Text
-                  className="mt-2 text-xs leading-4"
-                  style={{ color: colors.mutedText }}
-                >
-                  Log your symptoms today to sustain and protect your forest
-                  growth.
-                </Text>
-              </View>
-
-              {/* Right Column: Premium Concentric Progress Ring */}
-              <View className="items-center justify-center">
-                <View
-                  className="w-24 h-24 rounded-full border-4 items-center justify-center relative"
-                  style={{
-                    borderColor: isDark ? "#1e293b" : "#f1f5f9",
-                  }}
-                >
-                  {/* Subtle inner ambient pulse layout */}
-                  <View
-                    className="absolute inset-1 rounded-full opacity-10"
-                    style={{
-                      backgroundColor:
-                        treeHealth > 75
-                          ? "#10b981"
-                          : treeHealth > 50
-                            ? "#f59e0b"
-                            : "#ef4444",
-                    }}
-                  />
-
-                  {/* Numerical Stat Display inside the Ring */}
+              <LinearGradient
+                colors={heroGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                className="p-6 flex-row items-center justify-between"
+              >
+                {/* Left Column: Context Text */}
+                <View className="flex-1 pr-4">
                   <Text
-                    className="text-xl font-black tracking-tighter"
+                    className="text-xs font-bold tracking-widest uppercase mb-1"
+                    style={{ color: colors.primary }}
+                  >
+                    Forest Status
+                  </Text>
+                  <Text
+                    className="text-lg font-extrabold tracking-tight leading-6"
                     style={{ color: colors.foreground }}
                   >
-                    {treeHealth}%
+                    Your wellness forest is{" "}
+                    {treeHealth > 75
+                      ? "Thriving"
+                      : treeHealth > 50
+                        ? "Healthy"
+                        : "Needs Attention"}
                   </Text>
                   <Text
-                    className="text-[9px] font-bold uppercase tracking-wider mt-0.5"
-                    style={{
-                      color:
-                        treeHealth > 75
-                          ? "#10b981"
-                          : treeHealth > 50
-                            ? "#f59e0b"
-                            : "#ef4444",
-                    }}
+                    className="mt-2 text-xs leading-4"
+                    style={{ color: colors.mutedText }}
                   >
-                    Health
+                    Log your symptoms or habits today to keep your wellness
+                    forest growing.
                   </Text>
                 </View>
-              </View>
+
+                {/* Right Column: Premium Concentric Progress Ring */}
+                <View className="items-center justify-center">
+                  <View
+                    className="w-24 h-24 rounded-full border-4 items-center justify-center relative"
+                    style={{
+                      borderColor: isDark ? colors.border : "#efe7e4",
+                    }}
+                  >
+                    {/* Subtle inner ambient pulse layout */}
+                    <View
+                      className="absolute inset-1 rounded-full opacity-10"
+                      style={{
+                      backgroundColor:
+                          treeHealth > 75
+                            ? colors.success
+                            : treeHealth > 50
+                              ? colors.warning
+                              : colors.danger,
+                      }}
+                    />
+
+                    {/* Numerical Stat Display inside the Ring */}
+                    <Text
+                      className="text-xl font-black tracking-tighter"
+                      style={{ color: colors.foreground }}
+                    >
+                      {treeHealth}%
+                    </Text>
+                    <Text
+                      className="text-[9px] font-bold uppercase tracking-wider mt-0.5"
+                      style={{
+                        color:
+                          treeHealth > 75
+                            ? colors.success
+                            : treeHealth > 50
+                              ? colors.warning
+                              : colors.danger,
+                      }}
+                    >
+                      Health
+                    </Text>
+                  </View>
+                </View>
+              </LinearGradient>
             </View>
           </View>
 
           {/* NEW GRAPH SECTION: Premium Cycle Insights Trends */}
           <View className="mx-6 mb-6">
             <View
-              className="rounded-3xl border p-5 shadow-xs"
+              className="rounded-3xl border overflow-hidden shadow-lg"
               style={{
-                backgroundColor: colors.surface,
                 borderColor: colors.border,
+                ...getShadow(colors, isDark),
               }}
             >
-              <View className="flex-row justify-between items-center mb-6">
-                <View>
-                  <Text
-                    className="text-xs font-bold tracking-widest uppercase"
-                    style={{ color: colors.secondary }}
-                  >
-                    Analytics
-                  </Text>
-                  <Text
-                    className="text-base font-extrabold tracking-tight"
-                    style={{ color: colors.foreground }}
-                  >
-                    Cycle Length Trends
-                  </Text>
-                </View>
-                <View className="flex-row items-center gap-1">
-                  <Text
-                    className="text-xs font-bold"
-                    style={{ color: colors.foreground }}
-                  >
-                    Avg: 28 Days
-                  </Text>
-                  <Feather name="trending-up" size={14} color="#10b981" />
-                </View>
-              </View>
-
-              {/* Minimal Clean Graph Canvas Bars */}
-              <View className="h-36 flex-row justify-between items-end px-2 pt-2">
-                {analyticGraphData.map((data, index) => (
-                  <View key={index} className="items-center flex-1 gap-1.5">
-                    {/* Value above bars */}
+              <LinearGradient
+                colors={surfaceGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                className="p-5"
+              >
+                <View className="flex-row justify-between items-center mb-6">
+                  <View>
                     <Text
-                      className="text-[10px] font-bold"
-                      style={{ color: colors.mutedText }}
+                      className="text-xs font-bold tracking-widest uppercase"
+                      style={{ color: colors.secondary }}
                     >
-                      {data.length}d
+                      Analytics
                     </Text>
-
-                    {/* Pill Bar Layout */}
-                    <View
-                      className={`w-4 ${data.heightClass} rounded-full relative overflow-hidden`}
-                      style={{
-                        backgroundColor: isDark ? "#2d2d39" : "#f1f5f9",
-                      }}
-                    >
-                      {/* Highlighting the latest month bar for premium contrast */}
-                      <View
-                        className="absolute bottom-0 left-0 right-0 top-0 rounded-full"
-                        style={{
-                          backgroundColor:
-                            index === 4 ? colors.primary : colors.secondary,
-                          opacity: index === 4 ? 1 : 0.45,
-                        }}
-                      />
-                    </View>
-
-                    {/* Month Label */}
                     <Text
-                      className="text-[10px] font-bold mt-0.5"
-                      style={{ color: colors.mutedText }}
+                      className="text-base font-extrabold tracking-tight"
+                      style={{ color: colors.foreground }}
                     >
-                      {data.month}
+                      Cycle Length Trends
                     </Text>
                   </View>
-                ))}
-              </View>
+                  <View className="flex-row items-center gap-1">
+                    <Text
+                      className="text-xs font-bold"
+                      style={{ color: colors.foreground }}
+                    >
+                      Avg: {predictions?.cycleLength ?? 28} Days
+                    </Text>
+                    <Feather
+                      name="trending-up"
+                      size={14}
+                      color={colors.success}
+                    />
+                  </View>
+                </View>
+
+                {/* Minimal Clean Graph Canvas Bars */}
+                <View className="h-36 flex-row justify-between items-end px-2 pt-2">
+                  {analyticGraphData.map((data, index) => (
+                    <View key={index} className="items-center flex-1 gap-1.5">
+                      {/* Value above bars */}
+                      <Text
+                        className="text-[10px] font-bold"
+                        style={{ color: colors.mutedText }}
+                      >
+                        {data.length}d
+                      </Text>
+
+                      {/* Pill Bar Layout */}
+                      <View
+                        className="w-4 rounded-full relative overflow-hidden"
+                        style={{
+                          backgroundColor: colors.surfaceSoft,
+                          height: data.height,
+                        }}
+                      >
+                        {/* Highlighting the latest month bar for premium contrast */}
+                        <LinearGradient
+                          colors={
+                            index === 4
+                              ? [colors.primary, colors.secondary]
+                              : [colors.secondary, colors.accent]
+                          }
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 0, y: 1 }}
+                          className="absolute bottom-0 left-0 right-0 top-0 rounded-full"
+                          style={{
+                            opacity: index === 4 ? 1 : 0.45,
+                          }}
+                        />
+                      </View>
+
+                      {/* Month Label */}
+                      <Text
+                        className="text-[10px] font-bold mt-0.5"
+                        style={{ color: colors.mutedText }}
+                      >
+                        {data.month}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </LinearGradient>
             </View>
           </View>
 
@@ -267,7 +348,7 @@ export default function Home() {
             {[
               {
                 label: "Days Logged",
-                value: trackedDays ? `${trackedDays} Days` : "6 Days",
+                value: `${loggedDays} Days`,
                 icon: "calendar-outline",
                 color: colors.primary,
                 bg: softTints.pink,
@@ -277,11 +358,14 @@ export default function Home() {
                 value: `${periodLength} Days`,
                 icon: "hourglass-outline",
                 color: colors.secondary,
-                bg: softTints.purple,
+                bg: softTints.mint,
               },
               {
                 label: "Fertile Window",
-                value: `${fertileWindow} Days`,
+                value:
+                  typeof fertileWindow === "number"
+                    ? `${fertileWindow} Days`
+                    : fertileWindow,
                 icon: "heart-outline",
                 color: colors.accent,
                 bg: softTints.amber,
@@ -289,34 +373,41 @@ export default function Home() {
             ].map((metric, i) => (
               <View
                 key={i}
-                className="flex-1 items-center rounded-2xl border p-4 shadow-2xs"
+                className="flex-1 items-center rounded-2xl border overflow-hidden shadow-sm relative min-h-[110px]"
                 style={{
-                  backgroundColor: colors.surface,
                   borderColor: colors.border,
                 }}
               >
-                <View
-                  className="p-2.5 rounded-xl"
-                  style={{ backgroundColor: metric.bg }}
-                >
-                  <Ionicons
-                    name={metric.icon as any}
-                    size={18}
-                    color={metric.color}
-                  />
+                <LinearGradient
+                  colors={surfaceGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  className="absolute inset-0"
+                />
+                <View className="items-center p-4 w-full">
+                  <View
+                    className="p-2.5 rounded-xl"
+                    style={{ backgroundColor: metric.bg }}
+                  >
+                    <Ionicons
+                      name={metric.icon as any}
+                      size={18}
+                      color={metric.color}
+                    />
+                  </View>
+                  <Text
+                    className="mt-3 text-sm font-extrabold tracking-tight"
+                    style={{ color: colors.foreground }}
+                  >
+                    {metric.value}
+                  </Text>
+                  <Text
+                    className="text-[10px] font-semibold mt-0.5 text-center"
+                    style={{ color: colors.mutedText }}
+                  >
+                    {metric.label}
+                  </Text>
                 </View>
-                <Text
-                  className="mt-3 text-sm font-extrabold tracking-tight"
-                  style={{ color: colors.foreground }}
-                >
-                  {metric.value}
-                </Text>
-                <Text
-                  className="text-[10px] font-semibold mt-0.5"
-                  style={{ color: colors.mutedText }}
-                >
-                  {metric.label}
-                </Text>
               </View>
             ))}
           </View>
@@ -335,68 +426,74 @@ export default function Home() {
               {[
                 {
                   title: "Period Tracker",
-                  desc: "Log flows, moods, and symptoms daily",
+                  desc: "Log flow, mood, symptoms, and notes",
                   icon: "water-outline",
                   route: "/(app)/(dashboard)/tracker",
                   bg: softTints.pink,
-                  iconColor: "#d946a6",
+                  iconColor: colors.primary,
                 },
                 {
                   title: "Smart Predictions",
-                  desc: "AI-driven cycle analysis & schedule charts",
+                  desc: "Cycle forecasts, windows, and trend charts",
                   icon: "analytics-outline",
                   route: "/(app)/predictions",
-                  bg: softTints.purple,
-                  iconColor: "#8b5cf6",
+                  bg: softTints.lavender,
+                  iconColor: colors.secondary,
                 },
                 {
-                  title: "Gynac Consultation",
-                  desc: "Private clinical access and chat options",
+                  title: "Gynec Consultation",
+                  desc: "Private specialist booking and secure chat",
                   icon: "chatbubble-ellipses-outline",
                   route: "/(app)/consultation",
                   bg: softTints.emerald,
-                  iconColor: "#14b8a6",
+                  iconColor: colors.success,
                 },
               ].map((f) => (
                 <TouchableOpacity
                   key={f.title}
                   onPress={() => router.push(f.route as any)}
                   activeOpacity={0.7}
-                  className="flex-row items-center p-4 rounded-2xl border shadow-2xs"
+                  className="rounded-2xl border overflow-hidden shadow-sm"
                   style={{
-                    backgroundColor: colors.surface,
                     borderColor: colors.border,
                   }}
                 >
-                  <View
-                    className="p-3 rounded-xl mr-4"
-                    style={{ backgroundColor: f.bg }}
+                  <LinearGradient
+                    colors={surfaceGradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    className="flex-row items-center p-4"
                   >
-                    <Ionicons
-                      name={f.icon as any}
-                      size={20}
-                      color={f.iconColor}
+                    <View
+                      className="p-3 rounded-xl mr-4"
+                      style={{ backgroundColor: f.bg }}
+                    >
+                      <Ionicons
+                        name={f.icon as any}
+                        size={20}
+                        color={f.iconColor}
+                      />
+                    </View>
+                    <View className="flex-1">
+                      <Text
+                        className="text-sm font-bold"
+                        style={{ color: colors.foreground }}
+                      >
+                        {f.title}
+                      </Text>
+                      <Text
+                        className="text-xs mt-0.5"
+                        style={{ color: colors.mutedText }}
+                      >
+                        {f.desc}
+                      </Text>
+                    </View>
+                    <Feather
+                      name="chevron-right"
+                      size={16}
+                      color={colors.mutedText}
                     />
-                  </View>
-                  <View className="flex-1">
-                    <Text
-                      className="text-sm font-bold"
-                      style={{ color: colors.foreground }}
-                    >
-                      {f.title}
-                    </Text>
-                    <Text
-                      className="text-xs mt-0.5"
-                      style={{ color: colors.mutedText }}
-                    >
-                      {f.desc}
-                    </Text>
-                  </View>
-                  <Feather
-                    name="chevron-right"
-                    size={16}
-                    color={colors.mutedText}
-                  />
+                  </LinearGradient>
                 </TouchableOpacity>
               ))}
             </View>
@@ -415,69 +512,75 @@ export default function Home() {
                   desc: "Irregularities & symptom tracking",
                   icon: "alert-circle-outline",
                   route: "/(app)/health-issues",
-                  bg: softTints.orange,
-                  iconColor: "#f97316",
+                  bg: softTints.amber,
+                  iconColor: colors.accent,
                 },
                 {
                   title: "Anonymous Q&A",
-                  desc: "Safe community discussions",
+                  desc: "Safe, anonymous health questions",
                   icon: "help-circle-outline",
                   route: "/(app)/qa",
-                  bg: softTints.cyan,
-                  iconColor: "#06b6d4",
+                  bg: softTints.blue,
+                  iconColor: colors.info,
                 },
                 {
                   title: "Hygiene & Care",
-                  desc: "Products and dynamic sanitization",
+                  desc: "Product hygiene and comfort tips",
                   icon: "leaf-outline",
                   route: "/(app)/hygiene",
                   bg: softTints.emerald,
-                  iconColor: "#10b981",
+                  iconColor: colors.secondary,
                 },
                 {
                   title: "Sexual Wellbeing",
-                  desc: "Intimacy tracking & clean logs",
+                  desc: "Consent, intimacy, and safety resources",
                   icon: "heart-outline",
                   route: "/(app)/sexual-wellbeing",
                   bg: softTints.pink,
-                  iconColor: "#ec4899",
+                  iconColor: colors.primary,
                 },
               ].map((f) => (
                 <TouchableOpacity
                   key={f.title}
                   onPress={() => router.push(f.route as any)}
                   activeOpacity={0.7}
-                  className="w-[48%] p-4 rounded-2xl border justify-between min-h-[110px]"
+                  className="w-[48%] rounded-2xl border overflow-hidden min-h-[110px]"
                   style={{
-                    backgroundColor: colors.surface,
                     borderColor: colors.border,
                   }}
                 >
-                  <View
-                    className="self-start p-2 rounded-xl"
-                    style={{ backgroundColor: f.bg }}
+                  <LinearGradient
+                    colors={surfaceGradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    className="p-4 flex-1 justify-between"
                   >
-                    <Ionicons
-                      name={f.icon as any}
-                      size={18}
-                      color={f.iconColor}
-                    />
-                  </View>
-                  <View className="mt-3">
-                    <Text
-                      className="text-xs font-bold"
-                      style={{ color: colors.foreground }}
+                    <View
+                      className="self-start p-2 rounded-xl"
+                      style={{ backgroundColor: f.bg }}
                     >
-                      {f.title}
-                    </Text>
-                    <Text
-                      className="text-[10px] mt-0.5"
-                      numberOfLines={1}
-                      style={{ color: colors.mutedText }}
-                    >
-                      {f.desc}
-                    </Text>
-                  </View>
+                      <Ionicons
+                        name={f.icon as any}
+                        size={18}
+                        color={f.iconColor}
+                      />
+                    </View>
+                    <View className="mt-3">
+                      <Text
+                        className="text-xs font-bold"
+                        style={{ color: colors.foreground }}
+                      >
+                        {f.title}
+                      </Text>
+                      <Text
+                        className="text-[10px] mt-0.5"
+                        numberOfLines={1}
+                        style={{ color: colors.mutedText }}
+                      >
+                        {f.desc}
+                      </Text>
+                    </View>
+                  </LinearGradient>
                 </TouchableOpacity>
               ))}
             </View>
@@ -495,57 +598,63 @@ export default function Home() {
                   title: "Forest",
                   icon: "leaf-outline",
                   route: "/(app)/forest",
-                  color: "#10b981",
+                  color: colors.secondary,
                 },
                 {
                   title: "Blogs",
                   icon: "book-open-outline",
                   route: "/(app)/blogs",
-                  color: "#6366f1",
+                  color: colors.info,
                 },
                 {
                   title: "Video Content",
                   icon: "play-circle-outline",
                   route: "/(app)/reels",
-                  color: "#f59e0b",
+                  color: colors.accent,
                 },
                 {
                   title: "Partner sync",
                   icon: "git-merge-outline",
                   route: "/(app)/partner",
-                  color: "#8b5cf6",
+                  color: colors.primary,
                 },
                 {
                   title: "Build Habits",
                   icon: "toggle-outline",
                   route: "/(app)/habits",
-                  color: "#22d3ee",
+                  color: colors.info,
                 },
                 {
                   title: "Nominate Buddy",
                   icon: "star-outline",
                   route: "/(app)/buddy-nomination",
-                  color: "#fbbf24",
+                  color: colors.accent,
                 },
               ].map((f) => (
                 <TouchableOpacity
                   key={f.title}
                   onPress={() => router.push(f.route as any)}
                   activeOpacity={0.8}
-                  className="w-[31.2%] items-center justify-center p-3 rounded-xl border"
+                  className="w-[31.2%] rounded-xl border overflow-hidden"
                   style={{
-                    backgroundColor: colors.surface,
                     borderColor: colors.border,
                   }}
                 >
-                  <Ionicons name={f.icon as any} size={18} color={f.color} />
-                  <Text
-                    className="mt-1.5 text-center text-[10px] font-bold"
-                    numberOfLines={1}
-                    style={{ color: colors.foreground }}
+                  <LinearGradient
+                    colors={surfaceGradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 0, y: 1 }}
+                    className="items-center justify-center p-3"
                   >
-                    {f.title}
-                  </Text>
+                    <Ionicons name={f.icon as any} size={18} color={f.color} />
+                    <Text
+                      className="mt-1.5 text-center text-[10px] font-bold"
+                      numberOfLines={1}
+                      style={{ color: colors.foreground }}
+                    >
+                      {f.title}
+                    </Text>
+                  </LinearGradient>
                 </TouchableOpacity>
               ))}
             </View>

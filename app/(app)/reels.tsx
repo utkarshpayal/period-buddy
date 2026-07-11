@@ -1,9 +1,10 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   Image,
+  Modal,
   ScrollView,
   StatusBar,
   Text,
@@ -14,9 +15,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 import { useAppState } from "../../components/AppState";
 import { useTheme } from "../../components/theme";
+import { reelsApi, type Reel as ApiReel } from "../../lib/api";
 
 // --- STRUCTURAL CLINICAL ENDPOINT CONTRACTS ---
-interface GynacReel {
+interface HealthReel {
   id: string;
   title: string;
   creatorId: string;
@@ -33,6 +35,90 @@ interface GynacReel {
   votedOptionId: string | null;
 }
 
+const fallbackReels: HealthReel[] = [
+  {
+    id: "r_1",
+    title: "A Simple Overview of Hormonal Cycle Phases",
+    creatorId: "doc_sarah",
+    creatorName: "Dr. Sarah Chen (OBGYN & Cycle Expert)",
+    creatorAvatar:
+      "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?q=80&w=150&auto=format&fit=crop",
+    duration: "0:15",
+    views: 3420,
+    category: "Wellness",
+    verified: true,
+    thumbnailUrl:
+      "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?q=80&w=600&auto=format&fit=crop",
+    directMp4Url:
+      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+    pollQuestion: "Vote for the next video topic:",
+    votedOptionId: null,
+    pollOptions: [
+      {
+        id: "o1",
+        topic: "Stress, cortisol, and cycle changes",
+        votes: 142,
+      },
+      {
+        id: "o2",
+        topic: "Menstrual cup cleaning and storage",
+        votes: 98,
+      },
+    ],
+  },
+  {
+    id: "r_2",
+    title: "Gentle Yoga Movements for Period Pain Relief",
+    creatorId: "doc_thara",
+    creatorName: "Dr. Thara (Clinical Physiologist)",
+    creatorAvatar:
+      "https://images.unsplash.com/photo-1594824813573-246434e33963?q=80&w=150&auto=format&fit=crop",
+    duration: "0:12",
+    views: 2890,
+    category: "Self-Care",
+    verified: true,
+    thumbnailUrl:
+      "https://images.unsplash.com/photo-1506126613408-eca07ce68773?q=80&w=600&auto=format&fit=crop",
+    directMp4Url:
+      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
+    pollQuestion: "What should the next quick video cover?",
+    votedOptionId: null,
+    pollOptions: [
+      {
+        id: "o3",
+        topic: "Understanding Period Poops & Bowel Triggers",
+        votes: 215,
+      },
+      { id: "o4", topic: "PCOS-friendly food and routine basics", votes: 310 },
+    ],
+  },
+];
+
+function mapApiReel(reel: ApiReel): HealthReel {
+  return {
+    id: reel.id ?? reel._id ?? reel.creatorId,
+    title: reel.title,
+    creatorId: reel.creatorId,
+    creatorName: reel.creatorName,
+    creatorAvatar:
+      reel.creatorAvatar ||
+      "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?q=80&w=150&auto=format&fit=crop",
+    duration: reel.duration,
+    views: reel.views,
+    category: reel.category,
+    verified: reel.verified,
+    thumbnailUrl: reel.thumbnailUrl,
+    directMp4Url: reel.directMp4Url,
+    pollQuestion: reel.pollQuestion || "Vote for the next topic:",
+    votedOptionId: reel.votedOptionId ?? null,
+    pollOptions: reel.pollOptions.map((option) => ({
+      id: option.optionId,
+      topic: option.topic,
+      votes: option.votes,
+    })),
+  };
+}
+
 export default function Reels() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
@@ -42,75 +128,42 @@ export default function Reels() {
   const [followingCreatorIds, setFollowingCreatorIds] = useState<Set<string>>(
     new Set(),
   );
+  const [selectedCreator, setSelectedCreator] = useState<HealthReel | null>(
+    null,
+  );
 
-  // Fixed Data collections using raw direct MP4 streaming containers
-  const [reels, setReels] = useState<GynacReel[]>([
-    {
-      id: "r_1",
-      title: "Complete Medical Overview of Hormonal Cycle Milestones",
-      creatorId: "doc_sarah",
-      creatorName: "Dr. Sarah Chen (OBGYN & Cycle Expert)",
-      creatorAvatar:
-        "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?q=80&w=150&auto=format&fit=crop",
-      duration: "0:15",
-      views: 3420,
-      category: "Wellness",
-      verified: true,
-      thumbnailUrl:
-        "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?q=80&w=600&auto=format&fit=crop",
-      // Verified direct static MP4 sample source link
-      directMp4Url:
-        "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-      pollQuestion:
-        "Vote for my next video topic, sister! Drop your preference:",
-      votedOptionId: null,
-      pollOptions: [
-        {
-          id: "o1",
-          topic: "Reversing Cortisol Stress Spikes Naturally",
-          votes: 142,
-        },
-        {
-          id: "o2",
-          topic: "Menstrual Cups: Complete Medical Sanitization Guide",
-          votes: 98,
-        },
-      ],
-    },
-    {
-      id: "r_2",
-      title: "Yoga & Pelvic Floor Decompression Movements for Pain Relief",
-      creatorId: "doc_thara",
-      creatorName: "Dr. Thara (Clinical Physiologist)",
-      creatorAvatar:
-        "https://images.unsplash.com/photo-1594824813573-246434e33963?q=80&w=150&auto=format&fit=crop",
-      duration: "0:12",
-      views: 2890,
-      category: "Self-Care",
-      verified: true,
-      thumbnailUrl:
-        "https://images.unsplash.com/photo-1506126613408-eca07ce68773?q=80&w=600&auto=format&fit=crop",
-      directMp4Url:
-        "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
-      pollQuestion: "What should I decode in next week's quick-clip feed?",
-      votedOptionId: null,
-      pollOptions: [
-        {
-          id: "o3",
-          topic: "Understanding Period Poops & Bowel Triggers",
-          votes: 215,
-        },
-        { id: "o4", topic: "PCOS Nutritional Matrix Layouts", votes: 310 },
-      ],
-    },
-  ]);
+  const [reels, setReels] = useState<HealthReel[]>(fallbackReels);
 
-  const softTints = {
-    pink: isDark ? "#3b1a2d" : "#fff0f6",
-  };
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadReels() {
+      try {
+        const response = await reelsApi.getReels({ limit: 20 });
+        if (isMounted && response.reels.length > 0) {
+          setReels(response.reels.map(mapApiReel));
+          setFollowingCreatorIds(
+            new Set(
+              response.reels
+                .filter((reel) => reel.followedByMe)
+                .map((reel) => reel.creatorId),
+            ),
+          );
+        }
+      } catch {
+        if (isMounted) setReels(fallbackReels);
+      }
+    }
+
+    loadReels();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // --- INTERACTION CONTROLLER DRIVERS ---
-  function handleToggleFollow(creatorId: string) {
+  async function handleToggleFollow(reelId: string, creatorId: string) {
     setFollowingCreatorIds((prev) => {
       const next = new Set(prev);
       if (next.has(creatorId)) next.delete(creatorId);
@@ -120,9 +173,22 @@ export default function Reels() {
       }
       return next;
     });
+
+    try {
+      const result = await reelsApi.toggleFollowCreator(reelId);
+      if (result.tokensAwarded) earnTokens(result.tokensAwarded);
+      setFollowingCreatorIds((prev) => {
+        const next = new Set(prev);
+        if (result.followedByMe) next.add(creatorId);
+        else next.delete(creatorId);
+        return next;
+      });
+    } catch {
+      // Optimistic follow state remains local while offline.
+    }
   }
 
-  function handleTriggerVote(reelId: string, optionId: string) {
+  async function handleTriggerVote(reelId: string, optionId: string) {
     setReels((currentList) =>
       currentList.map((reel) => {
         if (reel.id !== reelId || reel.votedOptionId) return reel;
@@ -133,8 +199,8 @@ export default function Reels() {
 
         earnTokens(5);
         Alert.alert(
-          "Vote Counted! 🎉",
-          "Your video topic priority reference has been attached.",
+          "Vote counted",
+          "Your topic preference has been saved.",
         );
 
         return {
@@ -144,6 +210,51 @@ export default function Reels() {
         };
       }),
     );
+
+    try {
+      const result = await reelsApi.votePoll(reelId, optionId);
+      earnTokens(result.tokensAwarded);
+      setReels((currentList) =>
+        currentList.map((reel) =>
+          reel.id === reelId
+            ? {
+                ...reel,
+                votedOptionId: optionId,
+                pollOptions: result.pollOptions.map((option) => ({
+                  id: option.optionId,
+                  topic: option.topic,
+                  votes: option.votes,
+                })),
+              }
+            : reel,
+        ),
+      );
+    } catch {
+      // Optimistic vote remains visible while offline.
+    }
+  }
+
+  async function handlePlay(reelId: string) {
+    setActivePlayId(reelId);
+    try {
+      const result = await reelsApi.recordView(reelId);
+      setReels((currentList) =>
+        currentList.map((reel) =>
+          reel.id === reelId ? { ...reel, views: result.views } : reel,
+        ),
+      );
+    } catch {
+      // Video can still play when view tracking is unavailable.
+    }
+  }
+
+  function getCreatorStats(creatorId: string) {
+    const creatorReels = reels.filter((reel) => reel.creatorId === creatorId);
+    return {
+      reelsCount: creatorReels.length,
+      totalViews: creatorReels.reduce((sum, reel) => sum + reel.views, 0),
+      categories: Array.from(new Set(creatorReels.map((reel) => reel.category))),
+    };
   }
 
   // Pure HTML5 Video Engine — Bypasses all YouTube iframe blocks natively
@@ -219,7 +330,11 @@ export default function Reels() {
                 >
                   {/* MEDICAL CREATOR HEADER */}
                   <View className="p-4 flex-row items-center justify-between border-b border-neutral-100 dark:border-neutral-900/60">
-                    <View className="flex-row items-center gap-3 flex-1">
+                    <TouchableOpacity
+                      activeOpacity={0.75}
+                      className="flex-row items-center gap-3 flex-1"
+                      onPress={() => setSelectedCreator(item)}
+                    >
                       <Image
                         source={{ uri: item.creatorAvatar }}
                         className="w-10 h-10 rounded-full bg-neutral-200"
@@ -237,19 +352,25 @@ export default function Reels() {
                             <MaterialCommunityIcons
                               name="shield-check"
                               size={13}
-                              color="#10b981"
+                            color={colors.success}
                             />
                           )}
                         </View>
                         <Text className="text-[10px] font-bold tracking-wide uppercase text-neutral-400">
-                          Board Certified Gynac
+                          Board-certified specialist
+                        </Text>
+                        <Text
+                          className="mt-1 text-[10px] font-black uppercase tracking-wider"
+                          style={{ color: colors.primary }}
+                        >
+                          View Profile
                         </Text>
                       </View>
-                    </View>
+                    </TouchableOpacity>
 
                     <TouchableOpacity
                       activeOpacity={0.7}
-                      onPress={() => handleToggleFollow(item.creatorId)}
+                      onPress={() => handleToggleFollow(item.id, item.creatorId)}
                       className="px-3.5 py-1.5 rounded-full border"
                       style={{
                         backgroundColor: isFollowing
@@ -291,7 +412,7 @@ export default function Reels() {
                     ) : (
                       <TouchableOpacity
                         activeOpacity={0.9}
-                        onPress={() => setActivePlayId(item.id)}
+                        onPress={() => handlePlay(item.id)}
                         className="w-full h-full relative"
                       >
                         <Image
@@ -360,7 +481,7 @@ export default function Reels() {
                         color={colors.primary}
                       />
                       <Text className="text-[10px] font-black uppercase tracking-wider text-neutral-400">
-                        Creator's Next Topic Poll
+                        {"Creator's Next Topic Poll"}
                       </Text>
                     </View>
 
@@ -438,6 +559,234 @@ export default function Reels() {
           </View>
         </ScrollView>
       </SafeAreaView>
+
+      <Modal
+        visible={!!selectedCreator}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setSelectedCreator(null)}
+      >
+        {selectedCreator ? (
+          <SafeAreaView
+            className="flex-1"
+            style={{ backgroundColor: colors.background }}
+          >
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 40 }}
+            >
+              <View className="flex-row items-center justify-between px-6 pt-6">
+                <Text
+                  className="text-xl font-black tracking-tight"
+                  style={{ color: colors.foreground }}
+                >
+                  Creator Profile
+                </Text>
+                <TouchableOpacity
+                  accessibilityLabel="Close creator profile"
+                  className="rounded-full border p-2"
+                  onPress={() => setSelectedCreator(null)}
+                  style={{
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  }}
+                >
+                  <Feather name="x" size={18} color={colors.foreground} />
+                </TouchableOpacity>
+              </View>
+
+              <View className="items-center px-6 pt-8">
+                <Image
+                  source={{ uri: selectedCreator.creatorAvatar }}
+                  className="h-28 w-28 rounded-full bg-neutral-200"
+                />
+                <View className="mt-4 flex-row items-center gap-1.5">
+                  <Text
+                    className="text-2xl font-black tracking-tight text-center"
+                    style={{ color: colors.foreground }}
+                  >
+                    {selectedCreator.creatorName}
+                  </Text>
+                  {selectedCreator.verified ? (
+                    <MaterialCommunityIcons
+                      name="shield-check"
+                      size={18}
+                      color={colors.success}
+                    />
+                  ) : null}
+                </View>
+                <Text
+                  className="mt-1 text-xs font-bold uppercase tracking-wider"
+                  style={{ color: colors.mutedText }}
+                >
+                  {selectedCreator.category} creator
+                </Text>
+              </View>
+
+              <View className="mx-6 mt-8 flex-row gap-3">
+                {[
+                  {
+                    label: "Videos",
+                    value: getCreatorStats(selectedCreator.creatorId).reelsCount,
+                    icon: "play-circle-outline",
+                  },
+                  {
+                    label: "Views",
+                    value: getCreatorStats(
+                      selectedCreator.creatorId,
+                    ).totalViews.toLocaleString(),
+                    icon: "eye-outline",
+                  },
+                  {
+                    label: "Topics",
+                    value: getCreatorStats(
+                      selectedCreator.creatorId,
+                    ).categories.length,
+                    icon: "albums-outline",
+                  },
+                ].map((metric) => (
+                  <View
+                    key={metric.label}
+                    className="flex-1 items-center rounded-2xl border p-4"
+                    style={{
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    }}
+                  >
+                    <Ionicons
+                      name={metric.icon as any}
+                      size={18}
+                      color={colors.primary}
+                    />
+                    <Text
+                      className="mt-2 text-base font-black"
+                      style={{ color: colors.foreground }}
+                    >
+                      {metric.value}
+                    </Text>
+                    <Text
+                      className="text-[10px] font-bold"
+                      style={{ color: colors.mutedText }}
+                    >
+                      {metric.label}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+
+              <View
+                className="mx-6 mt-6 rounded-3xl border p-5"
+                style={{
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                }}
+              >
+                <Text
+                  className="text-sm font-black"
+                  style={{ color: colors.foreground }}
+                >
+                  About this creator
+                </Text>
+                <Text
+                  className="mt-2 text-xs font-semibold leading-5"
+                  style={{ color: colors.mutedText }}
+                >
+                  Follow this specialist to keep their cycle education videos,
+                  polls, and comfort-first health guidance close in your feed.
+                </Text>
+
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  className="mt-5 rounded-full py-3.5 items-center justify-center"
+                  onPress={() =>
+                    handleToggleFollow(
+                      selectedCreator.id,
+                      selectedCreator.creatorId,
+                    )
+                  }
+                  style={{
+                    backgroundColor: followingCreatorIds.has(
+                      selectedCreator.creatorId,
+                    )
+                      ? colors.input
+                      : colors.primary,
+                    borderColor: colors.border,
+                    borderWidth: followingCreatorIds.has(
+                      selectedCreator.creatorId,
+                    )
+                      ? 1
+                      : 0,
+                  }}
+                >
+                  <Text
+                    className="text-sm font-black"
+                    style={{
+                      color: followingCreatorIds.has(selectedCreator.creatorId)
+                        ? colors.foreground
+                        : colors.buttonText,
+                    }}
+                  >
+                    {followingCreatorIds.has(selectedCreator.creatorId)
+                      ? "Following"
+                      : "Follow Creator"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <View className="mx-6 mt-6">
+                <Text
+                  className="mb-3 text-xs font-black uppercase tracking-widest"
+                  style={{ color: colors.primary }}
+                >
+                  Videos by this creator
+                </Text>
+                <View className="gap-3">
+                  {reels
+                    .filter(
+                      (reel) =>
+                        reel.creatorId === selectedCreator.creatorId,
+                    )
+                    .map((reel) => (
+                      <TouchableOpacity
+                        key={reel.id}
+                        activeOpacity={0.8}
+                        className="flex-row overflow-hidden rounded-2xl border"
+                        onPress={() => {
+                          setSelectedCreator(null);
+                          handlePlay(reel.id);
+                        }}
+                        style={{
+                          backgroundColor: colors.surface,
+                          borderColor: colors.border,
+                        }}
+                      >
+                        <Image
+                          source={{ uri: reel.thumbnailUrl }}
+                          className="h-20 w-24 bg-neutral-200"
+                        />
+                        <View className="flex-1 justify-center p-3">
+                          <Text
+                            className="text-xs font-black"
+                            numberOfLines={2}
+                            style={{ color: colors.foreground }}
+                          >
+                            {reel.title}
+                          </Text>
+                          <Text
+                            className="mt-1 text-[10px] font-bold"
+                            style={{ color: colors.mutedText }}
+                          >
+                            {reel.duration} • {reel.views.toLocaleString()} views
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                </View>
+              </View>
+            </ScrollView>
+          </SafeAreaView>
+        ) : null}
+      </Modal>
     </>
   );
 }

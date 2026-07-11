@@ -1,15 +1,40 @@
 import { Link, useRouter } from "expo-router";
 import React, { useEffect, useRef } from "react";
-import { Image, StatusBar, Text, TouchableOpacity, View } from "react-native";
+import {
+  Image,
+  ScrollView,
+  StatusBar,
+  Text,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../components/auth-context";
 import { ThemeToggle, useTheme } from "../components/theme";
+import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import {
+  getActionGradient,
+  getScreenGradient,
+  getShadow,
+  getSoftTints,
+} from "../components/ui-tokens";
 
 export default function Index() {
   const router = useRouter();
   const { isAuthenticated } = useAuth();
   const { colors, isDark } = useTheme();
+  const { width } = useWindowDimensions();
   const hasNavigated = useRef(false);
+  const contentWidth = Math.min(Math.max(width - 40, 280), 540);
+  const screenGradient = getScreenGradient(colors, isDark) as [
+    string,
+    string,
+    string,
+  ];
+  const actionGradient = getActionGradient(colors) as [string, string];
+  const softTints = getSoftTints(colors);
 
   useEffect(() => {
     if (isAuthenticated && !hasNavigated.current) {
@@ -24,92 +49,209 @@ export default function Index() {
   }, [isAuthenticated, router]);
 
   return (
-    <>
+    <LinearGradient
+      colors={screenGradient}
+      className="flex-1"
+    >
       <StatusBar
         barStyle={isDark ? "light-content" : "dark-content"}
-        backgroundColor={colors.background}
+        backgroundColor="transparent"
+        translucent
       />
 
-      <SafeAreaView
-        className="flex-1"
-        style={{ backgroundColor: colors.background }}
-      >
-        <View className="absolute right-6 top-8 z-10 ">
+      <SafeAreaView className="flex-1">
+        <View className="flex-row justify-between items-center px-5 py-4">
+          <View className="flex-row items-center gap-2">
+            <View
+              className="w-8 h-8 rounded-full items-center justify-center"
+              style={{ backgroundColor: colors.primaryLight }}
+            >
+              <Ionicons name="sparkles" size={14} color={colors.primary} />
+            </View>
+            <Text
+              className="text-lg font-black tracking-widest"
+              style={{ color: colors.foreground }}
+            >
+              NURA
+            </Text>
+          </View>
           <ThemeToggle />
         </View>
 
-        <View className="flex-1 justify-center px-6">
-          <View className="mb-12 items-center">
-            <View
-              className="mb-5 h-20 w-20 items-center justify-center rounded-full border-2 overflow-hidden"
-              style={{
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-              }}
-            >
-              <Image
-                source={require("../assets/images/logo.png")}
-                resizeMode="contain"
-                style={{
-                  width: 200,
-                  height: 200,
-                }}
-              />
-            </View>
-
-            <Text
-              className="text-4xl font-bold pb-4"
-              style={{ color: colors.foreground }}
-            >
-              The Nura
-            </Text>
-
-            <Text
-              className="mt-3 text-center text-base leading-6 pb-12"
-              style={{ color: colors.foreground }}
-            >
-              Feel the flow with Nura - Your ultimate productivity companion
-            </Text>
-          </View>
-
-          <View className="gap-4 w-full">
-            {/* Primary Action Button (Login) */}
-            <Link href="/(tabs)/login" asChild>
-              <TouchableOpacity
-                activeOpacity={0.85}
-                className="rounded-2xl py-4 shadow-md items-center justify-center"
-                style={{ backgroundColor: colors.primary }}
-              >
-                <Text
-                  className="text-center text-base font-semibold tracking-wide"
-                  style={{ color: colors.buttonText }}
-                >
-                  Log In
-                </Text>
-              </TouchableOpacity>
-            </Link>
-
-            {/* Secondary Action Button (Sign Up) */}
-            <Link href="/(tabs)/signup" asChild>
-              <TouchableOpacity
-                activeOpacity={0.75}
-                className="rounded-2xl border py-4 items-center justify-center"
+        <ScrollView
+          contentContainerStyle={{
+            alignItems: "center",
+            flexGrow: 1,
+            justifyContent: "center",
+            paddingBottom: 42,
+            paddingHorizontal: 20,
+          }}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={{ width: contentWidth }}>
+            <View className="items-center mb-8 mt-2">
+              <View
+                className="mb-6 rounded-full border px-3 py-1.5"
                 style={{
                   backgroundColor: colors.surface,
                   borderColor: colors.border,
                 }}
               >
                 <Text
-                  className="text-center text-base font-semibold tracking-wide"
-                  style={{ color: colors.text }}
+                  className="text-[11px] font-black uppercase tracking-widest"
+                  style={{ color: colors.primary }}
+                >
+                  Private cycle care
+                </Text>
+              </View>
+
+              <View
+                className="mb-7 h-28 w-28 items-center justify-center relative rounded-[32px] border overflow-hidden"
+                style={{
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  ...getShadow(colors, isDark),
+                }}
+              >
+                <Image
+                  source={require("../assets/images/logo.png")}
+                  resizeMode="contain"
+                  className="w-full h-full"
+                />
+                <View
+                  className="absolute -bottom-2 -right-2 w-8 h-8 rounded-full items-center justify-center border"
+                  style={{ backgroundColor: colors.primary }}
+                >
+                  <Ionicons name="heart" size={14} color={colors.buttonText} />
+                </View>
+              </View>
+
+              <Text
+                className="text-4xl font-black text-center leading-10"
+                style={{ color: colors.foreground }}
+              >
+                Nura
+              </Text>
+
+              <Text
+                className="mt-3 text-center text-base font-semibold leading-6"
+                style={{ color: colors.mutedText }}
+              >
+                A calm, modern space to track your cycle, understand your body,
+                ask private questions, and feel supported every day.
+              </Text>
+            </View>
+
+          <View className="gap-3 mb-8">
+            {[
+              {
+                icon: "calendar-outline",
+                title: "Smart cycle tracking",
+                desc: "Periods, fertile windows, symptoms, moods, and daily logs in one place.",
+                tint: softTints.pink,
+                color: colors.primary,
+              },
+              {
+                icon: "shield-checkmark-outline",
+                title: "Private by default",
+                desc: "Sensitive notes, partner sharing, and community activity stay under your control.",
+                tint: softTints.mint,
+                color: colors.secondary,
+              },
+              {
+                icon: "sparkles-outline",
+                title: "Support that feels human",
+                desc: "Q&A, care articles, habit nudges, and clinical consultation access.",
+                tint: softTints.lavender,
+                color: colors.accent,
+              },
+            ].map((feat) => (
+              <View
+                key={feat.title}
+                className="flex-row items-center p-4 rounded-2xl border"
+                style={{
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                }}
+              >
+                <View
+                  className="w-12 h-12 rounded-2xl items-center justify-center mr-4"
+                  style={{ backgroundColor: feat.tint }}
+                >
+                  <Ionicons
+                    name={feat.icon as any}
+                    size={20}
+                    color={feat.color}
+                  />
+                </View>
+                <View className="flex-1">
+                  <Text
+                    className="text-sm font-black"
+                    style={{ color: colors.foreground }}
+                  >
+                    {feat.title}
+                  </Text>
+                  <Text
+                    className="text-xs font-semibold mt-1 leading-4"
+                    style={{ color: colors.mutedText }}
+                  >
+                    {feat.desc}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+
+          <View className="gap-4 w-full">
+            <Link href="/(tabs)/login" asChild>
+              <TouchableOpacity
+                activeOpacity={0.9}
+                className="rounded-full overflow-hidden"
+              >
+                <LinearGradient
+                  colors={actionGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  className="py-4 items-center justify-center"
+                >
+                  <Text
+                    className="text-center text-sm font-black tracking-wide"
+                    style={{ color: colors.buttonText }}
+                  >
+                    Log In
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </Link>
+
+            <Link href="/(tabs)/signup" asChild>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                className="rounded-full border py-4 items-center justify-center"
+                style={{
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                }}
+              >
+                <Text
+                  className="text-center text-sm font-black tracking-wide"
+                  style={{ color: colors.foreground }}
                 >
                   Create Account
                 </Text>
               </TouchableOpacity>
             </Link>
           </View>
-        </View>
+
+            <Text
+              className="mt-5 text-center text-[11px] font-semibold leading-4"
+              style={{ color: colors.mutedText }}
+            >
+              No awkward dashboards. No judgment. Just clear care for real life.
+            </Text>
+          </View>
+        </ScrollView>
       </SafeAreaView>
-    </>
+    </LinearGradient>
   );
 }

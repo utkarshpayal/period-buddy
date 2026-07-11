@@ -1,7 +1,9 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useRef, useState } from "react";
+import { LinearGradient } from "expo-linear-gradient";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   ScrollView,
   Share,
@@ -14,144 +16,185 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../../components/theme";
-
-// --- TELEHEALTH & PARTNER METRIC SCHEMAS ---
-interface ChatMessage {
-  id: string;
-  sender: "user" | "partner";
-  text: string;
-  time: string;
-}
+import { getSoftTints } from "../../components/ui-tokens";
+import {
+  partnerApi,
+  type PartnerMessage,
+  type PartnerProfile,
+} from "../../lib/api";
 
 export default function Partner() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
-  const scrollViewRef = useRef<ScrollView>(null);
+  const chatScrollRef = useRef<ScrollView>(null);
 
-  // Core Screen Navigation UI State
-  const [activeTab, setActiveTab] = useState<
-    "info" | "invite" | "access" | "chat"
-  >("info");
+  const [profile, setProfile] = useState<PartnerProfile | null>(null);
+  const [, setLoading] = useState(true);
 
-  // Invite System States
+  const [activeTab, setActiveTab] = useState<"info" | "invite" | "access" | "chat">("info");
+
+  // Invite
+  const [generatingCode, setGeneratingCode] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
-  const [isPartnerConnected, setIsPartnerConnected] = useState(false);
+  const [connectCode, setConnectCode] = useState("");
+  const [connecting, setConnecting] = useState(false);
 
-  // Dynamic Granular Access Permissions State Switches
-  const [shareCyclePhase, setShareCyclePhase] = useState(true);
-  const [shareSymptoms, setShareSymptoms] = useState(false);
-  const [shareIntimacyLog, setShareIntimacyLog] = useState(true);
-  const [shareAlerts, setShareAlerts] = useState(true);
+  // Permissions (local mirrors, saved on toggle)
+  const [perms, setPerms] = useState({
+    shareCyclePhase: true,
+    shareSymptoms: false,
+    shareIntimacyLog: true,
+    shareAlerts: true,
+  });
 
-  // Live Chat Stream States
+  // Chat
+  const [chatMessages, setChatMessages] = useState<PartnerMessage[]>([]);
   const [typedMessage, setTypedMessage] = useState("");
-  const [chatLog, setChatLog] = useState<ChatMessage[]>([
-    {
-      id: "m1",
-      sender: "partner",
-      text: "Hey! Just set up the sync code on my phone. App says you are on Cycle Day 6 today, let me know if you need anything comforting brought over! ❤️",
-      time: "10:14 AM",
-    },
-  ]);
+  const [sendingMessage, setSendingMessage] = useState(false);
 
-  const softTints = {
-    pink: isDark ? "#3b1a2d" : "#fff0f6",
-    emerald: isDark ? "#062e20" : "#ecfdf5",
-    purple: isDark ? "#231942" : "#f3e8ff",
-    orange: isDark ? "#361e12" : "#fff7ed",
+  const softTints = getSoftTints(colors);
+
+  const load = useCallback(async () => {
+    try {
+      const p = await partnerApi.getProfile();
+      setProfile(p);
+      if (p.permissions) {
+        setPerms({
+          shareCyclePhase: p.permissions.shareCyclePhase ?? true,
+          shareSymptoms: p.permissions.shareSymptoms ?? false,
+          shareIntimacyLog: p.permissions.shareIntimacyLog ?? true,
+          shareAlerts: p.permissions.shareAlerts ?? true,
+        });
+      }
+      if (p.inviteCode) setInviteCode(p.inviteCode);
+    } catch {
+      // fail silently
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const loadMessages = useCallback(async () => {
+    try {
+      const msgs = await partnerApi.getMessages();
+      setChatMessages(msgs);
+      setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: false }), 100);
+    } catch {
+      // keep empty
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useEffect(() => {
+    if (activeTab === "chat") loadMessages();
+  }, [activeTab, loadMessages]);
+
+  const handleGenerateCode = async () => {
+    setGeneratingCode(true);
+    try {
+      const result = await partnerApi.generateInviteCode();
+      setInviteCode(result.inviteCode);
+      setProfile((p) => p ? { ...p, inviteCode: result.inviteCode } : p);
+      Alert.alert("Code Generated 🎉", `Your private sync key is:\n${result.inviteCode}\n\nShare this with your partner to connect.`);
+    } catch (err) {
+      Alert.alert("Error", err instanceof Error ? err.message : "Failed to generate code");
+    } finally {
+      setGeneratingCode(false);
+    }
   };
 
-  // --- BUSINESS LOGIC DRIVERS ---
-  function generateInviteCode() {
-    const rawCode = `NURA-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-    setInviteCode(rawCode);
-    Alert.alert("Code Generated 🎉", `Your private sync key is: ${rawCode}`);
-  }
-
-  async function handleNativeShare() {
+  const handleNativeShare = async () => {
     if (!inviteCode) return;
     await Share.share({
       message: `Connect with me on Nura as my wellness support buddy. Use our private authentication key: ${inviteCode}`,
     });
-  }
+  };
 
-  function simulatePartnerConnection() {
-    setIsPartnerConnected(true);
-    setActiveTab("access");
-    Alert.alert(
-      "Connected Successfully! ✨",
-      "Your partner's device profile has synchronized. Configure sharing filters below.",
-    );
-  }
+  const handleConnect = async () => {
+    if (!connectCode.trim()) {
+      Alert.alert("Error", "Please enter a partner invite code");
+      return;
+    }
+    setConnecting(true);
+    try {
+      await partnerApi.connectPartner(connectCode.trim());
+      await load();
+      setConnectCode("");
+      setActiveTab("access");
+      Alert.alert("Connected", "Your partner has been linked. Configure sharing permissions below.");
+    } catch (err) {
+      Alert.alert("Connection Failed", err instanceof Error ? err.message : "Invalid or expired invite code");
+    } finally {
+      setConnecting(false);
+    }
+  };
 
-  function handleSendChatMessage() {
-    if (!typedMessage.trim()) return;
+  const updatePerm = async (key: keyof typeof perms, value: boolean) => {
+    const next = { ...perms, [key]: value };
+    setPerms(next);
+    try {
+      await partnerApi.updatePermissions(next);
+    } catch {
+      // revert on failure
+      setPerms(perms);
+    }
+  };
 
-    const userPayload: ChatMessage = {
-      id: `msg_u_${Date.now()}`,
-      sender: "user",
-      text: typedMessage.trim(),
-      time: "Just now",
-    };
-
-    setChatLog((prev) => [...prev, userPayload]);
+  const handleSendMessage = async () => {
+    if (!typedMessage.trim() || sendingMessage) return;
+    const text = typedMessage.trim();
     setTypedMessage("");
-    setTimeout(
-      () => scrollViewRef.current?.scrollToEnd({ animated: true }),
-      50,
-    );
+    setSendingMessage(true);
 
-    // Warm, organic couple-centric response generation simulation logic
-    setTimeout(() => {
-      setChatLog((prev) => [
-        ...prev,
-        {
-          id: `msg_p_${Date.now()}`,
-          sender: "partner",
-          text: "Got it! Thanks for updating the permissions. Love how minimal this setup feels. Let me know if those cramps flare up later. 🌸",
-          time: "Just now",
-        },
-      ]);
-      setTimeout(
-        () => scrollViewRef.current?.scrollToEnd({ animated: true }),
-        50,
-      );
-    }, 1500);
-  }
+    // Optimistic
+    setChatMessages((prev) => [...prev, { sender: "user", text, sentAt: new Date().toISOString() }]);
+    setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 50);
+
+    try {
+      await partnerApi.sendMessage(text);
+    } catch {
+      // stays optimistically
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
+  const isConnected = profile?.isConnected ?? false;
+  const partnerName =
+    profile?.partnerId && typeof profile.partnerId === "object"
+      ? `${profile.partnerId.firstName} ${profile.partnerId.lastName}`
+      : "Your Partner";
 
   return (
     <>
-      <StatusBar
-        barStyle={isDark ? "light-content" : "dark-content"}
-        backgroundColor={colors.background}
-      />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
 
-      <SafeAreaView
-        className="flex-1"
-        style={{ backgroundColor: colors.background }}
-      >
-        {/* Navigation Action Header */}
+      <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
+        {/* Nav */}
         <View className="flex-row items-center gap-2 px-6 pt-6">
           <TouchableOpacity
             onPress={() => router.back()}
             activeOpacity={0.7}
             className="p-2.5 -ml-2 rounded-full border"
-            style={{
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-            }}
+            style={{ backgroundColor: colors.surface, borderColor: colors.border }}
           >
             <Feather name="arrow-left" size={18} color={colors.foreground} />
           </TouchableOpacity>
-          <Text
-            className="flex-1 text-2xl font-black tracking-tight ml-2"
-            style={{ color: colors.foreground }}
-          >
-            Partner Options
+          <Text className="flex-1 text-2xl font-black tracking-tight ml-2" style={{ color: colors.foreground }}>
+            Partner Sync
           </Text>
+          {isConnected && (
+            <View className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-full" style={{ backgroundColor: softTints.emerald }}>
+              <View className="w-2 h-2 rounded-full bg-emerald-500" />
+              <Text className="text-[10px] font-black text-emerald-600">Connected</Text>
+            </View>
+          )}
         </View>
 
-        {/* PREMIUM HORIZONTAL SCROLLABLE TAB SELECTORS */}
+        {/* Tab pills */}
         <View className="mt-5">
           <ScrollView
             horizontal
@@ -161,7 +204,7 @@ export default function Partner() {
             {[
               { id: "info", label: "Overview" },
               { id: "invite", label: "Link Partner" },
-              { id: "access", label: "Permissions Options" },
+              { id: "access", label: "Permissions" },
               { id: "chat", label: "Private Chat" },
             ].map((tab) => {
               const isSelected = activeTab === tab.id;
@@ -170,19 +213,15 @@ export default function Partner() {
                   key={tab.id}
                   onPress={() => setActiveTab(tab.id as any)}
                   activeOpacity={0.8}
-                  className="rounded-full px-5 py-2.5 border shadow-3xs"
+                  className="rounded-full px-5 py-2.5 border shadow-sm"
                   style={{
-                    backgroundColor: isSelected
-                      ? colors.primary
-                      : colors.surface,
+                    backgroundColor: isSelected ? colors.primary : colors.surface,
                     borderColor: isSelected ? colors.primary : colors.border,
                   }}
                 >
                   <Text
                     className="text-xs font-bold tracking-wide"
-                    style={{
-                      color: isSelected ? colors.buttonText : colors.foreground,
-                    }}
+                    style={{ color: isSelected ? colors.buttonText : colors.foreground }}
                   >
                     {tab.label}
                   </Text>
@@ -192,395 +231,313 @@ export default function Partner() {
           </ScrollView>
         </View>
 
-        {/* MAIN BODY SCROLL VIEW PORT WINDOW */}
         <ScrollView
-          ref={scrollViewRef}
+          ref={chatScrollRef}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{
-            paddingBottom: activeTab === "chat" ? 20 : 120,
-          }}
+          contentContainerStyle={{ paddingBottom: activeTab === "chat" ? 80 : 120 }}
           className="flex-1"
         >
           <View className="mx-6 mt-6">
-            {/* SEGMENT 1: OVERVIEW CARD LAYOUTS */}
+            {/* ── OVERVIEW ── */}
             {activeTab === "info" && (
               <View className="gap-5">
-                <Text
-                  className="text-xs font-semibold px-1 leading-4"
-                  style={{ color: colors.mutedText }}
-                >
-                  Sync synchronization logs securely to cultivate healthier
-                  communication loops during heavy cycle workloads.
-                </Text>
-
-                <View
-                  className="rounded-3xl border p-5 shadow-2xs flex-row items-center"
-                  style={{
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  }}
-                >
+                {isConnected && (
                   <View
-                    className="p-3 rounded-2xl mr-4"
-                    style={{ backgroundColor: softTints.pink }}
+                    className="flex-row items-center p-4 rounded-2xl border gap-3"
+                    style={{ backgroundColor: softTints.emerald, borderColor: colors.successLight }}
                   >
-                    <Ionicons
-                      name="people-outline"
-                      size={20}
-                      color={colors.primary}
-                    />
-                  </View>
-                  <View className="flex-1">
-                    <Text
-                      className="text-sm font-black tracking-tight"
-                      style={{ color: colors.foreground }}
-                    >
-                      What's Shared Natively
-                    </Text>
-                    <Text
-                      className="text-xs mt-1 leading-4"
-                      style={{ color: colors.mutedText }}
-                    >
-                      Live cycle spacing indicators, targeted physiological
-                      comfort tips, and customized alert structures.
+                    <View className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                    <Text className="text-xs font-black text-emerald-700 flex-1">
+                      Synced with {partnerName}
                     </Text>
                   </View>
-                </View>
+                )}
 
-                <View
-                  className="rounded-3xl border p-5 shadow-2xs flex-row items-center"
-                  style={{
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  }}
-                >
+                {[
+                  { icon: "people-outline", bg: softTints.pink, color: colors.primary, title: "What's Shared", desc: "Cycle phase, comfort tips, and alerts can be shared only when you allow them." },
+                  { icon: "heart-outline", bg: softTints.emerald, color: colors.success, title: "Better Support", desc: "Help your partner understand what kind of care, space, or reminders may help." },
+                  { icon: "shield-checkmark-outline", bg: softTints.lavender, color: colors.accent, title: "Privacy First", desc: "Everything shared is your choice. You can change permissions any time." },
+                ].map((card) => (
                   <View
-                    className="p-3 rounded-2xl mr-4"
-                    style={{ backgroundColor: softTints.emerald }}
+                    key={card.title}
+                    className="rounded-3xl border p-5 shadow-sm flex-row items-center"
+                    style={{ backgroundColor: colors.surface, borderColor: colors.border }}
                   >
-                    <Ionicons name="leaf-outline" size={20} color="#10b981" />
+                    <View className="p-3 rounded-2xl mr-4" style={{ backgroundColor: card.bg }}>
+                      <Ionicons name={card.icon as any} size={20} color={card.color} />
+                    </View>
+                    <View className="flex-1">
+                      <Text className="text-sm font-black tracking-tight" style={{ color: colors.foreground }}>
+                        {card.title}
+                      </Text>
+                      <Text className="text-xs mt-1 leading-4" style={{ color: colors.mutedText }}>
+                        {card.desc}
+                      </Text>
+                    </View>
                   </View>
-                  <View className="flex-1">
-                    <Text
-                      className="text-sm font-black tracking-tight"
-                      style={{ color: colors.foreground }}
-                    >
-                      Ecosystem Benefits
-                    </Text>
-                    <Text
-                      className="text-xs mt-1 leading-4"
-                      style={{ color: colors.mutedText }}
-                    >
-                      Bypasses awkward transactional explanations completely.
-                      Down-regulates daily miscommunication drops.
-                    </Text>
-                  </View>
-                </View>
+                ))}
 
                 <TouchableOpacity
                   activeOpacity={0.85}
-                  onPress={() => setActiveTab("invite")}
+                  onPress={() => setActiveTab(isConnected ? "access" : "invite")}
                   className="mt-4 rounded-2xl py-4 items-center justify-center shadow-md"
                   style={{ backgroundColor: colors.primary }}
                 >
-                  <Text
-                    className="text-sm font-bold tracking-wide"
-                    style={{ color: colors.buttonText }}
-                  >
-                    Proceed to Sync Setup
+                  <Text className="text-sm font-bold tracking-wide text-white">
+                    {isConnected ? "Manage Permissions" : "Proceed to Sync Setup"}
                   </Text>
                 </TouchableOpacity>
               </View>
             )}
 
-            {/* SEGMENT 2: INVITE ENCRYPTION KEY SETUP */}
+            {/* ── INVITE / CONNECT ── */}
             {activeTab === "invite" && (
-              <View className="gap-4 pt-2">
+              <View className="gap-5">
+                {/* Generate code section */}
                 <View
-                  className="rounded-3xl border p-6 items-center shadow-xs"
-                  style={{
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  }}
+                  className="rounded-3xl border p-6 items-center shadow-sm"
+                  style={{ backgroundColor: colors.surface, borderColor: colors.border }}
                 >
-                  <View
-                    className="p-4 rounded-2xl mb-4"
-                    style={{ backgroundColor: softTints.pink }}
-                  >
-                    <MaterialCommunityIcons
-                      name="heart-flash"
-                      size={32}
-                      color={colors.primary}
-                    />
+                  <View className="p-4 rounded-2xl mb-4" style={{ backgroundColor: softTints.pink }}>
+                    <MaterialCommunityIcons name="heart-flash" size={32} color={colors.primary} />
                   </View>
-                  <Text
-                    className="text-base font-black tracking-tight"
-                    style={{ color: colors.foreground }}
-                  >
-                    Invite Support Buddy
+                  <Text className="text-base font-black tracking-tight" style={{ color: colors.foreground }}>
+                    Invite Your Partner
                   </Text>
-                  <Text
-                    className="text-xs text-center mt-1.5 leading-4 px-4"
-                    style={{ color: colors.mutedText }}
-                  >
-                    Generate a sandboxed secure device hash key below to unlock
-                    matching dashboard mirrors for your partner.
+                  <Text className="text-xs text-center mt-1.5 leading-4 px-4" style={{ color: colors.mutedText }}>
+                    Generate a secure invite code and share it with your partner so they can connect to your profile.
                   </Text>
 
-                  {!inviteCode ? (
-                    <TouchableOpacity
-                      activeOpacity={0.8}
-                      onPress={generateInviteCode}
-                      className="mt-6 w-full rounded-xl py-3.5 items-center justify-center"
-                      style={{ backgroundColor: colors.primary }}
-                    >
-                      <Text className="text-xs font-bold tracking-wide text-white uppercase">
-                        Generate Unique Code
-                      </Text>
-                    </TouchableOpacity>
-                  ) : (
+                  {inviteCode ? (
                     <View className="w-full mt-6 gap-3">
-                      <View className="bg-neutral-50 dark:bg-neutral-900 border border-neutral-100 p-4 rounded-xl">
+                      <LinearGradient
+                        colors={[colors.surface, colors.primaryLight]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        className="p-4 rounded-xl border"
+                        style={{ borderColor: `${colors.primary}30` }}
+                      >
                         <Text className="text-[10px] text-center font-bold uppercase text-neutral-400">
                           Your Secure Sync Key
                         </Text>
-                        <Text className="text-center text-xl font-black mt-1 text-pink-500 tracking-widest">
+                        <Text className="text-center text-xl font-black mt-1 tracking-widest" style={{ color: colors.primary }}>
                           {inviteCode}
                         </Text>
-                      </View>
+                      </LinearGradient>
 
                       <TouchableOpacity
                         activeOpacity={0.8}
                         onPress={handleNativeShare}
-                        className="w-full rounded-xl py-3.5 items-center justify-center border border-pink-500/30"
-                        style={{ backgroundColor: softTints.pink }}
+                        className="w-full rounded-xl py-3.5 items-center justify-center border"
+                        style={{ backgroundColor: softTints.pink, borderColor: `${colors.primary}30` }}
                       >
-                        <Text className="text-xs font-bold text-pink-500">
-                          Dispatch Hash Invitation
+                        <Text className="text-xs font-bold" style={{ color: colors.primary }}>
+                          Share Invite Code
                         </Text>
                       </TouchableOpacity>
 
-                      {/* SIMULATION FOR TESTING ACTION PIPELINES */}
-                      {!isPartnerConnected && (
-                        <TouchableOpacity
-                          onPress={simulatePartnerConnection}
-                          className="mt-2 py-1"
-                        >
-                          <Text className="text-center text-[11px] font-bold text-neutral-400 underline">
-                            Simulate Partner Acceptance
-                          </Text>
-                        </TouchableOpacity>
-                      )}
+                      <TouchableOpacity onPress={handleGenerateCode} className="mt-1 py-1">
+                        <Text className="text-center text-[11px] font-bold underline" style={{ color: colors.mutedText }}>
+                          Generate new code
+                        </Text>
+                      </TouchableOpacity>
                     </View>
+                  ) : (
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      disabled={generatingCode}
+                      onPress={handleGenerateCode}
+                      className="mt-6 w-full rounded-xl py-3.5 items-center justify-center"
+                      style={{ backgroundColor: colors.primary, opacity: generatingCode ? 0.7 : 1 }}
+                    >
+                      {generatingCode ? (
+                        <ActivityIndicator color={colors.buttonText} />
+                      ) : (
+                        <Text className="text-xs font-bold tracking-wide text-white uppercase">
+                          Generate Unique Code
+                        </Text>
+                      )}
+                    </TouchableOpacity>
                   )}
                 </View>
+
+                {/* Connect using a code */}
+                {!isConnected && (
+                  <View
+                    className="rounded-3xl border p-5 shadow-sm"
+                    style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+                  >
+                    <Text className="text-sm font-black mb-3" style={{ color: colors.foreground }}>
+                      Got a Partner Code?
+                    </Text>
+                    <View
+                      className="flex-row items-center rounded-2xl border px-4 mb-3"
+                      style={{ backgroundColor: colors.background, borderColor: colors.border }}
+                    >
+                      <TextInput
+                        placeholder="Enter invite code e.g. NURA-ABC123"
+                        placeholderTextColor={colors.mutedText}
+                        value={connectCode}
+                        onChangeText={(t) => setConnectCode(t.toUpperCase())}
+                        autoCapitalize="characters"
+                        className="flex-1 py-3 text-sm font-bold"
+                        style={{ color: colors.foreground }}
+                      />
+                    </View>
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      disabled={connecting || !connectCode.trim()}
+                      onPress={handleConnect}
+                      className="rounded-xl py-3.5 items-center justify-center"
+                      style={{
+                        backgroundColor: connectCode.trim() ? colors.primary : colors.border,
+                        opacity: connecting ? 0.7 : 1,
+                      }}
+                    >
+                      {connecting ? (
+                        <ActivityIndicator color={colors.buttonText} />
+                      ) : (
+                        <Text className="text-sm font-bold text-white">Connect Partner</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
             )}
 
-            {/* SEGMENT 3: GRANULAR GRANULAR ACCESS CONTROLS (THE CORE USER ASK) */}
+            {/* ── PERMISSIONS ── */}
             {activeTab === "access" && (
               <View className="gap-4 pt-1">
-                <View className="bg-pink-50/50 dark:bg-pink-950/20 px-4 py-3 rounded-2xl border border-pink-100 dark:border-pink-900/40 flex-row items-center gap-3">
-                  <View className="w-2 h-2 rounded-full bg-emerald-500" />
-                  <Text
-                    className="text-xs font-bold"
-                    style={{ color: colors.foreground }}
-                  >
-                    Partner Connection Status:{" "}
-                    {isPartnerConnected
-                      ? "Active Stream"
-                      : "Awaiting Pairing Hash"}
+                <View
+                  className="flex-row items-center gap-3 p-4 rounded-2xl border"
+                  style={{ backgroundColor: isConnected ? softTints.emerald : colors.surface, borderColor: colors.border }}
+                >
+                  <View className={`w-2.5 h-2.5 rounded-full ${isConnected ? "bg-emerald-500" : "bg-neutral-400"}`} />
+                  <Text className="text-xs font-black flex-1" style={{ color: colors.foreground }}>
+                    Partner: {isConnected ? `● ${partnerName} is linked` : "No partner connected yet"}
                   </Text>
                 </View>
 
-                <Text
-                  className="text-xs font-black tracking-widest uppercase mt-3 px-1"
-                  style={{ color: colors.primary }}
-                >
-                  Privacy & Data Release Configuration
+                <Text className="text-xs font-black tracking-widest uppercase mt-3 px-1" style={{ color: colors.primary }}>
+                    Sharing Permissions
                 </Text>
 
-                {/* Grid Framework list mapping switch selectors */}
                 <View
-                  className="rounded-3xl border shadow-3xs p-4 gap-4"
-                  style={{
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  }}
+                  className="rounded-3xl border shadow-sm p-4 gap-4"
+                  style={{ backgroundColor: colors.surface, borderColor: colors.border }}
                 >
-                  {/* Toggle 1 */}
-                  <View className="flex-row justify-between items-center">
-                    <View className="flex-1 pr-4">
-                      <Text
-                        className="text-xs font-extrabold"
-                        style={{ color: colors.foreground }}
-                      >
-                        Cycle Phase Index Tracker
-                      </Text>
-                      <Text
-                        className="text-[10px] mt-0.5 font-medium leading-3.5"
-                        style={{ color: colors.mutedText }}
-                      >
-                        Allows partner to view live phase names (e.g. Luteal,
-                        Period Day 6).
-                      </Text>
+                  {[
+                    { key: "shareCyclePhase" as const, title: "Cycle Phase", desc: "Share phase names like luteal, ovulation, or period day.", value: perms.shareCyclePhase },
+                    { key: "shareSymptoms" as const, title: "Symptoms", desc: "Share selected symptoms such as cramps, fatigue, or mood changes.", value: perms.shareSymptoms },
+                    { key: "shareIntimacyLog" as const, title: "Intimacy Notes", desc: "Share intimacy-related logs only if you are comfortable.", value: perms.shareIntimacyLog },
+                    { key: "shareAlerts" as const, title: "Care Alerts", desc: "Send gentle reminders before expected period or PMS days.", value: perms.shareAlerts },
+                  ].map((item, i, arr) => (
+                    <View key={item.key}>
+                      <View className="flex-row justify-between items-center">
+                        <View className="flex-1 pr-4">
+                          <Text className="text-xs font-extrabold" style={{ color: colors.foreground }}>
+                            {item.title}
+                          </Text>
+                          <Text className="text-[10px] mt-0.5 font-medium leading-3.5" style={{ color: colors.mutedText }}>
+                            {item.desc}
+                          </Text>
+                        </View>
+                        <Switch
+                          value={item.value}
+                          onValueChange={(v) => updatePerm(item.key, v)}
+                          trackColor={{ true: colors.primary }}
+                        />
+                      </View>
+                      {i < arr.length - 1 && (
+                        <View className="h-[1px] w-full mt-4" style={{ backgroundColor: colors.border }} />
+                      )}
                     </View>
-                    <Switch
-                      value={shareCyclePhase}
-                      onValueChange={setShareCyclePhase}
-                      trackColor={{ true: colors.primary }}
-                    />
-                  </View>
-
-                  <View className="h-[1px] w-full bg-neutral-100 dark:bg-neutral-900/60" />
-
-                  {/* Toggle 2 */}
-                  <View className="flex-row justify-between items-center">
-                    <View className="flex-1 pr-4">
-                      <Text
-                        className="text-xs font-extrabold"
-                        style={{ color: colors.foreground }}
-                      >
-                        Physical Symptoms Breakdown
-                      </Text>
-                      <Text
-                        className="text-[10px] mt-0.5 font-medium leading-3.5"
-                        style={{ color: colors.mutedText }}
-                      >
-                        Shares specific log attributes like severe cramps,
-                        fatigue, or mood dips.
-                      </Text>
-                    </View>
-                    <Switch
-                      value={shareSymptoms}
-                      onValueChange={setShareSymptoms}
-                      trackColor={{ true: colors.primary }}
-                    />
-                  </View>
-
-                  <View className="h-[1px] w-full bg-neutral-100 dark:bg-neutral-900/60" />
-
-                  {/* Toggle 3 */}
-                  <View className="flex-row justify-between items-center">
-                    <View className="flex-1 pr-4">
-                      <Text
-                        className="text-xs font-extrabold"
-                        style={{ color: colors.foreground }}
-                      >
-                        Intimacy & Intercourse History
-                      </Text>
-                      <Text
-                        className="text-[10px] mt-0.5 font-medium leading-3.5"
-                        style={{ color: colors.mutedText }}
-                      >
-                        Exposes safe sex trackers or shared habit game
-                        parameters cleanly.
-                      </Text>
-                    </View>
-                    <Switch
-                      value={shareIntimacyLog}
-                      onValueChange={setShareIntimacyLog}
-                      trackColor={{ true: colors.primary }}
-                    />
-                  </View>
-
-                  <View className="h-[1px] w-full bg-neutral-100 dark:bg-neutral-900/60" />
-
-                  {/* Toggle 4 */}
-                  <View className="flex-row justify-between items-center">
-                    <View className="flex-1 pr-4">
-                      <Text
-                        className="text-xs font-extrabold"
-                        style={{ color: colors.foreground }}
-                      >
-                        PMS & Flow Proactive Alerts
-                      </Text>
-                      <Text
-                        className="text-[10px] mt-0.5 font-medium leading-3.5"
-                        style={{ color: colors.mutedText }}
-                      >
-                        Pushes automated micro-notifications to partner device 2
-                        days before periods.
-                      </Text>
-                    </View>
-                    <Switch
-                      value={shareAlerts}
-                      onValueChange={setShareAlerts}
-                      trackColor={{ true: colors.primary }}
-                    />
-                  </View>
+                  ))}
                 </View>
               </View>
             )}
 
-            {/* SEGMENT 4: REAL-TIME THREADS STYLE MESSAGING STREAMS */}
+            {/* ── CHAT ── */}
             {activeTab === "chat" && (
               <View className="gap-4 pb-28">
-                {chatLog.map((message) => {
-                  const isPartner = message.sender === "partner";
-                  return (
-                    <View
-                      key={message.id}
-                      className={`max-w-[80%] p-4 rounded-2xl ${
-                        isPartner
-                          ? "self-start rounded-tl-none border border-neutral-100 dark:border-neutral-800"
-                          : "self-end rounded-tr-none"
-                      }`}
-                      style={{
-                        backgroundColor: isPartner
-                          ? colors.surface
-                          : colors.primary,
-                      }}
+                {!isConnected ? (
+                  <View className="items-center py-16">
+                    <MaterialCommunityIcons name="account-heart-outline" size={48} color={colors.mutedText} />
+                    <Text className="mt-4 text-sm font-bold text-center" style={{ color: colors.foreground }}>
+                      No partner connected
+                    </Text>
+                    <Text className="mt-2 text-xs text-center" style={{ color: colors.mutedText }}>
+                      Link a partner first to start messaging.
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => setActiveTab("invite")}
+                      className="mt-5 px-6 py-3 rounded-2xl"
+                      style={{ backgroundColor: colors.primary }}
                     >
-                      <Text
-                        className="text-xs font-medium leading-5"
+                      <Text className="text-sm font-bold text-white">Link Partner</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : chatMessages.length === 0 ? (
+                  <View className="items-center py-12">
+                    <MaterialCommunityIcons name="chat-outline" size={40} color={colors.mutedText} />
+                    <Text className="mt-3 text-xs text-center" style={{ color: colors.mutedText }}>
+                      No messages yet. Say hello! 👋
+                    </Text>
+                  </View>
+                ) : (
+                  chatMessages.map((msg, i) => {
+                    const isPartner = msg.sender === "partner";
+                    return (
+                      <View
+                        key={msg._id ?? i}
+                        className={`max-w-[80%] p-4 rounded-2xl ${isPartner ? "self-start rounded-tl-none border" : "self-end rounded-tr-none"}`}
                         style={{
-                          color: isPartner
-                            ? colors.foreground
-                            : colors.buttonText,
+                          backgroundColor: isPartner ? colors.surface : colors.primary,
+                          borderColor: isPartner ? colors.border : undefined,
                         }}
                       >
-                        {message.text}
-                      </Text>
-                    </View>
-                  );
-                })}
+                        <Text
+                          className="text-xs font-medium leading-5"
+                          style={{ color: isPartner ? colors.foreground : colors.buttonText }}
+                        >
+                          {msg.text}
+                        </Text>
+                      </View>
+                    );
+                  })
+                )}
               </View>
             )}
           </View>
         </ScrollView>
 
-        {/* STICKY ABSOLUTE MESSAGE INPUT FOOTER CONSOLE BAR FOR LIVE CONVERSATIONS */}
-        {activeTab === "chat" && (
+        {/* Chat input footer */}
+        {activeTab === "chat" && isConnected && (
           <View
-            className="absolute bottom-0 left-0 right-0 px-4 py-3.5 border-t border-neutral-100 dark:border-neutral-900 flex-row items-center gap-3"
-            style={{ backgroundColor: colors.surface }}
+            className="absolute bottom-0 left-0 right-0 px-4 py-3.5 border-t flex-row items-center gap-3"
+            style={{ backgroundColor: colors.surface, borderColor: colors.border }}
           >
             <TextInput
-              placeholder="Send secure chat message to partner..."
+              placeholder="Send a private message..."
               placeholderTextColor={colors.mutedText}
               value={typedMessage}
               onChangeText={setTypedMessage}
-              className="flex-1 bg-neutral-100 dark:bg-neutral-800 px-4 py-3 rounded-xl text-sm"
-              style={{ color: colors.foreground }}
+              className="flex-1 px-4 py-3 rounded-xl text-sm"
+              style={{ backgroundColor: colors.input, color: colors.foreground }}
+              onSubmitEditing={handleSendMessage}
+              returnKeyType="send"
             />
             <TouchableOpacity
-              disabled={!typedMessage.trim()}
-              onPress={handleSendChatMessage}
+              disabled={!typedMessage.trim() || sendingMessage}
+              onPress={handleSendMessage}
               className="p-2.5 rounded-full items-center justify-center"
-              style={{
-                backgroundColor: typedMessage.trim()
-                  ? colors.primary
-                  : colors.border,
-              }}
+              style={{ backgroundColor: typedMessage.trim() ? colors.primary : colors.border }}
             >
-              <Feather
-                name="arrow-up"
-                size={16}
-                color={
-                  typedMessage.trim() ? colors.buttonText : colors.mutedText
-                }
-              />
+              {sendingMessage ? (
+                <ActivityIndicator size="small" color={colors.buttonText} />
+              ) : (
+                <Feather name="arrow-up" size={16} color={typedMessage.trim() ? colors.buttonText : colors.mutedText} />
+              )}
             </TouchableOpacity>
           </View>
         )}

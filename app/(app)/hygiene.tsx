@@ -1,6 +1,6 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ScrollView,
   StatusBar,
@@ -10,6 +10,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../../components/theme";
+import { getSoftTints } from "../../components/ui-tokens";
+import { wellbeingApi, type WellbeingResource } from "../../lib/api";
 
 // --- BACKEND RESPONSE MODEL SCHEMAS ---
 interface HygieneItem {
@@ -20,6 +22,55 @@ interface HygieneItem {
   description: string;
   category: "products" | "daily" | "activities" | "prevention";
   tips: string[];
+}
+
+function mapHygieneResource(resource: WellbeingResource, index: number): HygieneItem {
+  return {
+    id: resource._id ?? resource.id ?? resource.title,
+    title: resource.title,
+    icon: resource.icon,
+    iconType: "ionicons",
+    description: resource.summary,
+    category: inferHygieneCategory(resource.title, index),
+    tips:
+      resource.extendedGuide.length > 0
+        ? resource.extendedGuide
+        : [resource.summary],
+  };
+}
+
+function inferHygieneCategory(
+  title: string,
+  index: number,
+): HygieneItem["category"] {
+  const normalized = title.toLowerCase();
+  if (normalized.includes("product") || normalized.includes("pad")) {
+    return "products";
+  }
+  if (
+    normalized.includes("bath") ||
+    normalized.includes("swim") ||
+    normalized.includes("movement")
+  ) {
+    return "activities";
+  }
+  if (
+    normalized.includes("infection") ||
+    normalized.includes("uti") ||
+    normalized.includes("odor")
+  ) {
+    return "prevention";
+  }
+  if (
+    normalized.includes("daily") ||
+    normalized.includes("wash") ||
+    normalized.includes("vulva")
+  ) {
+    return "daily";
+  }
+  return (["products", "daily", "activities", "prevention"] as const)[
+    index % 4
+  ];
 }
 
 export default function Hygiene() {
@@ -38,12 +89,12 @@ export default function Hygiene() {
       icon: "water-outline",
       iconType: "ionicons",
       description:
-        "Optimizing comfort cycles matching your live flow density parameters.",
+        "Choose and change period products based on your flow and comfort.",
       category: "products",
       tips: [
-        "Change standard cotton pads or tampons every 4-6 hours to prevent moisture setup.",
-        "Medical-grade silicone menstrual cups can be safely worn up to 12 hours contextually.",
-        "Integrate breathable organic period panties during lower baseline or lighter spotting days.",
+        "Change pads or tampons every 4-6 hours, or sooner if flow is heavy.",
+        "Menstrual cups can often be worn up to 12 hours, depending on flow and product guidance.",
+        "Use breathable period underwear for light days, spotting, or backup protection.",
       ],
     },
     {
@@ -52,12 +103,12 @@ export default function Hygiene() {
       icon: "leaf-outline",
       iconType: "ionicons",
       description:
-        "Essential physiological cleansing protocols during menstrual phases.",
+        "Simple daily care during periods without disrupting your natural balance.",
       category: "daily",
       tips: [
-        "Cleanse external intimate vulva zones exclusively using lukewarm water daily.",
-        "Strictly avoid internal douching loops—it disrupts critical localized flora balances.",
-        "Transition into fresh, breathable cotton undergarments twice a day minimum.",
+        "Clean only the external vulva with lukewarm water.",
+        "Avoid douching or scented intimate washes because they can disrupt pH.",
+        "Change into fresh, breathable underwear when damp or uncomfortable.",
       ],
     },
     {
@@ -66,12 +117,12 @@ export default function Hygiene() {
       icon: "droplet",
       iconType: "feather",
       description:
-        "Safe and clean guidelines for aquatic environments or standard recovery.",
+        "Clean, comfortable guidance for swimming, bathing, and movement.",
       category: "activities",
       tips: [
-        "Utilize secure menstrual cups or fresh tampons immediately before entering pools.",
-        "Soaking in soothing warm baths is highly encouraged to naturally relieve localized cramps.",
-        "Ensure your immediate personal setup zones remain fully sanitized, clean and dry.",
+        "Use a fresh tampon or cup before swimming if that feels right for you.",
+        "Warm baths can help ease cramps and lower body tension.",
+        "Dry off and change products or underwear after swimming or workouts.",
       ],
     },
     {
@@ -80,24 +131,43 @@ export default function Hygiene() {
       icon: "shield-check-outline",
       iconType: "material",
       description:
-        "Mitigating bacterial pathways, UTIs, and standard skin friction rash.",
+        "Reduce irritation, odor, UTIs, and friction during sensitive days.",
       category: "prevention",
       tips: [
-        "Always follow a definitive front-to-back wiping motion patterns cleanly.",
-        "Maintain high baseline hydration levels to flush out urinary tract tracts routinely.",
-        "Evade highly synthetic nylon undergarments that trap temperature anomalies.",
+        "Wipe front to back to reduce infection risk.",
+        "Stay hydrated, especially if you are prone to UTIs.",
+        "Avoid tight synthetic underwear when skin feels irritated.",
       ],
     },
   ];
+  const [apiHygieneTips, setApiHygieneTips] = useState<HygieneItem[]>([]);
 
-  const softTints = {
-    pink: isDark ? "#3b1a2d" : "#fff0f6",
-    purple: isDark ? "#231942" : "#f3e8ff",
-    orange: isDark ? "#361e12" : "#fff7ed",
-    emerald: isDark ? "#062e20" : "#ecfdf5",
-  };
+  useEffect(() => {
+    let isMounted = true;
 
-  const currentActiveData = hygieneTips.find(
+    async function loadHygieneResources() {
+      try {
+        const resources = await wellbeingApi.getResources("hygiene");
+        if (isMounted && resources.length > 0) {
+          setApiHygieneTips(resources.map(mapHygieneResource));
+        }
+      } catch {
+        if (isMounted) setApiHygieneTips([]);
+      }
+    }
+
+    loadHygieneResources();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const softTints = getSoftTints(colors);
+
+  const activeResources = apiHygieneTips.length > 0 ? apiHygieneTips : hygieneTips;
+
+  const currentActiveData = activeResources.find(
     (item) => item.category === activeTab,
   );
 
@@ -167,10 +237,10 @@ export default function Hygiene() {
               className="mb-6"
             >
               {[
-                { id: "products", label: "Ecosystem Products" },
-                { id: "daily", label: "Daily Rituals" },
-                { id: "activities", label: "Bathing & Fitness" },
-                { id: "prevention", label: "Infection Shield" },
+                { id: "products", label: "Products" },
+                { id: "daily", label: "Daily Care" },
+                { id: "activities", label: "Bathing & Movement" },
+                { id: "prevention", label: "Infection Care" },
               ].map((tab) => {
                 const isSelected = activeTab === tab.id;
                 return (
@@ -260,7 +330,7 @@ export default function Hygiene() {
                         <Ionicons
                           name="checkmark-circle"
                           size={16}
-                          color="#10b981"
+                          color={colors.success}
                         />
                       </View>
                       <Text
@@ -294,7 +364,7 @@ export default function Hygiene() {
                   className="text-[10px] font-semibold mt-0.5"
                   style={{ color: colors.mutedText }}
                 >
-                  Consult private clinical OBGYNs on our encryption channels.
+                  Talk privately with an OBGYN if symptoms persist or worsen.
                 </Text>
               </View>
               <TouchableOpacity

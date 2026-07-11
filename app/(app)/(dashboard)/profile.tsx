@@ -3,7 +3,9 @@ import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   Alert,
+  Image,
   Modal,
+  Platform,
   ScrollView,
   StatusBar,
   Switch,
@@ -15,12 +17,22 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppState } from "../../../components/AppState";
 import { useAuth } from "../../../components/auth-context";
 import { ThemeToggle, useTheme } from "../../../components/theme";
+import { getSoftTints } from "../../../components/ui-tokens";
+import { authApi } from "../../../lib/api";
 
 export default function Profile() {
   const { colors, isDark } = useTheme();
   const { signOut, user } = useAuth();
   const { trackedDays } = useAppState();
   const router = useRouter();
+  const displayName =
+    [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Nura user";
+  const displayEmail = user?.email || "Private account";
+  const initials =
+    [user?.firstName?.[0], user?.lastName?.[0]]
+      .filter(Boolean)
+      .join("")
+      .toUpperCase() || "N";
 
   // Navigation Panel Interactivity Controller States
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
@@ -28,63 +40,57 @@ export default function Profile() {
     useState(false);
   const [supportModalVisible, setSupportModalVisible] = useState(false);
   const [privacyModalVisible, setPrivacyModalVisible] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   // Settings Functional Flags
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [anonymousMode, setAnonymousMode] = useState(false);
 
-  const currentStreak = Math.min(trackedDays || 9, 12);
+  const softTints = getSoftTints(colors);
 
-  const softTints = {
-    pink: isDark ? "#3b1a2d" : "#fff0f6",
-    purple: isDark ? "#231942" : "#f3e8ff",
-    orange: isDark ? "#361e12" : "#fff7ed",
-    emerald: isDark ? "#062e20" : "#ecfdf5",
-  };
-  const API_BASE_URL = "http://localhost:5000";
+  async function performLogout() {
+    if (isLoggingOut) return;
 
-  // --- FULLY FIXED BACKEND-SYNCHRONIZED LOGOUT LIFECYCLE ---
-  const handleLogout = () => {
+    try {
+      setIsLoggingOut(true);
+      await authApi.logoutAlias();
+    } catch (networkError) {
+      console.log("Server verification skipped during exit:", networkError);
+    } finally {
+      await signOut();
+      router.replace("/login");
+      setIsLoggingOut(false);
+    }
+  }
+
+  function handleLogout() {
+    if (Platform.OS === "web") {
+      const confirmed =
+        typeof globalThis.confirm === "function"
+          ? globalThis.confirm(
+              "Log out? You can sign back in any time. Your saved care history stays with your account.",
+            )
+          : true;
+
+      if (confirmed) {
+        performLogout();
+      }
+      return;
+    }
+
     Alert.alert(
-      "Logout Account",
-      "Are you sure you want to exit your active secure session?",
+      "Log out?",
+      "You can sign back in any time. Your saved care history stays with your account.",
       [
         { text: "Cancel", style: "cancel" },
         {
           text: "Logout",
           style: "destructive",
-          onPress: async () => {
-            try {
-              // 📦 STEP 1: Extract token from auth state BEFORE it gets wiped out locally
-              const activeSessionToken = user?.token;
-
-              // 🚀 STEP 2: Fire network trigger request to clean server sessions cache arrays
-              // Replace with your actual base domain configuration endpoint if different
-              await fetch(`${API_BASE_URL}/api/logout`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${activeSessionToken}`, // Pass token safely to clear 'authenticate' middleware bounds
-                },
-              });
-            } catch (networkError) {
-              // Catch blocks safeguard application flows: if backend server is offline, user is still allowed out
-              console.log(
-                "Server verification skipped during exit:",
-                networkError,
-              );
-            } finally {
-              // 🧼 STEP 3: Wipe local disk key matrices and force push routing out
-              if (signOut) {
-                await signOut();
-              }
-              router.replace("/(tabs)/login");
-            }
-          },
+          onPress: performLogout,
         },
       ],
     );
-  };
+  }
 
   return (
     <>
@@ -109,14 +115,26 @@ export default function Profile() {
           {/* USER AVATAR BRAND IDENTITY SECTION */}
           <View className="items-center px-6 pt-8">
             <View
-              className="h-28 w-28 items-center justify-center rounded-full border-4 shadow-sm relative"
+              className="h-28 w-28 items-center justify-center rounded-full border-4 shadow-sm relative overflow-hidden"
               style={{
                 backgroundColor: softTints.pink,
                 borderColor: colors.border,
               }}
             >
-              <Text className="text-5xl">👧</Text>
-              {/* <Text className="text-5xl">{user?.profilePicture}</Text> */}
+              {user?.profilePicture ? (
+                <Image
+                  source={{ uri: user.profilePicture }}
+                  className="h-full w-full"
+                  resizeMode="cover"
+                />
+              ) : (
+                <Text
+                  className="text-3xl font-black"
+                  style={{ color: colors.primary }}
+                >
+                  {initials}
+                </Text>
+              )}
 
               <View className="absolute bottom-1 right-1 bg-emerald-500 w-5 h-5 rounded-full border-2 border-white dark:border-neutral-900" />
             </View>
@@ -125,13 +143,13 @@ export default function Profile() {
               className="mt-4 text-2xl font-black tracking-tight"
               style={{ color: colors.foreground }}
             >
-              {user?.firstName || "Utkarsh"} {user?.lastName || "Payal"}
+              {displayName}
             </Text>
             <Text
               className="mt-1 text-xs font-semibold"
               style={{ color: colors.mutedText }}
             >
-              {user?.email || "utkarsh12march2004@gmail.com"}
+              {displayEmail}
             </Text>
           </View>
 
@@ -140,7 +158,7 @@ export default function Profile() {
             {[
               {
                 label: "Days Tracked",
-                value: trackedDays || 9,
+                value: trackedDays,
                 icon: "checkmark-done-circle-outline",
                 color: colors.primary,
                 bg: softTints.pink,
@@ -150,14 +168,14 @@ export default function Profile() {
                 value: user?.tokenEarned || 0,
                 icon: "star-outline",
                 color: colors.accent,
-                bg: softTints.orange,
+                bg: softTints.amber,
               },
               {
                 label: "Day Streak",
-                value: user?.streakCount || 0,
+                value: user?.streakCount ?? trackedDays,
                 icon: "flame-outline",
                 color: colors.secondary,
-                bg: softTints.purple,
+                bg: softTints.mint,
               },
             ].map((metric, i) => (
               <View
@@ -220,7 +238,7 @@ export default function Profile() {
                 className="flex-1 text-sm font-bold"
                 style={{ color: colors.foreground }}
               >
-                My Progress & Forest
+                My Progress & Wellness Forest
               </Text>
               <Feather
                 name="chevron-right"
@@ -241,7 +259,7 @@ export default function Profile() {
             >
               <View
                 className="p-2.5 rounded-xl mr-4"
-                style={{ backgroundColor: softTints.orange }}
+                style={{ backgroundColor: softTints.amber }}
               >
                 <Ionicons
                   name="trophy-outline"
@@ -282,7 +300,7 @@ export default function Profile() {
               >
                 <View
                   className="p-2.5 rounded-xl mr-4"
-                  style={{ backgroundColor: softTints.purple }}
+                  style={{ backgroundColor: softTints.lavender }}
                 >
                   <Ionicons
                     name="settings-outline"
@@ -386,7 +404,7 @@ export default function Profile() {
                 className="flex-1 text-sm font-bold"
                 style={{ color: colors.foreground }}
               >
-                Help & Support Helpdesk
+                Help & Support
               </Text>
               <Feather
                 name="chevron-right"
@@ -412,7 +430,7 @@ export default function Profile() {
                 <Ionicons
                   name="shield-checkmark-outline"
                   size={18}
-                  color="#10b981"
+                  color={colors.secondary}
                 />
               </View>
               <Text
@@ -433,18 +451,18 @@ export default function Profile() {
           <TouchableOpacity
             onPress={handleLogout}
             activeOpacity={0.85}
-            className="mx-6 mt-10 flex-row items-center justify-center rounded-2xl border py-4"
+            className="mx-6 mt-10 flex-row items-center justify-center rounded-full border py-4"
             style={{
               backgroundColor: colors.surface,
-              borderColor: "#ef4444",
+              borderColor: colors.primary,
             }}
           >
-            <Feather name="log-out" size={16} color="#ef4444" />
+            <Feather name="log-out" size={16} color={colors.primary} />
             <Text
               className="ml-2 text-sm font-bold tracking-wide"
-              style={{ color: "#ef4444" }}
+              style={{ color: colors.primary }}
             >
-              Log Out Securely
+              {isLoggingOut ? "Logging Out..." : "Log Out Securely"}
             </Text>
           </TouchableOpacity>
         </ScrollView>
@@ -472,7 +490,8 @@ export default function Profile() {
             </Text>
             <TouchableOpacity
               onPress={() => setAchievementsModalVisible(false)}
-              className="p-1 bg-neutral-100 dark:bg-neutral-800 rounded-full"
+              className="p-1 rounded-full"
+              style={{ backgroundColor: colors.border }}
             >
               <Feather name="x" size={18} color={colors.foreground} />
             </TouchableOpacity>
@@ -499,8 +518,8 @@ export default function Profile() {
               className="text-xs text-center mt-2 leading-4"
               style={{ color: colors.mutedText }}
             >
-              Unlocked for completing a comprehensive 12-day symptom logging
-              sequence without sequence drops.
+              Unlocked for steady symptom logging and habit care across your
+              recent cycle.
             </Text>
           </View>
         </View>
@@ -537,14 +556,14 @@ export default function Profile() {
             className="text-sm leading-5 mb-4"
             style={{ color: colors.foreground }}
           >
-            Have clinical questions regarding predictions, local cache cycles or
-            tokens exchange metrics? Our operations desk handles issues 24/7.
+            Need help with predictions, account access, cycle logs, or partner
+            sharing? Send a support request and we will guide you through it.
           </Text>
           <TouchableOpacity
             onPress={() =>
               Alert.alert(
                 "Ticket Logged",
-                "Support query reference token generated successfully.",
+                "Your support request has been logged.",
               )
             }
             className="w-full rounded-2xl py-4 items-center justify-center"
@@ -583,17 +602,16 @@ export default function Profile() {
             </TouchableOpacity>
           </View>
           <View
-            className="p-5 rounded-2xl border bg-neutral-50 dark:bg-neutral-900/40"
-            style={{ borderColor: colors.border }}
+            className="p-5 rounded-2xl border"
+            style={{ borderColor: colors.border, backgroundColor: colors.surface }}
           >
             <Text
               className="text-xs leading-5"
               style={{ color: colors.foreground }}
             >
-              Your tracking notes, biological logging values, and identity
-              references are completely encrypted using on-device sandboxed
-              secure local stores. No diagnostic records are dispatched onto
-              server clusters without user permissions.
+              Your tracking notes, cycle logs, and identity details are treated
+              as private health data. Sharing controls stay with you, and
+              sensitive records should only be sent with clear permission.
             </Text>
           </View>
         </View>

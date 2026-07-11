@@ -1,8 +1,11 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { LinearGradient } from "expo-linear-gradient";
+import React, { useCallback, useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
+  RefreshControl,
   ScrollView,
   StatusBar,
   Text,
@@ -10,452 +13,274 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useAppState } from "../../components/AppState";
 import { useTheme } from "../../components/theme";
+import { getActionGradient, getSoftTints } from "../../components/ui-tokens";
+import { habitsApi, type Habit } from "../../lib/api";
 
-// --- BACKEND SPECIFIC API DATA SCHEMAS ---
-interface Habit {
-  id: string;
-  title: string;
-  icon: string;
-  color: string;
-  completed: boolean;
-  tokens: number;
-  streak: number;
+const HABIT_IDEAS = [
+  { title: "Sleep 8 Hours", icon: "moon-outline", color: "#7c3aed", tokens: 45 },
+  { title: "Eat Iron-Rich Food", icon: "nutrition-outline", color: "#d97706", tokens: 35 },
+  { title: "Stretch for 10 Minutes", icon: "body-outline", color: "#0f766e", tokens: 25 },
+];
+
+function computeTreeState(pct: number) {
+  if (pct === 0) return { label: "Resting Seed", icon: "seed-outline", motivation: "Complete a small routine today to start growing your wellness tree." };
+  if (pct <= 35) return { label: "New Seedling", icon: "sprout-outline", motivation: "Your basic routines are building steady roots." };
+  if (pct <= 75) return { label: "Growing Tree", icon: "tree-outline", motivation: "Nice progress. Your care habits are becoming consistent." };
+  return { label: "Blooming Tree", icon: "flower-tulip-outline", motivation: "Strong routine day. Your wellness tree is fully nourished." };
 }
-
-type BrowserStorage = {
-  getItem: (key: string) => string | null;
-  setItem: (key: string, value: string) => void;
-};
-
-const HABITS_STORAGE_KEY = "period-buddy.habits";
-
-const defaultHabits: Habit[] = [
-  {
-    id: "h_1",
-    title: "Log Period Tracking Data",
-    icon: "calendar-outline",
-    color: "#d946a6",
-    completed: false,
-    tokens: 50,
-    streak: 12,
-  },
-  {
-    id: "h_2",
-    title: "Drink 8 Glasses of Water",
-    icon: "water-outline",
-    color: "#06b6d4",
-    completed: false,
-    tokens: 30,
-    streak: 8,
-  },
-  {
-    id: "h_3",
-    title: "Exercise or Sync Movement",
-    icon: "fitness-outline",
-    color: "#22c55e",
-    completed: false,
-    tokens: 60,
-    streak: 5,
-  },
-  {
-    id: "h_4",
-    title: "Mindfulness Meditation",
-    icon: "heart-outline",
-    color: "#ec4899",
-    completed: false,
-    tokens: 40,
-    streak: 3,
-  },
-];
-
-const habitIdeas = [
-  {
-    title: "Sleep 8 Hours Comfortably",
-    icon: "moon-outline",
-    color: "#6366f1",
-    tokens: 45,
-  },
-  {
-    title: "Consume Iron-Rich Nutritional Foods",
-    icon: "nutrition-outline",
-    color: "#f97316",
-    tokens: 35,
-  },
-  {
-    title: "Light Pelvic Stretch for 10 Mins",
-    icon: "body-outline",
-    color: "#14b8a6",
-    tokens: 25,
-  },
-];
 
 export default function Habits() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
-  const { earnTokens } = useAppState();
-  const [habits, setHabits] = useState<Habit[]>(readStoredHabits);
+
+  const [habits, setHabits] = useState<Habit[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  const softTints = getSoftTints(colors);
+  const actionGradient = getActionGradient(colors) as [string, string];
+
+  const load = useCallback(async (isRefresh = false) => {
+    try {
+      if (isRefresh) setRefreshing(true);
+      else setLoading(true);
+      const data = await habitsApi.getHabits();
+      setHabits(data);
+    } catch (err) {
+      Alert.alert("Error", err instanceof Error ? err.message : "Failed to load habits");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
 
   useEffect(() => {
-    writeStoredHabits(habits);
-  }, [habits]);
+    load();
+  }, [load]);
 
-  const toggleHabit = (id: string) => {
-    const found = habits.find((habit) => habit.id === id);
-
-    if (found) {
-      const willComplete = !found.completed;
-      if (willComplete) {
-        earnTokens(found.tokens);
-      }
+  const toggleHabit = async (id: string) => {
+    setTogglingId(id);
+    try {
+      const result = await habitsApi.toggleHabit(id);
+      setHabits((prev) =>
+        prev.map((h) =>
+          h.id === id
+            ? { ...h, completed: result.completed, streak: result.streak }
+            : h,
+        ),
+      );
+    } catch (err) {
+      Alert.alert("Error", err instanceof Error ? err.message : "Could not update habit");
+    } finally {
+      setTogglingId(null);
     }
-
-    setHabits((current) =>
-      current.map((habit) =>
-        habit.id === id ? { ...habit, completed: !habit.completed } : habit,
-      ),
-    );
   };
 
-  const addHabit = () => {
-    const nextIdea = habitIdeas.find(
-      (idea) => !habits.some((habit) => habit.title === idea.title),
-    );
-
-    if (!nextIdea) {
-      Alert.alert(
-        "Ecosystem Slots Full",
-        "You have already integrated all available structural habits.",
-      );
+  const addHabit = async () => {
+    const idea = HABIT_IDEAS.find((idea) => !habits.some((h) => h.title === idea.title));
+    if (!idea) {
+      Alert.alert("Habit list full", "You have already added all suggested habits.");
       return;
     }
-
-    setHabits((current) => [
-      ...current,
-      {
-        ...nextIdea,
-        completed: false,
-        id: String(Date.now()),
-        streak: 0,
-      },
-    ]);
+    try {
+      const newHabit = await habitsApi.createHabit(idea);
+      setHabits((prev) => [...prev, newHabit]);
+    } catch (err) {
+      Alert.alert("Error", err instanceof Error ? err.message : "Could not add habit");
+    }
   };
 
-  const totalTokens = habits.reduce(
-    (acc, h) => acc + (h.completed ? h.tokens : 0),
-    0,
-  );
-
-  // --- DYNAMIC LIFESTYLE TREE GROWTH ENGINE ---
-  const maxPossibleTokens = 180;
-  const growthPercentage = Math.min(
-    (totalTokens / maxPossibleTokens) * 100,
-    100,
-  );
-
-  function computeTreeStageLabel(percentage: number): {
-    label: string;
-    icon: string;
-    motivation: string;
-  } {
-    if (percentage === 0) {
-      return {
-        label: "Dormant Seed",
-        icon: "seed-outline",
-        motivation: "Complete today's habits to nurture your cycle tree.",
-      };
-    }
-    if (percentage <= 35) {
-      return {
-        label: "Sprouting Seedling 🌱",
-        icon: "sprout-outline",
-        motivation:
-          "Clean hydration and basic routines are giving roots to your wellness tree.",
-      };
-    }
-    if (percentage <= 75) {
-      return {
-        label: "Active Budding Branch 🌿",
-        icon: "tree-outline",
-        motivation:
-          "Amazing energy! Your hormone cycles are balancing beautifully today.",
-      };
-    }
-    return {
-      label: "Blooming Blossom 🌸",
-      icon: "flower-tulip-outline",
-      motivation:
-        "Peak wellness tree growth attained! Your dynamic system is fully nourished.",
-    };
-  }
-
-  const currentTreeState = computeTreeStageLabel(growthPercentage);
-
-  const softTints = {
-    pink: isDark ? "#3b1a2d" : "#fff0f6",
-  };
+  const totalTokens = habits.reduce((acc, h) => acc + (h.completed ? h.tokens : 0), 0);
+  const maxPossibleTokens = Math.max(180, habits.reduce((acc, h) => acc + h.tokens, 0));
+  const growthPct = Math.min((totalTokens / maxPossibleTokens) * 100, 100);
+  const treeState = computeTreeState(growthPct);
 
   return (
     <>
-      <StatusBar
-        barStyle={isDark ? "light-content" : "dark-content"}
-        backgroundColor={colors.background}
-      />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
 
-      <SafeAreaView
-        className="flex-1"
-        style={{ backgroundColor: colors.background }}
-      >
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 60 }}
-        >
-          {/* Header Action Row */}
-          <View className="flex-row items-center gap-2 px-6 pt-6">
-            <TouchableOpacity
-              onPress={() => router.back()}
-              activeOpacity={0.7}
-              className="p-2.5 -ml-2 rounded-full border"
-              style={{
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-              }}
-            >
-              <Feather name="arrow-left" size={18} color={colors.foreground} />
-            </TouchableOpacity>
-            <Text
-              className="flex-1 text-2xl font-black tracking-tight ml-2"
-              style={{ color: colors.foreground }}
-            >
-              Habit Tracker
-            </Text>
+      <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
+        {/* Header */}
+        <View className="flex-row items-center gap-2 px-6 pt-6">
+          <TouchableOpacity
+            onPress={() => router.back()}
+            activeOpacity={0.7}
+            className="p-2.5 -ml-2 rounded-full border"
+            style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+          >
+            <Feather name="arrow-left" size={18} color={colors.foreground} />
+          </TouchableOpacity>
+          <Text className="flex-1 text-2xl font-black tracking-tight ml-2" style={{ color: colors.foreground }}>
+            Habit Tracker
+          </Text>
+          <TouchableOpacity onPress={() => load(true)} className="p-2.5 rounded-full border" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+            <Feather name="refresh-cw" size={16} color={colors.mutedText} />
+          </TouchableOpacity>
+        </View>
+
+        {loading ? (
+          <View className="flex-1 items-center justify-center">
+            <ActivityIndicator size="large" color={colors.primary} />
           </View>
-
-          {/* DYNAMIC INTERACTIVE CYCLE TREE GROW HUB PANEL */}
-          <View className="mx-6 mt-6">
-            <View
-              className="rounded-3xl border p-5 shadow-2xl relative overflow-hidden"
-              style={{
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-              }}
-            >
-              {/* Subtle ambient pink glow tracking background element overlay */}
+        ) : (
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 60 }}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={colors.primary} />
+            }
+          >
+            {/* Tree Hub Panel */}
+            <View className="mx-6 mt-6">
               <View
-                className="absolute -right-6 -top-6 w-20 h-20 rounded-full opacity-35"
-                style={{ backgroundColor: softTints.pink }}
-              />
+                className="rounded-3xl border p-5 shadow-2xl relative overflow-hidden"
+                style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+              >
+                <View className="absolute -right-6 -top-6 w-20 h-20 rounded-full opacity-35" style={{ backgroundColor: softTints.pink }} />
 
-              <View className="flex-row items-center justify-between">
-                <View className="flex-1 pr-2">
-                  <Text className="text-[10px] font-black tracking-widest uppercase text-pink-500">
-                    Current Cycle Tree
-                  </Text>
-                  <Text
-                    className="mt-1 text-base font-black tracking-tight"
-                    style={{ color: colors.foreground }}
-                  >
-                    {currentTreeState.label}
-                  </Text>
-                  <Text
-                    className="mt-1 text-[11px] font-medium leading-4"
-                    style={{ color: colors.mutedText }}
-                  >
-                    {currentTreeState.motivation}
-                  </Text>
-                </View>
-
-                {/* Animated Dynamic Graphic Icon Shield Badge */}
-                <View
-                  className="h-20 w-20 items-center justify-center rounded-2xl border border-dashed border-pink-300"
-                  style={{ backgroundColor: softTints.pink }}
-                >
-                  <MaterialCommunityIcons
-                    name={currentTreeState.icon as any}
-                    size={36}
-                    color={colors.primary}
-                  />
-                </View>
-              </View>
-
-              {/* Progress Core Bar Systems */}
-              <View className="mt-5">
-                <View className="flex-row justify-between items-center mb-1.5 px-0.5">
-                  <Text
-                    className="text-[10px] font-bold"
-                    style={{ color: colors.mutedText }}
-                  >
-                    Score: {totalTokens} / {maxPossibleTokens} Tokens
-                  </Text>
-                  <Text className="text-[10px] font-black text-pink-500">
-                    {Math.round(growthPercentage)}% Growth
-                  </Text>
-                </View>
-
-                <View className="h-2.5 overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
+                <View className="flex-row items-center justify-between">
+                  <View className="flex-1 pr-2">
+                    <Text
+                      className="text-[10px] font-black tracking-widest uppercase"
+                      style={{ color: colors.primary }}
+                    >
+                      Current Cycle Tree
+                    </Text>
+                    <Text className="mt-1 text-base font-black tracking-tight" style={{ color: colors.foreground }}>
+                      {treeState.label}
+                    </Text>
+                    <Text className="mt-1 text-[11px] font-medium leading-4" style={{ color: colors.mutedText }}>
+                      {treeState.motivation}
+                    </Text>
+                  </View>
                   <View
-                    className="h-full rounded-full"
-                    style={{
-                      width: `${growthPercentage}%`,
-                      backgroundColor: colors.primary,
-                    }}
-                  />
+                    className="h-20 w-20 items-center justify-center rounded-2xl border border-dashed border-pink-300"
+                    style={{ backgroundColor: softTints.pink }}
+                  >
+                    <MaterialCommunityIcons name={treeState.icon as any} size={36} color={colors.primary} />
+                  </View>
+                </View>
+
+                {/* Progress Bar */}
+                <View className="mt-5">
+                  <View className="flex-row justify-between items-center mb-1.5 px-0.5">
+                    <Text className="text-[10px] font-bold" style={{ color: colors.mutedText }}>
+                      Score: {totalTokens} / {maxPossibleTokens} Tokens
+                    </Text>
+                    <Text className="text-[10px] font-black" style={{ color: colors.primary }}>
+                      {Math.round(growthPct)}% Growth
+                    </Text>
+                  </View>
+                  <View className="h-2.5 overflow-hidden rounded-full" style={{ backgroundColor: colors.surfaceSoft }}>
+                    <LinearGradient
+                      colors={actionGradient}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={{ height: "100%", width: `${growthPct}%`, borderRadius: 99 }}
+                    />
+                  </View>
                 </View>
               </View>
             </View>
-          </View>
 
-          {/* HABITS ACCORDION CORE LIST SYSTEM */}
-          <View className="mx-6 mt-8">
-            <Text
-              className="mb-4 text-xs font-black tracking-widest uppercase px-1"
-              style={{ color: colors.primary }}
-            >
-              Daily Routines Checklist
-            </Text>
+            {/* Habits List */}
+            <View className="mx-6 mt-8">
+              <Text className="mb-4 text-xs font-black tracking-widest uppercase px-1" style={{ color: colors.primary }}>
+                Daily Routines Checklist
+              </Text>
 
-            <View className="gap-3.5">
-              {habits.map((habit) => (
-                <TouchableOpacity
-                  key={habit.id}
-                  activeOpacity={0.8}
-                  onPress={() => toggleHabit(habit.id)}
-                  className="rounded-2xl border shadow-3xs overflow-hidden"
-                  style={{
-                    backgroundColor: colors.surface,
-                    borderColor: habit.completed
-                      ? `${habit.color}30`
-                      : colors.border,
-                  }}
-                >
-                  <View className="flex-row items-center justify-between p-4.5">
-                    <View className="flex-row items-center flex-1 gap-4">
-                      {/* Check Sphere Indicator Boxes */}
-                      <View
-                        className="h-10 w-10 items-center justify-center rounded-xl border"
-                        style={{
-                          backgroundColor: habit.completed
-                            ? habit.color
-                            : "transparent",
-                          borderColor: habit.completed
-                            ? habit.color
-                            : colors.border,
-                        }}
-                      >
-                        {habit.completed ? (
-                          <Feather name="check" size={16} color="white" />
-                        ) : (
-                          <Ionicons
-                            name={habit.icon as any}
-                            size={18}
-                            color={colors.mutedText}
-                          />
-                        )}
-                      </View>
-
-                      <View className="flex-1">
-                        <Text
-                          className="text-sm font-bold tracking-tight"
-                          style={{
-                            color: habit.completed
-                              ? colors.mutedText
-                              : colors.foreground,
-                            textDecorationLine: habit.completed
-                              ? "line-through"
-                              : "none",
-                            opacity: habit.completed ? 0.6 : 1,
-                          }}
-                        >
-                          {habit.title}
-                        </Text>
-                        <View className="flex-row items-center gap-1 mt-0.5">
-                          <MaterialCommunityIcons
-                            name="fire"
-                            size={12}
-                            color="#f97316"
-                          />
-                          <Text
-                            className="text-[10px] font-bold"
-                            style={{ color: colors.mutedText }}
+              <View className="gap-3.5">
+                {habits.map((habit) => {
+                  const isToggling = togglingId === habit.id;
+                  return (
+                    <TouchableOpacity
+                      key={habit.id}
+                      activeOpacity={0.8}
+                      onPress={() => toggleHabit(habit.id)}
+                      disabled={isToggling}
+                      className="rounded-2xl border shadow-sm overflow-hidden"
+                      style={{
+                        backgroundColor: colors.surface,
+                        borderColor: habit.completed ? `${habit.color}40` : colors.border,
+                        opacity: isToggling ? 0.7 : 1,
+                      }}
+                    >
+                      <View className="flex-row items-center justify-between p-4">
+                        <View className="flex-row items-center flex-1 gap-4">
+                          {/* Checkbox */}
+                          <View
+                            className="h-10 w-10 items-center justify-center rounded-xl border"
+                            style={{
+                              backgroundColor: habit.completed ? habit.color : "transparent",
+                              borderColor: habit.completed ? habit.color : colors.border,
+                            }}
                           >
-                            {habit.streak} day streak
+                            {isToggling ? (
+                              <ActivityIndicator size="small" color={habit.completed ? "white" : colors.mutedText} />
+                            ) : habit.completed ? (
+                              <Feather name="check" size={16} color="white" />
+                            ) : (
+                              <Ionicons name={habit.icon as any} size={18} color={colors.mutedText} />
+                            )}
+                          </View>
+
+                          <View className="flex-1">
+                            <Text
+                              className="text-sm font-bold tracking-tight"
+                              style={{
+                                color: habit.completed ? colors.mutedText : colors.foreground,
+                                textDecorationLine: habit.completed ? "line-through" : "none",
+                                opacity: habit.completed ? 0.6 : 1,
+                              }}
+                            >
+                              {habit.title}
+                            </Text>
+                            <View className="flex-row items-center gap-1 mt-0.5">
+                              <MaterialCommunityIcons name="fire" size={12} color="#f97316" />
+                              <Text className="text-[10px] font-bold" style={{ color: colors.mutedText }}>
+                                {habit.streak} day streak
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+
+                        <View
+                          className="rounded-lg px-2.5 py-1"
+                          style={{ backgroundColor: habit.completed ? colors.border : `${habit.color}18` }}
+                        >
+                          <Text
+                            className="text-[10px] font-black"
+                            style={{ color: habit.completed ? colors.mutedText : habit.color }}
+                          >
+                            +{habit.tokens} pts
                           </Text>
                         </View>
                       </View>
-                    </View>
-
-                    {/* Reward Multi-Multiplier Tokens Value Tags */}
-                    <View
-                      className="rounded-lg px-2.5 py-1"
-                      style={{
-                        backgroundColor: habit.completed
-                          ? colors.border
-                          : `${habit.color}15`,
-                      }}
-                    >
-                      <Text
-                        className="text-[10px] font-black"
-                        style={{
-                          color: habit.completed
-                            ? colors.mutedText
-                            : habit.color,
-                        }}
-                      >
-                        +{habit.tokens} pts
-                      </Text>
-                    </View>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* CURATED ADD CUSTOM HABIT IDEA ACTION COMPONENT */}
-            <TouchableOpacity
-              activeOpacity={0.7}
-              className="mt-6 rounded-2xl border border-dashed py-4 items-center justify-center bg-neutral-50/40 dark:bg-neutral-900/10"
-              onPress={addHabit}
-              style={{ borderColor: colors.border }}
-            >
-              <View className="flex-row items-center gap-2">
-                <Feather name="plus-circle" size={15} color={colors.primary} />
-                <Text
-                  className="text-xs font-black tracking-wide"
-                  style={{ color: colors.primary }}
-                >
-                  Expand Habit Spectrum
-                </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
+
+              {/* Add Habit Button */}
+              <TouchableOpacity
+                activeOpacity={0.7}
+                className="mt-6 rounded-2xl border border-dashed py-4 items-center justify-center"
+                onPress={addHabit}
+                style={{ borderColor: colors.border, backgroundColor: isDark ? "#0a0718" : "#fafafa" }}
+              >
+                <View className="flex-row items-center gap-2">
+                  <Feather name="plus-circle" size={15} color={colors.primary} />
+                  <Text className="text-xs font-black tracking-wide" style={{ color: colors.primary }}>
+                    Add Suggested Habit
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        )}
       </SafeAreaView>
     </>
   );
-}
-
-// --- LOCAL PERSISTENCE STORAGE LAYER HANDLERS ---
-function getStorage() {
-  const globalWithStorage = globalThis as typeof globalThis & {
-    localStorage?: BrowserStorage;
-  };
-  return globalWithStorage.localStorage;
-}
-
-function readStoredHabits() {
-  try {
-    const rawHabits = getStorage()?.getItem(HABITS_STORAGE_KEY);
-    if (!rawHabits) return defaultHabits;
-
-    const habits = JSON.parse(rawHabits) as Habit[];
-    return Array.isArray(habits) && habits.length > 0 ? habits : defaultHabits;
-  } catch {
-    return defaultHabits;
-  }
-}
-
-function writeStoredHabits(habits: Habit[]) {
-  try {
-    getStorage()?.setItem(HABITS_STORAGE_KEY, JSON.stringify(habits));
-  } catch {}
 }

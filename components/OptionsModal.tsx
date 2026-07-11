@@ -83,7 +83,7 @@ export default function OptionsModal({
           <View
             style={{
               alignItems: "center",
-              backgroundColor: colors.background,
+              backgroundColor: colors.input,
               borderRadius: 9,
               height: 34,
               justifyContent: "center",
@@ -111,7 +111,7 @@ export default function OptionsModal({
           accessibilityLabel="Close post options"
           onPress={onClose}
           style={{
-            backgroundColor: "rgba(0,0,0,0.28)",
+            backgroundColor: colors.overlay,
             bottom: 0,
             left: 0,
             position: "absolute",

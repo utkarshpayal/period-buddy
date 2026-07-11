@@ -9,8 +9,10 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import type { DayEntry } from "./AppState";
 import { useTheme } from "./theme";
+import { getActionGradient } from "./ui-tokens";
 
 type LogOption<Value extends string> = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -71,6 +73,7 @@ export default function DayDetailsModal({
   onLogSymptom?: (symptom: string) => void;
 }) {
   const { colors } = useTheme();
+  const actionGradient = getActionGradient(colors) as [string, string];
   const [noteText, setNoteText] = useState(details ?? "");
   const [selectedEnergy, setSelectedEnergy] = useState<DayEntry["energy"]>();
   const [selectedFlow, setSelectedFlow] = useState<DayEntry["flow"]>();
@@ -133,31 +136,67 @@ export default function DayDetailsModal({
         activeOpacity={0.85}
         onPress={onPress}
         style={{
-          alignItems: "center",
-          backgroundColor: isSelected ? colors.primary : colors.background,
-          borderColor: isSelected ? colors.primary : colors.border,
           borderRadius: 12,
           borderWidth: 1,
-          flexDirection: "row",
-          gap: 6,
-          paddingHorizontal: 10,
-          paddingVertical: 8,
+          borderColor: isSelected ? "transparent" : colors.border,
+          overflow: "hidden",
         }}
       >
-        <Ionicons
-          name={icon}
-          size={16}
-          color={isSelected ? colors.buttonText : colors.foreground}
-        />
-        <Text
-          style={{
-            color: isSelected ? colors.buttonText : colors.foreground,
-            fontSize: 12,
-            fontWeight: "700",
-          }}
-        >
-          {label}
-        </Text>
+        {isSelected ? (
+          <LinearGradient
+            colors={actionGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={{
+              alignItems: "center",
+              flexDirection: "row",
+              gap: 6,
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+            }}
+          >
+            <Ionicons
+              name={icon}
+              size={16}
+              color={colors.buttonText}
+            />
+            <Text
+              style={{
+                color: colors.buttonText,
+                fontSize: 12,
+                fontWeight: "700",
+              }}
+            >
+              {label}
+            </Text>
+          </LinearGradient>
+        ) : (
+          <View
+            style={{
+              alignItems: "center",
+              backgroundColor: colors.input,
+              flexDirection: "row",
+              gap: 6,
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+            }}
+          >
+            <Ionicons
+              name={icon}
+              size={16}
+              color={colors.foreground}
+            />
+            <Text
+              style={{
+                color: colors.foreground,
+                fontSize: 12,
+                fontWeight: "700",
+              }}
+            >
+              {label}
+            </Text>
+          </View>
+        )}
       </TouchableOpacity>
     );
   }
@@ -174,7 +213,7 @@ export default function DayDetailsModal({
           accessibilityLabel="Close day details"
           onPress={onClose}
           style={{
-            backgroundColor: "rgba(0,0,0,0.32)",
+            backgroundColor: colors.overlay,
             bottom: 0,
             left: 0,
             position: "absolute",
@@ -307,7 +346,7 @@ export default function DayDetailsModal({
               placeholder="Describe symptoms, mood, medicine, or anything you noticed..."
               placeholderTextColor={colors.mutedText}
               style={{
-                backgroundColor: colors.background,
+                backgroundColor: colors.input,
                 borderColor: colors.border,
                 borderRadius: 12,
                 borderWidth: 1,
@@ -331,29 +370,38 @@ export default function DayDetailsModal({
           >
             <TouchableOpacity
               onPress={handleSave}
+              activeOpacity={0.8}
               style={{
-                backgroundColor: colors.primary,
-                borderRadius: 12,
                 flex: 1,
-                paddingHorizontal: 16,
-                paddingVertical: 13,
+                borderRadius: 12,
+                overflow: "hidden",
               }}
             >
-              <Text
+              <LinearGradient
+                colors={actionGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
                 style={{
-                  color: colors.buttonText,
-                  fontWeight: "700",
-                  textAlign: "center",
+                  paddingHorizontal: 16,
+                  paddingVertical: 13,
                 }}
               >
-                Save Log
-              </Text>
+                <Text
+                  style={{
+                    color: colors.buttonText,
+                    fontWeight: "700",
+                    textAlign: "center",
+                  }}
+                >
+                  Save Log
+                </Text>
+              </LinearGradient>
             </TouchableOpacity>
 
             <TouchableOpacity
               onPress={handleLog}
               style={{
-                backgroundColor: colors.background,
+                backgroundColor: colors.input,
                 borderColor: colors.border,
                 borderRadius: 12,
                 borderWidth: 1,

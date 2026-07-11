@@ -10,8 +10,11 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import { useAppState } from "../../components/AppState";
 import { useTheme } from "../../components/theme";
+import { getActionGradient, getSoftTints } from "../../components/ui-tokens";
+import { questionAnswerApi } from "../../lib/api";
 
 // --- TELEHEALTH CONVERSATION MODEL CONTRACTS ---
 interface ChatMessage {
@@ -26,6 +29,8 @@ export default function QA() {
   const router = useRouter();
   const { earnTokens } = useAppState();
   const scrollViewRef = useRef<ScrollView>(null);
+  const actionGradient = getActionGradient(colors) as [string, string];
+  const softTints = getSoftTints(colors);
 
   // Functional Input and Loading States
   const [typedQuestion, setTypedQuestion] = useState("");
@@ -36,7 +41,7 @@ export default function QA() {
     {
       id: "init_1",
       sender: "companion",
-      text: "Hey sister! ✨ No judgments, no awkwardness here. Ask me anything about dark brown flows, weird body changes, tampons, intimacy, or even doubts your boyfriend has. I'm trained directly on our local health library. What's on your mind?",
+      text: "Hi, I am Nura Companion. Ask anything about periods, discharge, cramps, hygiene, intimacy, partner questions, or body changes. No judgment, just clear and private guidance.",
       time: "9:41 AM",
     },
   ]);
@@ -46,32 +51,32 @@ export default function QA() {
     {
       keywords: ["brown", "dark", "black", "blood", "bleed"],
       response:
-        "Oh, dark brown or blackish blood is completely normal, especially at the start or very end of your period! It's just older blood that took its sweet time leaving the uterus. When it moves slowly, it oxidizes with oxygen and turns dark. No stress at all! ❤️",
+        "Dark brown blood is often normal at the start or end of a period. It is usually older blood leaving the uterus more slowly. If it comes with severe pain, bad odor, fever, or unusual discharge, it is worth checking with a clinician.",
     },
     {
       keywords: ["cup", "hymen", "break", "virgin"],
       response:
-        "Listen to me: using a menstrual cup or tampon can stretch or tear your hymen, but that has absolutely ZERO correlation with losing your virginity! Virginity is a social concept, not a medical status. Your body is totally safe with a cup. 🩺",
+        "A menstrual cup or tampon can stretch the hymen, but virginity is not a medical measurement. Use the smallest comfortable size, go slowly, and stop if you feel pain.",
     },
     {
       keywords: ["poop", "motions", "stomach", "loose"],
       response:
-        "Ah, the legendary 'period poops'! Totally real. Right before your period, your body releases chemicals called prostaglandins to make your uterus contract. Sometimes these chemicals wander over to your bowels and make them relax too, causing sudden bathroom runs! 🚽",
+        "Changes in bowel movements around periods are common. Prostaglandins help the uterus contract and can also affect the bowel, which may cause cramps, loose stools, or more frequent bathroom trips.",
     },
     {
       keywords: ["sex", "intimacy", "relation", "intercourse", "safe"],
       response:
-        "Biologically, yes, it is perfectly fine if both you and your partner are happy and comfortable with it! It can even act as a natural cramp reliever thanks to endorphins. Just remember, your cervix is more sensitive now, and you can still get pregnant or catch infections, so protection is still a must! 🌸",
+        "Sex during a period can be safe if everyone involved is comfortable and consenting. Use protection because pregnancy and infections are still possible, and pause if there is pain or discomfort.",
     },
     {
       keywords: ["wash", "soap", "clean", "vagina", "smell", "scent"],
       response:
-        "Please put the scented wash down! 🛑 The vagina is a beautiful, self-cleaning ecosystem. Using harsh soaps, douches, or intimate washes disrupts your natural pH and kills the good bacteria, which actually *causes* infections and odors. Plain warm water on the outside (vulva) is all you ever need.",
+        "Avoid scented washes, douching, or internal cleaning. The vagina is self-cleaning, and harsh products can disrupt pH. Warm water on the external vulva is usually enough.",
     },
     {
       keywords: ["boy", "boyfriend", "pms", "partner", "man"],
       response:
-        "That is so sweet that you/he asked! PMS can feel like an emotional roller coaster. The best support is validating those feelings instead of asking 'Are you on your period?'. Keep a heating pad ready, track her cycle phase implicitly, and grab her favorite comforting snacks. It makes a world of difference! 🍫",
+        "PMS support works best when it is respectful: validate feelings, offer practical help, and avoid teasing or blaming mood changes on a period. A heating pad, rest, water, and patience can help a lot.",
     },
   ];
 
@@ -106,15 +111,39 @@ export default function QA() {
     );
 
     // AI Companion reply emulation matching internal knowledge tokens mapping arrays
-    setTimeout(() => {
-      // Internal keyword checking loop
-      let foundMatchedResponse =
-        "I hear you, and that's a totally valid thing to wonder about! My database is checking that specific context. For immediate guidance, try dropping words like 'brown blood', 'period poop', or 'intimate wash' so I can fetch the exact clinical log from our framework. 📝";
+    setTimeout(async () => {
+      let foundMatchedResponse = "";
 
-      for (const entry of trainedLocalKnowledgeBase) {
-        if (entry.keywords.some((keyword) => cleanQuery.includes(keyword))) {
-          foundMatchedResponse = entry.response;
-          break;
+      try {
+        const result = await questionAnswerApi.ask(typedQuestion.trim());
+        foundMatchedResponse = result.answer;
+      } catch {
+        try {
+          const result = await questionAnswerApi.getQuestions({
+            search: cleanQuery,
+            limit: 1,
+          });
+          const matchedQuestion = result.data?.[0] ?? result.questions?.[0];
+          if (matchedQuestion?.answer) {
+            foundMatchedResponse = matchedQuestion.answer;
+          }
+        } catch (lookupError) {
+          console.log(
+            "Backend query failed, falling back to local knowledge base:",
+            lookupError,
+          );
+        }
+      }
+
+      if (!foundMatchedResponse) {
+        // Internal keyword checking loop fallback
+        foundMatchedResponse = "That is a valid thing to wonder about. Try keywords like 'brown blood', 'period poop', 'tampon', 'cup', 'hygiene', or 'intimacy' so I can give a more specific answer.";
+
+        for (const entry of trainedLocalKnowledgeBase) {
+          if (entry.keywords.some((keyword) => cleanQuery.includes(keyword))) {
+            foundMatchedResponse = entry.response;
+            break;
+          }
         }
       }
 
@@ -148,8 +177,11 @@ export default function QA() {
       >
         {/* Custom Companion Chat Header Section */}
         <View
-          className="px-6 py-4 border-b border-neutral-100 dark:border-neutral-900/60 flex-row justify-between items-center"
-          style={{ backgroundColor: colors.surface }}
+          className="px-6 py-4 border-b flex-row justify-between items-center"
+          style={{
+            borderColor: colors.border,
+            backgroundColor: colors.surface,
+          }}
         >
           <View className="flex-row items-center gap-3">
             <TouchableOpacity
@@ -162,7 +194,13 @@ export default function QA() {
 
             {/* Robot/Companion Identity Sphere Indicator */}
             <View className="relative">
-              <View className="w-10 h-10 rounded-full bg-pink-100 items-center justify-center border border-pink-200/50">
+              <View
+                className="w-10 h-10 rounded-full items-center justify-center border"
+                style={{
+                  backgroundColor: softTints.pink,
+                  borderColor: colors.border,
+                }}
+              >
                 <Text className="text-xl">✨</Text>
               </View>
               <View className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white dark:border-neutral-900" />
@@ -176,7 +214,7 @@ export default function QA() {
                 Nura Companion
               </Text>
               <Text className="text-[10px] font-bold text-emerald-500 tracking-wider uppercase mt-0.5">
-                Trained & Online
+                Private guidance online
               </Text>
             </View>
           </View>
@@ -202,40 +240,51 @@ export default function QA() {
             {chatLog.map((message) => {
               const isCompanion = message.sender === "companion";
               return (
-                <View
-                  key={message.id}
-                  className={`max-w-[85%] p-4 rounded-2xl ${
-                    isCompanion
-                      ? "self-start rounded-tl-none border border-neutral-100 dark:border-neutral-800"
-                      : "self-end rounded-tr-none shadow-2xs"
-                  }`}
-                  style={{
-                    backgroundColor: isCompanion
-                      ? colors.surface
-                      : colors.primary,
-                  }}
-                >
-                  {/* Text Message Context */}
-                  <Text
-                    className="text-xs font-medium leading-5"
-                    style={{
-                      color: isCompanion
-                        ? colors.foreground
-                        : colors.buttonText,
-                    }}
-                  >
-                    {message.text}
-                  </Text>
-
-                  {/* Subtle Time Tag Indicator */}
-                  <Text
-                    className="text-[8px] font-bold text-right mt-1.5 opacity-60"
-                    style={{
-                      color: isCompanion ? colors.mutedText : colors.buttonText,
-                    }}
-                  >
-                    {message.time}
-                  </Text>
+                <View key={message.id}>
+                  {isCompanion ? (
+                    <View
+                      className="max-w-[85%] p-4 rounded-2xl self-start rounded-tl-none border"
+                      style={{
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                      }}
+                    >
+                      <Text
+                        className="text-xs font-medium leading-5"
+                        style={{ color: colors.foreground }}
+                      >
+                        {message.text}
+                      </Text>
+                      <Text
+                        className="text-[8px] font-bold text-right mt-1.5 opacity-60"
+                        style={{ color: colors.mutedText }}
+                      >
+                        {message.time}
+                      </Text>
+                    </View>
+                  ) : (
+                    <View className="max-w-[85%] self-end rounded-2xl rounded-tr-none overflow-hidden shadow-md">
+                      <LinearGradient
+                        colors={actionGradient}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        className="p-4"
+                      >
+                        <Text
+                          className="text-xs font-medium leading-5"
+                          style={{ color: colors.buttonText }}
+                        >
+                          {message.text}
+                        </Text>
+                        <Text
+                          className="text-[8px] font-bold text-right mt-1.5 opacity-60"
+                          style={{ color: colors.buttonText }}
+                        >
+                          {message.time}
+                        </Text>
+                      </LinearGradient>
+                    </View>
+                  )}
                 </View>
               );
             })}
@@ -243,10 +292,16 @@ export default function QA() {
             {/* HUMANIZED ACTIVE TYPING STATUS DOTS SIMULATION */}
             {isCompanionTyping && (
               <View
-                className="self-start rounded-2xl rounded-tl-none border border-neutral-100 dark:border-neutral-800 px-4 py-3.5 items-center justify-center flex-row gap-1"
-                style={{ backgroundColor: colors.surface }}
+                className="self-start rounded-2xl rounded-tl-none border px-4 py-3.5 items-center justify-center flex-row gap-1"
+                style={{
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                }}
               >
-                <Text className="text-xs font-bold tracking-widest text-pink-500 animate-pulse">
+                <Text
+                  className="text-xs font-bold tracking-widest animate-pulse"
+                  style={{ color: colors.primary }}
+                >
                   Companion is writing...
                 </Text>
               </View>
@@ -256,8 +311,11 @@ export default function QA() {
 
         {/* PERSISTENT FIXED FOOTER MESSAGE CONSOLE BAR ROW */}
         <View
-          className="px-4 py-3.5 border-t border-neutral-100 dark:border-neutral-900/60 flex-row items-center gap-3"
-          style={{ backgroundColor: colors.surface }}
+          className="px-4 py-3.5 border-t flex-row items-center gap-3"
+          style={{
+            borderColor: colors.border,
+            backgroundColor: colors.surface,
+          }}
         >
           <TextInput
             placeholder="Ask me anything anonymously..."
@@ -266,27 +324,35 @@ export default function QA() {
             onChangeText={setTypedQuestion}
             onSubmitEditing={handleTriggerConversation}
             returnKeyType="send"
-            className="flex-1 bg-neutral-100 dark:bg-neutral-800 px-4 py-3 rounded-xl text-sm"
-            style={{ color: colors.foreground }}
+            className="flex-1 px-4 py-3 rounded-xl text-sm"
+            style={{
+              color: colors.foreground,
+              backgroundColor: colors.input,
+            }}
           />
           <TouchableOpacity
             disabled={!typedQuestion.trim()}
             onPress={handleTriggerConversation}
             activeOpacity={0.8}
-            className="p-2.5 rounded-full items-center justify-center"
-            style={{
-              backgroundColor: typedQuestion.trim()
-                ? colors.primary
-                : colors.border,
-            }}
+            className="rounded-full overflow-hidden"
           >
-            <Feather
-              name="send"
-              size={15}
-              color={
-                typedQuestion.trim() ? colors.buttonText : colors.mutedText
-              }
-            />
+            {typedQuestion.trim() ? (
+              <LinearGradient
+                colors={actionGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                className="p-2.5 items-center justify-center"
+              >
+                <Feather name="send" size={15} color={colors.buttonText} />
+              </LinearGradient>
+            ) : (
+              <View
+                className="p-2.5 items-center justify-center"
+                style={{ backgroundColor: colors.border }}
+              >
+                <Feather name="send" size={15} color={colors.mutedText} />
+              </View>
+            )}
           </TouchableOpacity>
         </View>
       </SafeAreaView>

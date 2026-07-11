@@ -4,7 +4,7 @@ import {
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ScrollView,
   StatusBar,
@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppState } from "../../components/AppState";
 import { useTheme } from "../../components/theme";
+import { forestApi, type ForestStatus } from "../../lib/api";
 
 interface Tree {
   id: number;
@@ -29,36 +30,87 @@ export default function Forest() {
   const { trackedDays } = useAppState();
 
   const [isNourished, setIsNourished] = useState(false);
+  const [forestStatus, setForestStatus] = useState<ForestStatus | null>(null);
 
-  const currentHealth = Math.min(100, Math.max(45, 55 + trackedDays * 6));
+  useEffect(() => {
+    let isMounted = true;
 
-  const trees: Tree[] = [
-    { id: 1, month: "April", health: 100, status: "healthy" },
-    {
-      id: 2,
-      month: "May",
-      health: currentHealth,
-      status: currentHealth >= 60 ? "healthy" : "wilted",
-    },
-    { id: 3, month: "June", health: 45, status: "wilted" },
-  ];
+    async function loadForestStatus() {
+      try {
+        const status = await forestApi.getStatus();
+        if (isMounted) setForestStatus(status);
+      } catch {
+        if (isMounted) setForestStatus(null);
+      }
+    }
 
-  // Calculations for Forest Levels
+    loadForestStatus();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const currentHealth =
+    forestStatus?.currentHealth ?? Math.min(100, Math.max(45, 55 + trackedDays * 6));
+
+  const trees: Tree[] =
+    forestStatus?.trees?.length
+      ? forestStatus.trees.map((tree, index) => ({
+          id: index + 1,
+          month: tree.month,
+          health: tree.health,
+          status:
+            tree.status === "dead" || tree.status === "healthy" || tree.status === "wilted"
+              ? tree.status
+              : tree.health >= 60
+                ? "healthy"
+                : "wilted",
+        }))
+      : [
+          { id: 1, month: "April", health: 100, status: "healthy" },
+          {
+            id: 2,
+            month: "May",
+            health: currentHealth,
+            status: currentHealth >= 60 ? "healthy" : "wilted",
+          },
+          { id: 3, month: "June", health: 45, status: "wilted" },
+        ];
+
   const healthyTreeCount =
-    trees.filter((t) => t.status === "healthy").length + 12; // Base pool for demo
-  const averageHealth = Math.round(
-    trees.reduce((acc, t) => acc + t.health, 0) / trees.length,
-  );
+    forestStatus?.healthyTreeCount ??
+    trees.filter((t) => t.status === "healthy").length + 12;
+  const averageHealth =
+    forestStatus?.averageHealth ??
+    Math.round(trees.reduce((acc, t) => acc + t.health, 0) / trees.length);
 
-  let forestTier = "Sprout Woodland";
+  let forestTier = forestStatus?.forestTier ?? "Sprout Woodland";
   let tierColor = "#10b981"; // Emerald
 
-  if (healthyTreeCount >= 20) {
+  if (!forestStatus && healthyTreeCount >= 20) {
     forestTier = "Ancient Evergreen Canopy";
     tierColor = "#047857";
-  } else if (healthyTreeCount >= 14) {
+  } else if (!forestStatus && healthyTreeCount >= 14) {
     forestTier = "Lush Tropical Forest";
     tierColor = "#059669";
+  }
+
+  async function handleLogCare() {
+    setIsNourished(true);
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const result = await forestApi.logCare({
+        careType: "water",
+        dateKey: today,
+        note: "Logged care from the app",
+      });
+      setForestStatus(result.status);
+    } catch {
+      // Keep the visual confirmation when developing without the backend.
+    } finally {
+      setTimeout(() => setIsNourished(false), 2500);
+    }
   }
 
   return (
@@ -143,7 +195,7 @@ export default function Forest() {
                     style={{ zIndex: 9 }}
                   />
 
-                  {/* Foreground Detail & Life */}
+                  {/* Foreground detail */}
                   <MaterialCommunityIcons
                     name="flower-tulip"
                     size={20}
@@ -168,20 +220,6 @@ export default function Forest() {
                     }}
                   />
 
-                  {/* Little Forest Pet Creature Easter Egg */}
-                  {averageHealth >= 80 && (
-                    <FontAwesome5
-                      name="dove"
-                      size={16}
-                      color={isDark ? "#a7f3d0" : "#047857"}
-                      style={{
-                        position: "absolute",
-                        top: 25,
-                        right: "30%",
-                        opacity: 0.8,
-                      }}
-                    />
-                  )}
                 </View>
               ) : (
                 /* Wilted / Sick Forest State */
@@ -212,7 +250,7 @@ export default function Forest() {
                   className="text-[11px] font-bold tracking-widest uppercase"
                   style={{ color: tierColor }}
                 >
-                  🌲 {forestTier}
+                  {forestTier}
                 </Text>
               </View>
 
@@ -220,7 +258,7 @@ export default function Forest() {
               {isNourished && (
                 <View className="absolute inset-0 bg-blue-500/10 items-center justify-center">
                   <Text className="text-blue-400 text-xs font-bold bg-neutral-900/80 px-3 py-1 rounded-full border border-blue-400/30">
-                    💧 Forest Hydrated! +5% Vitality
+                    Forest hydrated +5% vitality
                   </Text>
                 </View>
               )}
@@ -237,7 +275,7 @@ export default function Forest() {
                     className="text-xs font-medium"
                     style={{ color: colors.mutedText }}
                   >
-                    Global Density
+                    Forest Size
                   </Text>
                   <Text
                     className="text-lg font-bold mt-0.5"
@@ -271,19 +309,18 @@ export default function Forest() {
                 style={{
                   backgroundColor: isNourished ? colors.border : "#0284c7",
                 }}
-                disabled={isNourished}
-                onPress={() => {
-                  setIsNourished(true);
-                  setTimeout(() => setIsNourished(false), 2500);
-                }}
+                disabled={isNourished || forestStatus?.todayCareLogged}
+                onPress={handleLogCare}
               >
                 <Ionicons
-                  name={isNourished ? "checkmark-circle" : "water"}
+                  name={isNourished || forestStatus?.todayCareLogged ? "checkmark-circle" : "water"}
                   size={18}
                   color="white"
                 />
                 <Text className="text-white font-bold text-sm">
-                  {isNourished ? "Nourished Today" : "Nourish Forest Habitat"}
+                  {isNourished || forestStatus?.todayCareLogged
+                    ? "Nourished Today"
+                    : "Log Care for Forest"}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -374,7 +411,7 @@ export default function Forest() {
               className="mb-4 mt-8 text-lg font-bold"
               style={{ color: colors.foreground }}
             >
-              Canopy Leaderboard 🏆
+              Canopy Leaderboard
             </Text>
 
             <View className="gap-2">
@@ -411,7 +448,7 @@ export default function Forest() {
                             className="font-bold text-sm"
                             style={{ color: colors.foreground }}
                           >
-                            {user.name} {isMe && "✨"}
+                          {isMe ? `${user.name} (you)` : user.name}
                           </Text>
                           <Text
                             className="text-[11px]"
@@ -434,7 +471,7 @@ export default function Forest() {
                           className="font-bold text-xs"
                           style={{ color: colors.foreground }}
                         >
-                          {user.trees} Nodes
+                          {user.trees} Trees
                         </Text>
                       </View>
                     </View>

@@ -1,6 +1,6 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
   ScrollView,
@@ -13,6 +13,12 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppState } from "../../components/AppState";
 import { useTheme } from "../../components/theme";
+import { getSoftTints } from "../../components/ui-tokens";
+import {
+  buddyApi,
+  type BuddyMatch as ApiBuddyMatch,
+  type BuddyMessage as ApiBuddyMessage,
+} from "../../lib/api";
 
 // --- STRUCTURAL BACKEND REGISTRY CONTRACTS ---
 interface PeriodBuddy {
@@ -33,6 +39,66 @@ interface BuddyMessage {
   time: string;
 }
 
+const fallbackNominees: PeriodBuddy[] = [
+  {
+    id: "b_1",
+    alias: "Mystic Peony",
+    avatarSeed: "MP",
+    cyclePhase: "Ovulation Phase",
+    cycleOverlapDays: 26,
+    lastUpdate: "Updated today",
+    compatibility: 95,
+    similarities: ["28-Day Cycle", "PMDD Fatigue", "Craves Dark Chocolate"],
+  },
+  {
+    id: "b_2",
+    alias: "Cosmic Fern",
+    avatarSeed: "CF",
+    cyclePhase: "Luteal Phase",
+    cycleOverlapDays: 22,
+    lastUpdate: "Updated today",
+    compatibility: 88,
+    similarities: ["31-Day Cycle", "Insomnia Spikes", "Hot Yoga Routine"],
+  },
+  {
+    id: "b_3",
+    alias: "Aura Amber",
+    avatarSeed: "AA",
+    cyclePhase: "Follicular Phase",
+    cycleOverlapDays: 19,
+    lastUpdate: "Updated 2 days ago",
+    compatibility: 85,
+    similarities: ["26-Day Cycle", "Anxiety Spikes", "Chamomile Tea Log"],
+  },
+];
+
+function mapBuddy(match: ApiBuddyMatch): PeriodBuddy {
+  return {
+    id: match.id ?? match._id ?? match.alias,
+    alias: match.alias,
+    avatarSeed: match.avatarSeed,
+    cyclePhase: match.cyclePhase,
+    cycleOverlapDays: match.cycleOverlapDays,
+    lastUpdate: "Updated today",
+    compatibility: match.compatibility,
+    similarities: match.similarities,
+  };
+}
+
+function mapBuddyMessage(message: ApiBuddyMessage): BuddyMessage {
+  return {
+    id: message.id ?? message._id ?? `${message.sender}_${message.sentAt}`,
+    sender: message.sender,
+    text: message.text,
+    time: message.sentAt
+      ? new Date(message.sentAt).toLocaleTimeString("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+        })
+      : "Just now",
+  };
+}
+
 export default function BuddyNomination() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
@@ -47,52 +113,56 @@ export default function BuddyNomination() {
   const [isChatConsoleOpen, setIsChatConsoleOpen] = useState(false);
   const [typedMessage, setTypedMessage] = useState("");
 
-  // Curated matches payload collection structures ready for dynamic DB query parsing
-  const [nominees, setNominees] = useState<PeriodBuddy[]>([
-    {
-      id: "b_1",
-      alias: "Mystic Peony 🌸",
-      avatarSeed: "🦄",
-      cyclePhase: "Ovulation Phase",
-      cycleOverlapDays: 26,
-      lastUpdate: "Updated today",
-      compatibility: 95,
-      similarities: ["28-Day Cycle", "PMDD Fatigue", "Craves Dark Chocolate"],
-    },
-    {
-      id: "b_2",
-      alias: "Cosmic Fern 🌿",
-      avatarSeed: "🦊",
-      cyclePhase: "Luteal Phase",
-      cycleOverlapDays: 22,
-      lastUpdate: "Updated today",
-      compatibility: 88,
-      similarities: ["31-Day Cycle", "Insomnia Spikes", "Hot Yoga Routine"],
-    },
-    {
-      id: "b_3",
-      alias: "Aura Amber 🌙",
-      avatarSeed: "🐼",
-      cyclePhase: "Follicular Phase",
-      cycleOverlapDays: 19,
-      lastUpdate: "Updated 2 days ago",
-      compatibility: 85,
-      similarities: ["26-Day Cycle", "Anxiety Spikes", "Chamomile Tea Log"],
-    },
-  ]);
+  const [nominees, setNominees] = useState<PeriodBuddy[]>(fallbackNominees);
 
   // Private live dialogue log data array container
   const [chatLog, setChatLog] = useState<BuddyMessage[]>([
     {
       id: "m1",
       sender: "buddy",
-      text: "Hey period buddy! It is crazy how accurately our cycle schedules match up. Are you experiencing the intense ovulation fatigue too today? 🥱",
+      text: "Hey period buddy. Our cycle windows are really close this month. Are you feeling ovulation fatigue today too?",
       time: "2:40 PM",
     },
   ]);
 
-  const filteredNominees = nominees.filter((girl) =>
-    [girl.alias, girl.cyclePhase]
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadBuddySpace() {
+      try {
+        const [matchesResponse, activeBuddy, messages] = await Promise.all([
+          buddyApi.getMatches(),
+          buddyApi.getActive(),
+          buddyApi.getMessages(),
+        ]);
+
+        if (!isMounted) return;
+
+        if (matchesResponse.matches.length > 0) {
+          setNominees(matchesResponse.matches.map(mapBuddy));
+        }
+        if (activeBuddy) {
+          setActiveNominatedId(activeBuddy.id ?? activeBuddy._id ?? null);
+        }
+        if (messages.length > 0) {
+          setChatLog(messages.map(mapBuddyMessage));
+        }
+      } catch {
+        if (isMounted) {
+          setNominees(fallbackNominees);
+        }
+      }
+    }
+
+    loadBuddySpace();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const filteredNominees = nominees.filter((buddy) =>
+    [buddy.alias, buddy.cyclePhase]
       .join(" ")
       .toLowerCase()
       .includes(searchQuery.trim().toLowerCase()),
@@ -100,30 +170,33 @@ export default function BuddyNomination() {
 
   const activeBuddyData = nominees.find((b) => b.id === activeNominatedId);
 
-  const softTints = {
-    pink: isDark ? "#3b1a2d" : "#fff0f6",
-    emerald: isDark ? "#062e20" : "#ecfdf5",
-  };
+  const softTints = getSoftTints(colors);
 
   // --- BUSINESS OPERATION MECHANICS ---
-  function handleNominateBuddy(id: string) {
+  async function handleNominateBuddy(id: string) {
     if (activeNominatedId) {
       Alert.alert(
         "Nomination Limit Reached",
-        "You can cleanly secure exactly one active anonymous Period Buddy per monthly hormonal cycle window.",
+        "You can keep one active anonymous Period Buddy for each cycle window.",
       );
       return;
     }
 
     setActiveNominatedId(id);
-    earnTokens(25); // Trigger token addition instantly inside local global scopes
-    Alert.alert(
-      "Buddy Locked! 🌟",
-      "Your secure monthly communication workspace has been instantiated anonymously.",
-    );
+    earnTokens(25);
+
+    try {
+      const result = await buddyApi.nominate(id);
+      setActiveNominatedId(result.buddy.id ?? result.buddy._id ?? id);
+      if (result.tokensAwarded) earnTokens(result.tokensAwarded);
+    } catch {
+      // Keep the local buddy active for offline development.
+    }
+
+    Alert.alert("Buddy nominated", "Your anonymous buddy space is ready.");
   }
 
-  function handleSendBuddyMessage() {
+  async function handleSendBuddyMessage() {
     if (!typedMessage.trim()) return;
 
     const myPayload: BuddyMessage = {
@@ -140,22 +213,29 @@ export default function BuddyNomination() {
       50,
     );
 
-    // Humanized peer-to-peer anonymous response emulation script matching layout
-    setTimeout(() => {
-      setChatLog((prev) => [
-        ...prev,
-        {
-          id: `msg_b_${Date.now()}`,
-          sender: "buddy",
-          text: "Omg totally agree! Let's check our shared habit tree updates later to see if tracking logs match up tonight too. 🌸",
-          time: "Just now",
-        },
-      ]);
-      setTimeout(
-        () => scrollViewRef.current?.scrollToEnd({ animated: true }),
-        50,
-      );
-    }, 1200);
+    try {
+      const result = await buddyApi.sendMessage(myPayload.text);
+      if (result.tokensAwarded) earnTokens(result.tokensAwarded);
+      if (result.messages.length > 0) {
+        setChatLog(result.messages.map(mapBuddyMessage));
+      }
+    } catch {
+      setTimeout(() => {
+        setChatLog((prev) => [
+          ...prev,
+          {
+            id: `msg_b_${Date.now()}`,
+            sender: "buddy",
+            text: "Totally. Let's check our habit updates later and compare how the day felt.",
+            time: "Just now",
+          },
+        ]);
+        setTimeout(
+          () => scrollViewRef.current?.scrollToEnd({ animated: true }),
+          50,
+        );
+      }, 1200);
+    }
   }
 
   return (
@@ -230,15 +310,15 @@ export default function BuddyNomination() {
                   className="text-base font-black tracking-tight leading-5 mb-1.5"
                   style={{ color: colors.foreground }}
                 >
-                  Nominate Your Period Buddy 🌙
+                  Nominate Your Period Buddy
                 </Text>
                 <Text
                   className="text-xs leading-4"
                   style={{ color: colors.mutedText }}
                 >
                   Sync timelines anonymously with another profile holding
-                  identical cycle milestones. Cross-compare biological trends
-                  and chat completely safe.
+                  similar cycle milestones. Compare patterns and chat with
+                  privacy in mind.
                 </Text>
               </View>
             )}
@@ -274,13 +354,13 @@ export default function BuddyNomination() {
 
                 {/* MATCH STACK FEED TIMELINE LOOP */}
                 <View className="gap-4">
-                  {filteredNominees.map((girl) => {
-                    const isSelectedBuddy = activeNominatedId === girl.id;
+                  {filteredNominees.map((buddy) => {
+                    const isSelectedBuddy = activeNominatedId === buddy.id;
                     const isAnyBuddyLocked = activeNominatedId !== null;
 
                     return (
                       <View
-                        key={girl.id}
+                        key={buddy.id}
                         className="rounded-3xl border shadow-2xl overflow-hidden"
                         style={{
                           backgroundColor: colors.surface,
@@ -295,7 +375,7 @@ export default function BuddyNomination() {
                           <View className="flex-row items-center gap-4 flex-1">
                             <View className="h-14 w-14 items-center justify-center rounded-full bg-neutral-100 dark:bg-neutral-800 border border-neutral-200/40">
                               <Text className="text-2xl">
-                                {girl.avatarSeed}
+                                {buddy.avatarSeed}
                               </Text>
                             </View>
 
@@ -304,7 +384,7 @@ export default function BuddyNomination() {
                                 className="text-sm font-black tracking-tight"
                                 style={{ color: colors.foreground }}
                               >
-                                {girl.alias}
+                                {buddy.alias}
                               </Text>
                               <View className="flex-row items-center gap-1.5 mt-0.5">
                                 <View className="w-1.5 h-1.5 rounded-full bg-pink-500" />
@@ -312,11 +392,11 @@ export default function BuddyNomination() {
                                   className="text-[11px] font-bold"
                                   style={{ color: colors.mutedText }}
                                 >
-                                  {girl.cyclePhase}
+                                  {buddy.cyclePhase}
                                 </Text>
                               </View>
                               <Text className="mt-1 text-[9px] font-black uppercase text-neutral-400">
-                                {girl.lastUpdate}
+                                {buddy.lastUpdate}
                               </Text>
                             </View>
                           </View>
@@ -328,7 +408,7 @@ export default function BuddyNomination() {
                               style={{ backgroundColor: softTints.emerald }}
                             >
                               <Text className="text-xs font-black text-emerald-500">
-                                {girl.compatibility}%
+                                {buddy.compatibility}%
                               </Text>
                             </View>
                             <Text className="mt-1 text-[10px] font-bold uppercase tracking-wider text-neutral-400">
@@ -339,7 +419,7 @@ export default function BuddyNomination() {
 
                         {/* SUB ELEMENT: PILL ATTRIBUTES LABELS COMPARE ROW */}
                         <View className="flex-row flex-wrap gap-1.5 px-5 pb-4">
-                          {girl.similarities.map((chip, cIdx) => (
+                          {buddy.similarities.map((chip, cIdx) => (
                             <View
                               key={cIdx}
                               className="px-2.5 py-1 rounded-md bg-neutral-50 dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800"
@@ -356,13 +436,13 @@ export default function BuddyNomination() {
                           activeOpacity={0.8}
                           disabled={isAnyBuddyLocked && !isSelectedBuddy}
                           className="mx-5 mb-5 rounded-xl py-3 items-center justify-center border shadow-3xs"
-                          onPress={() => handleNominateBuddy(girl.id)}
+                          onPress={() => handleNominateBuddy(buddy.id)}
                           style={{
                             backgroundColor: isSelectedBuddy
                               ? softTints.emerald
                               : colors.primary,
                             borderColor: isSelectedBuddy
-                              ? "#10b981"
+                              ? colors.success
                               : colors.primary,
                           }}
                         >
@@ -370,13 +450,13 @@ export default function BuddyNomination() {
                             className="text-xs font-bold tracking-wide"
                             style={{
                               color: isSelectedBuddy
-                                ? "#10b981"
+                                ? colors.success
                                 : colors.buttonText,
                             }}
                           >
                             {isSelectedBuddy
-                              ? "Nominated Expert Locked ✓"
-                              : "Nominate as Buddy ✨"}
+                              ? "Buddy Nominated"
+                              : "Nominate as Buddy"}
                           </Text>
                         </TouchableOpacity>
 
@@ -395,7 +475,7 @@ export default function BuddyNomination() {
                               className="text-xs font-black"
                               style={{ color: colors.foreground }}
                             >
-                              Enter Secure Anonymous Workspace
+                              Open Anonymous Chat
                             </Text>
                           </TouchableOpacity>
                         )}
@@ -484,7 +564,7 @@ export default function BuddyNomination() {
             style={{ backgroundColor: colors.surface }}
           >
             <TextInput
-              placeholder="Type anonymous message to buddy..."
+              placeholder="Type an anonymous message..."
               placeholderTextColor={colors.mutedText}
               value={typedMessage}
               onChangeText={setTypedMessage}

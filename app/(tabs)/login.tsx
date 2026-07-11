@@ -3,30 +3,50 @@ import { Link, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   StatusBar,
+  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../components/auth-context";
 import { ThemeToggle, useTheme } from "../../components/theme";
 import { loginUser } from "../../lib/auth";
+import { LinearGradient } from "expo-linear-gradient";
+import {
+  getActionGradient,
+  getScreenGradient,
+  getShadow,
+  getSoftTints,
+} from "../../components/ui-tokens";
 
 export default function Login() {
   const router = useRouter();
   const { signIn } = useAuth();
   const { colors, isDark } = useTheme();
+  const { width } = useWindowDimensions();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [emailFocused, setEmailFocused] = useState(false);
+  const [passwordFocused, setPasswordFocused] = useState(false);
+  const contentWidth = Math.min(Math.max(width - 40, 280), 460);
+  const screenGradient = getScreenGradient(colors, isDark) as [
+    string,
+    string,
+    string,
+  ];
+  const actionGradient = getActionGradient(colors) as [string, string];
+  const softTints = getSoftTints(colors);
 
   function handlePasswordReset() {
     setErrorMessage(
       email.trim()
-        ? `Password reset instructions were prepared for ${email.trim().toLowerCase()}.`
-        : "Enter your email first so we know where to send reset instructions.",
+        ? `Instructions sent to ${email.trim().toLowerCase()}.`
+        : "Enter your email first to reset password.",
     );
   }
 
@@ -34,10 +54,10 @@ export default function Login() {
     signIn({
       token: "demo-google-session",
       user: {
-        email: "demo@flowher.app",
-        firstName: "Flow",
+        email: "demo@nura.app",
+        firstName: "Nura",
         isProfileComplete: true,
-        lastName: "User",
+        lastName: "Sister",
       },
     });
     router.replace("/(app)/(dashboard)/home");
@@ -85,141 +105,204 @@ export default function Login() {
   }
 
   return (
-    <>
+    <LinearGradient
+      colors={screenGradient}
+      className="flex-1"
+    >
       <StatusBar
         barStyle={isDark ? "light-content" : "dark-content"}
-        backgroundColor={colors.background}
+        backgroundColor="transparent"
+        translucent
       />
 
-      <SafeAreaView
-        className="flex-1"
-        style={{ backgroundColor: colors.background }}
-      >
-        <View className="absolute right-6 top-8 z-10">
+      <SafeAreaView className="flex-1">
+        <View className="absolute right-6 top-6 z-10">
           <ThemeToggle />
         </View>
 
-        <View className="flex-1 justify-center px-6">
-          <View className="mb-10 items-center">
-            {/* <View
-              className="mb-5 h-20 w-20 items-center justify-center rounded-full border-2"
-              style={{
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-              }}
-            >
-              <Ionicons
-                name="water-outline"
-                size={38}
-                color={colors.foreground}
-              />
-            </View> */}
+        <ScrollView
+          contentContainerStyle={{
+            alignItems: "center",
+            flexGrow: 1,
+            justifyContent: "center",
+            paddingHorizontal: 20,
+            paddingVertical: 40,
+          }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={{ width: contentWidth }}>
+            <View className="mb-7 items-center">
+              <View
+                className="mb-4 h-14 w-14 items-center justify-center rounded-2xl border"
+                style={{
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                }}
+              >
+                <Ionicons name="sparkles" size={22} color={colors.primary} />
+              </View>
 
-            <Text
-              className="text-4xl font-bold"
-              style={{ color: colors.foreground }}
-            >
-              Login
-            </Text>
+              <Text
+                className="text-3xl font-black tracking-tight text-center"
+                style={{ color: colors.foreground }}
+              >
+                Welcome back
+              </Text>
 
-            <Text
-              className="mt-3 text-center text-base leading-6"
-              style={{ color: colors.foreground }}
-            >
-              Welcome back to The Nura
-            </Text>
-          </View>
+              <Text
+                className="mt-2.5 text-center text-sm font-semibold leading-5"
+                style={{ color: colors.mutedText }}
+              >
+                Continue your private wellness routine with your tracker,
+                community, and care tools.
+              </Text>
+            </View>
 
           <View
-            className="rounded-2xl border-2 p-6"
+            className="rounded-3xl border p-5 mb-6"
             style={{
               backgroundColor: colors.surface,
               borderColor: colors.border,
+              ...getShadow(colors, isDark),
             }}
           >
+            <View className="mb-5 flex-row items-center justify-between">
+              <View>
+                <Text
+                  className="text-sm font-black"
+                  style={{ color: colors.foreground }}
+                >
+                  Sign in
+                </Text>
+                <Text
+                  className="mt-1 text-[11px] font-semibold"
+                  style={{ color: colors.mutedText }}
+                >
+                  Your care space is ready.
+                </Text>
+              </View>
+              <View
+                className="h-10 w-10 items-center justify-center rounded-2xl"
+                style={{ backgroundColor: softTints.mint }}
+              >
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={18}
+                  color={colors.secondary}
+                />
+              </View>
+            </View>
+
             <View
-              className="mb-5 flex-row items-center rounded-xl border px-4 py-4"
+              className="mb-4 flex-row items-center rounded-2xl border px-4 py-4"
               style={{
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
+                backgroundColor: colors.input,
+                borderColor: emailFocused ? colors.primary : colors.border,
+                borderWidth: emailFocused ? 1.5 : 1,
               }}
             >
               <Ionicons
                 name="mail-outline"
-                size={20}
-                color={colors.foreground}
+                size={18}
+                color={emailFocused ? colors.primary : colors.mutedText}
               />
-
               <TextInput
                 autoCapitalize="none"
                 keyboardType="email-address"
-                onChangeText={setEmail}
+                onChangeText={(text) => {
+                  setErrorMessage("");
+                  setEmail(text);
+                }}
+                onFocus={() => setEmailFocused(true)}
+                onBlur={() => setEmailFocused(false)}
                 placeholder="Email address"
-                placeholderTextColor={colors.foreground}
-                className="ml-3 flex-1 text-base outline-none"
+                placeholderTextColor={colors.mutedText}
+                className="ml-3 flex-1 text-sm outline-none font-semibold"
                 style={{ color: colors.foreground }}
                 value={email}
               />
             </View>
 
             <View
-              className="mb-4 flex-row items-center rounded-xl border px-4 py-2"
+              className="mb-4 flex-row items-center rounded-2xl border px-4 py-4"
               style={{
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
+                backgroundColor: colors.input,
+                borderColor: passwordFocused ? colors.primary : colors.border,
+                borderWidth: passwordFocused ? 1.5 : 1,
               }}
             >
               <Ionicons
                 name="lock-closed-outline"
-                size={20}
-                color={colors.foreground}
+                size={18}
+                color={passwordFocused ? colors.primary : colors.mutedText}
               />
-
               <TextInput
-                onChangeText={setPassword}
+                onChangeText={(text) => {
+                  setErrorMessage("");
+                  setPassword(text);
+                }}
+                onFocus={() => setPasswordFocused(true)}
+                onBlur={() => setPasswordFocused(false)}
                 placeholder="Password"
-                placeholderTextColor={colors.foreground}
+                placeholderTextColor={colors.mutedText}
                 secureTextEntry
-                className="ml-3 flex-1 text-base outline-none"
+                className="ml-3 flex-1 text-sm outline-none font-semibold"
                 style={{ color: colors.foreground }}
                 value={password}
               />
             </View>
 
             <TouchableOpacity
-              className="mb-6 self-end"
+              className="mb-6 self-end px-1"
               onPress={handlePasswordReset}
             >
               <Text
-                className="text-sm font-medium underline"
+                className="text-xs font-bold"
                 style={{ color: colors.primary }}
               >
                 Forgot Password?
               </Text>
             </TouchableOpacity>
 
+            {/* Submit Button */}
             <TouchableOpacity
-              activeOpacity={0.85}
-                 disabled={isSubmitting}
+              activeOpacity={0.9}
+              disabled={isSubmitting}
               onPress={handleLogin}
-              className="rounded-2xl py-4 shadow-md items-center justify-center"
-              style={{ backgroundColor: colors.primary }}
+              className="rounded-full overflow-hidden"
+              style={{ opacity: isSubmitting ? 0.75 : 1 }}
             >
-              <Text
-                className="text-center text-base font-semibold tracking-wide"
-                style={{ color: colors.buttonText }}
+              <LinearGradient
+                colors={actionGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                className="py-4 items-center justify-center"
               >
-                {isSubmitting ? "Logging in..." : "Log In"}
-              </Text>
+                <Text
+                  className="text-center text-sm font-black tracking-wide"
+                  style={{ color: colors.buttonText }}
+                >
+                  {isSubmitting ? "Logging in..." : "Log In"}
+                </Text>
+              </LinearGradient>
             </TouchableOpacity>
 
             {errorMessage ? (
-              <Text
-                className="mt-4 text-center text-sm font-medium"
-                style={{ color: colors.foreground }}
+              <View
+                className="mt-4 rounded-2xl border px-4 py-3"
+                style={{
+                  backgroundColor: colors.dangerLight,
+                  borderColor: colors.danger,
+                }}
               >
-                {errorMessage}
-              </Text>
+                <Text
+                  className="text-center text-xs font-bold"
+                  style={{ color: colors.danger }}
+                >
+                  {errorMessage}
+                </Text>
+              </View>
             ) : null}
 
             <View className="my-6 flex-row items-center">
@@ -228,8 +311,8 @@ export default function Login() {
                 style={{ backgroundColor: colors.border }}
               />
               <Text
-                className="mx-3 text-sm"
-                style={{ color: colors.foreground }}
+                className="mx-3 text-[10px] font-black tracking-wider"
+                style={{ color: colors.mutedText }}
               >
                 OR
               </Text>
@@ -239,22 +322,22 @@ export default function Login() {
               />
             </View>
 
+            {/* Google Sign In */}
             <TouchableOpacity
-              className="flex-row rounded-2xl py-4 shadow-md items-center border justify-center"
+              className="flex-row rounded-full py-4 items-center border justify-center"
               onPress={handleGoogleSignIn}
               style={{
-                backgroundColor: colors.surface,
+                backgroundColor: colors.input,
                 borderColor: colors.border,
               }}
             >
               <Ionicons
                 name="logo-google"
-                size={22}
+                size={18}
                 color={colors.foreground}
               />
-
               <Text
-                className="ml-3 text-base font-semibold"
+                className="ml-3 text-sm font-bold"
                 style={{ color: colors.foreground }}
               >
                 Continue with Google
@@ -262,13 +345,14 @@ export default function Login() {
             </TouchableOpacity>
           </View>
 
-          <View className="mt-8 flex-row justify-center">
-            <Text style={{ color: colors.foreground }}>No account yet?</Text>
-
+          <View className="flex-row justify-center flex-wrap">
+            <Text className="text-xs font-semibold" style={{ color: colors.mutedText }}>
+              {"Don't have an account?"}
+            </Text>
             <Link href="/(tabs)/signup" asChild>
               <TouchableOpacity>
                 <Text
-                  className="ml-2 font-bold underline"
+                  className="ml-2 text-xs font-bold underline"
                   style={{ color: colors.primary }}
                 >
                   Sign Up
@@ -276,8 +360,9 @@ export default function Login() {
               </TouchableOpacity>
             </Link>
           </View>
-        </View>
+          </View>
+        </ScrollView>
       </SafeAreaView>
-    </>
+    </LinearGradient>
   );
 }

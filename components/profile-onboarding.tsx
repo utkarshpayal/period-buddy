@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+import { LinearGradient } from "expo-linear-gradient";
 import React, { useState } from "react";
 import {
   Alert,
@@ -10,30 +11,31 @@ import {
   View,
 } from "react-native";
 import { useTheme } from "./theme";
+import { getActionGradient, getShadow } from "./ui-tokens";
 
 const onboardingSteps = [
   {
     icon: "calendar-outline",
     id: "dateOfBirth",
-    subtitle: "This helps personalize your experience.",
+    subtitle: "This helps customize your cycle predictions and health logs.",
     title: "What is your date of birth?",
   },
   {
     icon: "people-outline",
     id: "gender",
-    subtitle: "Choose the option that feels right for you.",
+    subtitle: "Choose the identity that feels right to you.",
     title: "What is your gender?",
   },
   {
     icon: "call-outline",
     id: "phone",
-    subtitle: "You can add this now or skip it.",
+    subtitle: "We will only use this for clinical consult notifications.",
     title: "What is your phone number?",
   },
   {
     icon: "image-outline",
     id: "profilePicture",
-    subtitle: "Add a picture to make your profile yours.",
+    subtitle: "Add a picture to personalize your dashboard profile.",
     title: "Add a profile picture",
   },
 ] as const;
@@ -54,7 +56,8 @@ type ProfileOnboardingProps = {
 };
 
 export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const actionGradient = getActionGradient(colors) as [string, string];
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [gender, setGender] = useState("");
@@ -62,6 +65,8 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
+
   const currentStep = onboardingSteps[currentStepIndex];
   const isLastOnboardingStep = currentStepIndex === onboardingSteps.length - 1;
 
@@ -89,10 +94,25 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
     }
   }
 
-  function goToNextOnboardingStep() {
-    if (isSubmitting) {
-      return;
+  function handleBackStep() {
+    if (currentStepIndex > 0) {
+      setCurrentStepIndex((index) => index - 1);
     }
+  }
+
+  function goToNextOnboardingStep() {
+    if (isSubmitting) return;
+
+    // Basic validation
+    if (currentStep.id === "dateOfBirth" && dateOfBirth.trim()) {
+      const dobPattern = /^\d{4}-\d{2}-\d{2}$/;
+      if (!dobPattern.test(dateOfBirth.trim())) {
+        setErrorMessage("Please enter date of birth in YYYY-MM-DD format.");
+        return;
+      }
+    }
+
+    setErrorMessage("");
 
     if (isLastOnboardingStep) {
       handleSubmitOnboarding();
@@ -105,7 +125,7 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
   async function handleSubmitOnboarding() {
     const values = {
       dateOfBirth: dateOfBirth.trim(),
-      gender,
+      gender: gender || "prefer not to say",
       phone: phone.trim(),
       profilePicture: profilePicture ?? "",
     };
@@ -120,8 +140,8 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
       }
 
       Alert.alert(
-        "Profile submitted",
-        "Profile details submit karne ke liye ready hain.",
+        "Profile Setup",
+        "Profile complete! Ready to save.",
       );
     } catch (error) {
       setErrorMessage(
@@ -137,65 +157,87 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
   function renderOnboardingInput(stepId: OnboardingStepId) {
     if (stepId === "dateOfBirth") {
       return (
-        <View
-          className="mb-6 flex-row items-center rounded-xl border px-4 py-4"
-          style={{
-            backgroundColor: colors.surface,
-            borderColor: colors.border,
-          }}
-        >
-          <Ionicons
-            name="calendar-outline"
-            size={20}
-            color={colors.foreground}
-          />
+        <View className="mb-4">
+          <View
+            className="flex-row items-center rounded-2xl border px-4 py-4.5"
+            style={{
+              backgroundColor: colors.input,
+              borderColor: isFocused ? colors.primary : colors.border,
+              borderWidth: isFocused ? 1.5 : 1,
+            }}
+          >
+            <Ionicons
+              name="calendar-outline"
+              size={20}
+              color={isFocused ? colors.primary : colors.mutedText}
+            />
 
-          <TextInput
-            keyboardType="numbers-and-punctuation"
-            onChangeText={setDateOfBirth}
-            placeholder="YYYY-MM-DD"
-            placeholderTextColor={colors.foreground}
-            className="ml-3 flex-1 text-base outline-none"
-            style={{ color: colors.foreground }}
-            value={dateOfBirth}
-          />
+            <TextInput
+              keyboardType="numbers-and-punctuation"
+              onChangeText={(text) => {
+                setErrorMessage("");
+                setDateOfBirth(text);
+              }}
+              onFocus={() => setIsFocused(true)}
+              onBlur={() => setIsFocused(false)}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={colors.mutedText}
+              className="ml-3 flex-1 text-base outline-none font-semibold"
+              style={{ color: colors.foreground }}
+              value={dateOfBirth}
+            />
+          </View>
+          <Text className="mt-2 text-xs font-semibold px-1" style={{ color: colors.mutedText }}>
+            Format: YYYY-MM-DD (e.g. 1998-05-24)
+          </Text>
         </View>
       );
     }
 
     if (stepId === "gender") {
       return (
-        <View className="mb-6 gap-3">
+        <View className="mb-4 gap-3">
           {genderOptions.map((option) => {
             const isSelected = gender === option;
 
             return (
               <TouchableOpacity
-                activeOpacity={0.85}
-                className="flex-row items-center justify-between rounded-xl border px-4 py-4"
+                activeOpacity={0.9}
+                className="flex-row items-center justify-between rounded-2xl border px-5 py-4"
                 key={option}
                 onPress={() => setGender(option)}
                 style={{
-                  backgroundColor: isSelected ? colors.button : colors.surface,
-                  borderColor: colors.border,
+                  backgroundColor: isSelected ? colors.primaryLight : colors.input,
+                  borderColor: isSelected ? colors.primary : colors.border,
+                  borderWidth: isSelected ? 1.5 : 1,
                 }}
               >
                 <Text
-                  className="text-base font-semibold"
+                  className="text-sm font-bold capitalize"
                   style={{
-                    color: isSelected ? colors.buttonText : colors.foreground,
+                    color: isSelected ? colors.primary : colors.foreground,
                   }}
                 >
                   {option}
                 </Text>
 
                 {isSelected ? (
-                  <Ionicons
-                    name="checkmark-circle"
-                    size={22}
-                    color={colors.buttonText}
+                  <View
+                    className="h-5.5 w-5.5 rounded-full items-center justify-center"
+                    style={{ backgroundColor: colors.primary }}
+                  >
+                    <Ionicons
+                      name="checkmark"
+                      size={12}
+                      color={colors.buttonText}
+                    />
+                  </View>
+                ) : (
+                  <View
+                    className="h-5.5 w-5.5 rounded-full border"
+                    style={{ borderColor: colors.border }}
                   />
-                ) : null}
+                )}
               </TouchableOpacity>
             );
           })}
@@ -206,20 +248,27 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
     if (stepId === "phone") {
       return (
         <View
-          className="mb-6 flex-row items-center rounded-xl border px-4 py-4"
+          className="mb-4 flex-row items-center rounded-2xl border px-4 py-4.5"
           style={{
-            backgroundColor: colors.surface,
-            borderColor: colors.border,
+            backgroundColor: colors.input,
+            borderColor: isFocused ? colors.primary : colors.border,
+            borderWidth: isFocused ? 1.5 : 1,
           }}
         >
-          <Ionicons name="call-outline" size={20} color={colors.foreground} />
+          <Ionicons
+            name="call-outline"
+            size={20}
+            color={isFocused ? colors.primary : colors.mutedText}
+          />
 
           <TextInput
             keyboardType="phone-pad"
             onChangeText={setPhone}
-            placeholder="Phone number"
-            placeholderTextColor={colors.foreground}
-            className="ml-3 flex-1 text-base outline-none"
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
+            placeholder="+1 (555) 019-2834"
+            placeholderTextColor={colors.mutedText}
+            className="ml-3 flex-1 text-base outline-none font-semibold"
             style={{ color: colors.foreground }}
             value={phone}
           />
@@ -228,14 +277,15 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
     }
 
     return (
-      <View className="mb-6 items-center">
+      <View className="mb-4 items-center">
         <TouchableOpacity
-          activeOpacity={0.85}
-          className="h-32 w-32 items-center justify-center overflow-hidden rounded-full border-2"
+          activeOpacity={0.9}
+          className="h-32 w-32 items-center justify-center overflow-hidden rounded-full border relative shadow-md"
           onPress={handlePickProfilePicture}
           style={{
-            backgroundColor: colors.surface,
-            borderColor: colors.border,
+            backgroundColor: colors.input,
+            borderColor: colors.primary,
+            borderWidth: profilePicture ? 1 : 2,
           }}
         >
           {profilePicture ? (
@@ -245,140 +295,187 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
               resizeMode="cover"
             />
           ) : (
-            <Ionicons
-              name="camera-outline"
-              size={36}
-              color={colors.foreground}
-            />
+            <View className="items-center justify-center">
+              <Ionicons
+                name="camera-outline"
+                size={36}
+                color={colors.primary}
+              />
+              <Text className="text-[9px] font-extrabold mt-1 tracking-wider" style={{ color: colors.primary }}>
+                CHOOSE PHOTO
+              </Text>
+            </View>
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity
-          activeOpacity={0.85}
-          className="mt-4 rounded-xl border px-5 py-3"
-          onPress={handlePickProfilePicture}
-          style={{
-            backgroundColor: colors.surface,
-            borderColor: colors.border,
-          }}
-        >
-          <Text
-            className="text-base font-semibold"
-            style={{ color: colors.foreground }}
+        {profilePicture && (
+          <TouchableOpacity
+            activeOpacity={0.8}
+            className="mt-4 rounded-full border px-5 py-2.5"
+            onPress={handlePickProfilePicture}
+            style={{
+              backgroundColor: colors.input,
+              borderColor: colors.border,
+            }}
           >
-            {profilePicture ? "Change picture" : "Choose picture"}
-          </Text>
-        </TouchableOpacity>
+            <Text
+              className="text-xs font-bold"
+              style={{ color: colors.foreground }}
+            >
+              Change Photo
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   }
 
   return (
-    <>
-      <View className="mb-10 items-center">
+    <View className="w-full">
+      {/* Back Button & Progress indicators */}
+      <View className="flex-row items-center justify-between mb-6 w-full">
+        {currentStepIndex > 0 ? (
+          <TouchableOpacity
+            onPress={handleBackStep}
+            className="w-10 h-10 rounded-full border items-center justify-center shadow-xs"
+            style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+          >
+            <Ionicons name="arrow-back" size={16} color={colors.foreground} />
+          </TouchableOpacity>
+        ) : (
+          <View className="w-10 h-10" />
+        )}
+
+        <Text className="text-xs font-black tracking-widest uppercase" style={{ color: colors.mutedText }}>
+          Step {currentStepIndex + 1} of {onboardingSteps.length}
+        </Text>
+
+        <View className="w-10 h-10" />
+      </View>
+
+      {/* Progress Bar */}
+      <View
+        className="h-2 w-full rounded-full mb-8 overflow-hidden"
+        style={{ backgroundColor: colors.border }}
+      >
         <View
-          className="mb-5 h-20 w-20 items-center justify-center rounded-full border-2"
+          className="h-full rounded-full"
           style={{
-            backgroundColor: colors.surface,
+            backgroundColor: colors.primary,
+            width: `${((currentStepIndex + 1) / onboardingSteps.length) * 100}%`,
+          }}
+        />
+      </View>
+
+      {/* Circle Icon Sphere */}
+      <View className="mb-6 items-center">
+        <View
+          className="h-16 w-16 items-center justify-center rounded-[22px] border shadow-xs"
+          style={{
+            backgroundColor: colors.primaryLight,
             borderColor: colors.border,
           }}
         >
           <Ionicons
             name={currentStep.icon}
-            size={34}
-            color={colors.foreground}
+            size={24}
+            color={colors.primary}
           />
         </View>
-
-        <Text
-          className="text-center text-3xl font-bold"
-          style={{ color: colors.foreground }}
-        >
-          Complete Profile
-        </Text>
-
-        <Text
-          className="mt-3 text-center text-base leading-6"
-          style={{ color: colors.foreground }}
-        >
-          Step {currentStepIndex + 1} of {onboardingSteps.length}
-        </Text>
       </View>
 
+      {/* Card Wrapper */}
       <View
-        className="rounded-2xl border-2 p-6"
+        className="rounded-[32px] border p-6 shadow-sm"
         style={{
           backgroundColor: colors.surface,
           borderColor: colors.border,
+          ...getShadow(colors, isDark),
         }}
       >
         <Text
-          className="text-2xl font-bold leading-8"
+          className="text-2xl font-extrabold tracking-tight"
           style={{ color: colors.foreground }}
         >
           {currentStep.title}
         </Text>
 
         <Text
-          className="mt-2 text-base leading-6"
-          style={{ color: colors.foreground }}
+          className="mt-2 text-sm font-semibold leading-relaxed"
+          style={{ color: colors.mutedText }}
         >
           {currentStep.subtitle}
         </Text>
 
+        {/* Input Slot */}
         <View className="mt-6">{renderOnboardingInput(currentStep.id)}</View>
 
-        <View className="flex-row gap-3">
+        {/* Action Buttons */}
+        <View className="flex-row gap-3 mt-4">
           <TouchableOpacity
-            activeOpacity={0.85}
-            className="flex-1 rounded-xl border py-4"
+            activeOpacity={0.8}
+            className="flex-1 rounded-full border py-4 items-center justify-center"
             disabled={isSubmitting}
             onPress={goToNextOnboardingStep}
             style={{
-              backgroundColor: colors.surface,
+              backgroundColor: colors.input,
               borderColor: colors.border,
             }}
           >
             <Text
-              className="text-center text-lg font-bold"
-              style={{ color: colors.foreground }}
+              className="text-center text-sm font-bold"
+              style={{ color: colors.mutedText }}
             >
               Skip
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            activeOpacity={0.85}
-            className="flex-1 rounded-xl py-4"
+            activeOpacity={0.9}
+            className="flex-1 rounded-full overflow-hidden"
             disabled={isSubmitting}
             onPress={goToNextOnboardingStep}
             style={{
-              backgroundColor: colors.button,
               opacity: isSubmitting ? 0.65 : 1,
             }}
           >
-            <Text
-              className="text-center text-lg font-bold"
-              style={{ color: colors.buttonText }}
+            <LinearGradient
+              colors={actionGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              className="py-4 items-center justify-center"
             >
-              {isSubmitting
-                ? "Submitting..."
-                : isLastOnboardingStep
-                  ? "Submit"
-                  : "Next"}
-            </Text>
+              <Text
+                className="text-center text-sm font-bold"
+                style={{ color: colors.buttonText }}
+              >
+                {isSubmitting
+                  ? "Saving..."
+                  : isLastOnboardingStep
+                    ? "Finish Setup"
+                    : "Next Step"}
+              </Text>
+            </LinearGradient>
           </TouchableOpacity>
         </View>
 
         {errorMessage ? (
-          <Text
-            className="mt-4 text-center text-sm font-medium"
-            style={{ color: colors.foreground }}
+          <View
+            className="mt-4 rounded-2xl border px-4 py-3"
+            style={{
+              backgroundColor: colors.dangerLight,
+              borderColor: colors.danger,
+            }}
           >
-            {errorMessage}
-          </Text>
+            <Text
+              className="text-center text-xs font-bold"
+              style={{ color: colors.danger }}
+            >
+              {errorMessage}
+            </Text>
+          </View>
         ) : null}
       </View>
-    </>
+    </View>
   );
 }

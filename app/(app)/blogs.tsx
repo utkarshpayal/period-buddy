@@ -1,6 +1,6 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   Image,
@@ -15,6 +15,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppState } from "../../components/AppState";
 import { useTheme } from "../../components/theme";
+import { getSoftTints } from "../../components/ui-tokens";
+import { blogsApi, type ContentFeedItem } from "../../lib/api";
 
 // --- BACKEND REST API PAYLOAD CONTRACTS ---
 interface ContentItem {
@@ -28,6 +30,70 @@ interface ContentItem {
   summary: string;
 }
 
+const fallbackContent: ContentItem[] = [
+  {
+    id: "c1",
+    title: "Understanding Your Hormonal Cycle",
+    author: "Dr. Sarah Chen (Endocrinologist)",
+    type: "blog",
+    time: "8 min read",
+    imageUrl:
+      "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?q=80&w=600&auto=format&fit=crop",
+    verified: true,
+    summary:
+      "A practical guide to the common phases of a menstrual cycle, what can change in mood and energy, and how tracking helps you notice your own pattern.",
+  },
+  {
+    id: "c2",
+    title: "Yoga and Targeted Stretching for Cramps",
+    author: "Coach Fernanda Fit",
+    type: "reel",
+    time: "10 min playback",
+    imageUrl:
+      "https://images.unsplash.com/photo-1506126613408-eca07ce68773?q=80&w=600&auto=format&fit=crop",
+    verified: true,
+    summary:
+      "Gentle movements like child pose, cat-cow, and supported hip stretches may reduce tension and make cramps easier to manage.",
+  },
+  {
+    id: "c3",
+    title: "PCOS / PCOD: What You Need to Know Today",
+    author: "Dr. Priya Sharma (OBGYN)",
+    type: "blog",
+    time: "12 min read",
+    imageUrl:
+      "https://images.unsplash.com/photo-1511556532299-8f662fc26c06?q=80&w=600&auto=format&fit=crop",
+    verified: true,
+    summary:
+      "Learn the common signs of PCOS/PCOD, what to track, and when to bring symptoms to a clinician for a proper evaluation.",
+  },
+  {
+    id: "c4",
+    title: "Period Myths vs Clinical Facts",
+    author: "Jessica Wellness Team",
+    type: "reel",
+    time: "5 min playback",
+    imageUrl:
+      "https://images.unsplash.com/photo-1516627145497-ae6968895b74?q=80&w=600&auto=format&fit=crop",
+    verified: true,
+    summary:
+      "A simple myth-busting guide on swimming, movement, showers, hygiene, and what is actually safe during a period.",
+  },
+];
+
+function mapFeedItem(item: ContentFeedItem): ContentItem {
+  return {
+    id: item.sourceId,
+    title: item.title,
+    author: item.author,
+    type: item.type,
+    time: item.time,
+    imageUrl: item.imageUrl,
+    verified: item.verified,
+    summary: item.summary,
+  };
+}
+
 export default function Blogs() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
@@ -38,68 +104,37 @@ export default function Blogs() {
     "all",
   );
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
+  const [content, setContent] = useState<ContentItem[]>(fallbackContent);
 
   // Immersive Preview Modal Layer States
   const [selectedItem, setSelectedItem] = useState<ContentItem | null>(null);
   const [previewVisible, setPreviewVisible] = useState(false);
 
-  // High Fidelity Mock payload mapping standard database models explicitly
-  const content: ContentItem[] = [
-    {
-      id: "c1",
-      title: "Understanding Your Hormonal Cycle Flow Patterns",
-      author: "Dr. Sarah Chen (Endocrinologist)",
-      type: "blog",
-      time: "8 min read",
-      imageUrl:
-        "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?q=80&w=600&auto=format&fit=crop",
-      verified: true,
-      summary:
-        "Your endocrine system transitions through distinct evolutionary checkpoints every 28 days. Tracking basal shifts, estrogen elevations, and core luteal windows allows you to intelligently forecast mood deviations and optimal workout schedules cleanly.",
-    },
-    {
-      id: "c2",
-      title: "Yoga and Targeted Stretching for Cramps",
-      author: "Coach Fernanda Fit",
-      type: "reel",
-      time: "10 min playback",
-      imageUrl:
-        "https://images.unsplash.com/photo-1506126613408-eca07ce68773?q=80&w=600&auto=format&fit=crop",
-      verified: true,
-      summary:
-        "Incorporate specialized pelvic floor decompression movements like the Child's Pose variation or gentle cat-cows. These structural stretches alleviate sudden uterine vascular pressure zones, down-regulating menstrual fatigue markers safely.",
-    },
-    {
-      id: "c3",
-      title: "PCOS / PCOD: What You Need to Know Today",
-      author: "Dr. Priya Sharma (OBGYN)",
-      type: "blog",
-      time: "12 min read",
-      imageUrl:
-        "https://images.unsplash.com/photo-1511556532299-8f662fc26c06?q=80&w=600&auto=format&fit=crop",
-      verified: true,
-      summary:
-        "Polycystic Ovary Syndrome involves tracking complex insulin resistance loops. Learn how micro-nutritional configurations, clean sleep targets, and progressive body habits can naturally reverse follicle aggregation variables without harsh cycles.",
-    },
-    {
-      id: "c4",
-      title: "Ecosystem Period Myths vs Clinical Facts",
-      author: "Jessica Wellness Team",
-      type: "reel",
-      time: "5 min playback",
-      imageUrl:
-        "https://images.unsplash.com/photo-1516627145497-ae6968895b74?q=80&w=600&auto=format&fit=crop",
-      verified: true,
-      summary:
-        "Busting standard cultural misconceptions regarding swimming during active flows, cold showers, and physical exercise tracking. Clinical benchmarks prove that regular activity pathways actually strengthen period recovery speeds.",
-    },
-  ];
+  const softTints = getSoftTints(colors);
 
-  const softTints = {
-    pink: isDark ? "#3b1a2d" : "#fff0f6",
-    blue: isDark ? "#162842" : "#edf2ff",
-    purple: isDark ? "#231942" : "#f3e8ff",
-  };
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadFeed() {
+      try {
+        const response = await blogsApi.getFeed({
+          limit: 20,
+          type: selectedType,
+        });
+        if (isMounted && response.items.length > 0) {
+          setContent(response.items.map(mapFeedItem));
+        }
+      } catch {
+        if (isMounted) setContent(fallbackContent);
+      }
+    }
+
+    loadFeed();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedType]);
 
   const filteredContent =
     selectedType === "all"
@@ -132,10 +167,10 @@ export default function Blogs() {
         message: `Check out this verified health resource on Nura: "${item.title}" by ${item.author}.`,
       });
       earnTokens(3);
-    } catch (error) {
+    } catch {
       Alert.alert(
         "Error",
-        "Unable to trigger device native share interface pools.",
+        "Unable to open the share sheet right now.",
       );
     }
   }
@@ -299,7 +334,7 @@ export default function Blogs() {
                             <MaterialCommunityIcons
                               name="shield-check"
                               size={12}
-                              color="#10b981"
+                              color={colors.success}
                             />
                           )}
                         </View>
@@ -333,7 +368,7 @@ export default function Blogs() {
                           <Text
                             className="text-[11px] font-black"
                             style={{
-                              color: isVideo ? "#8b5cf6" : colors.primary,
+                              color: isVideo ? colors.accent : colors.primary,
                             }}
                           >
                             {isVideo ? "Watch" : "Read"}
@@ -371,14 +406,14 @@ export default function Blogs() {
                       className="text-[9px] font-black uppercase tracking-wider"
                       style={{ color: colors.foreground }}
                     >
-                      {selectedItem.type === "blog" ? "Journal" : "Video Core"}
+                      {selectedItem.type === "blog" ? "Journal" : "Video"}
                     </Text>
                   </View>
                   {selectedItem.verified && (
                     <MaterialCommunityIcons
                       name="shield-check"
                       size={14}
-                      color="#10b981"
+                      color={colors.success}
                     />
                   )}
                 </View>
@@ -413,8 +448,11 @@ export default function Blogs() {
 
                 {/* Main Core Typography reading content area wrapper segments */}
                 <View className="p-6">
-                  <Text className="text-xs font-bold tracking-widest uppercase mb-3 text-pink-500">
-                    Verified Medical Data Abstract
+                  <Text
+                    className="text-xs font-bold tracking-widest uppercase mb-3"
+                    style={{ color: colors.primary }}
+                  >
+                    Verified Health Summary
                   </Text>
                   <Text
                     className="text-sm font-medium leading-6 mb-8"

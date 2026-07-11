@@ -1,17 +1,69 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import React from "react";
-import { Platform, TouchableOpacity, View } from "react-native";
+import {
+  Platform,
+  ScrollView,
+  StatusBar,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { useTheme } from "../../../components/theme";
 
+import { useAuth } from "../../../components/auth-context";
+import { ProfileOnboarding } from "../../../components/profile-onboarding";
+import { submitOnboarding } from "../../../lib/auth";
+import { SafeAreaView } from "react-native-safe-area-context";
+
 export default function DashboardLayout() {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
+  const { token, user, signIn } = useAuth();
+
+  async function handleOnboardingSubmit(values: any) {
+    if (!token) return;
+    try {
+      const response = await submitOnboarding(values, token);
+      const updatedUser = response.data ?? response.user;
+      const isProfileComplete =
+        response.isProfileComplete ?? updatedUser?.isProfileComplete ?? true;
+      signIn({
+        token,
+        user: {
+          ...user,
+          ...values,
+          ...updatedUser,
+          isProfileComplete,
+        },
+      });
+    } catch (err) {
+      console.error("Onboarding failed:", err);
+      throw err;
+    }
+  }
+
+  if (user && user.isProfileComplete === false) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
+        <StatusBar
+          barStyle={isDark ? "light-content" : "dark-content"}
+          backgroundColor={colors.background}
+        />
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1, justifyContent: "center", paddingHorizontal: 24, paddingVertical: 40 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          <ProfileOnboarding onSubmit={handleOnboardingSubmit} />
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarShowLabel: false, // Hiding regular labels for a cleaner, modern look
+        tabBarShowLabel: false,
         tabBarStyle: {
           position: "absolute",
           bottom: Platform.OS === "ios" ? 28 : 20,
@@ -25,26 +77,34 @@ export default function DashboardLayout() {
           elevation: 4,
           shadowColor: "#000",
           shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.08,
+          shadowOpacity: isDark ? 0.22 : 0.08,
           shadowRadius: 12,
-          paddingBottom: 0, // Reset baseline alignment paddings
+          paddingBottom: 0,
         },
       }}
     >
       {[
-        { name: "home", iconFocused: "home", iconUnfocused: "home-outline" },
+        {
+          name: "home",
+          label: "Home",
+          iconFocused: "home",
+          iconUnfocused: "home-outline",
+        },
         {
           name: "tracker",
+          label: "Tracker",
           iconFocused: "calendar",
           iconUnfocused: "calendar-outline",
         },
         {
           name: "community",
+          label: "Community",
           iconFocused: "people",
           iconUnfocused: "people-outline",
         },
         {
           name: "profile",
+          label: "Profile",
           iconFocused: "person",
           iconUnfocused: "person-outline",
         },
@@ -70,31 +130,26 @@ export default function DashboardLayout() {
               );
             },
             tabBarIcon: ({ focused }) => (
-              <View className="items-center justify-center relative w-full h-full">
-                {focused ? (
-                  /* Custom Round Indicator popping out of the top nav margin line */
-                  <View
-                    className="absolute h-14 w-14 rounded-full items-center justify-center border shadow-sm"
-                    style={{
-                      backgroundColor: colors.primary,
-                      borderColor: colors.background,
-                      top: -18, 
-                    }}
-                  >
-                    <Ionicons
-                      name={tab.iconFocused as any}
-                      size={22}
-                      color={colors.buttonText}
-                    />
-                  </View>
-                ) : (
-                  /* Clean unselected icon representation */
-                  <Ionicons
-                    name={tab.iconUnfocused as any}
-                    size={22}
-                    color={colors.mutedText}
-                  />
-                )}
+              <View
+                className="items-center justify-center rounded-2xl px-2"
+                style={{
+                  backgroundColor: focused ? colors.primaryLight : "transparent",
+                  minWidth: 64,
+                  height: 52,
+                }}
+              >
+                <Ionicons
+                  name={(focused ? tab.iconFocused : tab.iconUnfocused) as any}
+                  size={21}
+                  color={focused ? colors.primary : colors.mutedText}
+                />
+                <Text
+                  className="mt-1 text-[10px] font-black"
+                  numberOfLines={1}
+                  style={{ color: focused ? colors.primary : colors.mutedText }}
+                >
+                  {tab.label}
+                </Text>
               </View>
             ),
           }}

@@ -110,8 +110,8 @@ export default function Home() {
                 source={require("../../assets/images/logo.png")}
                 resizeMode="contain"
                 style={{
-                  width: 200,
-                  height: 200,
+                  width: 56,
+                  height: 56,
                 }}
               />
             </View>
@@ -127,7 +127,7 @@ export default function Home() {
               className="mt-3 text-center text-base leading-6"
               style={{ color: colors.foreground }}
             >
-              {name ? `Welcome, ${name}` : "Welcome to FlowHer"}
+              {name ? `Welcome, ${name}` : "Welcome to Nura"}
             </Text>
           </View>
 
