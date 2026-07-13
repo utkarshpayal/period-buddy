@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import React from "react";
 import {
+  KeyboardAvoidingView,
   Platform,
   ScrollView,
   StatusBar,
@@ -49,12 +50,19 @@ export default function DashboardLayout() {
           barStyle={isDark ? "light-content" : "dark-content"}
           backgroundColor={colors.background}
         />
-        <ScrollView
-          contentContainerStyle={{ flexGrow: 1, justifyContent: "center", paddingHorizontal: 24, paddingVertical: 40 }}
-          keyboardShouldPersistTaps="handled"
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
         >
-          <ProfileOnboarding onSubmit={handleOnboardingSubmit} />
-        </ScrollView>
+          <ScrollView
+            contentContainerStyle={{ flexGrow: 1, justifyContent: "center", paddingHorizontal: 24, paddingVertical: 40 }}
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
+          >
+            <ProfileOnboarding onSubmit={handleOnboardingSubmit} />
+          </ScrollView>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     );
   }

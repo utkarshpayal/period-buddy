@@ -3,6 +3,8 @@ import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StatusBar,
   Text,
@@ -10,7 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppState } from "../../components/AppState";
 import { useTheme } from "../../components/theme";
 import { getSoftTints } from "../../components/ui-tokens";
@@ -72,6 +74,8 @@ const fallbackNominees: PeriodBuddy[] = [
   },
 ];
 
+
+
 function mapBuddy(match: ApiBuddyMatch): PeriodBuddy {
   return {
     id: match.id ?? match._id ?? match.alias,
@@ -104,6 +108,7 @@ export default function BuddyNomination() {
   const router = useRouter();
   const { earnTokens } = useAppState();
   const scrollViewRef = useRef<ScrollView>(null);
+  const insets = useSafeAreaInsets();
 
   // Interface Functional Controllers
   const [searchQuery, setSearchQuery] = useState("");
@@ -249,12 +254,21 @@ export default function BuddyNomination() {
         className="flex-1"
         style={{ backgroundColor: colors.background }}
       >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          className="flex-1"
+          keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
+        >
         <ScrollView
           ref={scrollViewRef}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
-            paddingBottom: isChatConsoleOpen ? 20 : 120,
+            paddingBottom: isChatConsoleOpen
+              ? Math.max(120, insets.bottom + 98)
+              : Math.max(120, insets.bottom + 84),
           }}
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
         >
           {/* Header Action Row Bar */}
           <View className="flex-row items-center gap-2 px-6 pt-6">
@@ -340,6 +354,7 @@ export default function BuddyNomination() {
                     placeholderTextColor={colors.mutedText}
                     value={searchQuery}
                     onChangeText={setSearchQuery}
+                    returnKeyType="search"
                     className="ml-3 flex-1 py-4 text-sm"
                     style={{ color: colors.foreground }}
                   />
@@ -373,7 +388,13 @@ export default function BuddyNomination() {
                       >
                         <View className="flex-row items-center justify-between p-5">
                           <View className="flex-row items-center gap-4 flex-1">
-                            <View className="h-14 w-14 items-center justify-center rounded-full bg-neutral-100 dark:bg-neutral-800 border border-neutral-200/40">
+                            <View
+                              className="h-14 w-14 items-center justify-center rounded-full border"
+                              style={{
+                                backgroundColor: colors.surfaceSoft,
+                                borderColor: colors.border,
+                              }}
+                            >
                               <Text className="text-2xl">
                                 {buddy.avatarSeed}
                               </Text>
@@ -422,9 +443,17 @@ export default function BuddyNomination() {
                           {buddy.similarities.map((chip, cIdx) => (
                             <View
                               key={cIdx}
-                              className="px-2.5 py-1 rounded-md bg-neutral-50 dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800"
+                              className="px-2.5 py-1 rounded-md"
+                              style={{
+                                backgroundColor: colors.surfaceSoft,
+                                borderWidth: 1,
+                                borderColor: colors.border,
+                              }}
                             >
-                              <Text className="text-[9px] font-bold text-neutral-500">
+                              <Text
+                                className="text-[9px] font-bold"
+                                style={{ color: colors.foreground }}
+                              >
                                 #{chip}
                               </Text>
                             </View>
@@ -464,7 +493,12 @@ export default function BuddyNomination() {
                         {isSelectedBuddy && (
                           <TouchableOpacity
                             onPress={() => setIsChatConsoleOpen(true)}
-                            className="mx-5 mb-5 -mt-2 p-3 bg-neutral-50 dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800 rounded-xl flex-row items-center justify-center gap-2"
+                            className="mx-5 mb-5 -mt-2 p-3 rounded-xl flex-row items-center justify-center gap-2"
+                            style={{
+                              backgroundColor: colors.surfaceSoft,
+                              borderWidth: 1,
+                              borderColor: colors.border,
+                            }}
                           >
                             <Ionicons
                               name="chatbubble-ellipses-outline"
@@ -489,7 +523,13 @@ export default function BuddyNomination() {
               activeBuddyData && (
                 <View className="pt-2 pb-24">
                   {/* Top Sticky Mini Meta Header Banner */}
-                  <View className="bg-neutral-50 dark:bg-neutral-900 border border-neutral-100 p-4 rounded-2xl flex-row justify-between items-center mb-6">
+                  <View
+                    className="border p-4 rounded-2xl flex-row justify-between items-center mb-6"
+                    style={{
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    }}
+                  >
                     <View className="flex-row items-center gap-3">
                       <Text className="text-lg">
                         {activeBuddyData.avatarSeed}
@@ -508,7 +548,8 @@ export default function BuddyNomination() {
                     </View>
                     <TouchableOpacity
                       onPress={() => setIsChatConsoleOpen(false)}
-                      className="px-3 py-1.5 rounded-lg bg-neutral-200/60 dark:bg-neutral-800"
+                      className="px-3 py-1.5 rounded-lg"
+                      style={{ backgroundColor: colors.surfaceSoft }}
                     >
                       <Text
                         className="text-[10px] font-black"
@@ -529,12 +570,14 @@ export default function BuddyNomination() {
                           className={`max-w-[80%] p-4 rounded-2xl ${
                             isMe
                               ? "self-end rounded-tr-none shadow-2xs"
-                              : "self-start rounded-tl-none border border-neutral-100 dark:border-neutral-800"
+                              : "self-start rounded-tl-none"
                           }`}
                           style={{
                             backgroundColor: isMe
                               ? colors.primary
                               : colors.surface,
+                            borderWidth: isMe ? 0 : 1,
+                            borderColor: isMe ? undefined : colors.border,
                           }}
                         >
                           <Text
@@ -560,16 +603,27 @@ export default function BuddyNomination() {
         {/* SECURE FIXED FLOATING MESSAGING WRAPPER FOOTER ATTACHMENT CONSOLE ROW */}
         {isChatConsoleOpen && (
           <View
-            className="absolute bottom-0 left-0 right-0 px-4 py-3.5 border-t border-neutral-100 dark:border-neutral-900 flex-row items-center gap-3"
-            style={{ backgroundColor: colors.surface }}
+            className="absolute bottom-0 left-0 right-0 px-4 py-3.5 flex-row items-center gap-3"
+            style={{
+              borderTopWidth: 1,
+              borderTopColor: colors.border,
+              backgroundColor: colors.surface,
+              paddingBottom: Math.max(14, insets.bottom + 8),
+            }}
           >
             <TextInput
               placeholder="Type an anonymous message..."
               placeholderTextColor={colors.mutedText}
               value={typedMessage}
               onChangeText={setTypedMessage}
-              className="flex-1 bg-neutral-100 dark:bg-neutral-800 px-4 py-3 rounded-xl text-sm"
-              style={{ color: colors.foreground }}
+              className="flex-1 px-4 py-3 rounded-xl text-sm"
+              style={{
+                backgroundColor: colors.input,
+                color: colors.foreground,
+              }}
+              onSubmitEditing={handleSendBuddyMessage}
+              blurOnSubmit={false}
+              returnKeyType="send"
             />
             <TouchableOpacity
               disabled={!typedMessage.trim()}
@@ -591,6 +645,7 @@ export default function BuddyNomination() {
             </TouchableOpacity>
           </View>
         )}
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </>
   );

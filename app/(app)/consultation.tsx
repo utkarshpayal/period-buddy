@@ -4,7 +4,9 @@ import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   RefreshControl,
   ScrollView,
   StatusBar,
@@ -13,7 +15,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../../components/theme";
 import { getSoftTints } from "../../components/ui-tokens";
 import {
@@ -39,6 +41,7 @@ export default function ConsultationScreen() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
   const chatScrollRef = useRef<ScrollView>(null);
+  const insets = useSafeAreaInsets();
 
   // Lists
   const [doctors, setDoctors] = useState<Doctor[]>([]);
@@ -283,7 +286,7 @@ export default function ConsultationScreen() {
                             {doctor.specialty}
                           </Text>
                           <View className="mt-2.5 flex-row items-center gap-2">
-                            <View className="flex-row items-center gap-1 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md">
+                            <View className="flex-row items-center gap-1 bg-amber-100 dark:bg-amber-950/40 px-2 py-0.5 rounded-md" style={{backgroundColor: isDark ? "#525151ff" : "#e7dde6ff"}}>
                               <Ionicons name="star" size={11} color={colors.warning} />
                               <Text className="text-[10px] font-black" style={{ color: colors.foreground }}>
                                 {doctor.rating}
@@ -348,9 +351,9 @@ export default function ConsultationScreen() {
                 </Text>
                 <TouchableOpacity
                   onPress={() => setPaymentModalVisible(false)}
-                  className="p-1.5 bg-neutral-100 dark:bg-neutral-800 rounded-full"
+                  className="p-1.5 bg-neutral-100 dark:bg-neutral-200 rounded-full"
                 >
-                  <Feather name="x" size={16} color={colors.foreground} />
+                  <Feather name="x" size={16} color={colors.background} />
                 </TouchableOpacity>
               </View>
 
@@ -410,6 +413,10 @@ export default function ConsultationScreen() {
           presentationStyle="pageSheet"
           onRequestClose={() => setChatModalVisible(false)}
         >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={{ flex: 1 }}
+          >
           <View className="flex-1" style={{ backgroundColor: colors.background }}>
             {/* Chat header */}
             <View
@@ -437,7 +444,9 @@ export default function ConsultationScreen() {
               ref={chatScrollRef}
               showsVerticalScrollIndicator={false}
               className="flex-1 px-6 pt-4"
-              contentContainerStyle={{ paddingBottom: 20 }}
+              contentContainerStyle={{ paddingBottom: 32 }}
+              keyboardDismissMode="on-drag"
+              keyboardShouldPersistTaps="handled"
             >
               {loadingMessages ? (
                 <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
@@ -470,7 +479,11 @@ export default function ConsultationScreen() {
             {/* Input row */}
             <View
               className="px-4 py-3.5 border-t flex-row items-center gap-3"
-              style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+              style={{
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                paddingBottom: Math.max(14, insets.bottom + 8),
+              }}
             >
               <TextInput
                 placeholder="Type your message…"
@@ -480,6 +493,7 @@ export default function ConsultationScreen() {
                 className="flex-1 px-4 py-3 rounded-xl text-sm"
                 style={{ backgroundColor: colors.input, color: colors.foreground }}
                 onSubmitEditing={handleSendMessage}
+                blurOnSubmit={false}
                 returnKeyType="send"
               />
               <TouchableOpacity
@@ -496,6 +510,7 @@ export default function ConsultationScreen() {
               </TouchableOpacity>
             </View>
           </View>
+          </KeyboardAvoidingView>
         </Modal>
       </SafeAreaView>
     </>

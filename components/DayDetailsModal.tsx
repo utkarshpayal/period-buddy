@@ -1,7 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
 import {
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -9,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import type { DayEntry } from "./AppState";
 import { useTheme } from "./theme";
@@ -73,6 +76,7 @@ export default function DayDetailsModal({
   onLogSymptom?: (symptom: string) => void;
 }) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const actionGradient = getActionGradient(colors) as [string, string];
   const [noteText, setNoteText] = useState(details ?? "");
   const [selectedEnergy, setSelectedEnergy] = useState<DayEntry["energy"]>();
@@ -208,7 +212,11 @@ export default function DayDetailsModal({
       visible={visible}
       onRequestClose={onClose}
     >
-      <View style={{ flex: 1, justifyContent: "flex-end" }}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
+        style={{ flex: 1, justifyContent: "flex-end" }}
+      >
         <Pressable
           accessibilityLabel="Close day details"
           onPress={onClose}
@@ -245,9 +253,14 @@ export default function DayDetailsModal({
           </View>
 
           <ScrollView
+            automaticallyAdjustKeyboardInsets
+            keyboardDismissMode="on-drag"
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ padding: 20, paddingBottom: 12 }}
+            contentContainerStyle={{
+              padding: 20,
+              paddingBottom: 24,
+            }}
           >
             <View
               style={{
@@ -366,6 +379,7 @@ export default function DayDetailsModal({
               flexDirection: "row",
               gap: 8,
               padding: 16,
+              paddingBottom: Math.max(16, insets.bottom + 10),
             }}
           >
             <TouchableOpacity
@@ -422,7 +436,7 @@ export default function DayDetailsModal({
             </TouchableOpacity>
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

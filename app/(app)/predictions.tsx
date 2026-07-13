@@ -1,7 +1,7 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   RefreshControl,
@@ -26,6 +26,74 @@ const PHASE_META: Record<string, { label: string; color: string; description: st
   ovulation: { label: "Ovulation", color: "#d9467d", description: "A common peak-fertility window for many cycles." },
   luteal: { label: "Luteal", color: "#7c3aed", description: "Mood, cravings, and sleep can shift before your period." },
 };
+
+type AnalyticsBar = {
+  daysLogged?: number;
+  isPlaceholder: boolean;
+  length: number;
+  month: string;
+};
+
+const MONTH_LABELS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+function parseMonthIndex(month: string) {
+  const normalized = month.slice(0, 3).toLowerCase();
+  return MONTH_LABELS.findIndex(
+    (label) => label.toLowerCase() === normalized,
+  );
+}
+
+function buildFiveMonthAnalytics(
+  entries: CyclePredictions["analyticsData"] = [],
+): AnalyticsBar[] {
+  const cleanEntries = entries
+    .filter((entry) => entry.month)
+    .slice(-5)
+    .map((entry) => {
+      const monthIndex = parseMonthIndex(entry.month);
+
+      return {
+        ...entry,
+        month:
+          monthIndex >= 0
+            ? MONTH_LABELS[monthIndex]
+            : entry.month.slice(0, 3) || "Now",
+      };
+    });
+
+  const latestMonth = cleanEntries[cleanEntries.length - 1]?.month;
+  const latestIndex =
+    latestMonth && parseMonthIndex(latestMonth) >= 0
+      ? parseMonthIndex(latestMonth)
+      : new Date().getMonth();
+  const byMonth = new Map(cleanEntries.map((entry) => [entry.month, entry]));
+
+  return Array.from({ length: 5 }, (_, index) => {
+    const monthIndex = (latestIndex - 4 + index + 12) % 12;
+    const month = MONTH_LABELS[monthIndex];
+    const entry = byMonth.get(month);
+
+    return {
+      daysLogged: entry?.daysLogged,
+      isPlaceholder: !entry,
+      length: entry?.length ?? 0,
+      month,
+    };
+  });
+}
 
 export default function Predictions() {
   const { colors, isDark } = useTheme();
@@ -60,10 +128,17 @@ export default function Predictions() {
   }, [load]);
 
   const phaseMeta = data ? PHASE_META[data.currentPhase] ?? PHASE_META.follicular : null;
+  const analyticsBars = useMemo(
+    () => buildFiveMonthAnalytics(data?.analyticsData),
+    [data?.analyticsData],
+  );
+  const hasAnalyticsHistory = analyticsBars.some((bar) => bar.length > 0);
 
-  const maxBarLength = data?.analyticsData?.length
-    ? Math.max(...data.analyticsData.map((d) => d.length), 1)
-    : 35;
+  const maxBarLength = Math.max(
+    ...analyticsBars.map((d) => d.length),
+    data?.cycleLength ?? 1,
+    1,
+  );
 
   return (
     <>
@@ -221,53 +296,90 @@ export default function Predictions() {
               </View>
 
               {/* Analytics graph */}
-              {data.analyticsData?.length > 0 && (
-                <View
-                  className="rounded-3xl border overflow-hidden shadow-sm mb-5"
-                  style={{ borderColor: colors.border }}
+              <View
+                className="rounded-3xl border overflow-hidden shadow-sm mb-5"
+                style={{ borderColor: colors.border }}
+              >
+                <LinearGradient
+                  colors={surfaceGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  className="p-5"
                 >
-                  <LinearGradient
-                    colors={surfaceGradient}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    className="p-5"
-                  >
-                    <Text className="text-xs font-bold tracking-widest uppercase mb-1" style={{ color: colors.secondary }}>
-                      Analytics
-                    </Text>
-                    <Text className="text-base font-extrabold tracking-tight mb-5" style={{ color: colors.foreground }}>
-                      Cycle Length Trends
-                    </Text>
-                    <View className="h-32 flex-row justify-between items-end px-2">
-                      {data.analyticsData.map((d, i) => {
-                        const heightPct = Math.max(0.15, d.length / maxBarLength);
-                        const isLatest = i === data.analyticsData.length - 1;
-                        return (
-                          <View key={i} className="items-center flex-1 gap-1.5">
-                            <Text className="text-[10px] font-bold" style={{ color: colors.mutedText }}>
-                              {d.length}d
-                            </Text>
-                            <View
-                              className="w-4 rounded-full overflow-hidden"
-                              style={{ height: 100 * heightPct, backgroundColor: colors.surfaceSoft }}
-                            >
+                  <Text className="text-xs font-bold tracking-widest uppercase mb-1" style={{ color: colors.secondary }}>
+                    Analytics
+                  </Text>
+                  <View className="mb-5 flex-row items-start justify-between gap-3">
+                    <View className="flex-1">
+                      <Text className="text-base font-extrabold tracking-tight" style={{ color: colors.foreground }}>
+                        Last 5 Cycle Entries
+                      </Text>
+                      <Text className="mt-1 text-[11px] font-semibold leading-4" style={{ color: colors.mutedText }}>
+                        {hasAnalyticsHistory
+                          ? "Missing months stay visible as 0 so trends are easy to read."
+                          : "Log your first cycle month to start building this trend."}
+                      </Text>
+                    </View>
+                    <View
+                      className="rounded-full px-3 py-1"
+                      style={{ backgroundColor: softTints.blue }}
+                    >
+                      <Text className="text-[10px] font-black uppercase" style={{ color: colors.info }}>
+                        5 months
+                      </Text>
+                    </View>
+                  </View>
+                  <View className="h-36 flex-row justify-between items-end px-1">
+                    {analyticsBars.map((d, i) => {
+                      const heightPct =
+                        d.length > 0 ? Math.max(0.15, d.length / maxBarLength) : 0;
+                      const isLatest = i === analyticsBars.length - 1;
+                      return (
+                        <View key={`${d.month}-${i}`} className="items-center flex-1 gap-1.5">
+                          <Text className="text-[10px] font-bold" style={{ color: d.length ? colors.foreground : colors.mutedText }}>
+                            {d.length}d
+                          </Text>
+                          <View
+                            className="w-5 rounded-full overflow-hidden justify-end"
+                            style={{
+                              backgroundColor: colors.surfaceSoft,
+                              borderColor: colors.border,
+                              borderWidth: 1,
+                              height: 108,
+                            }}
+                          >
+                            {d.length > 0 ? (
                               <LinearGradient
                                 colors={isLatest ? actionGradient : [colors.secondary, colors.info]}
                                 start={{ x: 0, y: 0 }}
                                 end={{ x: 0, y: 1 }}
-                                style={{ flex: 1, opacity: isLatest ? 1 : 0.5 }}
+                                style={{
+                                  borderRadius: 999,
+                                  height: 108 * heightPct,
+                                  opacity: isLatest ? 1 : 0.62,
+                                  width: "100%",
+                                }}
                               />
-                            </View>
-                            <Text className="text-[10px] font-bold mt-0.5" style={{ color: colors.mutedText }}>
-                              {d.month}
-                            </Text>
+                            ) : (
+                              <View
+                                style={{
+                                  backgroundColor: colors.border,
+                                  borderRadius: 999,
+                                  height: 4,
+                                  margin: 4,
+                                }}
+                              />
+                            )}
                           </View>
-                        );
-                      })}
-                    </View>
-                  </LinearGradient>
-                </View>
-              )}
+                          <Text className="text-[10px] font-bold mt-0.5" style={{ color: colors.mutedText }}>
+                            {d.month}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </LinearGradient>
+              </View>
 
               {/* Cycle stats */}
               <View className="flex-row gap-3 mb-5">

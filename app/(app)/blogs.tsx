@@ -404,7 +404,7 @@ export default function Blogs() {
                   <View className="px-2.5 py-0.5 rounded-md bg-neutral-100 dark:bg-neutral-800">
                     <Text
                       className="text-[9px] font-black uppercase tracking-wider"
-                      style={{ color: colors.foreground }}
+                      style={{ color: !isDark ? "white" : "black" }}
                     >
                       {selectedItem.type === "blog" ? "Journal" : "Video"}
                     </Text>
@@ -421,7 +421,7 @@ export default function Blogs() {
                   onPress={() => setPreviewVisible(false)}
                   className="p-1.5 bg-neutral-100 dark:bg-neutral-800 rounded-full"
                 >
-                  <Feather name="x" size={16} color={colors.foreground} />
+                  <Feather name="x" size={16} color={!isDark ? "white" : "black"} />
                 </TouchableOpacity>
               </View>
 

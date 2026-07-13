@@ -2,6 +2,8 @@ import { useRouter } from "expo-router";
 import React, { useEffect } from "react";
 import {
   Image,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StatusBar,
   Text,
@@ -67,16 +69,23 @@ export default function Home() {
           className="flex-1"
           style={{ backgroundColor: colors.background }}
         >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            className="flex-1"
+            keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
+          >
           <View className="absolute right-6 top-4 z-10">
             <ThemeToggle />
           </View>
 
           <ScrollView
             contentContainerClassName="flex-grow justify-center px-6 py-10"
+            keyboardDismissMode="on-drag"
             keyboardShouldPersistTaps="handled"
           >
             <ProfileOnboarding onSubmit={handleSubmitOnboarding} />
           </ScrollView>
+          </KeyboardAvoidingView>
         </SafeAreaView>
       </>
     );

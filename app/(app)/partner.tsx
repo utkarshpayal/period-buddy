@@ -5,6 +5,8 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   Share,
   StatusBar,
@@ -14,7 +16,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../../components/theme";
 import { getSoftTints } from "../../components/ui-tokens";
 import {
@@ -27,6 +29,7 @@ export default function Partner() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
   const chatScrollRef = useRef<ScrollView>(null);
+  const insets = useSafeAreaInsets();
 
   const [profile, setProfile] = useState<PartnerProfile | null>(null);
   const [, setLoading] = useState(true);
@@ -173,6 +176,11 @@ export default function Partner() {
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
 
       <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          className="flex-1"
+          keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
+        >
         {/* Nav */}
         <View className="flex-row items-center gap-2 px-6 pt-6">
           <TouchableOpacity
@@ -234,8 +242,15 @@ export default function Partner() {
         <ScrollView
           ref={chatScrollRef}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: activeTab === "chat" ? 80 : 120 }}
+          contentContainerStyle={{
+            paddingBottom:
+              activeTab === "chat"
+                ? Math.max(124, insets.bottom + 104)
+                : Math.max(120, insets.bottom + 90),
+          }}
           className="flex-1"
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
         >
           <View className="mx-6 mt-6">
             {/* ── OVERVIEW ── */}
@@ -380,6 +395,7 @@ export default function Partner() {
                         value={connectCode}
                         onChangeText={(t) => setConnectCode(t.toUpperCase())}
                         autoCapitalize="characters"
+                        returnKeyType="done"
                         className="flex-1 py-3 text-sm font-bold"
                         style={{ color: colors.foreground }}
                       />
@@ -515,7 +531,11 @@ export default function Partner() {
         {activeTab === "chat" && isConnected && (
           <View
             className="absolute bottom-0 left-0 right-0 px-4 py-3.5 border-t flex-row items-center gap-3"
-            style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+            style={{
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              paddingBottom: Math.max(14, insets.bottom + 8),
+            }}
           >
             <TextInput
               placeholder="Send a private message..."
@@ -525,6 +545,7 @@ export default function Partner() {
               className="flex-1 px-4 py-3 rounded-xl text-sm"
               style={{ backgroundColor: colors.input, color: colors.foreground }}
               onSubmitEditing={handleSendMessage}
+              blurOnSubmit={false}
               returnKeyType="send"
             />
             <TouchableOpacity
@@ -541,6 +562,7 @@ export default function Partner() {
             </TouchableOpacity>
           </View>
         )}
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </>
   );

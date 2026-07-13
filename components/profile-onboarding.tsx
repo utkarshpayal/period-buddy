@@ -173,6 +173,7 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
             />
 
             <TextInput
+              autoComplete="birthdate-full"
               keyboardType="numbers-and-punctuation"
               onChangeText={(text) => {
                 setErrorMessage("");
@@ -182,8 +183,10 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
               onBlur={() => setIsFocused(false)}
               placeholder="YYYY-MM-DD"
               placeholderTextColor={colors.mutedText}
+              returnKeyType="next"
               className="ml-3 flex-1 text-base outline-none font-semibold"
               style={{ color: colors.foreground }}
+              textContentType="birthdate"
               value={dateOfBirth}
             />
           </View>
@@ -262,14 +265,20 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
           />
 
           <TextInput
+            autoComplete="tel"
             keyboardType="phone-pad"
-            onChangeText={setPhone}
+            onChangeText={(text) => {
+              setErrorMessage("");
+              setPhone(text);
+            }}
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
             placeholder="+1 (555) 019-2834"
             placeholderTextColor={colors.mutedText}
+            returnKeyType="done"
             className="ml-3 flex-1 text-base outline-none font-semibold"
             style={{ color: colors.foreground }}
+            textContentType="telephoneNumber"
             value={phone}
           />
         </View>

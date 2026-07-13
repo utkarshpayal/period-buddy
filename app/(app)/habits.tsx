@@ -96,6 +96,9 @@ export default function Habits() {
   const maxPossibleTokens = Math.max(180, habits.reduce((acc, h) => acc + h.tokens, 0));
   const growthPct = Math.min((totalTokens / maxPossibleTokens) * 100, 100);
   const treeState = computeTreeState(growthPct);
+  const hasSuggestedHabits = HABIT_IDEAS.some(
+    (idea) => !habits.some((habit) => habit.title === idea.title),
+  );
 
   return (
     <>
@@ -121,13 +124,16 @@ export default function Habits() {
         </View>
 
         {loading ? (
-          <View className="flex-1 items-center justify-center">
+          <View className="flex-1 items-center justify-center px-6">
             <ActivityIndicator size="large" color={colors.primary} />
+            <Text className="mt-4 text-xs font-bold text-center" style={{ color: colors.mutedText }}>
+              Loading your daily routines...
+            </Text>
           </View>
         ) : (
           <ScrollView
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 60 }}
+            contentContainerStyle={{ paddingBottom: 100 }}
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={colors.primary} />
             }
@@ -192,7 +198,20 @@ export default function Habits() {
               </Text>
 
               <View className="gap-3.5">
-                {habits.map((habit) => {
+                {habits.length === 0 ? (
+                  <View
+                    className="items-center rounded-2xl border p-5"
+                    style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+                  >
+                    <MaterialCommunityIcons name="sprout-outline" size={30} color={colors.primary} />
+                    <Text className="mt-3 text-sm font-black" style={{ color: colors.foreground }}>
+                      Start with one gentle habit
+                    </Text>
+                    <Text className="mt-1 text-xs text-center leading-5" style={{ color: colors.mutedText }}>
+                      Add a suggested routine and your tree will begin growing from today.
+                    </Text>
+                  </View>
+                ) : habits.map((habit) => {
                   const isToggling = togglingId === habit.id;
                   return (
                     <TouchableOpacity
@@ -268,12 +287,17 @@ export default function Habits() {
                 activeOpacity={0.7}
                 className="mt-6 rounded-2xl border border-dashed py-4 items-center justify-center"
                 onPress={addHabit}
-                style={{ borderColor: colors.border, backgroundColor: isDark ? "#0a0718" : "#fafafa" }}
+                disabled={!hasSuggestedHabits}
+                style={{
+                  borderColor: colors.border,
+                  backgroundColor: colors.surfaceSoft,
+                  opacity: hasSuggestedHabits ? 1 : 0.62,
+                }}
               >
                 <View className="flex-row items-center gap-2">
                   <Feather name="plus-circle" size={15} color={colors.primary} />
                   <Text className="text-xs font-black tracking-wide" style={{ color: colors.primary }}>
-                    Add Suggested Habit
+                    {hasSuggestedHabits ? "Add Suggested Habit" : "All Suggestions Added"}
                   </Text>
                 </View>
               </TouchableOpacity>

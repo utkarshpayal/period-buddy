@@ -226,7 +226,7 @@ export default function Hygiene() {
 
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 60 }}
+          contentContainerStyle={{ paddingBottom: 100 }}
         >
           <View className="mt-6">
             {/* HORIZONTAL CATEGORY CHIP CONTROLS */}
@@ -323,10 +323,16 @@ export default function Hygiene() {
                   {currentActiveData.tips.map((tip, idx) => (
                     <View
                       key={idx}
-                      className="flex-row items-start p-4 rounded-2xl border bg-neutral-50 dark:bg-neutral-900/40"
-                      style={{ borderColor: colors.border }}
+                      className="flex-row items-start p-4 rounded-2xl border"
+                      style={{
+                        backgroundColor: colors.surfaceSoft,
+                        borderColor: colors.border,
+                      }}
                     >
-                      <View className="mt-0.5 mr-3.5 p-1 rounded-full bg-emerald-500/10 dark:bg-emerald-500/20">
+                      <View
+                        className="mt-0.5 mr-3.5 p-1 rounded-full"
+                        style={{ backgroundColor: colors.successLight }}
+                      >
                         <Ionicons
                           name="checkmark-circle"
                           size={16}

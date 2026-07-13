@@ -1,6 +1,7 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ScrollView,
   StatusBar,
@@ -9,7 +10,6 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { LinearGradient } from "expo-linear-gradient";
 import { useAppState } from "../../../components/AppState";
 import { useAuth } from "../../../components/auth-context";
 import { useTheme } from "../../../components/theme";
@@ -25,6 +25,69 @@ import {
   type DashboardSummary,
   type Predictions,
 } from "../../../lib/api";
+
+type AnalyticsBar = {
+  length: number;
+  month: string;
+};
+
+const MONTH_LABELS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+function parseMonthIndex(month: string) {
+  const normalized = month.slice(0, 3).toLowerCase();
+  return MONTH_LABELS.findIndex(
+    (label) => label.toLowerCase() === normalized,
+  );
+}
+
+function buildFiveMonthAnalytics(
+  entries: Predictions["analyticsData"] = [],
+): AnalyticsBar[] {
+  const cleanEntries = entries
+    .filter((entry) => entry.month)
+    .slice(-5)
+    .map((entry) => {
+      const monthIndex = parseMonthIndex(entry.month);
+
+      return {
+        length: entry.length,
+        month:
+          monthIndex >= 0
+            ? MONTH_LABELS[monthIndex]
+            : entry.month.slice(0, 3) || "Now",
+      };
+    });
+  const latestMonth = cleanEntries[cleanEntries.length - 1]?.month;
+  const latestIndex =
+    latestMonth && parseMonthIndex(latestMonth) >= 0
+      ? parseMonthIndex(latestMonth)
+      : new Date().getMonth();
+  const byMonth = new Map(cleanEntries.map((entry) => [entry.month, entry]));
+
+  return Array.from({ length: 5 }, (_, index) => {
+    const monthIndex = (latestIndex - 4 + index + 12) % 12;
+    const month = MONTH_LABELS[monthIndex];
+    const entry = byMonth.get(month);
+
+    return {
+      length: entry?.length ?? 0,
+      month,
+    };
+  });
+}
 
 export default function Home() {
   const { colors, isDark } = useTheme();
@@ -67,8 +130,8 @@ export default function Home() {
   const dashboardTokens = dashboard?.tokens ?? tokens;
   const cycleDay = Math.max(
     predictions?.currentCycleDay ??
-      dashboard?.predictions?.currentCycleDay ??
-      (loggedDays || 1),
+    dashboard?.predictions?.currentCycleDay ??
+    (loggedDays || 1),
     1,
   );
   const expectedEndDate =
@@ -76,21 +139,18 @@ export default function Home() {
     dashboard?.predictions?.nextPeriodDate ??
     "soon";
   const periodLength = predictions?.periodLength ?? 5;
-  const fertileWindow = predictions?.fertileWindowDuration ?? "6 day window";
+  const fertileWindow = predictions?.fertileWindowDuration ?? "6 days";
 
-  const analyticGraphData =
-    predictions?.analyticsData?.length
-      ? predictions.analyticsData.map((item) => ({
-          ...item,
-          height: Math.max(56, Math.min(112, item.length * 3.4)),
-        }))
-      : [
-          { month: "Mar", length: 27, height: 76 },
-          { month: "Apr", length: 28, height: 88 },
-          { month: "May", length: 30, height: 104 },
-          { month: "Jun", length: 29, height: 94 },
-          { month: "Jul", length: 28, height: 88 },
-        ];
+  const analyticGraphData = useMemo(
+    () => buildFiveMonthAnalytics(predictions?.analyticsData),
+    [predictions?.analyticsData],
+  );
+  const hasAnalyticsHistory = analyticGraphData.some((item) => item.length > 0);
+  const maxBarLength = Math.max(
+    ...analyticGraphData.map((item) => item.length),
+    predictions?.cycleLength ?? 1,
+    1,
+  );
 
   const treeHealth =
     dashboard?.forestHealth ?? Math.min(100, Math.max(45, 55 + loggedDays * 6));
@@ -213,7 +273,7 @@ export default function Home() {
                     <View
                       className="absolute inset-1 rounded-full opacity-10"
                       style={{
-                      backgroundColor:
+                        backgroundColor:
                           treeHealth > 75
                             ? colors.success
                             : treeHealth > 50
@@ -275,7 +335,15 @@ export default function Home() {
                       className="text-base font-extrabold tracking-tight"
                       style={{ color: colors.foreground }}
                     >
-                      Cycle Length Trends
+                      Last 5 Cycle Entries
+                    </Text>
+                    <Text
+                      className="mt-1 text-[11px] font-semibold leading-4"
+                      style={{ color: colors.mutedText }}
+                    >
+                      {hasAnalyticsHistory
+                        ? "Missing months stay visible as 0 for a clearer trend."
+                        : "Log cycle history to start building this graph."}
                     </Text>
                   </View>
                   <View className="flex-row items-center gap-1">
@@ -295,49 +363,75 @@ export default function Home() {
 
                 {/* Minimal Clean Graph Canvas Bars */}
                 <View className="h-36 flex-row justify-between items-end px-2 pt-2">
-                  {analyticGraphData.map((data, index) => (
-                    <View key={index} className="items-center flex-1 gap-1.5">
-                      {/* Value above bars */}
-                      <Text
-                        className="text-[10px] font-bold"
-                        style={{ color: colors.mutedText }}
-                      >
-                        {data.length}d
-                      </Text>
+                  {analyticGraphData.map((data, index) => {
+                    const heightPct =
+                      data.length > 0
+                        ? Math.max(0.15, data.length / maxBarLength)
+                        : 0;
+                    const isLatest = index === analyticGraphData.length - 1;
 
-                      {/* Pill Bar Layout */}
+                    return (
                       <View
-                        className="w-4 rounded-full relative overflow-hidden"
-                        style={{
-                          backgroundColor: colors.surfaceSoft,
-                          height: data.height,
-                        }}
+                        key={`${data.month}-${index}`}
+                        className="items-center flex-1 gap-1.5"
                       >
-                        {/* Highlighting the latest month bar for premium contrast */}
-                        <LinearGradient
-                          colors={
-                            index === 4
-                              ? [colors.primary, colors.secondary]
-                              : [colors.secondary, colors.accent]
-                          }
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 0, y: 1 }}
-                          className="absolute bottom-0 left-0 right-0 top-0 rounded-full"
+                        <Text
+                          className="text-[10px] font-bold"
                           style={{
-                            opacity: index === 4 ? 1 : 0.45,
+                            color: data.length
+                              ? colors.foreground
+                              : colors.mutedText,
                           }}
-                        />
-                      </View>
+                        >
+                          {data.length}d
+                        </Text>
 
-                      {/* Month Label */}
-                      <Text
-                        className="text-[10px] font-bold mt-0.5"
-                        style={{ color: colors.mutedText }}
-                      >
-                        {data.month}
-                      </Text>
-                    </View>
-                  ))}
+                        <View
+                          className="w-5 rounded-full relative overflow-hidden justify-end"
+                          style={{
+                            backgroundColor: colors.surfaceSoft,
+                            borderColor: colors.border,
+                            borderWidth: 1,
+                            height: 108,
+                          }}
+                        >
+                          {data.length > 0 ? (
+                            <LinearGradient
+                              colors={
+                                isLatest
+                                  ? [colors.primary, colors.secondary]
+                                  : [colors.secondary, colors.accent]
+                              }
+                              start={{ x: 0, y: 0 }}
+                              end={{ x: 0, y: 1 }}
+                              style={{
+                                borderRadius: 999,
+                                height: 108 * heightPct,
+                                opacity: isLatest ? 1 : 0.5,
+                                width: "100%",
+                              }}
+                            />
+                          ) : (
+                            <View
+                              style={{
+                                backgroundColor: colors.border,
+                                borderRadius: 999,
+                                height: 4,
+                                margin: 4,
+                              }}
+                            />
+                          )}
+                        </View>
+
+                        <Text
+                          className="text-[10px] font-bold mt-0.5"
+                          style={{ color: colors.mutedText }}
+                        >
+                          {data.month}
+                        </Text>
+                      </View>
+                    );
+                  })}
                 </View>
               </LinearGradient>
             </View>

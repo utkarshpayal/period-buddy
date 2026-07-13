@@ -10,7 +10,10 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { useTheme } from "../../components/theme";
 import { getSoftTints } from "../../components/ui-tokens";
 import { healthIssuesApi, type HealthIssue as ApiHealthIssue } from "../../lib/api";
@@ -126,6 +129,7 @@ function mapHealthIssue(issue: ApiHealthIssue): HealthIssue {
 export default function HealthIssues() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [issues, setIssues] = useState<HealthIssue[]>(fallbackIssues);
@@ -196,7 +200,7 @@ export default function HealthIssues() {
 
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 60 }}
+          contentContainerStyle={{ paddingBottom: 100 }}
         >
           <View className="mx-6 mt-6">
             <Text
@@ -282,8 +286,12 @@ export default function HealthIssues() {
             >
               {/* Sheet Control Sticky Upper Header Action Row */}
               <View
-                className="px-6 py-4.5 border-b border-neutral-100 dark:border-neutral-900 flex-row justify-between items-center"
-                style={{ backgroundColor: colors.surface }}
+                className="px-6 pb-4 border-b flex-row justify-between items-center"
+                style={{
+                  backgroundColor: colors.surface,
+                  borderBottomColor: colors.border,
+                  paddingTop: insets.top + 16,
+                }}
               >
                 <View>
                   <Text
@@ -301,7 +309,8 @@ export default function HealthIssues() {
                 </View>
                 <TouchableOpacity
                   onPress={() => setDetailModalVisible(false)}
-                  className="p-1.5 bg-neutral-100 dark:bg-neutral-800 rounded-full"
+                  className="p-1.5 rounded-full"
+                  style={{ backgroundColor: colors.surfaceSoft }}
                 >
                   <Feather name="x" size={16} color={colors.foreground} />
                 </TouchableOpacity>
@@ -310,16 +319,22 @@ export default function HealthIssues() {
               {/* Scrollable Clinical Core Body Context Area */}
               <ScrollView
                 showsVerticalScrollIndicator={false}
-                contentContainerStyle={{ paddingBottom: 60 }}
+                contentContainerStyle={{ paddingBottom: insets.bottom + 60 }}
               >
                 {/* HIGH RESOLUTION HERO MEDICAL ILLUSTRATION BANNER */}
-                <View className="w-full h-52 relative bg-neutral-100">
+                <View
+                  className="w-full h-52 relative"
+                  style={{ backgroundColor: colors.surfaceSoft }}
+                >
                   <Image
                     source={{ uri: selectedIssueData.imageUrl }}
                     className="w-full h-full"
                     resizeMode="cover"
                   />
-                  <View className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
+                  <View
+                    className="absolute inset-0"
+                    style={{ backgroundColor: "rgba(0,0,0,0.12)" }}
+                  />
                 </View>
 
                 {/* CONTENT AREA WRAPPER */}
@@ -339,7 +354,10 @@ export default function HealthIssues() {
                   </Text>
 
                   {/* Horizontal Border Break Separator Line */}
-                  <View className="h-[1px] w-full bg-neutral-100 dark:bg-neutral-900 mb-6" />
+                  <View
+                    className="h-[1px] w-full mb-6"
+                    style={{ backgroundColor: colors.border }}
+                  />
 
                   {/* Part B: Specialized Active Interactive Symptom Guidance Roadmap */}
                   <Text
@@ -349,8 +367,11 @@ export default function HealthIssues() {
                     Care Guidance
                   </Text>
                   <View
-                    className="p-5 rounded-2xl border bg-neutral-50 dark:bg-neutral-900/40"
-                    style={{ borderColor: colors.border }}
+                    className="p-5 rounded-2xl border"
+                    style={{
+                      backgroundColor: colors.surfaceSoft,
+                      borderColor: colors.border,
+                    }}
                   >
                     <Text
                       className="text-xs font-semibold leading-6"
@@ -361,7 +382,13 @@ export default function HealthIssues() {
                   </View>
 
                   {/* Operational Telehealth Action Redirection Banner Badge */}
-                  <View className="mt-6 p-4 rounded-xl flex-row items-center justify-between border border-dashed border-neutral-300 dark:border-neutral-700">
+                  <View
+                    className="mt-6 p-4 rounded-xl flex-row items-center justify-between border border-dashed"
+                    style={{
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    }}
+                  >
                     <View className="flex-1 pr-4">
                       <Text
                         className="text-xs font-bold"

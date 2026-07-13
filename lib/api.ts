@@ -1,10 +1,32 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import Constants from "expo-constants";
 
-const LOCAL_DEV_API_BASE_URL = "http://localhost:5000";
+const LOCAL_DEV_API_PORT = "5000";
 const envApiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
 
+function getLocalDevApiBaseUrl() {
+  const constants = Constants as unknown as {
+    expoConfig?: { hostUri?: string };
+    manifest?: { debuggerHost?: string };
+    manifest2?: {
+      extra?: {
+        expoClient?: { hostUri?: string };
+        expoGo?: { debuggerHost?: string };
+      };
+    };
+  };
+  const hostUri =
+    constants.expoConfig?.hostUri ??
+    constants.manifest2?.extra?.expoClient?.hostUri ??
+    constants.manifest2?.extra?.expoGo?.debuggerHost ??
+    constants.manifest?.debuggerHost;
+  const host = hostUri?.split(":")[0];
+
+  return `http://${host || "localhost"}:${LOCAL_DEV_API_PORT}`;
+}
+
 export const API_BASE_URL = (
-  envApiBaseUrl || (__DEV__ ? LOCAL_DEV_API_BASE_URL : "")
+  envApiBaseUrl || (__DEV__ ? getLocalDevApiBaseUrl() : "")
 ).replace(/\/+$/, "");
 export const AUTH_SESSION_KEY = "period-buddy.auth-session";
 
@@ -280,7 +302,7 @@ export type CommunityComment = {
   id?: string;
   isAnonymous?: boolean;
   likes?: number;
-  userId?: string | Pick<AuthUser, "firstName" | "lastName" | "profilePicture">;
+  userId?: string | (Pick<AuthUser, "firstName" | "lastName" | "profilePicture"> & { isOwn?: boolean });
 };
 
 export type CommunityPost = {
@@ -297,7 +319,7 @@ export type CommunityPost = {
   savedByMe?: boolean;
   tags?: string[];
   title?: string;
-  userId?: string | Pick<AuthUser, "firstName" | "lastName" | "profilePicture">;
+  userId?: string | (Pick<AuthUser, "firstName" | "lastName" | "profilePicture"> & { isOwn?: boolean });
 };
 
 export type Blog = {
@@ -400,9 +422,12 @@ export type QuestionAnswer = {
 
 export type AskQuestionResponse = {
   answer: string;
+  disclaimer?: string;
   matchedQuestion?: QuestionAnswer;
   question: string;
+  suggestedQuestions?: string[];
   source: "ai" | "knowledge_base" | string;
+  tokensAwarded?: number;
 };
 
 async function getToken(): Promise<string | null> {
@@ -476,7 +501,17 @@ export async function apiEnvelopeRequest<T>(
   });
 
   const text = await response.text();
-  const data = text ? JSON.parse(text) : {};
+  let data: unknown = {};
+
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    if (!response.ok) {
+      throw new Error(text || `Request failed (${response.status})`);
+    }
+
+    throw new Error("The API returned a response the app could not read.");
+  }
 
   if (!response.ok) {
     throw new Error(getErrorMessage(data, response.status));
@@ -808,13 +843,22 @@ export const communityApi = {
     }),
 
   addComment: (id: string, content: string, isAnonymous = true) =>
-    apiRequest<CommunityComment>(`/api/community/${id}/comment`, {
-      body: JSON.stringify({ content, isAnonymous }),
-      method: "POST",
-    }),
+    apiRequest<{ comment: CommunityComment; commentsCount: number }>(
+      `/api/community/${id}/comment`,
+      {
+        body: JSON.stringify({ content, isAnonymous }),
+        method: "POST",
+      },
+    ),
 
   deletePost: (id: string) =>
     apiRequest<void>(`/api/community/${id}`, { method: "DELETE" }),
+
+  deleteComment: (postId: string, commentId: string) =>
+    apiRequest<{ commentsCount: number }>(
+      `/api/community/${postId}/comment/${commentId}`,
+      { method: "DELETE" },
+    ),
 };
 
 export const blogsApi = {
@@ -980,7 +1024,6 @@ export const questionAnswerApi = {
     apiRequest<AskQuestionResponse>("/api/questions/ask", {
       body: JSON.stringify({ question }),
       method: "POST",
-      skipAuth: true,
     }),
 
   getQuestionById: (idOrSlug: string) =>

@@ -8,13 +8,15 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "./theme";
 
-type OptionAction = "report" | "save" | "share";
+type OptionAction = "delete" | "report" | "save" | "share";
 
 export default function OptionsModal({
   visible,
   onClose,
+  onDelete,
   onReport,
   onShare,
   onSave,
@@ -23,6 +25,7 @@ export default function OptionsModal({
 }: {
   visible: boolean;
   onClose: () => void;
+  onDelete?: () => Promise<void> | void;
   onReport?: () => Promise<void> | void;
   onShare?: () => Promise<void> | void;
   onSave?: () => Promise<void> | void;
@@ -30,6 +33,7 @@ export default function OptionsModal({
   isSaved?: boolean;
 }) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const [pendingAction, setPendingAction] = React.useState<OptionAction | null>(
     null,
   );
@@ -52,18 +56,22 @@ export default function OptionsModal({
   function renderAction({
     action,
     color = colors.foreground,
+    description,
     disabled = false,
     icon,
     label,
     onPress,
+    statusLabel,
     weight = "600",
   }: {
     action: OptionAction;
     color?: string;
+    description: string;
     disabled?: boolean;
     icon: keyof typeof Ionicons.glyphMap;
     label: string;
     onPress?: () => Promise<void> | void;
+    statusLabel?: string;
     weight?: "600" | "700";
   }) {
     const isPending = pendingAction === action;
@@ -76,10 +84,10 @@ export default function OptionsModal({
         onPress={() => runAction(action, onPress)}
         style={{
           opacity: isDisabled && !isPending ? 0.45 : 1,
-          paddingVertical: 12,
+          paddingVertical: 13,
         }}
       >
-        <View style={{ alignItems: "center", flexDirection: "row", gap: 10 }}>
+        <View style={{ alignItems: "center", flexDirection: "row", gap: 12 }}>
           <View
             style={{
               alignItems: "center",
@@ -92,7 +100,42 @@ export default function OptionsModal({
           >
             <Ionicons name={icon} size={18} color={color} />
           </View>
-          <Text style={{ color, flex: 1, fontWeight: weight }}>{label}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color, fontWeight: weight }}>{label}</Text>
+            <Text
+              style={{
+                color: colors.mutedText,
+                fontSize: 11,
+                fontWeight: "600",
+                lineHeight: 16,
+                marginTop: 2,
+              }}
+            >
+              {description}
+            </Text>
+          </View>
+          {statusLabel ? (
+            <View
+              style={{
+                backgroundColor: colors.input,
+                borderColor: colors.border,
+                borderRadius: 999,
+                borderWidth: 1,
+                paddingHorizontal: 8,
+                paddingVertical: 3,
+              }}
+            >
+              <Text
+                style={{
+                  color: colors.mutedText,
+                  fontSize: 10,
+                  fontWeight: "800",
+                }}
+              >
+                {statusLabel}
+              </Text>
+            </View>
+          ) : null}
           {isPending ? <ActivityIndicator color={color} size="small" /> : null}
         </View>
       </TouchableOpacity>
@@ -125,6 +168,7 @@ export default function OptionsModal({
             borderTopLeftRadius: 18,
             borderTopRightRadius: 18,
             padding: 16,
+            paddingBottom: Math.max(16, insets.bottom + 10),
             borderColor: colors.border,
             borderWidth: 1,
           }}
@@ -153,6 +197,7 @@ export default function OptionsModal({
 
           {renderAction({
             action: "share",
+            description: "Open your device share sheet for this community post.",
             icon: "share-social-outline",
             label: "Share",
             onPress: onShare,
@@ -161,20 +206,71 @@ export default function OptionsModal({
           {renderAction({
             action: "save",
             color: isSaved ? colors.primary : colors.foreground,
+            description: isSaved
+              ? "Remove this post from your saved community list."
+              : "Keep this post in your saved community list.",
             icon: isSaved ? "bookmark" : "bookmark-outline",
             label: isSaved ? "Unsave" : "Save",
             onPress: onSave,
+            statusLabel: isSaved ? "Saved" : undefined,
           })}
 
           {renderAction({
             action: "report",
-            color: "#ef4444",
+            color: colors.danger,
+            description: isReported
+              ? "This post has already been sent for review."
+              : "Flag unsafe, spammy, or harmful content for review.",
             disabled: isReported,
             icon: isReported ? "flag" : "flag-outline",
             label: isReported ? "Reported" : "Report",
             onPress: onReport,
+            statusLabel: isReported ? "Done" : "Safety",
             weight: "700",
           })}
+
+          {onDelete && renderAction({
+            action: "delete",
+            color: colors.danger,
+            description: "Permanently remove this post from the community.",
+            icon: "trash-outline",
+            label: "Delete Post",
+            onPress: onDelete,
+            weight: "700",
+          })}
+
+          <View
+            style={{
+              backgroundColor: colors.input,
+              borderColor: colors.border,
+              borderRadius: 14,
+              borderWidth: 1,
+              marginTop: 4,
+              padding: 12,
+            }}
+          >
+            <Text
+              style={{
+                color: colors.foreground,
+                fontSize: 12,
+                fontWeight: "800",
+              }}
+            >
+              Anonymous community safety
+            </Text>
+            <Text
+              style={{
+                color: colors.mutedText,
+                fontSize: 11,
+                fontWeight: "600",
+                lineHeight: 16,
+                marginTop: 4,
+              }}
+            >
+              Saved posts stay private on this device. Reports are private and
+              help keep the feed supportive.
+            </Text>
+          </View>
 
           <TouchableOpacity
             accessibilityRole="button"

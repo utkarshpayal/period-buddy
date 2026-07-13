@@ -2,6 +2,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { Link, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StatusBar,
   Text,
@@ -21,6 +23,7 @@ import {
   getShadow,
   getSoftTints,
 } from "../../components/ui-tokens";
+
 
 export default function SignUp() {
   const router = useRouter();
@@ -52,7 +55,7 @@ export default function SignUp() {
     setErrorMessage("");
 
     if (!firstName.trim() || !lastName.trim() || !email.trim() || !password) {
-      setErrorMessage("Please fill out all fields.");
+      setErrorMessage("All fields are required.");
       return;
     }
 
@@ -115,21 +118,29 @@ export default function SignUp() {
       />
 
       <SafeAreaView className="flex-1">
-        <View className="absolute right-6 top-6 z-10">
-          <ThemeToggle />
-        </View>
-
-        <ScrollView
-          contentContainerStyle={{
-            alignItems: "center",
-            flexGrow: 1,
-            justifyContent: "center",
-            paddingHorizontal: 20,
-            paddingVertical: 40,
-          }}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          className="flex-1"
+          keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
         >
+          <View className="absolute right-6 top-6 z-10">
+            <ThemeToggle />
+          </View>
+
+          <ScrollView
+            automaticallyAdjustKeyboardInsets
+            contentContainerStyle={{
+              alignItems: "center",
+              flexGrow: 1,
+              justifyContent: "center",
+              paddingBottom: 56,
+              paddingHorizontal: 20,
+              paddingTop: 80,
+            }}
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
           <View style={{ width: contentWidth }}>
             <View className="mb-7 items-center mt-4">
               <View
@@ -203,6 +214,7 @@ export default function SignUp() {
                 color={fnameFocused ? colors.primary : colors.mutedText}
               />
               <TextInput
+                autoComplete="given-name"
                 onChangeText={(text) => {
                   setErrorMessage("");
                   setFirstName(text);
@@ -211,8 +223,10 @@ export default function SignUp() {
                 onBlur={() => setFnameFocused(false)}
                 placeholder="First name"
                 placeholderTextColor={colors.mutedText}
+                returnKeyType="next"
                 className="ml-3 flex-1 text-sm outline-none font-semibold"
                 style={{ color: colors.foreground }}
+                textContentType="givenName"
                 value={firstName}
               />
             </View>
@@ -231,6 +245,7 @@ export default function SignUp() {
                 color={lnameFocused ? colors.primary : colors.mutedText}
               />
               <TextInput
+                autoComplete="family-name"
                 onChangeText={(text) => {
                   setErrorMessage("");
                   setLastName(text);
@@ -239,8 +254,10 @@ export default function SignUp() {
                 onBlur={() => setLnameFocused(false)}
                 placeholder="Last name"
                 placeholderTextColor={colors.mutedText}
+                returnKeyType="next"
                 className="ml-3 flex-1 text-sm outline-none font-semibold"
                 style={{ color: colors.foreground }}
+                textContentType="familyName"
                 value={lastName}
               />
             </View>
@@ -260,6 +277,7 @@ export default function SignUp() {
               />
               <TextInput
                 autoCapitalize="none"
+                autoComplete="email"
                 keyboardType="email-address"
                 onChangeText={(text) => {
                   setErrorMessage("");
@@ -269,8 +287,10 @@ export default function SignUp() {
                 onBlur={() => setEmailFocused(false)}
                 placeholder="Email address"
                 placeholderTextColor={colors.mutedText}
+                returnKeyType="next"
                 className="ml-3 flex-1 text-sm outline-none font-semibold"
                 style={{ color: colors.foreground }}
+                textContentType="emailAddress"
                 value={email}
               />
             </View>
@@ -297,9 +317,11 @@ export default function SignUp() {
                 onBlur={() => setPassFocused(false)}
                 placeholder="Password (min. 8 characters)"
                 placeholderTextColor={colors.mutedText}
+                returnKeyType="done"
                 secureTextEntry
                 className="ml-3 flex-1 text-sm outline-none font-semibold"
                 style={{ color: colors.foreground }}
+                textContentType="newPassword"
                 value={password}
               />
             </View>
@@ -368,7 +390,8 @@ export default function SignUp() {
             </Link>
           </View>
           </View>
-        </ScrollView>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </LinearGradient>
   );

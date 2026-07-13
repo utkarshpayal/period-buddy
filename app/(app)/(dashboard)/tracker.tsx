@@ -33,6 +33,7 @@ import type { DayEntry as LocalDayEntry } from "../../../components/AppState";
 const CYCLE_LENGTH = 28;
 const CURRENT_CYCLE_DAY = 14;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const WEEKDAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
 
 type CyclePhase = "follicular" | "luteal" | "ovulation" | "period";
 
@@ -83,6 +84,10 @@ function getDateLabel(date: Date) {
   });
 }
 
+function getMonthKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
 function getCycleDay(
   date: Date,
   cycleStartDate: Date,
@@ -102,6 +107,10 @@ function getCyclePhase(cycleDay: number, periodLength = 5): CyclePhase {
   return "luteal";
 }
 
+function getMondayFirstWeekday(date: Date) {
+  return (date.getDay() + 6) % 7;
+}
+
 function formatSettingsDate(value?: string) {
   if (!value) return getDateKey(new Date());
   const parsedDate = new Date(value);
@@ -113,7 +122,9 @@ export default function Tracker() {
   const { colors, isDark } = useTheme();
   const [selectedDate, setSelectedDate] = useState<SelectedDate | null>(null);
   const [dayDetailsVisible, setDayDetailsVisible] = useState(false);
-  const [currentMonth, setCurrentMonth] = useState(() => new Date());
+  const [selectedYear, setSelectedYear] = useState(() =>
+    new Date().getFullYear(),
+  );
   const [cycleSettings, setCycleSettings] = useState<CycleSettings | null>(null);
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [settingsError, setSettingsError] = useState("");
@@ -140,13 +151,18 @@ export default function Tracker() {
   }, [cycleSettings]);
   const todayKey = getDateKey(new Date());
 
-  const monthLabel = useMemo(
+  const calendarMonths = useMemo(
     () =>
-      currentMonth.toLocaleDateString("en-US", {
-        month: "long",
-        year: "numeric",
-      }),
-    [currentMonth],
+      Array.from(
+        { length: 12 },
+        (_, index) => new Date(selectedYear, index, 1),
+      ),
+    [selectedYear],
+  );
+
+  const yearOptions = useMemo(
+    () => [selectedYear - 1, selectedYear, selectedYear + 1],
+    [selectedYear],
   );
 
   const { dayEntries, dayNotes, earnTokens, saveDayEntry } = useAppState();
@@ -186,31 +202,38 @@ export default function Tracker() {
 
   useEffect(() => {
     let isMounted = true;
-    const monthKey = `${currentMonth.getFullYear()}-${String(
-      currentMonth.getMonth() + 1,
-    ).padStart(2, "0")}`;
-
-    async function loadMonthLogs() {
+    async function loadYearLogs() {
       try {
-        const logs = await cycleApi.getMonthLogs(monthKey);
-        if (!isMounted) return;
-        setRemoteDayEntries(
-          logs.reduce<Record<string, LocalDayEntry>>((acc, log) => {
-            acc[log.dateKey] = mapApiDayEntry(log);
-            return acc;
-          }, {}),
+        const results = await Promise.allSettled(
+          calendarMonths.map((month) => cycleApi.getMonthLogs(getMonthKey(month))),
         );
+        if (!isMounted) return;
+
+        const entries = results.reduce<Record<string, LocalDayEntry>>(
+          (acc, result) => {
+            if (result.status !== "fulfilled") return acc;
+
+            result.value.forEach((log) => {
+              acc[log.dateKey] = mapApiDayEntry(log);
+            });
+
+            return acc;
+          },
+          {},
+        );
+
+        setRemoteDayEntries(entries);
       } catch {
         if (isMounted) setRemoteDayEntries({});
       }
     }
 
-    loadMonthLogs();
+    loadYearLogs();
 
     return () => {
       isMounted = false;
     };
-  }, [currentMonth]);
+  }, [calendarMonths]);
 
   function mapApiDayEntry(log: ApiDayEntry): LocalDayEntry {
     return {
@@ -262,15 +285,18 @@ export default function Tracker() {
     [colors, softTints],
   );
 
-  const days = useMemo<CalendarCell[]>(() => {
-    const year = currentMonth.getFullYear();
-    const month = currentMonth.getMonth();
-    const firstWeekday = new Date(year, month, 1).getDay();
+  function buildCalendarDays(monthDate: Date): CalendarCell[] {
+    const year = monthDate.getFullYear();
+    const month = monthDate.getMonth();
+    const firstWeekday = getMondayFirstWeekday(new Date(year, month, 1));
     const daysInMonth = new Date(year, month + 1, 0).getDate();
 
     const blanks: CalendarCell[] = Array.from(
       { length: firstWeekday },
-      (_, index) => ({ key: `blank-${index}`, kind: "blank" }),
+      (_, index) => ({
+        key: `blank-${year}-${month}-${index}`,
+        kind: "blank",
+      }),
     );
 
     const monthDays: CalendarCell[] = Array.from(
@@ -286,19 +312,13 @@ export default function Tracker() {
           dateKey: getDateKey(date),
           day,
           kind: "day",
-          key: `day-${day}`,
+          key: `day-${year}-${month}-${day}`,
           phase: getCyclePhase(cycleDay, activePeriodLength),
         };
       },
     );
 
     return [...blanks, ...monthDays];
-  }, [activeCycleLength, activePeriodLength, currentMonth, cycleStartDate]);
-
-  function changeMonth(direction: -1 | 1) {
-    setCurrentMonth(
-      (month) => new Date(month.getFullYear(), month.getMonth() + direction, 1),
-    );
   }
 
   function openDate(date: Date) {
@@ -311,13 +331,13 @@ export default function Tracker() {
       day: date.getDate(),
       phaseLabel: `${phaseStyles[phase].label} Phase • Day ${cycleDay}`,
     });
+    setDayDetailsVisible(true);
   }
 
   function openToday() {
     const today = new Date();
-    setCurrentMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+    setSelectedYear(today.getFullYear());
     openDate(today);
-    setDayDetailsVisible(true);
   }
 
   function openCycleSettings() {
@@ -379,7 +399,7 @@ export default function Tracker() {
       });
       setCycleSettings(savedSettings);
       setSettingsVisible(false);
-      setCurrentMonth(new Date());
+      setSelectedYear(new Date().getFullYear());
     } catch (error) {
       setSettingsError(
         error instanceof Error
@@ -422,7 +442,7 @@ export default function Tracker() {
                 Track your cycle, flow, mood, and symptoms
               </Text>
             </View>
-            <View className="flex-row gap-2">
+            {/* <View className="flex-row gap-2">
               <TouchableOpacity
                 activeOpacity={0.7}
                 onPress={openCycleSettings}
@@ -450,7 +470,7 @@ export default function Tracker() {
                   color={colors.primary}
                 />
               </TouchableOpacity>
-            </View>
+            </View> */}
           </View>
 
           {/* Elegant Horizontal Legend Row */}
@@ -532,233 +552,255 @@ export default function Tracker() {
           </View>
 
           {/* Calendar Body Area */}
-          <View className="mx-6 mt-6">
-            <View className="flex-row items-center justify-between px-1">
-              <Text
-                className="text-lg font-extrabold tracking-tight"
-                style={{ color: colors.foreground }}
-              >
-                {monthLabel}
-              </Text>
-              <View className="flex-row gap-1.5">
+          <View className="mx-4 mt-6">
+            <View className="px-2">
+              <View className="flex-row items-center justify-between gap-3">
+                <View className="flex-1">
+                  <Text
+                    className="text-lg font-extrabold tracking-tight"
+                    style={{ color: colors.foreground }}
+                  >
+                    Calendar
+                  </Text>
+                  {/* <Text
+                    className="mt-1 text-xs font-semibold leading-5"
+                    style={{ color: colors.mutedText }}
+                  >
+                    All 12 months are in one scroll. Tap any date to add flow,
+                    symptoms, mood, energy, or notes.
+                  </Text> */}
+                </View>
                 <TouchableOpacity
-                  activeOpacity={0.7}
-                  className="rounded-full p-2 border"
-                  onPress={() => changeMonth(-1)}
+                  activeOpacity={0.82}
+                  className="rounded-full border px-4 py-2"
+                  onPress={openToday}
                   style={{
                     backgroundColor: colors.surface,
                     borderColor: colors.border,
                   }}
                 >
-                  <Feather
-                    name="chevron-left"
-                    size={16}
-                    color={colors.foreground}
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  activeOpacity={0.7}
-                  className="rounded-full p-2 border"
-                  onPress={() => changeMonth(1)}
-                  style={{
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  }}
-                >
-                  <Feather
-                    name="chevron-right"
-                    size={16}
-                    color={colors.foreground}
-                  />
+                  <Text
+                    className="text-xs font-black"
+                    style={{ color: colors.primary }}
+                  >
+                    Today
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
 
-            {/* Clean Rounded Calendar Matrix */}
+            <ScrollView
+              className="-mx-4 mt-4"
+              contentContainerStyle={{ gap: 8, paddingHorizontal: 20 }}
+              horizontal
+              keyboardShouldPersistTaps="handled"
+              showsHorizontalScrollIndicator={false}
+            >
+              {yearOptions.map((year) => {
+                const isSelected = year === selectedYear;
+
+                return (
+                  <TouchableOpacity
+                    activeOpacity={0.82}
+                    className="rounded-full border px-4 py-2"
+                    key={year}
+                    onPress={() => setSelectedYear(year)}
+                    style={{
+                      backgroundColor: isSelected
+                        ? colors.primary
+                        : colors.surface,
+                      borderColor: isSelected ? colors.primary : colors.border,
+                    }}
+                  >
+                    <Text
+                      className="text-xs font-black"
+                      style={{
+                        color: isSelected ? colors.background : colors.mutedText,
+                      }}
+                    >
+                      {year}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
             <View
-              className="mt-4 rounded-3xl border overflow-hidden shadow-lg"
+              className="mt-4 overflow-hidden rounded-[28px] border"
               style={{
+                backgroundColor: colors.surface,
                 borderColor: colors.border,
                 ...getShadow(colors, isDark),
               }}
             >
-              <LinearGradient
-                colors={surfaceGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                className="p-5"
-              >
-                <View className="flex-row justify-between mb-4">
-                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+              <View className="px-5 pb-3 pt-5">
+                <View className="flex-row items-center justify-between">
+                  <View>
                     <Text
-                      key={d}
-                      className="text-center text-xs font-bold uppercase tracking-widest"
+                      className="text-xl font-black tracking-tight"
+                      style={{ color: colors.foreground }}
+                    >
+                      {selectedYear}
+                    </Text>
+                    <Text
+                      className="mt-0.5 text-[11px] font-bold"
+                      style={{ color: colors.mutedText }}
+                    >
+                      Period dates are shown in pink
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              <View
+                className="border-y px-5 py-3"
+                style={{ borderColor: colors.border }}
+              >
+                <View className="flex-row">
+                  {WEEKDAY_LABELS.map((day, index) => (
+                    <Text
+                      className="text-center text-[10px] font-black uppercase"
+                      key={`${day}-${index}`}
                       style={{ color: colors.mutedText, width: `${100 / 7}%` }}
                     >
-                      {d.substring(0, 1)}
+                      {day}
                     </Text>
                   ))}
                 </View>
+              </View>
 
-                <View className="flex-row flex-wrap row-gap-3">
-                  {days.map((cell) => {
-                    if (cell.kind === "blank") {
-                      return (
-                        <View
-                          key={cell.key}
-                          style={{ width: `${100 / 7}%`, aspectRatio: 1 }}
-                        />
-                      );
-                    }
+              <View className="px-4 pb-6">
+                {calendarMonths.map((monthDate, monthIndex) => {
+                  const monthDays = buildCalendarDays(monthDate);
+                  const monthKey = getMonthKey(monthDate);
 
-                    const isSelected = selectedDate?.dateKey === cell.dateKey;
-                    const isToday = cell.dateKey === todayKey;
-                    const entry =
-                      dayEntries[cell.dateKey] ?? remoteDayEntries[cell.dateKey];
-                    const hasLog = Boolean(
-                      entry?.note.trim() ||
-                      entry?.symptoms.length ||
-                      entry?.flow ||
-                      entry?.mood ||
-                      entry?.energy ||
-                      dayNotes[cell.dateKey]?.trim(),
-                    );
-                    const phaseStyle = phaseStyles[cell.phase];
-
-                    return (
-                      <TouchableOpacity
-                        key={cell.key}
-                        className="items-center justify-center p-1 relative"
-                        activeOpacity={0.8}
-                        onPress={() => openDate(cell.date)}
-                        style={{ width: `${100 / 7}%`, aspectRatio: 1 }}
+                  return (
+                    <View
+                      key={monthKey}
+                      className={monthIndex === 0 ? "pt-5" : "mt-5 border-t pt-5"}
+                      style={{
+                        borderColor:
+                          monthIndex === 0 ? "transparent" : colors.border,
+                      }}
+                    >
+                      <Text
+                        className="mb-4 text-center text-sm font-black"
+                        style={{ color: colors.foreground }}
                       >
-                        <View
-                          className="w-full h-full rounded-full items-center justify-center border relative"
-                          style={{
-                            backgroundColor: isSelected
-                              ? colors.primary
-                              : isToday
-                                ? colors.primaryLight
-                                : "transparent",
-                            borderColor: isSelected
-                              ? colors.primary
-                              : isToday
+                        {monthDate.toLocaleDateString("en-US", {
+                          month: "long",
+                        })}
+                      </Text>
+
+                      <View className="flex-row flex-wrap row-gap-1.5">
+                        {monthDays.map((cell) => {
+                          if (cell.kind === "blank") {
+                            return (
+                              <View
+                                key={cell.key}
+                                style={{ height: 42, width: `${100 / 7}%` }}
+                              />
+                            );
+                          }
+
+                          const isSelected =
+                            selectedDate?.dateKey === cell.dateKey;
+                          const isToday = cell.dateKey === todayKey;
+                          const entry =
+                            dayEntries[cell.dateKey] ??
+                            remoteDayEntries[cell.dateKey];
+                          const hasLog = Boolean(
+                            entry?.note.trim() ||
+                              entry?.symptoms.length ||
+                              entry?.flow ||
+                              entry?.mood ||
+                              entry?.energy ||
+                              dayNotes[cell.dateKey]?.trim(),
+                          );
+                          const hasFlowLog = Boolean(
+                            entry?.flow && entry.flow !== "none",
+                          );
+                          const isPeriodDay =
+                            cell.phase === "period" || hasFlowLog;
+                          const isFertileDay =
+                            cell.cycleDay >= 10 && cell.cycleDay <= 16;
+                          const isOvulationPeak = cell.cycleDay === 14;
+                          const dayTextColor = isPeriodDay
+                            ? colors.buttonText
+                            : isFertileDay
+                              ? colors.secondary
+                              : isSelected
                                 ? colors.primary
-                                : "transparent",
-                          }}
-                        >
-                          {/* Soft colored under-dot for matching the phase organically */}
-                          {!isSelected && !isToday && (
-                            <View
-                              className="absolute bottom-1 w-1.5 h-1.5 rounded-full"
-                              style={{ backgroundColor: phaseStyle.color }}
-                            />
-                          )}
+                                : colors.foreground;
 
-                          <Text
-                            className="text-sm font-bold"
-                            style={{
-                              color: isSelected
-                                ? colors.buttonText
-                                : isToday
-                                  ? colors.primary
-                                  : colors.foreground,
-                            }}
-                          >
-                            {cell.day}
-                          </Text>
-
-                          {/* Top corner smart token logging indicator dot */}
-                          {hasLog && (
-                            <View
-                              className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full"
-                              style={{
-                                backgroundColor: isSelected
-                                  ? colors.buttonText
-                                  : colors.accent,
-                              }}
-                            />
-                          )}
-                        </View>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </LinearGradient>
+                          return (
+                            <TouchableOpacity
+                              activeOpacity={0.82}
+                              className="items-center justify-center"
+                              key={cell.key}
+                              onPress={() => openDate(cell.date)}
+                              style={{ height: 42, width: `${100 / 7}%` }}
+                            >
+                              <View
+                                className="items-center justify-center rounded-full border relative"
+                                style={{
+                                  backgroundColor: isPeriodDay
+                                    ? colors.primary
+                                    : isSelected
+                                      ? colors.primaryLight
+                                      : "transparent",
+                                  borderColor: isPeriodDay
+                                    ? colors.primary
+                                    : isSelected || isToday
+                                      ? colors.primary
+                                      : isOvulationPeak
+                                        ? colors.secondary
+                                        : "transparent",
+                                  borderStyle:
+                                    !isPeriodDay &&
+                                    (isToday || isOvulationPeak)
+                                      ? "dashed"
+                                      : "solid",
+                                  borderWidth:
+                                    isSelected ||
+                                    isToday ||
+                                    isOvulationPeak ||
+                                    isPeriodDay
+                                      ? 1.5
+                                      : 0,
+                                  height: 34,
+                                  width: 34,
+                                }}
+                              >
+                                <Text
+                                  className="text-xs font-black"
+                                  style={{ color: dayTextColor }}
+                                >
+                                  {cell.day}
+                                </Text>
+                                {hasLog && (
+                                  <View
+                                    className="absolute bottom-1 h-1 w-1 rounded-full"
+                                    style={{
+                                      backgroundColor: isPeriodDay
+                                        ? colors.buttonText
+                                        : colors.accent,
+                                    }}
+                                  />
+                                )}
+                              </View>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
             </View>
 
-            {/* Clean Functional Dashboard Row Integration Preview */}
-            {selectedDate && (
-              <TouchableOpacity
-                activeOpacity={0.9}
-                onPress={() => setDayDetailsVisible(true)}
-                className="mt-5 rounded-2xl border overflow-hidden shadow-sm"
-                style={{
-                  borderColor: colors.border,
-                  ...getShadow(colors, isDark),
-                }}
-              >
-                <LinearGradient
-                  colors={surfaceGradient}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  className="p-4 flex-row items-center justify-between"
-                >
-                  <View className="flex-1">
-                    <Text
-                      className="text-sm font-bold"
-                      style={{ color: colors.foreground }}
-                    >
-                      {selectedDate.dateLabel}
-                    </Text>
-                    <Text
-                      className="text-xs font-semibold mt-0.5"
-                      style={{ color: colors.mutedText }}
-                    >
-                      {selectedDate.phaseLabel}
-                    </Text>
-
-                    {(dayEntries[selectedDate.dateKey] ??
-                      remoteDayEntries[selectedDate.dateKey])?.symptoms.length ? (
-                      <View className="flex-row gap-1.5 mt-2 flex-wrap">
-                        {(dayEntries[selectedDate.dateKey] ??
-                          remoteDayEntries[selectedDate.dateKey]).symptoms.map(
-                          (s, idx) => (
-                            <View
-                              key={idx}
-                              className="px-2 py-0.5 rounded-md border"
-                              style={{
-                                backgroundColor: `${colors.primary}15`,
-                                borderColor: `${colors.primary}30`,
-                              }}
-                            >
-                              <Text
-                                className="text-[10px] font-bold"
-                                style={{ color: colors.primary }}
-                              >
-                                {s}
-                              </Text>
-                            </View>
-                          ),
-                        )}
-                      </View>
-                    ) : (
-                      <Text
-                        className="text-[11px] font-medium mt-1.5 italic"
-                        style={{ color: colors.mutedText }}
-                      >
-                        No symptoms logged for this date. Tap to log.
-                      </Text>
-                    )}
-                  </View>
-                  <Feather name="edit-3" size={16} color={colors.primary} />
-                </LinearGradient>
-              </TouchableOpacity>
-            )}
-
             {/* Core Action Button */}
-            <TouchableOpacity
+            {/* <TouchableOpacity
               activeOpacity={0.85}
               className="mt-6 rounded-full overflow-hidden shadow-lg"
               onPress={openToday}
@@ -776,7 +818,7 @@ export default function Tracker() {
                   {"Log Today's Symptoms"}
                 </Text>
               </LinearGradient>
-            </TouchableOpacity>
+            </TouchableOpacity> */}
           </View>
         </ScrollView>
       </SafeAreaView>

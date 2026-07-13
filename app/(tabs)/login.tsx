@@ -2,6 +2,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { Link, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
+  KeyboardAvoidingView,
+  Platform,
   StatusBar,
   ScrollView,
   Text,
@@ -116,21 +118,29 @@ export default function Login() {
       />
 
       <SafeAreaView className="flex-1">
-        <View className="absolute right-6 top-6 z-10">
-          <ThemeToggle />
-        </View>
-
-        <ScrollView
-          contentContainerStyle={{
-            alignItems: "center",
-            flexGrow: 1,
-            justifyContent: "center",
-            paddingHorizontal: 20,
-            paddingVertical: 40,
-          }}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          className="flex-1"
+          keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
         >
+          <View className="absolute right-6 top-6 z-10">
+            <ThemeToggle />
+          </View>
+
+          <ScrollView
+            automaticallyAdjustKeyboardInsets
+            contentContainerStyle={{
+              alignItems: "center",
+              flexGrow: 1,
+              justifyContent: "center",
+              paddingBottom: 56,
+              paddingHorizontal: 20,
+              paddingTop: 80,
+            }}
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
           <View style={{ width: contentWidth }}>
             <View className="mb-7 items-center">
               <View
@@ -209,6 +219,7 @@ export default function Login() {
               />
               <TextInput
                 autoCapitalize="none"
+                autoComplete="email"
                 keyboardType="email-address"
                 onChangeText={(text) => {
                   setErrorMessage("");
@@ -218,8 +229,10 @@ export default function Login() {
                 onBlur={() => setEmailFocused(false)}
                 placeholder="Email address"
                 placeholderTextColor={colors.mutedText}
+                returnKeyType="next"
                 className="ml-3 flex-1 text-sm outline-none font-semibold"
                 style={{ color: colors.foreground }}
+                textContentType="emailAddress"
                 value={email}
               />
             </View>
@@ -246,9 +259,11 @@ export default function Login() {
                 onBlur={() => setPasswordFocused(false)}
                 placeholder="Password"
                 placeholderTextColor={colors.mutedText}
+                returnKeyType="done"
                 secureTextEntry
                 className="ml-3 flex-1 text-sm outline-none font-semibold"
                 style={{ color: colors.foreground }}
+                textContentType="password"
                 value={password}
               />
             </View>
@@ -361,7 +376,8 @@ export default function Login() {
             </Link>
           </View>
           </View>
-        </ScrollView>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </LinearGradient>
   );

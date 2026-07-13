@@ -90,9 +90,9 @@ function normalizePositionCard(card: unknown, index: number): PositionCard {
         typeof objectCard.tip === "string"
           ? objectCard.tip
           : normalizeTextCard(
-              card,
-              "Pause, check comfort, and choose what feels safe for both people.",
-            ),
+            card,
+            "Pause, check comfort, and choose what feels safe for both people.",
+          ),
     };
   }
 
@@ -395,7 +395,7 @@ export default function SexualWellbeing() {
 
               {activeGameMode === "spark" && (
                 <View className="py-1">
-                  <View className="flex-row justify-between items-center mb-4 pb-2 border-b border-neutral-100 dark:border-neutral-900/60">
+                  <View className="flex-row justify-between items-center mb-4 pb-2" style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}>
                     <View className="flex-row items-center gap-2">
                       <Ionicons
                         name="chatbubbles-outline"
@@ -418,7 +418,7 @@ export default function SexualWellbeing() {
                     </TouchableOpacity>
                   </View>
 
-                  <View className="bg-neutral-50 dark:bg-neutral-900/40 border border-neutral-100 p-5 rounded-2xl min-h-[90px] justify-center">
+                  <View className="p-5 rounded-2xl min-h-[90px] justify-center" style={{ backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border }}>
                     <Text
                       className="text-xs font-bold text-center leading-5 italic"
                       style={{ color: colors.foreground }}
@@ -454,7 +454,7 @@ export default function SexualWellbeing() {
 
               {activeGameMode === "positions" && (
                 <View className="py-1">
-                  <View className="flex-row justify-between items-center mb-4 pb-2 border-b border-neutral-100 dark:border-neutral-900/60">
+                  <View className="flex-row justify-between items-center mb-4 pb-2" style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}>
                     <View className="flex-row items-center gap-2">
                       <MaterialCommunityIcons
                         name="fire"
@@ -477,11 +477,11 @@ export default function SexualWellbeing() {
                     </TouchableOpacity>
                   </View>
 
-                  <View className="bg-neutral-50 dark:bg-neutral-900/40 border border-neutral-100 p-4.5 rounded-2xl">
+                  <View className="p-6 rounded-2xl" style={{ backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border }}>
                     <Text className="text-sm font-black tracking-tight text-center text-pink-500">
                       {positionCards[currentPositionIdx].name}
                     </Text>
-                    <View className="my-2.5 px-3 py-1 bg-neutral-100 dark:bg-neutral-800 self-center rounded-md">
+                    <View className="my-2.5 px-3 py-1  self-center rounded-md">
                       <Text
                         className="text-[10px] font-bold uppercase tracking-wider text-center"
                         style={{ color: colors.foreground }}
@@ -568,7 +568,7 @@ export default function SexualWellbeing() {
                         color={category.color}
                       />
                     </View>
-                    <View className="px-2.5 py-1 rounded-md bg-neutral-100 dark:bg-neutral-800">
+                    <View className="px-2.5 py-1 rounded-md" style={{ backgroundColor: colors.surfaceSoft }}>
                       <Text
                         className="text-[9px] font-bold tracking-wide"
                         style={{ color: colors.mutedText }}
@@ -594,7 +594,7 @@ export default function SexualWellbeing() {
                         {category.summary}
                       </Text>
                     </View>
-                    <View className="p-1.5 rounded-full bg-neutral-50 dark:bg-neutral-900 border border-neutral-100 dark:border-neutral-800 shadow-3xs">
+                    <View className="p-1.5 rounded-full shadow-3xs" style={{ backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border }}>
                       <Feather
                         name="book-open"
                         size={13}
@@ -657,11 +657,11 @@ export default function SexualWellbeing() {
             >
               {/* Sheet Control Header section */}
               <View
-                className="px-6 py-4 border-b border-neutral-100 dark:border-neutral-900 flex-row justify-between items-center"
-                style={{ backgroundColor: colors.surface }}
+                className="px-6 py-4 flex-row justify-between items-center"
+                style={{ backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border }}
               >
                 <View className="flex-row items-center gap-3">
-                  <View className="p-2 rounded-xl bg-neutral-100 dark:bg-neutral-800">
+                  <View className="p-2 rounded-xl" style={{ backgroundColor: colors.surfaceSoft }}>
                     <Ionicons
                       name={selectedCategory.icon as any}
                       size={18}
@@ -677,7 +677,8 @@ export default function SexualWellbeing() {
                 </View>
                 <TouchableOpacity
                   onPress={() => setModalVisible(false)}
-                  className="p-1.5 bg-neutral-100 dark:bg-neutral-800 rounded-full"
+                  className="p-1.5 rounded-full"
+                  style={{ backgroundColor: colors.surfaceSoft }}
                 >
                   <Feather name="x" size={16} color={colors.foreground} />
                 </TouchableOpacity>
@@ -705,7 +706,7 @@ export default function SexualWellbeing() {
                 </View>
 
                 {/* Separator split frame border line */}
-                <View className="h-[1px] w-full bg-neutral-100 dark:bg-neutral-900" />
+                <View style={{ height: 1, backgroundColor: colors.border }} />
 
                 {/* Multi lines detailed clinical checkboxes insights guide system list */}
                 <View className="gap-3.5">
@@ -718,8 +719,8 @@ export default function SexualWellbeing() {
                   {selectedCategory.extendedGuide.map((line, idx) => (
                     <View
                       key={idx}
-                      className="flex-row items-start p-4 rounded-2xl border bg-neutral-50 dark:bg-neutral-900/40"
-                      style={{ borderColor: colors.border }}
+                      className="flex-row items-start p-4 rounded-2xl"
+                      style={{ backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border }}
                     >
                       <View className="mt-0.5 mr-3.5 p-1 rounded-full bg-emerald-500/10">
                         <Ionicons

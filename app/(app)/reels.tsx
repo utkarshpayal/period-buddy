@@ -1,21 +1,28 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Image,
   Modal,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   ScrollView,
   StatusBar,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 import { useAppState } from "../../components/AppState";
 import { useTheme } from "../../components/theme";
 import { reelsApi, type Reel as ApiReel } from "../../lib/api";
+import { LinearGradient } from "expo-linear-gradient";
 
 // --- STRUCTURAL CLINICAL ENDPOINT CONTRACTS ---
 interface HealthReel {
@@ -120,9 +127,15 @@ function mapApiReel(reel: ApiReel): HealthReel {
 }
 
 export default function Reels() {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const router = useRouter();
   const { earnTokens } = useAppState();
+  const { height, width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const reelHeight = useMemo(
+    () => Math.max(560, height - insets.top - insets.bottom),
+    [height, insets.bottom, insets.top],
+  );
 
   const [activePlayId, setActivePlayId] = useState<string | null>(null);
   const [followingCreatorIds, setFollowingCreatorIds] = useState<Set<string>>(
@@ -141,7 +154,9 @@ export default function Reels() {
       try {
         const response = await reelsApi.getReels({ limit: 20 });
         if (isMounted && response.reels.length > 0) {
-          setReels(response.reels.map(mapApiReel));
+          const mappedReels = response.reels.map(mapApiReel);
+          setReels(mappedReels);
+          setActivePlayId((current) => current ?? mappedReels[0]?.id ?? null);
           setFollowingCreatorIds(
             new Set(
               response.reels
@@ -151,7 +166,10 @@ export default function Reels() {
           );
         }
       } catch {
-        if (isMounted) setReels(fallbackReels);
+        if (isMounted) {
+          setReels(fallbackReels);
+          setActivePlayId((current) => current ?? fallbackReels[0]?.id ?? null);
+        }
       }
     }
 
@@ -161,6 +179,12 @@ export default function Reels() {
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!activePlayId && reels[0]) {
+      setActivePlayId(reels[0].id);
+    }
+  }, [activePlayId, reels]);
 
   // --- INTERACTION CONTROLLER DRIVERS ---
   async function handleToggleFollow(reelId: string, creatorId: string) {
@@ -248,6 +272,19 @@ export default function Reels() {
     }
   }
 
+  function handleReelMomentumEnd(
+    event: NativeSyntheticEvent<NativeScrollEvent>,
+  ) {
+    const nextIndex = Math.round(
+      event.nativeEvent.contentOffset.y / reelHeight,
+    );
+    const nextReel = reels[nextIndex];
+
+    if (nextReel) {
+      void handlePlay(nextReel.id);
+    }
+  }
+
   function getCreatorStats(creatorId: string) {
     const creatorReels = reels.filter((reel) => reel.creatorId === creatorId);
     return {
@@ -271,7 +308,7 @@ export default function Reels() {
           </style>
         </head>
         <body>
-          <video src="${mp4Url}" autoplay loop controls playsinline></video>
+          <video src="${mp4Url}" autoplay loop muted playsinline></video>
         </body>
       </html>
     `;
@@ -280,224 +317,234 @@ export default function Reels() {
   return (
     <>
       <StatusBar
-        barStyle={isDark ? "light-content" : "dark-content"}
-        backgroundColor={colors.background}
+        barStyle="light-content"
+        backgroundColor="#050505"
       />
 
       <SafeAreaView
         className="flex-1"
-        style={{ backgroundColor: colors.background }}
+        style={{ backgroundColor: "#050505" }}
       >
         <ScrollView
+          decelerationRate="fast"
+          disableIntervalMomentum
+          onMomentumScrollEnd={handleReelMomentumEnd}
+          pagingEnabled
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 100 }}
+          snapToAlignment="start"
+          snapToInterval={reelHeight}
         >
-          {/* Header */}
-          <View className="flex-row items-center gap-2 px-6 pt-6">
-            <TouchableOpacity
-              onPress={() => router.back()}
-              activeOpacity={0.7}
-              className="p-2.5 -ml-2 rounded-full border"
-              style={{
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-              }}
-            >
-              <Feather name="arrow-left" size={18} color={colors.foreground} />
-            </TouchableOpacity>
-            <Text
-              className="flex-1 text-2xl font-black tracking-tight ml-2"
-              style={{ color: colors.foreground }}
-            >
-              Video Feed
-            </Text>
-          </View>
+          {reels.map((item, index) => {
+            const isPlaying = activePlayId === item.id;
+            const isFollowing = followingCreatorIds.has(item.creatorId);
+            const totalVotes = item.pollOptions.reduce(
+              (acc, curr) => acc + curr.votes,
+              0,
+            );
 
-          {/* TIMELINE TIMELINE STACK FEED */}
-          <View className="mt-6 px-6 gap-6">
-            {reels.map((item) => {
-              const isPlaying = activePlayId === item.id;
-              const isFollowing = followingCreatorIds.has(item.creatorId);
-
-              return (
-                <View
-                  key={item.id}
-                  className="rounded-3xl border overflow-hidden shadow-2xl"
-                  style={{
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  }}
-                >
-                  {/* MEDICAL CREATOR HEADER */}
-                  <View className="p-4 flex-row items-center justify-between border-b border-neutral-100 dark:border-neutral-900/60">
-                    <TouchableOpacity
-                      activeOpacity={0.75}
-                      className="flex-row items-center gap-3 flex-1"
-                      onPress={() => setSelectedCreator(item)}
-                    >
-                      <Image
-                        source={{ uri: item.creatorAvatar }}
-                        className="w-10 h-10 rounded-full bg-neutral-200"
-                      />
-                      <View className="flex-1">
-                        <View className="flex-row items-center gap-1">
-                          <Text
-                            className="text-xs font-black tracking-tight"
-                            style={{ color: colors.foreground }}
-                            numberOfLines={1}
-                          >
-                            {item.creatorName}
-                          </Text>
-                          {item.verified && (
-                            <MaterialCommunityIcons
-                              name="shield-check"
-                              size={13}
-                            color={colors.success}
-                            />
-                          )}
-                        </View>
-                        <Text className="text-[10px] font-bold tracking-wide uppercase text-neutral-400">
-                          Board-certified specialist
-                        </Text>
-                        <Text
-                          className="mt-1 text-[10px] font-black uppercase tracking-wider"
-                          style={{ color: colors.primary }}
-                        >
-                          View Profile
-                        </Text>
-                      </View>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      activeOpacity={0.7}
-                      onPress={() => handleToggleFollow(item.id, item.creatorId)}
-                      className="px-3.5 py-1.5 rounded-full border"
-                      style={{
-                        backgroundColor: isFollowing
-                          ? "transparent"
-                          : colors.primary,
-                        borderColor: isFollowing
-                          ? colors.border
-                          : colors.primary,
-                      }}
-                    >
-                      <Text
-                        className="text-[10px] font-black"
-                        style={{
-                          color: isFollowing
-                            ? colors.foreground
-                            : colors.buttonText,
-                        }}
-                      >
-                        {isFollowing ? "Following" : "Follow"}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  {/* HTML5 EMBEDDED MP4 STREAM CONTAINER */}
-                  <View className="w-full h-56 bg-black relative">
-                    {isPlaying ? (
-                      <WebView
-                        originWhitelist={["*"]}
-                        source={{
-                          html: generateHTML5VideoPlayer(item.directMp4Url),
-                        }}
-                        javaScriptEnabled={true}
-                        domStorageEnabled={true}
-                        allowsInlineMediaPlayback={true}
-                        mediaPlaybackRequiresUserAction={false}
-                        className="w-full h-full"
-                        style={{ backgroundColor: "black" }}
-                      />
-                    ) : (
-                      <TouchableOpacity
-                        activeOpacity={0.9}
-                        onPress={() => handlePlay(item.id)}
-                        className="w-full h-full relative"
-                      >
-                        <Image
-                          source={{ uri: item.thumbnailUrl }}
-                          className="w-full h-full"
-                          resizeMode="cover"
-                        />
-                        <View className="absolute inset-0 bg-black/25" />
-
-                        <View className="absolute inset-0 items-center justify-center">
-                          <View className="w-14 h-14 rounded-full bg-white/20 items-center justify-center border border-white/40 shadow-sm">
-                            <Ionicons
-                              name="play-circle"
-                              size={32}
-                              color="white"
-                              className="ml-0.5"
-                            />
-                          </View>
-                        </View>
-
-                        <View className="absolute bottom-3 right-3 bg-black/60 px-2 py-0.5 rounded-md">
-                          <Text className="text-[10px] font-bold text-white">
-                            {item.duration}
-                          </Text>
-                        </View>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-
-                  {/* TITLE DESCRIPTION BLOCK */}
-                  <View className="p-5 border-b border-neutral-100 dark:border-neutral-900/60">
-                    <Text
-                      className="text-sm font-black tracking-tight leading-5"
-                      style={{ color: colors.foreground }}
-                    >
-                      {item.title}
-                    </Text>
-                    <View className="flex-row items-center gap-4 mt-3">
-                      <View className="flex-row items-center gap-1">
-                        <Feather
-                          name="eye"
-                          size={12}
-                          color={colors.mutedText}
-                        />
-                        <Text
-                          className="text-[10px] font-extrabold tracking-wide"
-                          style={{ color: colors.mutedText }}
-                        >
-                          {item.views.toLocaleString()} views
-                        </Text>
-                      </View>
-                      <View className="px-2 py-0.5 bg-neutral-100 dark:bg-neutral-800 rounded-md">
-                        <Text className="text-[9px] font-black uppercase text-neutral-400">
-                          {item.category}
-                        </Text>
+            return (
+              <View
+                key={item.id}
+                style={{
+                  backgroundColor: "#050505",
+                  height: reelHeight,
+                  overflow: "hidden",
+                  width,
+                }}
+              >
+                {isPlaying ? (
+                  <WebView
+                    allowsInlineMediaPlayback
+                    domStorageEnabled
+                    javaScriptEnabled
+                    mediaPlaybackRequiresUserAction={false}
+                    originWhitelist={["*"]}
+                    source={{
+                      html: generateHTML5VideoPlayer(item.directMp4Url),
+                    }}
+                    style={{
+                      backgroundColor: "black",
+                      bottom: 0,
+                      left: 0,
+                      position: "absolute",
+                      right: 0,
+                      top: 0,
+                    }}
+                  />
+                ) : (
+                  <TouchableOpacity
+                    activeOpacity={0.92}
+                    onPress={() => handlePlay(item.id)}
+                    style={{
+                      bottom: 0,
+                      left: 0,
+                      position: "absolute",
+                      right: 0,
+                      top: 0,
+                    }}
+                  >
+                    <Image
+                      source={{ uri: item.thumbnailUrl }}
+                      resizeMode="cover"
+                      style={{ height: "100%", width: "100%" }}
+                    />
+                    <View className="absolute inset-0 items-center justify-center">
+                      <View className="h-16 w-16 items-center justify-center rounded-full border border-white/50 bg-black/35">
+                        <Ionicons name="play" size={30} color="white" />
                       </View>
                     </View>
+                  </TouchableOpacity>
+                )}
+
+                <LinearGradient
+                  colors={[
+                    "rgba(0,0,0,0.58)",
+                    "rgba(0,0,0,0.08)",
+                    "rgba(0,0,0,0.9)",
+                  ]}
+                  locations={[0, 0.42, 1]}
+                  pointerEvents="none"
+                  style={{
+                    bottom: 0,
+                    left: 0,
+                    position: "absolute",
+                    right: 0,
+                    top: 0,
+                  }}
+                />
+
+                <View className="absolute left-5 right-5 top-4 flex-row items-center gap-3">
+                  <TouchableOpacity
+                    activeOpacity={0.78}
+                    className="h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/35"
+                    onPress={() => router.back()}
+                  >
+                    <Feather name="arrow-left" size={18} color="white" />
+                  </TouchableOpacity>
+                  <View className="flex-1">
+                    <Text className="text-lg font-black text-white">
+                      Reels
+                    </Text>
+                    <Text className="text-[10px] font-bold uppercase text-white/65">
+                      {index + 1} of {reels.length}
+                    </Text>
+                  </View>
+                  <View className="rounded-full bg-white/15 px-3 py-1.5">
+                    <Text className="text-[10px] font-black uppercase text-white">
+                      For You
+                    </Text>
+                  </View>
+                </View>
+
+                <View className="absolute bottom-28 right-4 items-center gap-4">
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    className="items-center"
+                    onPress={() => setSelectedCreator(item)}
+                  >
+                    <Image
+                      source={{ uri: item.creatorAvatar }}
+                      className="h-12 w-12 rounded-full border-2 border-white bg-neutral-200"
+                    />
+                    {item.verified ? (
+                      <View className="-mt-3 rounded-full bg-emerald-500 p-0.5">
+                        <MaterialCommunityIcons
+                          name="check"
+                          size={12}
+                          color="white"
+                        />
+                      </View>
+                    ) : null}
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    activeOpacity={0.82}
+                    className="items-center"
+                    onPress={() => handleToggleFollow(item.id, item.creatorId)}
+                  >
+                    <View className="h-11 w-11 items-center justify-center rounded-full bg-white/18">
+                      <Ionicons
+                        name={isFollowing ? "checkmark" : "add"}
+                        size={24}
+                        color="white"
+                      />
+                    </View>
+                    <Text className="mt-1 text-[10px] font-black text-white">
+                      {isFollowing ? "Following" : "Follow"}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <View className="items-center">
+                    <View className="h-11 w-11 items-center justify-center rounded-full bg-white/18">
+                      <Feather name="eye" size={20} color="white" />
+                    </View>
+                    <Text className="mt-1 text-[10px] font-black text-white">
+                      {item.views.toLocaleString()}
+                    </Text>
+                  </View>
+                </View>
+
+                <View className="absolute bottom-5 left-5 right-24">
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    className="mb-3 flex-row items-center gap-2"
+                    onPress={() => setSelectedCreator(item)}
+                  >
+                    <Text
+                      className="flex-1 text-sm font-black text-white"
+                      numberOfLines={1}
+                    >
+                      {item.creatorName}
+                    </Text>
+                    <View className="rounded-full bg-white/18 px-2 py-0.5">
+                      <Text className="text-[9px] font-black uppercase text-white">
+                        {item.category}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+
+                  <Text
+                    className="text-base font-black leading-5 text-white"
+                    numberOfLines={3}
+                  >
+                    {item.title}
+                  </Text>
+
+                  <View className="mt-3 flex-row items-center gap-3">
+                    <View className="flex-row items-center gap-1 rounded-full bg-black/30 px-2.5 py-1">
+                      <Ionicons
+                        name="time-outline"
+                        size={12}
+                        color="rgba(255,255,255,0.82)"
+                      />
+                      <Text className="text-[10px] font-bold text-white/85">
+                        {item.duration}
+                      </Text>
+                    </View>
+                    <Text className="text-[10px] font-bold text-white/70">
+                      Board-certified cycle education
+                    </Text>
                   </View>
 
-                  {/* INTEGRATED POLL COMPONENT */}
-                  <View className="p-5 bg-neutral-50 dark:bg-neutral-900/30">
-                    <View className="flex-row items-center gap-1.5 mb-3">
+                  <View className="mt-4 rounded-2xl border border-white/15 bg-black/42 p-3">
+                    <View className="mb-2 flex-row items-center gap-1.5">
                       <MaterialCommunityIcons
                         name="vote-outline"
                         size={14}
-                        color={colors.primary}
+                        color="white"
                       />
-                      <Text className="text-[10px] font-black uppercase tracking-wider text-neutral-400">
-                        {"Creator's Next Topic Poll"}
+                      <Text className="text-[10px] font-black uppercase text-white/75">
+                        Next topic poll
                       </Text>
                     </View>
-
                     <Text
-                      className="text-xs font-bold mb-3"
-                      style={{ color: colors.foreground }}
+                      className="mb-2 text-xs font-bold text-white"
+                      numberOfLines={2}
                     >
                       {item.pollQuestion}
                     </Text>
-
                     <View className="gap-2">
                       {item.pollOptions.map((option) => {
-                        const totalVotes = item.pollOptions.reduce(
-                          (acc, curr) => acc + curr.votes,
-                          0,
-                        );
                         const percentValue =
                           totalVotes > 0
                             ? Math.round((option.votes / totalVotes) * 100)
@@ -507,56 +554,49 @@ export default function Reels() {
 
                         return (
                           <TouchableOpacity
-                            key={option.id}
+                            activeOpacity={0.82}
+                            className="overflow-hidden rounded-xl border border-white/15 bg-white/10 px-3 py-2"
                             disabled={!!item.votedOptionId}
+                            key={option.id}
                             onPress={() =>
                               handleTriggerVote(item.id, option.id)
                             }
-                            activeOpacity={0.8}
-                            className="rounded-xl border p-3 relative overflow-hidden flex-row justify-between items-center"
-                            style={{
-                              backgroundColor: colors.surface,
-                              borderColor: isThisChoiceVoted
-                                ? colors.primary
-                                : colors.border,
-                            }}
                           >
-                            {!!item.votedOptionId && (
+                            {!!item.votedOptionId ? (
                               <View
-                                className="absolute left-0 top-0 bottom-0 opacity-10"
-                                style={{
-                                  width: `${percentValue}%`,
-                                  backgroundColor: colors.primary,
-                                }}
+                                className="absolute bottom-0 left-0 top-0 bg-white/18"
+                                style={{ width: `${percentValue}%` }}
                               />
-                            )}
-                            <Text
-                              className="text-xs font-semibold flex-1 pr-4"
-                              style={{ color: colors.foreground }}
-                            >
-                              {option.topic}
-                            </Text>
-                            {!!item.votedOptionId && (
+                            ) : null}
+                            <View className="flex-row items-center justify-between gap-3">
                               <Text
-                                className="text-xs font-black"
-                                style={{
-                                  color: isThisChoiceVoted
-                                    ? colors.primary
-                                    : colors.mutedText,
-                                }}
+                                className="flex-1 text-[11px] font-bold text-white"
+                                numberOfLines={2}
                               >
-                                {percentValue}%
+                                {option.topic}
                               </Text>
-                            )}
+                              {!!item.votedOptionId ? (
+                                <Text
+                                  className="text-[11px] font-black"
+                                  style={{
+                                    color: isThisChoiceVoted
+                                      ? "#f9a8d4"
+                                      : "rgba(255,255,255,0.7)",
+                                  }}
+                                >
+                                  {percentValue}%
+                                </Text>
+                              ) : null}
+                            </View>
                           </TouchableOpacity>
                         );
                       })}
                     </View>
                   </View>
                 </View>
-              );
-            })}
-          </View>
+              </View>
+            );
+          })}
         </ScrollView>
       </SafeAreaView>
 

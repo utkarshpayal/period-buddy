@@ -1,10 +1,13 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Image,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StatusBar,
   Text,
@@ -12,7 +15,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppState } from "../../../components/AppState";
 import OptionsModal from "../../../components/OptionsModal";
 import { useTheme } from "../../../components/theme";
@@ -31,6 +34,7 @@ interface Comment {
   avatar: string;
   content: string;
   time: string;
+  isOwner: boolean; // true when this comment belongs to the logged-in user
 }
 
 interface Post {
@@ -40,8 +44,9 @@ interface Post {
   content: string;
   likes: number;
   commentsCount: number;
-  comments: Comment[]; // Dynamic sub-array matching active relational database payloads
+  comments: Comment[];
   time: string;
+  isOwner: boolean; // true when this post belongs to the logged-in user
 }
 
 interface Blog {
@@ -59,71 +64,32 @@ interface Reel {
   thumbnailUrl: string;
 }
 
-// --- INITIAL PAYLOAD RECORDS MATCHING LIVE ENDPOINTS ---
-const initialPosts: Post[] = [
-  {
-    id: "1",
-    author: "Sarah M.",
-    avatar: "👧",
-    content: "I tracked my cycle consistently for 3 months and finally understand my energy patterns better.",
-    likes: 234,
-    commentsCount: 2,
-    time: "2h ago",
-    comments: [
-      { id: "c_1", author: "Jessica T.", avatar: "👩", content: "That is such a helpful milestone. Consistency really changes the picture.", time: "1h ago" },
-      { id: "c_2", author: "Lily R.", avatar: "👱‍♀️", content: "I am trying to reach that 3-month mark too.", time: "45m ago" }
-    ]
-  },
-  {
-    id: "2",
-    author: "Emma K.",
-    avatar: "👩",
-    content: "The habit building feature helped me stay consistent. Got 500 tokens this month!",
-    likes: 156,
-    commentsCount: 1,
-    time: "4h ago",
-    comments: [
-      { id: "c_3", author: "Chloe B.", avatar: "👧", content: "Wow, 500 tokens is amazing! What are you spending them on?", time: "2h ago" }
-    ]
-  },
-];
-
-const fallbackBlogsData: Blog[] = [
-  {
-    id: "b1",
-    title: "Period Myths Debunked",
-    subtitle: "Clear answers to common myths around periods, hygiene, and movement.",
-    readTime: "5 min read",
-    thumbnailUrl: "https://images.unsplash.com/photo-1516627145497-ae6968895b74?q=80&w=600&auto=format&fit=crop",
-  },
-];
-
-const fallbackReelsData: Reel[] = [
-  {
-    id: "r1",
-    title: "Hormonal Health Tips",
-    videoDuration: "3:45",
-    thumbnailUrl: "https://images.unsplash.com/photo-1506126613408-eca07ce68773?q=80&w=600&auto=format&fit=crop",
-  },
-];
-
 function mapCommunityPost(post: CommunityPost): Post {
+  // Backend resolveAuthor sets isOwn:true on userId when requester is the author
+  const isOwner = typeof post.userId === "object" && post.userId?.isOwn === true;
+
   return {
     id: post.id ?? post._id,
-    author: post.isAnonymous ? "Anonymous member" : "Community member",
-    avatar: "NU",
+    author: isOwner ? "You" : post.isAnonymous ? "Anonymous member" : "Community member",
+    avatar: isOwner ? "✨" : "NU",
     content: post.content,
     likes: post.likes,
     commentsCount: post.commentsCount ?? post.comments?.length ?? 0,
     time: formatRelativeTime(post.createdAt),
+    isOwner,
     comments:
-      post.comments?.map((comment) => ({
-        id: comment.id ?? comment._id ?? `comment_${Math.random()}`,
-        author: comment.isAnonymous ? "Anonymous member" : "Community member",
-        avatar: "NU",
-        content: comment.content,
-        time: formatRelativeTime(comment.createdAt),
-      })) ?? [],
+      post.comments?.map((comment) => {
+        const isCommentOwner =
+          typeof comment.userId === "object" && comment.userId?.isOwn === true;
+        return {
+          id: comment.id ?? comment._id ?? `comment_${Math.random()}`,
+          author: isCommentOwner ? "You" : comment.isAnonymous ? "Anonymous member" : "Community member",
+          avatar: isCommentOwner ? "U" : "AU",
+          content: comment.content,
+          time: formatRelativeTime(comment.createdAt),
+          isOwner: isCommentOwner,
+        };
+      }) ?? [],
   };
 }
 
@@ -162,19 +128,27 @@ export default function Community() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
   const softTints = getSoftTints(colors);
-  
+  const insets = useSafeAreaInsets();
+
   // UI States
-  const [activeTab, setActiveTab] = useState<"posts" | "buddy" | "blogs">("posts");
-  const [posts, setPosts] = useState<Post[]>(initialPosts);
+  const [activeTab, setActiveTab] = useState<"posts" | "buddy" | "blogs">(
+    "posts",
+  );
+  const [posts, setPosts] = useState<Post[]>([]);
   const [likedPostIds, setLikedPostIds] = useState<Set<string>>(new Set());
-  const [blogsData, setBlogsData] = useState<Blog[]>(fallbackBlogsData);
-  const [reelsData, setReelsData] = useState<Reel[]>(fallbackReelsData);
-  
+  // isOwner is now tracked on each Post/Comment object from the API — no extra Set needed
+  const [blogsData, setBlogsData] = useState<Blog[]>([]);
+  const [reelsData, setReelsData] = useState<Reel[]>([]);
+  const [isEducationLoading, setIsEducationLoading] = useState(true);
+  const [isPostsLoading, setIsPostsLoading] = useState(true);
+  const [educationError, setEducationError] = useState<string | null>(null);
+  const [postsError, setPostsError] = useState<string | null>(null);
+
   // Modals Controller States
   const [optionsVisible, setOptionsVisible] = useState(false);
   const [createPostVisible, setCreatePostVisible] = useState(false);
   const [commentsModalVisible, setCommentsModalVisible] = useState(false);
-  
+
   // Selected Context Holders
   const [activePost, setActivePost] = useState<Post | null>(null);
   const [newPostContent, setNewPostContent] = useState("");
@@ -189,59 +163,59 @@ export default function Community() {
     toggleSavedPost,
   } = useAppState();
 
-  useEffect(() => {
-    let isMounted = true;
+  const loadPosts = useCallback(async () => {
+    setIsPostsLoading(true);
+    setPostsError(null);
 
-    async function loadCommunity() {
-      try {
-        const [postsResponse, feedResponse] = await Promise.all([
-          communityApi.getPosts({ limit: 20 }),
-          blogsApi.getFeed({ limit: 10, type: "all" }),
-        ]);
-
-        if (!isMounted) return;
-
-        if (postsResponse.posts.length > 0) {
-          setPosts(postsResponse.posts.map(mapCommunityPost));
-          setLikedPostIds(
-            new Set(
-              postsResponse.posts
-                .filter((post) => post.likedByMe)
-                .map((post) => post.id ?? post._id),
-            ),
-          );
-        }
-
-        const blogItems = feedResponse.items.filter(
-          (item): item is ContentFeedItem & { type: "blog" } =>
-            item.type === "blog",
-        );
-        const reelItems = feedResponse.items.filter(
-          (item): item is ContentFeedItem & { type: "reel" } =>
-            item.type === "reel",
-        );
-
-        if (blogItems.length > 0) {
-          setBlogsData(blogItems.map(mapFeedBlog));
-        }
-        if (reelItems.length > 0) {
-          setReelsData(reelItems.map(mapFeedReel));
-        }
-      } catch {
-        if (isMounted) {
-          setPosts(initialPosts);
-          setBlogsData(fallbackBlogsData);
-          setReelsData(fallbackReelsData);
-        }
-      }
+    try {
+      const postsResponse = await communityApi.getPosts({ limit: 20 });
+      setPosts(postsResponse.posts.map(mapCommunityPost));
+      setLikedPostIds(
+        new Set(
+          postsResponse.posts
+            .filter((post) => post.likedByMe)
+            .map((post) => post.id ?? post._id),
+        ),
+      );
+    } catch {
+      setPosts([]);
+      setLikedPostIds(new Set());
+      setPostsError("Couldn't load anonymous posts.");
+    } finally {
+      setIsPostsLoading(false);
     }
-
-    loadCommunity();
-
-    return () => {
-      isMounted = false;
-    };
   }, []);
+
+  const loadEducationFeed = useCallback(async () => {
+    setIsEducationLoading(true);
+    setEducationError(null);
+
+    try {
+      const feedResponse = await blogsApi.getFeed({ limit: 10, type: "all" });
+      const blogItems = feedResponse.items.filter(
+        (item): item is ContentFeedItem & { type: "blog" } =>
+          item.type === "blog",
+      );
+      const reelItems = feedResponse.items.filter(
+        (item): item is ContentFeedItem & { type: "reel" } =>
+          item.type === "reel",
+      );
+
+      setBlogsData(blogItems.map(mapFeedBlog));
+      setReelsData(reelItems.map(mapFeedReel));
+    } catch {
+      setBlogsData([]);
+      setReelsData([]);
+      setEducationError("Couldn't load blogs and reels.");
+    } finally {
+      setIsEducationLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadPosts();
+    loadEducationFeed();
+  }, [loadEducationFeed, loadPosts]);
 
   // --- ACTIONS HANDLERS ---
   function openOptions(post: Post) {
@@ -277,9 +251,12 @@ export default function Community() {
     setPosts((current) =>
       current.map((item) =>
         item.id === post.id
-          ? { ...item, likes: Math.max(0, item.likes + (isAlreadyLiked ? -1 : 1)) }
-          : item
-      )
+          ? {
+            ...item,
+            likes: Math.max(0, item.likes + (isAlreadyLiked ? -1 : 1)),
+          }
+          : item,
+      ),
     );
     if (!isAlreadyLiked) earnTokens(1);
 
@@ -304,7 +281,10 @@ export default function Community() {
   // Threads style real-time sub-array append mutation
   async function handlePublishPost() {
     if (!newPostContent.trim()) {
-      Alert.alert("Empty Post", "Please type something before sharing with the community.");
+      Alert.alert(
+        "Empty Post",
+        "Please type something before sharing with the community.",
+      );
       return;
     }
 
@@ -316,9 +296,11 @@ export default function Community() {
       likes: 0,
       commentsCount: 0,
       time: "Just now",
-      comments: []
+      comments: [],
+      isOwner: true,
     };
 
+    const localId = payload.id;
     setPosts([payload, ...posts]);
     setNewPostContent("");
     setCreatePostVisible(false);
@@ -329,9 +311,10 @@ export default function Community() {
         content: payload.content,
         isAnonymous: true,
       });
+      // mapCommunityPost reads isOwn from the serialized backend response
       setPosts((current) => [
         mapCommunityPost(createdPost),
-        ...current.filter((post) => post.id !== payload.id),
+        ...current.filter((post) => post.id !== localId),
       ]);
     } catch {
       Alert.alert(
@@ -352,7 +335,8 @@ export default function Community() {
       author: "You",
       avatar: "✨",
       content: newCommentContent.trim(),
-      time: "Just now"
+      time: "Just now",
+      isOwner: true,
     };
 
     // Immutably patching structural nested relational values
@@ -362,7 +346,7 @@ export default function Community() {
         const patchedObject = {
           ...item,
           commentsCount: item.commentsCount + 1,
-          comments: structuralComments
+          comments: structuralComments,
         };
         // Update active context tree simultaneously to maintain reactive rendering
         setActivePost(patchedObject);
@@ -376,27 +360,30 @@ export default function Community() {
     earnTokens(2);
 
     try {
-      const createdComment = await communityApi.addComment(
+      const result = await communityApi.addComment(
         activePost.id,
         freshComment.content,
         true,
       );
+      const createdComment = result.comment;
       const syncedComment: Comment = {
         id: createdComment.id ?? createdComment._id ?? freshComment.id,
         author: createdComment.isAnonymous
           ? "Anonymous member"
           : "Community member",
-        avatar: "NU",
+        avatar: "AU",
         content: createdComment.content,
         time: formatRelativeTime(createdComment.createdAt),
+        isOwner: true,
       };
       setPosts((current) =>
         current.map((item) =>
           item.id === activePost.id
             ? {
-                ...item,
-                comments: [...item.comments.slice(0, -1), syncedComment],
-              }
+              ...item,
+              commentsCount: result.commentsCount,
+              comments: [...item.comments.slice(0, -1), syncedComment],
+            }
             : item,
         ),
       );
@@ -435,6 +422,62 @@ export default function Community() {
     closeOptions();
   }
 
+  // Called directly from OptionsModal — no Alert needed, the tap IS the confirmation
+  async function handleDeletePost() {
+    if (!activePost) return;
+    const postId = activePost.id;
+    closeOptions();
+    setPosts((current) => current.filter((p) => p.id !== postId));
+    try {
+      await communityApi.deletePost(postId);
+    } catch {
+      Alert.alert("Error", "Could not delete post. Please try again.");
+      loadPosts();
+    }
+  }
+
+  async function handleDeleteComment(postId: string, commentId: string) {
+    Alert.alert(
+      "Delete Comment",
+      "Remove this comment permanently?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            // Optimistic local removal from both posts list and activePost
+            setPosts((current) =>
+              current.map((p) =>
+                p.id === postId
+                  ? {
+                    ...p,
+                    commentsCount: Math.max(0, p.commentsCount - 1),
+                    comments: p.comments.filter((c) => c.id !== commentId),
+                  }
+                  : p,
+              ),
+            );
+            setActivePost((prev) =>
+              prev && prev.id === postId
+                ? {
+                  ...prev,
+                  commentsCount: Math.max(0, prev.commentsCount - 1),
+                  comments: prev.comments.filter((c) => c.id !== commentId),
+                }
+                : prev,
+            );
+            try {
+              await communityApi.deleteComment(postId, commentId);
+            } catch {
+              Alert.alert("Error", "Could not delete comment. Please try again.");
+            }
+          },
+        },
+      ],
+    );
+  }
+
   return (
     <>
       <StatusBar
@@ -442,16 +485,27 @@ export default function Community() {
         backgroundColor={colors.background}
       />
 
-      <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
+      <SafeAreaView
+        className="flex-1"
+        style={{ backgroundColor: colors.background }}
+      >
         <View className="flex-1 relative">
-          
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 140 }}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 140 }}
+          >
             {/* Header */}
             <View className="px-6 pt-6">
-              <Text className="text-3xl font-extrabold tracking-tight" style={{ color: colors.foreground }}>
+              <Text
+                className="text-3xl font-extrabold tracking-tight"
+                style={{ color: colors.foreground }}
+              >
                 Community
               </Text>
-              <Text className="text-xs font-semibold mt-1" style={{ color: colors.mutedText }}>
+              <Text
+                className="text-xs font-semibold mt-1"
+                style={{ color: colors.mutedText }}
+              >
                 Share experiences, ask questions, and find care resources safely
               </Text>
             </View>
@@ -476,11 +530,20 @@ export default function Community() {
                     activeOpacity={0.8}
                     className="rounded-full px-5 py-2.5 border"
                     style={{
-                      backgroundColor: isSelected ? colors.primary : colors.surface,
+                      backgroundColor: isSelected
+                        ? colors.primary
+                        : colors.surface,
                       borderColor: isSelected ? colors.primary : colors.border,
                     }}
                   >
-                    <Text className="text-xs font-bold tracking-wide" style={{ color: isSelected ? colors.buttonText : colors.foreground }}>
+                    <Text
+                      className="text-xs font-bold tracking-wide"
+                      style={{
+                        color: isSelected
+                          ? colors.buttonText
+                          : colors.foreground,
+                      }}
+                    >
                       {tab.label}
                     </Text>
                   </TouchableOpacity>
@@ -491,95 +554,295 @@ export default function Community() {
             {/* FEED CONTAINER */}
             {activeTab === "posts" && (
               <View className="mt-6 gap-4 px-6">
-                {posts.map((post) => {
-                  const isReported = reportedPosts.has(post.id);
-                  const isLiked = likedPostIds.has(post.id);
-                  const isSaved = savedPosts.has(post.id);
+                {isPostsLoading && (
+                  <View
+                    className="rounded-3xl border p-6 items-center"
+                    style={{
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    }}
+                  >
+                    <ActivityIndicator color={colors.primary} />
+                    <Text
+                      className="mt-3 text-xs font-bold"
+                      style={{ color: colors.mutedText }}
+                    >
+                      Loading anonymous posts...
+                    </Text>
+                  </View>
+                )}
+                {!isPostsLoading && postsError && (
+                  <View
+                    className="rounded-3xl border p-6 items-center"
+                    style={{
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    }}
+                  >
+                    <Ionicons
+                      name="cloud-offline-outline"
+                      size={24}
+                      color={colors.primary}
+                    />
+                    <Text
+                      className="mt-4 text-sm font-extrabold text-center"
+                      style={{ color: colors.foreground }}
+                    >
+                      Could not load posts
+                    </Text>
+                    <Text
+                      className="mt-1 text-xs text-center leading-4"
+                      style={{ color: colors.mutedText }}
+                    >
+                      Check your connection and try again.
+                    </Text>
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      className="mt-4 rounded-full px-4 py-2"
+                      onPress={loadPosts}
+                      style={{ backgroundColor: colors.primary }}
+                    >
+                      <Text
+                        className="text-xs font-bold"
+                        style={{ color: colors.buttonText }}
+                      >
+                        Retry
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+                {!isPostsLoading &&
+                  !postsError &&
+                  posts.map((post) => {
+                    const isReported = reportedPosts.has(post.id);
+                    const isLiked = likedPostIds.has(post.id);
+                    const isSaved = savedPosts.has(post.id);
 
-                  return (
+                    return (
+                      <View
+                        key={post.id}
+                        className="rounded-3xl border p-5 shadow-2xs relative"
+                        style={{
+                          backgroundColor: colors.surface,
+                          borderColor: isReported ? "#ef4444" : colors.border,
+                        }}
+                      >
+                        <View className="flex-row items-center justify-between">
+                          <View className="flex-row items-center gap-3">
+                            <View
+                              className="w-11 h-11 rounded-full items-center justify-center border"
+                              style={{
+                                backgroundColor: colors.surfaceSoft,
+                                borderColor: colors.border,
+                              }}
+                            >
+                              <Text className="text-xl">{post.avatar}</Text>
+                            </View>
+                            <View>
+                              <Text
+                                className="text-sm font-bold"
+                                style={{ color: colors.foreground }}
+                              >
+                                {post.author}
+                              </Text>
+                              <Text
+                                className="text-[11px] font-semibold mt-0.5"
+                                style={{ color: colors.mutedText }}
+                              >
+                                {post.time}
+                              </Text>
+                            </View>
+                          </View>
+                          <TouchableOpacity
+                            onPress={() => openOptions(post)}
+                            className="p-2 -mr-2"
+                          >
+                            <Feather
+                              name="more-vertical"
+                              size={18}
+                              color={colors.mutedText}
+                            />
+                          </TouchableOpacity>
+                        </View>
+
+                        <Text
+                          className="mt-4 text-sm font-medium leading-5"
+                          style={{ color: colors.foreground }}
+                        >
+                          {post.content}
+                        </Text>
+
+                        {/* Action Bar */}
+                        <View
+                          className="mt-5 pt-3 flex-row justify-between items-center px-1"
+                          style={{ borderTopWidth: 1, borderTopColor: colors.border }}
+                        >
+                          <TouchableOpacity
+                            className="flex-row items-center gap-2 py-1"
+                            onPress={() => toggleLike(post)}
+                          >
+                            <Ionicons
+                              name={isLiked ? "heart" : "heart-outline"}
+                              size={20}
+                              color={isLiked ? "#e11d48" : colors.mutedText}
+                            />
+                            <Text
+                              className="text-xs font-bold"
+                              style={{ color: colors.mutedText }}
+                            >
+                              {post.likes}
+                            </Text>
+                          </TouchableOpacity>
+
+                          {/* Open Threads-Style sliding comments sub-module */}
+                          <TouchableOpacity
+                            className="flex-row items-center gap-2 py-1"
+                            onPress={() => openCommentsSheet(post)}
+                          >
+                            <Ionicons
+                              name="chatbubble-outline"
+                              size={18}
+                              color={colors.mutedText}
+                            />
+                            <Text
+                              className="text-xs font-bold"
+                              style={{ color: colors.mutedText }}
+                            >
+                              {post.commentsCount}
+                            </Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            className="py-1"
+                            onPress={() => shareCommunityPost(post)}
+                          >
+                            <Ionicons
+                              name="share-social-outline"
+                              size={19}
+                              color={colors.mutedText}
+                            />
+                          </TouchableOpacity>
+                        </View>
+
+                        {/* Meta badges overlay */}
+                        {(isSaved || isReported) && (
+                          <View className="mt-4 flex-row gap-1.5">
+                            {isSaved && (
+                              <View
+                                className="flex-row items-center gap-1 rounded-full px-2.5 py-0.5"
+                                style={{ backgroundColor: colors.primaryLight }}
+                              >
+                                <Text
+                                  className="text-[10px] font-bold"
+                                  style={{ color: colors.primary }}
+                                >
+                                  Saved
+                                </Text>
+                              </View>
+                            )}
+                            {isReported && (
+                              <View
+                                className="flex-row items-center gap-1 rounded-full px-2.5 py-0.5"
+                                style={{ backgroundColor: colors.dangerLight }}
+                              >
+                                <Text
+                                  className="text-[10px] font-bold"
+                                  style={{ color: "#ef4444" }}
+                                >
+                                  Reported
+                                </Text>
+                              </View>
+                            )}
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })}
+                {!isPostsLoading && !postsError && posts.length === 0 && (
+                  <View
+                    className="rounded-3xl border p-6 items-center"
+                    style={{
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    }}
+                  >
                     <View
-                      key={post.id}
-                      className="rounded-3xl border p-5 shadow-2xs relative"
+                      className="w-12 h-12 rounded-2xl items-center justify-center border"
                       style={{
-                        backgroundColor: colors.surface,
-                        borderColor: isReported ? "#ef4444" : colors.border,
+                        backgroundColor: colors.surfaceSoft,
+                        borderColor: colors.border,
                       }}
                     >
-                      <View className="flex-row items-center justify-between">
-                        <View className="flex-row items-center gap-3">
-                          <View
-                            className="w-11 h-11 rounded-full items-center justify-center border"
-                            style={{
-                              backgroundColor: colors.surfaceSoft,
-                              borderColor: colors.border,
-                            }}
-                          >
-                            <Text className="text-xl">{post.avatar}</Text>
-                          </View>
-                          <View>
-                            <Text className="text-sm font-bold" style={{ color: colors.foreground }}>{post.author}</Text>
-                            <Text className="text-[11px] font-semibold mt-0.5" style={{ color: colors.mutedText }}>{post.time}</Text>
-                          </View>
-                        </View>
-                        <TouchableOpacity onPress={() => openOptions(post)} className="p-2 -mr-2">
-                          <Feather name="more-vertical" size={18} color={colors.mutedText} />
-                        </TouchableOpacity>
-                      </View>
-
-                      <Text className="mt-4 text-sm font-medium leading-5" style={{ color: colors.foreground }}>
-                        {post.content}
-                      </Text>
-
-                      {/* Action Bar */}
-                      <View className="mt-5 pt-3 border-t border-neutral-100 dark:border-neutral-800/60 flex-row justify-between items-center px-1">
-                        <TouchableOpacity className="flex-row items-center gap-2 py-1" onPress={() => toggleLike(post)}>
-                          <Ionicons name={isLiked ? "heart" : "heart-outline"} size={20} color={isLiked ? "#e11d48" : colors.mutedText} />
-                          <Text className="text-xs font-bold" style={{ color: colors.mutedText }}>{post.likes}</Text>
-                        </TouchableOpacity>
-
-                        {/* Open Threads-Style sliding comments sub-module */}
-                        <TouchableOpacity className="flex-row items-center gap-2 py-1" onPress={() => openCommentsSheet(post)}>
-                          <Ionicons name="chatbubble-outline" size={18} color={colors.mutedText} />
-                          <Text className="text-xs font-bold" style={{ color: colors.mutedText }}>{post.commentsCount}</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity className="py-1" onPress={() => shareCommunityPost(post)}>
-                          <Ionicons name="share-social-outline" size={19} color={colors.mutedText} />
-                        </TouchableOpacity>
-                      </View>
-
-                      {/* Meta badges overlay */}
-                      {(isSaved || isReported) && (
-                        <View className="mt-4 flex-row gap-1.5">
-                          {isSaved && (
-                            <View className="flex-row items-center gap-1 rounded-full px-2.5 py-0.5 bg-pink-50 dark:bg-pink-950/40">
-                              <Text className="text-[10px] font-bold" style={{ color: colors.primary }}>Saved</Text>
-                            </View>
-                          )}
-                          {isReported && (
-                            <View className="flex-row items-center gap-1 rounded-full px-2.5 py-0.5 bg-red-50 dark:bg-red-950/40">
-                              <Text className="text-[10px] font-bold" style={{ color: "#ef4444" }}>Reported</Text>
-                            </View>
-                          )}
-                        </View>
-                      )}
+                      <Ionicons
+                        name="chatbubble-ellipses-outline"
+                        size={22}
+                        color={colors.primary}
+                      />
                     </View>
-                  );
-                })}
+                    <Text
+                      className="mt-4 text-sm font-extrabold text-center"
+                      style={{ color: colors.foreground }}
+                    >
+                      No anonymous posts yet
+                    </Text>
+                    <Text
+                      className="mt-1 text-xs text-center leading-4"
+                      style={{ color: colors.mutedText }}
+                    >
+                      Start the first thread when you are ready to share.
+                    </Text>
+                  </View>
+                )}
               </View>
             )}
 
             {/* BUDDY MATCHING SYSTEM */}
             {activeTab === "buddy" && (
               <View className="mt-6 px-6">
-                <View className="rounded-3xl border p-6 items-center shadow-xs" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
-                  <View className="p-4 rounded-2xl mb-4" style={{ backgroundColor: softTints.pink }}>
-                    <MaterialCommunityIcons name="star-face" size={36} color={colors.primary} />
+                <View
+                  className="rounded-3xl border p-6 items-center shadow-xs"
+                  style={{
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  }}
+                >
+                  <View
+                    className="p-4 rounded-2xl mb-4"
+                    style={{ backgroundColor: softTints.pink }}
+                  >
+                    <MaterialCommunityIcons
+                      name="star-face"
+                      size={36}
+                      color={colors.primary}
+                    />
                   </View>
-                  <Text className="text-lg font-extrabold" style={{ color: colors.foreground }}>Nominate Period Buddy</Text>
-                  <Text className="mt-2 text-xs text-center px-4 leading-4" style={{ color: colors.mutedText }}>Find a private buddy with a similar cycle phase and care routine.</Text>
-                  <TouchableOpacity activeOpacity={0.85} className="mt-6 w-full rounded-xl py-3.5 items-center justify-center" onPress={() => router.push("/(app)/buddy-nomination" as any)} style={{ backgroundColor: colors.primary }}>
-                    <Text className="text-sm font-bold" style={{ color: colors.buttonText }}>Nominate Now</Text>
+                  <Text
+                    className="text-lg font-extrabold"
+                    style={{ color: colors.foreground }}
+                  >
+                    Nominate Period Buddy
+                  </Text>
+                  <Text
+                    className="mt-2 text-xs text-center px-4 leading-4"
+                    style={{ color: colors.mutedText }}
+                  >
+                    Find a private buddy with a similar cycle phase and care
+                    routine.
+                  </Text>
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    className="mt-6 w-full rounded-xl py-3.5 items-center justify-center"
+                    onPress={() =>
+                      router.push("/(app)/buddy-nomination" as any)
+                    }
+                    style={{ backgroundColor: colors.primary }}
+                  >
+                    <Text
+                      className="text-sm font-bold"
+                      style={{ color: colors.buttonText }}
+                    >
+                      Nominate Now
+                    </Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -588,29 +851,165 @@ export default function Community() {
             {/* EDUCATION MODULE (BLOGS) */}
             {activeTab === "blogs" && (
               <View className="mt-6 px-6 gap-5">
-                {blogsData.map((blog) => (
-                  <TouchableOpacity key={blog.id} className="overflow-hidden rounded-3xl border flex-row h-28" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
-                    <Image source={{ uri: blog.thumbnailUrl }} className="w-28 h-full bg-neutral-200" />
-                    <View className="flex-1 p-3 justify-center">
-                      <Text className="font-extrabold text-sm" style={{ color: colors.foreground }}>{blog.title}</Text>
-                      <Text className="text-[11px] mt-1" style={{ color: colors.mutedText }} numberOfLines={2}>{blog.subtitle}</Text>
-                    </View>
-                  </TouchableOpacity>
-                ))}
-                {reelsData.map((reel) => (
-                  <TouchableOpacity key={reel.id} className="overflow-hidden rounded-3xl border flex-row h-28" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
-                    <View className="w-28 h-full relative">
-                      <Image source={{ uri: reel.thumbnailUrl }} className="w-full h-full bg-neutral-200" />
-                      <View className="absolute inset-0 items-center justify-center bg-black/20">
-                        <Ionicons name="play-circle" size={26} color="white" />
+                {isEducationLoading && (
+                  <View
+                    className="rounded-3xl border p-6 items-center"
+                    style={{
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    }}
+                  >
+                    <ActivityIndicator color={colors.primary} />
+                    <Text
+                      className="mt-3 text-xs font-bold"
+                      style={{ color: colors.mutedText }}
+                    >
+                      Loading blogs and reels...
+                    </Text>
+                  </View>
+                )}
+                {!isEducationLoading && educationError && (
+                  <View
+                    className="rounded-3xl border p-6 items-center"
+                    style={{
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    }}
+                  >
+                    <Ionicons
+                      name="cloud-offline-outline"
+                      size={24}
+                      color={colors.primary}
+                    />
+                    <Text
+                      className="mt-4 text-sm font-extrabold text-center"
+                      style={{ color: colors.foreground }}
+                    >
+                      Could not load learning feed
+                    </Text>
+                    <Text
+                      className="mt-1 text-xs text-center leading-4"
+                      style={{ color: colors.mutedText }}
+                    >
+                      Check your connection and try again.
+                    </Text>
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      className="mt-4 rounded-full px-4 py-2"
+                      onPress={loadEducationFeed}
+                      style={{ backgroundColor: colors.primary }}
+                    >
+                      <Text
+                        className="text-xs font-bold"
+                        style={{ color: colors.buttonText }}
+                      >
+                        Retry
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+                {!isEducationLoading &&
+                  !educationError &&
+                  blogsData.map((blog) => (
+                    <TouchableOpacity
+                      key={blog.id}
+                      className="overflow-hidden rounded-3xl border flex-row h-28"
+                      style={{
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                      }}
+                    >
+                      <Image
+                        source={{ uri: blog.thumbnailUrl }}
+                        className="w-28 h-full bg-neutral-200"
+                      />
+                      <View className="flex-1 p-3 justify-center">
+                        <Text
+                          className="font-extrabold text-sm"
+                          style={{ color: colors.foreground }}
+                        >
+                          {blog.title}
+                        </Text>
+                        <Text
+                          className="text-[11px] mt-1"
+                          style={{ color: colors.mutedText }}
+                          numberOfLines={2}
+                        >
+                          {blog.subtitle}
+                        </Text>
                       </View>
+                    </TouchableOpacity>
+                  ))}
+                {!isEducationLoading &&
+                  !educationError &&
+                  reelsData.map((reel) => (
+                    <TouchableOpacity
+                      key={reel.id}
+                      className="overflow-hidden rounded-3xl border flex-row h-28"
+                      style={{
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                      }}
+                    >
+                      <View className="w-28 h-full relative">
+                        <Image
+                          source={{ uri: reel.thumbnailUrl }}
+                          className="w-full h-full bg-neutral-200"
+                        />
+                        <View className="absolute inset-0 items-center justify-center bg-black/20">
+                          <Ionicons
+                            name="play-circle"
+                            size={26}
+                            color="white"
+                          />
+                        </View>
+                      </View>
+                      <View className="flex-1 p-3 justify-center">
+                        <Text
+                          className="font-extrabold text-sm"
+                          style={{ color: colors.foreground }}
+                        >
+                          {reel.title}
+                        </Text>
+                        <Text
+                          className="text-[11px] mt-1"
+                          style={{ color: colors.mutedText }}
+                        >
+                          {reel.videoDuration}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                {!isEducationLoading &&
+                  !educationError &&
+                  blogsData.length === 0 &&
+                  reelsData.length === 0 && (
+                    <View
+                      className="rounded-3xl border p-6 items-center"
+                      style={{
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                      }}
+                    >
+                      <Ionicons
+                        name="book-outline"
+                        size={24}
+                        color={colors.primary}
+                      />
+                      <Text
+                        className="mt-4 text-sm font-extrabold text-center"
+                        style={{ color: colors.foreground }}
+                      >
+                        No learning content yet
+                      </Text>
+                      <Text
+                        className="mt-1 text-xs text-center leading-4"
+                        style={{ color: colors.mutedText }}
+                      >
+                        Published blogs and reels will appear here.
+                      </Text>
                     </View>
-                    <View className="flex-1 p-3 justify-center">
-                      <Text className="font-extrabold text-sm" style={{ color: colors.foreground }}>{reel.title}</Text>
-                      <Text className="text-[11px] mt-1" style={{ color: colors.mutedText }}>{reel.videoDuration}</Text>
-                    </View>
-                  </TouchableOpacity>
-                ))}
+                  )}
               </View>
             )}
           </ScrollView>
@@ -621,7 +1020,10 @@ export default function Community() {
               activeOpacity={0.9}
               onPress={() => setCreatePostVisible(true)}
               className="absolute bottom-28 right-6 w-14 h-14 rounded-full items-center justify-center shadow-lg border"
-              style={{ backgroundColor: colors.primary, borderColor: colors.background }}
+              style={{
+                backgroundColor: colors.primary,
+                borderColor: colors.background,
+              }}
             >
               <Feather name="edit-3" size={22} color={colors.buttonText} />
             </TouchableOpacity>
@@ -630,103 +1032,254 @@ export default function Community() {
       </SafeAreaView>
 
       {/* --- MODAL FEATURE 1: COMPOSE FRESH POST SHEET --- */}
-      <Modal visible={createPostVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setCreatePostVisible(false)}>
-        <View className="flex-1 px-6 pt-6" style={{ backgroundColor: colors.background }}>
-          <View className="flex-row justify-between items-center mb-6">
-            <TouchableOpacity onPress={() => setCreatePostVisible(false)}>
-              <Text className="text-base font-semibold" style={{ color: colors.mutedText }}>Cancel</Text>
-            </TouchableOpacity>
-            <Text className="text-lg font-black" style={{ color: colors.foreground }}>New Thread</Text>
-            <TouchableOpacity onPress={handlePublishPost} className="px-4 py-1.5 rounded-full" style={{ backgroundColor: colors.primary }}>
-              <Text className="text-xs font-bold" style={{ color: colors.buttonText }}>Post</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View className="flex-row gap-4 flex-1">
-            <View className="w-10 h-10 bg-pink-100 rounded-full items-center justify-center">
-              <Text className="text-lg">✨</Text>
+      <Modal
+        visible={createPostVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setCreatePostVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+        >
+          <View
+            className="flex-1 px-6 pt-6"
+            style={{
+              backgroundColor: colors.background,
+              paddingBottom: Math.max(18, insets.bottom + 10),
+            }}
+          >
+            <View className="flex-row justify-between items-center mb-6">
+              <TouchableOpacity onPress={() => setCreatePostVisible(false)}>
+                <Text
+                  className="text-base font-semibold"
+                  style={{ color: colors.mutedText }}
+                >
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              <Text
+                className="text-lg font-black"
+                style={{ color: colors.foreground }}
+              >
+                New Thread
+              </Text>
+              <TouchableOpacity
+                onPress={handlePublishPost}
+                className="px-4 py-1.5 rounded-full"
+                style={{ backgroundColor: colors.primary }}
+              >
+                <Text
+                  className="text-xs font-bold"
+                  style={{ color: colors.buttonText }}
+                >
+                  Post
+                </Text>
+              </TouchableOpacity>
             </View>
-            <TextInput
-              multiline
-              autoFocus
-              placeholder="What's on your mind? Share your cycle update anonymously..."
-              placeholderTextColor={colors.mutedText}
-              value={newPostContent}
-              onChangeText={setNewPostContent}
-              className="flex-1 text-base pt-1"
-              style={{ color: colors.foreground, verticalAlign: "top" }}
-            />
+
+            <View className="flex-row gap-4 flex-1">
+              <View className="w-10 h-10 bg-pink-100 rounded-full items-center justify-center">
+                <Text className="text-lg">✨</Text>
+              </View>
+              <TextInput
+                multiline
+                autoFocus
+                placeholder="What's on your mind? Share your cycle update anonymously..."
+                placeholderTextColor={colors.mutedText}
+                value={newPostContent}
+                onChangeText={setNewPostContent}
+                className="flex-1 text-base pt-1"
+                style={{ color: colors.foreground, verticalAlign: "top" }}
+                textAlignVertical="top"
+              />
+            </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* --- MODAL FEATURE 2: THREADS STYLE DETAIL SLIDING COMMENTS MODULE --- */}
-      <Modal visible={commentsModalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeCommentsSheet}>
-        <View className="flex-1" style={{ backgroundColor: colors.background }}>
-          {/* Sheet Header navigation panel bar */}
-          <View className="px-6 py-4 border-b border-neutral-100 dark:border-neutral-900 flex-row justify-between items-center">
-            <TouchableOpacity onPress={closeCommentsSheet}>
-              <Feather name="x" size={20} color={colors.foreground} />
-            </TouchableOpacity>
-            <Text className="text-base font-black" style={{ color: colors.foreground }}>Thread Discussion</Text>
-            <View className="w-5" />
-          </View>
-
-          <ScrollView showsVerticalScrollIndicator={false} className="flex-1 px-6 pt-4">
-            {/* Primary Render Target Focused Post Header Context info segment */}
-            {activePost && (
-              <View className="pb-5 border-b border-neutral-100 dark:border-neutral-900">
-                <View className="flex-row items-center gap-3">
-                  <Text className="text-2xl">{activePost.avatar}</Text>
-                  <Text className="text-sm font-bold" style={{ color: colors.foreground }}>{activePost.author}</Text>
-                </View>
-                <Text className="mt-3 text-sm leading-5" style={{ color: colors.foreground }}>{activePost.content}</Text>
-              </View>
-            )}
-
-            {/* List Array Generation target segment for mapped Comments database blocks */}
-            <View className="mt-5 gap-4 pb-20">
-              <Text className="text-xs font-bold tracking-widest uppercase mb-1" style={{ color: colors.mutedText }}>Responses</Text>
-              {activePost?.comments.map((comment) => (
-                <View key={comment.id} className="flex-row gap-3.5 items-start p-1">
-                  <View className="w-9 h-9 bg-neutral-100 dark:bg-neutral-800 rounded-full items-center justify-center">
-                    <Text className="text-base">{comment.avatar}</Text>
-                  </View>
-                  <View className="flex-1 bg-neutral-50 dark:bg-neutral-900/60 p-3.5 rounded-2xl border border-neutral-100/50 dark:border-neutral-800/40">
-                    <View className="flex-row justify-between items-center">
-                      <Text className="text-xs font-bold" style={{ color: colors.foreground }}>{comment.author}</Text>
-                      <Text className="text-[10px] font-semibold" style={{ color: colors.mutedText }}>{comment.time}</Text>
-                    </View>
-                    <Text className="text-xs font-medium mt-1.5 leading-4" style={{ color: colors.foreground }}>{comment.content}</Text>
-                  </View>
-                </View>
-              ))}
-              {activePost?.comments.length === 0 && (
-                <Text className="text-xs text-center italic my-6" style={{ color: colors.mutedText }}>Be the first one to leave a supportive reply!</Text>
-              )}
-            </View>
-          </ScrollView>
-
-          {/* Persistent Absolute Standard Footer Input field layout for writing replies */}
-          <View className="px-4 py-3 border-t border-neutral-100 dark:border-neutral-900 flex-row items-center gap-3" style={{ backgroundColor: colors.surface }}>
-            <TextInput
-              placeholder="Post your reply..."
-              placeholderTextColor={colors.mutedText}
-              value={newCommentContent}
-              onChangeText={setNewCommentContent}
-              className="flex-1 bg-neutral-100 dark:bg-neutral-800 px-4 py-3 rounded-xl text-sm"
-              style={{ color: colors.foreground }}
-            />
-            <TouchableOpacity 
-              disabled={!newCommentContent.trim()} 
-              onPress={handlePublishComment} 
-              className="p-2.5 rounded-full items-center justify-center"
-              style={{ backgroundColor: newCommentContent.trim() ? colors.primary : colors.border }}
+      <Modal
+        visible={commentsModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={closeCommentsSheet}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+        >
+          <View className="flex-1" style={{ backgroundColor: colors.background }}>
+            {/* Sheet Header navigation panel bar */}
+            <View
+              className="px-6 py-4 flex-row justify-between items-center"
+              style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}
             >
-              <Feather name="arrow-up" size={16} color={newCommentContent.trim() ? colors.buttonText : colors.mutedText} />
-            </TouchableOpacity>
+              <TouchableOpacity onPress={closeCommentsSheet}>
+                <Feather name="x" size={20} color={colors.foreground} />
+              </TouchableOpacity>
+              <Text
+                className="text-base font-black"
+                style={{ color: colors.foreground }}
+              >
+                Thread Discussion
+              </Text>
+              <View className="w-5" />
+            </View>
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              className="flex-1 px-6 pt-4"
+              keyboardDismissMode="on-drag"
+              keyboardShouldPersistTaps="handled"
+            >
+              {/* Primary Render Target Focused Post Header Context info segment */}
+              {activePost && (
+                <View
+                  className="pb-5"
+                  style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}
+                >
+                  <View className="flex-row items-center gap-3">
+                    <Text className="text-2xl">{activePost.avatar}</Text>
+                    <Text
+                      className="text-sm font-bold"
+                      style={{ color: colors.foreground }}
+                    >
+                      {activePost.author}
+                    </Text>
+                  </View>
+                  <Text
+                    className="mt-3 text-sm leading-5"
+                    style={{ color: colors.foreground }}
+                  >
+                    {activePost.content}
+                  </Text>
+                </View>
+              )}
+
+              {/* List Array Generation target segment for mapped Comments database blocks */}
+              <View className="mt-5 gap-4 pb-20">
+                <Text
+                  className="text-xs font-bold tracking-widest uppercase mb-1"
+                  style={{ color: colors.mutedText }}
+                >
+                  Responses
+                </Text>
+                {activePost?.comments.map((comment) => (
+                  <View
+                    key={comment.id}
+                    className="flex-row gap-3.5 items-start p-1"
+                  >
+                    <View
+                      className="w-9 h-9 rounded-full items-center justify-center"
+                      style={{ backgroundColor: colors.surfaceSoft }}
+                    >
+                      <Text className="text-base">{comment.avatar}</Text>
+                    </View>
+                    <View
+                      className="flex-1 p-3.5 rounded-2xl"
+                      style={{
+                        backgroundColor: colors.surfaceSoft,
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                      }}
+                    >
+                      <View className="flex-row justify-between items-center">
+                        <Text
+                          className="text-xs font-bold"
+                          style={{ color: colors.foreground }}
+                        >
+                          {comment.author}
+                        </Text>
+                        <View className="flex-row items-center gap-2">
+                          <Text
+                            className="text-[10px] font-semibold"
+                            style={{ color: colors.mutedText }}
+                          >
+                            {comment.time}
+                          </Text>
+                          {comment.isOwner && activePost && (
+                            <TouchableOpacity
+                              onPress={() =>
+                                handleDeleteComment(activePost.id, comment.id)
+                              }
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            >
+                              <Feather
+                                name="trash-2"
+                                size={13}
+                                color={colors.danger}
+                              />
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      </View>
+                      <Text
+                        className="text-xs font-medium mt-1.5 leading-4"
+                        style={{ color: colors.foreground }}
+                      >
+                        {comment.content}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+                {activePost?.comments.length === 0 && (
+                  <Text
+                    className="text-xs text-center italic my-6"
+                    style={{ color: colors.mutedText }}
+                  >
+                    Be the first one to leave a supportive reply!
+                  </Text>
+                )}
+              </View>
+            </ScrollView>
+
+            {/* Persistent Absolute Standard Footer Input field layout for writing replies */}
+            <View
+              className="px-4 py-3 flex-row items-center gap-3"
+              style={{
+                borderTopWidth: 1,
+                borderTopColor: colors.border,
+                backgroundColor: colors.surface,
+                paddingBottom: Math.max(12, insets.bottom + 8),
+              }}
+            >
+              <TextInput
+                placeholder="Post your reply..."
+                placeholderTextColor={colors.mutedText}
+                value={newCommentContent}
+                onChangeText={setNewCommentContent}
+                className="flex-1 px-4 py-3 rounded-xl text-sm"
+                style={{
+                  backgroundColor: colors.input,
+                  color: colors.foreground,
+                }}
+                onSubmitEditing={handlePublishComment}
+                returnKeyType="send"
+              />
+              <TouchableOpacity
+                disabled={!newCommentContent.trim()}
+                onPress={handlePublishComment}
+                className="p-2.5 rounded-full items-center justify-center"
+                style={{
+                  backgroundColor: newCommentContent.trim()
+                    ? colors.primary
+                    : colors.border,
+                }}
+              >
+                <Feather
+                  name="arrow-up"
+                  size={16}
+                  color={
+                    newCommentContent.trim()
+                      ? colors.buttonText
+                      : colors.mutedText
+                  }
+                />
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <OptionsModal
@@ -738,6 +1291,11 @@ export default function Community() {
         }}
         onSave={saveActivePost}
         onReport={reportActivePost}
+        onDelete={
+          activePost?.isOwner
+            ? handleDeletePost
+            : undefined
+        }
         isSaved={activePost ? savedPosts.has(activePost.id) : false}
         isReported={activePost ? reportedPosts.has(activePost.id) : false}
       />

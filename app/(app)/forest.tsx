@@ -4,8 +4,10 @@ import {
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
+  Animated,
+  Easing,
   ScrollView,
   StatusBar,
   Text,
@@ -13,6 +15,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import { useAppState } from "../../components/AppState";
 import { useTheme } from "../../components/theme";
 import { forestApi, type ForestStatus } from "../../lib/api";
@@ -28,9 +31,71 @@ export default function Forest() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
   const { trackedDays } = useAppState();
+  const swayAnim = useRef(new Animated.Value(0)).current;
+  const floatAnim = useRef(new Animated.Value(0)).current;
+  const sparkleAnim = useRef(new Animated.Value(0)).current;
 
   const [isNourished, setIsNourished] = useState(false);
   const [forestStatus, setForestStatus] = useState<ForestStatus | null>(null);
+
+  useEffect(() => {
+    const animations = [
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(swayAnim, {
+            duration: 1800,
+            easing: Easing.inOut(Easing.sin),
+            toValue: 1,
+            useNativeDriver: true,
+          }),
+          Animated.timing(swayAnim, {
+            duration: 1800,
+            easing: Easing.inOut(Easing.sin),
+            toValue: 0,
+            useNativeDriver: true,
+          }),
+        ]),
+      ),
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(floatAnim, {
+            duration: 2200,
+            easing: Easing.inOut(Easing.quad),
+            toValue: 1,
+            useNativeDriver: true,
+          }),
+          Animated.timing(floatAnim, {
+            duration: 2200,
+            easing: Easing.inOut(Easing.quad),
+            toValue: 0,
+            useNativeDriver: true,
+          }),
+        ]),
+      ),
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(sparkleAnim, {
+            duration: 1200,
+            easing: Easing.inOut(Easing.ease),
+            toValue: 1,
+            useNativeDriver: true,
+          }),
+          Animated.timing(sparkleAnim, {
+            duration: 1200,
+            easing: Easing.inOut(Easing.ease),
+            toValue: 0,
+            useNativeDriver: true,
+          }),
+        ]),
+      ),
+    ];
+
+    animations.forEach((animation) => animation.start());
+
+    return () => {
+      animations.forEach((animation) => animation.stop());
+    };
+  }, [floatAnim, sparkleAnim, swayAnim]);
 
   useEffect(() => {
     let isMounted = true;
@@ -87,6 +152,18 @@ export default function Forest() {
 
   let forestTier = forestStatus?.forestTier ?? "Sprout Woodland";
   let tierColor = "#10b981"; // Emerald
+  const treeSway = swayAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["-3deg", "3deg"],
+  });
+  const leafFloat = floatAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -12],
+  });
+  const sparkleOpacity = sparkleAnim.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [0.45, 1, 0.45],
+  });
 
   if (!forestStatus && healthyTreeCount >= 20) {
     forestTier = "Ancient Evergreen Canopy";
@@ -155,114 +232,266 @@ export default function Forest() {
             }}
           >
             {/* Visual Ecosystem Container */}
-            <View className="h-44 w-full relative justify-center items-center overflow-hidden bg-neutral-900/5 dark:bg-black/30 pt-4">
-              {/* Ground/Grass Layer Base */}
-              <View className="absolute bottom-0 left-0 right-0 h-8 bg-emerald-950/20 dark:bg-emerald-900/10 border-t border-emerald-500/10" />
+            <LinearGradient
+              colors={
+                isDark
+                  ? ["#10231d", "#172033", "#0b1412"]
+                  : ["#ecfdf5", "#eef2ff", "#fff1f2"]
+              }
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={{
+                height: 236,
+                overflow: "hidden",
+                position: "relative",
+                width: "100%",
+              }}
+            >
+              <Animated.View
+                style={{
+                  opacity: sparkleOpacity,
+                  position: "absolute",
+                  right: 24,
+                  top: 22,
+                  transform: [{ translateY: leafFloat }],
+                }}
+              >
+                <Ionicons
+                  name={isDark ? "moon" : "sunny"}
+                  size={30}
+                  color={isDark ? "#fde68a" : "#f59e0b"}
+                />
+              </Animated.View>
 
-              {/* Dynamic Layered Vector Trees (Replaced basic Emojis) */}
+              <View
+                style={{
+                  backgroundColor: isDark ? "#ffffff12" : "#ffffffaa",
+                  borderRadius: 999,
+                  height: 42,
+                  left: 30,
+                  position: "absolute",
+                  top: 46,
+                  width: 88,
+                }}
+              />
+              <View
+                style={{
+                  backgroundColor: isDark ? "#ffffff0f" : "#ffffff9a",
+                  borderRadius: 999,
+                  height: 34,
+                  position: "absolute",
+                  right: 64,
+                  top: 70,
+                  width: 72,
+                }}
+              />
+
+              <View
+                className="absolute bottom-0 left-0 right-0 h-14 border-t"
+                style={{
+                  backgroundColor: isDark ? "#064e3b55" : "#bbf7d0",
+                  borderColor: isDark ? "#10b98133" : "#86efac",
+                }}
+              />
+              <View
+                className="absolute bottom-9 left-0 right-0 h-10"
+                style={{
+                  backgroundColor: isDark ? "#10b98118" : "#dcfce7aa",
+                  borderTopLeftRadius: 999,
+                  borderTopRightRadius: 999,
+                }}
+              />
+
               {averageHealth >= 50 ? (
-                <View className="w-full h-full flex-row justify-center items-end pb-4 px-8 gap-4 relative">
-                  {/* Background Smaller Trees for depth */}
-                  <MaterialCommunityIcons
-                    name="tree"
-                    size={54}
-                    color={isDark ? "#064e3b" : "#0f766e"}
-                    style={{ opacity: 0.5, marginBottom: 4 }}
-                  />
-                  <FontAwesome5
-                    name="tree"
-                    size={48}
-                    color={isDark ? "#065f46" : "#115e59"}
+                <View className="h-full w-full items-center justify-end pb-8">
+                  <Animated.View
+                    className="absolute bottom-32 left-16"
                     style={{
-                      opacity: 0.4,
-                      marginBottom: 8,
-                      position: "absolute",
-                      left: "25%",
+                      opacity: sparkleOpacity,
+                      transform: [{ translateY: leafFloat }],
                     }}
-                  />
-
-                  {/* Primary Center Trees */}
-                  <MaterialCommunityIcons
-                    name="pine-tree"
-                    size={76}
-                    color={isDark ? "#10b981" : "#059669"}
-                    style={{ zIndex: 10 }}
-                  />
-                  <FontAwesome5
-                    name="tree"
-                    size={68}
-                    color={isDark ? "#059669" : "#10b981"}
-                    style={{ zIndex: 9 }}
-                  />
-
-                  {/* Foreground detail */}
-                  <MaterialCommunityIcons
-                    name="flower-tulip"
-                    size={20}
-                    color="#f43f5e"
+                  >
+                    <MaterialCommunityIcons
+                      name="leaf"
+                      size={20}
+                      color="#34d399"
+                    />
+                  </Animated.View>
+                  <Animated.View
+                    className="absolute bottom-28 right-20"
                     style={{
-                      position: "absolute",
-                      bottom: 6,
-                      left: "40%",
-                      zIndex: 12,
+                      opacity: sparkleOpacity,
+                      transform: [{ translateY: leafFloat }],
                     }}
-                  />
-                  <MaterialCommunityIcons
-                    name="leaf"
-                    size={16}
-                    color="#34d399"
-                    style={{
-                      position: "absolute",
-                      bottom: 12,
-                      right: "35%",
-                      zIndex: 12,
-                      transform: [{ rotate: "-15deg" }],
-                    }}
-                  />
+                  >
+                    <MaterialCommunityIcons
+                      name="flower-tulip"
+                      size={22}
+                      color="#fb7185"
+                    />
+                  </Animated.View>
 
+                  <View className="flex-row items-end justify-center gap-2">
+                    <Animated.View
+                      style={{
+                        opacity: 0.72,
+                        transform: [{ rotate: treeSway }],
+                      }}
+                    >
+                      <FontAwesome5
+                        name="tree"
+                        size={54}
+                        color={isDark ? "#047857" : "#0f766e"}
+                      />
+                    </Animated.View>
+                    <Animated.View style={{ transform: [{ rotate: treeSway }] }}>
+                      <MaterialCommunityIcons
+                        name="pine-tree"
+                        size={94}
+                        color={isDark ? "#34d399" : "#059669"}
+                      />
+                    </Animated.View>
+                    <Animated.View
+                      style={{
+                        transform: [{ rotate: treeSway }, { translateY: -4 }],
+                      }}
+                    >
+                      <FontAwesome5
+                        name="tree"
+                        size={78}
+                        color={isDark ? "#10b981" : "#16a34a"}
+                      />
+                    </Animated.View>
+                    <Animated.View
+                      style={{
+                        opacity: 0.68,
+                        transform: [{ rotate: treeSway }],
+                      }}
+                    >
+                      <MaterialCommunityIcons
+                        name="tree"
+                        size={58}
+                        color={isDark ? "#047857" : "#0d9488"}
+                      />
+                    </Animated.View>
+                  </View>
+
+                  <View className="mt-1 flex-row gap-3">
+                    <MaterialCommunityIcons
+                      name="flower"
+                      size={18}
+                      color="#f472b6"
+                    />
+                    <MaterialCommunityIcons
+                      name="sprout"
+                      size={20}
+                      color="#22c55e"
+                    />
+                    <MaterialCommunityIcons
+                      name="flower"
+                      size={16}
+                      color="#fb923c"
+                    />
+                  </View>
                 </View>
               ) : (
-                /* Wilted / Sick Forest State */
-                <View className="w-full h-full flex-row justify-center items-end pb-4 gap-6">
-                  <MaterialCommunityIcons
-                    name="tree-outline"
-                    size={64}
-                    color="#78716c"
-                    style={{ opacity: 0.6 }}
-                  />
-                  <MaterialCommunityIcons
-                    name="pine-tree-box"
-                    size={72}
-                    color="#57534e"
-                  />
-                  <MaterialCommunityIcons
-                    name="leaf-off"
-                    size={24}
-                    color="#a8a29e"
-                    style={{ position: "absolute", bottom: 16, right: "40%" }}
-                  />
+                <View className="h-full w-full items-center justify-end pb-8">
+                  <Animated.View
+                    className="flex-row items-end gap-5"
+                    style={{
+                      transform: [{ rotate: treeSway }],
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name="tree-outline"
+                      size={70}
+                      color={isDark ? "#a3a3a3" : "#78716c"}
+                      style={{ opacity: 0.78 }}
+                    />
+                    <MaterialCommunityIcons
+                      name="pine-tree-box"
+                      size={82}
+                      color={isDark ? "#78716c" : "#57534e"}
+                    />
+                  </Animated.View>
+                  <Animated.View
+                    className="absolute bottom-20 right-24"
+                    style={{
+                      opacity: sparkleOpacity,
+                      transform: [{ translateY: leafFloat }],
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name="leaf-off"
+                      size={24}
+                      color={isDark ? "#a8a29e" : "#78716c"}
+                    />
+                  </Animated.View>
                 </View>
               )}
 
-              {/* Floating Status Glassmorphic Badge */}
-              <View className="absolute top-4 left-4 backdrop-blur-md bg-white/10 dark:bg-black/40 px-3 py-1.5 rounded-2xl border border-white/20 shadow-sm">
+              <View
+                className="absolute left-4 top-4 rounded-2xl border px-3 py-1.5 shadow-sm"
+                style={{
+                  backgroundColor: isDark ? "#02061799" : "#ffffffdd",
+                  borderColor: isDark ? "#ffffff22" : "#ffffff",
+                }}
+              >
                 <Text
-                  className="text-[11px] font-bold tracking-widest uppercase"
+                  className="text-[11px] font-black tracking-widest uppercase"
                   style={{ color: tierColor }}
                 >
                   {forestTier}
                 </Text>
               </View>
 
-              {/* Water droplet animation confirmation */}
+              <View
+                className="absolute bottom-4 left-4 rounded-2xl border px-3 py-2"
+                style={{
+                  backgroundColor: isDark ? "#02061799" : "#ffffffdd",
+                  borderColor: isDark ? "#ffffff20" : colors.border,
+                }}
+              >
+                <Text
+                  className="text-[10px] font-black uppercase"
+                  style={{ color: colors.mutedText }}
+                >
+                  Care streak
+                </Text>
+                <Text
+                  className="text-sm font-black"
+                  style={{ color: colors.foreground }}
+                >
+                  {forestStatus?.careActions ?? trackedDays} actions
+                </Text>
+              </View>
+
               {isNourished && (
-                <View className="absolute inset-0 bg-blue-500/10 items-center justify-center">
-                  <Text className="text-blue-400 text-xs font-bold bg-neutral-900/80 px-3 py-1 rounded-full border border-blue-400/30">
-                    Forest hydrated +5% vitality
-                  </Text>
-                </View>
+                <Animated.View
+                  className="absolute inset-0 items-center justify-center"
+                  style={{
+                    backgroundColor: "#0284c733",
+                    opacity: sparkleOpacity,
+                  }}
+                >
+                  <View
+                    className="flex-row items-center gap-2 rounded-full border px-4 py-2"
+                    style={{
+                      backgroundColor: isDark ? "#082f49ee" : "#eff6ffee",
+                      borderColor: "#38bdf8",
+                    }}
+                  >
+                    <Ionicons name="water" size={16} color="#0284c7" />
+                    <Text
+                      className="text-xs font-black"
+                      style={{ color: isDark ? "#bae6fd" : "#075985" }}
+                    >
+                      Forest hydrated +5% vitality
+                    </Text>
+                  </View>
+                </Animated.View>
               )}
-            </View>
+            </LinearGradient>
 
             {/* Stats Dashboard Under Canopy */}
             <View
@@ -377,7 +606,10 @@ export default function Forest() {
                     </View>
 
                     {/* Right side individual tree render item */}
-                    <View className="items-center justify-center p-3 rounded-2xl bg-neutral-100 dark:bg-neutral-900/50 min-w-[76px] h-20">
+                    <View
+                      className="items-center justify-center p-3 rounded-2xl min-w-[76px] h-20"
+                      style={{ backgroundColor: colors.input }}
+                    >
                       {tree.status === "healthy" ? (
                         <MaterialCommunityIcons
                           name="tree"
@@ -459,8 +691,11 @@ export default function Forest() {
                         </View>
                       </View>
                       <View
-                        className="flex-row items-center gap-1.5 bg-neutral-100 dark:bg-neutral-900 px-3 py-1.5 rounded-lg border"
-                        style={{ borderColor: colors.border }}
+                        className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-lg border"
+                        style={{
+                          backgroundColor: colors.input,
+                          borderColor: colors.border,
+                        }}
                       >
                         <MaterialCommunityIcons
                           name="tree-outline"

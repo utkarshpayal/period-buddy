@@ -2,6 +2,8 @@ import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useRef, useState } from "react";
 import {
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StatusBar,
   Text,
@@ -9,7 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { useAppState } from "../../components/AppState";
 import { useTheme } from "../../components/theme";
@@ -18,17 +20,30 @@ import { questionAnswerApi } from "../../lib/api";
 
 // --- TELEHEALTH CONVERSATION MODEL CONTRACTS ---
 interface ChatMessage {
+  disclaimer?: string;
   id: string;
   sender: "user" | "companion";
+  source?: string;
+  suggestedQuestions?: string[];
   text: string;
   time: string;
 }
+
+const defaultSuggestedQuestions = [
+  "Is brown period blood normal?",
+  "Why are cramps worse this month?",
+  "How should I clean during my period?",
+];
+
+const defaultCompanionDisclaimer =
+  "General guidance only. For severe, unusual, or urgent symptoms, contact a trusted clinician.";
 
 export default function QA() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
   const { earnTokens } = useAppState();
   const scrollViewRef = useRef<ScrollView>(null);
+  const insets = useSafeAreaInsets();
   const actionGradient = getActionGradient(colors) as [string, string];
   const softTints = getSoftTints(colors);
 
@@ -39,9 +54,11 @@ export default function QA() {
   // Human-like conversational streams database initialization
   const [chatLog, setChatLog] = useState<ChatMessage[]>([
     {
+      disclaimer: defaultCompanionDisclaimer,
       id: "init_1",
       sender: "companion",
-      text: "Hi, I am Nura Companion. Ask anything about periods, discharge, cramps, hygiene, intimacy, partner questions, or body changes. No judgment, just clear and private guidance.",
+      suggestedQuestions: defaultSuggestedQuestions,
+      text: "Hi, I am Nura Companion. Ask anything about periods, discharge, cramps, hygiene, intimacy, partner questions, or body changes. I can share general education, and I will point you toward care when symptoms sound urgent.",
       time: "9:41 AM",
     },
   ]);
@@ -78,6 +95,21 @@ export default function QA() {
       response:
         "PMS support works best when it is respectful: validate feelings, offer practical help, and avoid teasing or blaming mood changes on a period. A heating pad, rest, water, and patience can help a lot.",
     },
+    {
+      keywords: [
+        "soaking",
+        "faint",
+        "dizzy",
+        "fever",
+        "severe pain",
+        "pregnant",
+        "suicide",
+        "self harm",
+      ],
+      response:
+        "This could need urgent help. If you are soaking pads quickly, feeling faint, have fever with pelvic pain, severe one-sided pain, bleeding during pregnancy, or thoughts of self-harm, contact emergency care or a trusted local clinician now.",
+      source: "urgent_safety",
+    },
   ];
 
   function formatCurrentTime(): string {
@@ -89,13 +121,14 @@ export default function QA() {
   }
 
   function handleTriggerConversation() {
-    const cleanQuery = typedQuestion.trim().toLowerCase();
-    if (!cleanQuery) return;
+    const submittedQuestion = typedQuestion.trim();
+    const cleanQuery = submittedQuestion.toLowerCase();
+    if (!cleanQuery || isCompanionTyping) return;
 
     const userMessagePayload: ChatMessage = {
       id: `msg_u_${Date.now()}`,
       sender: "user",
-      text: typedQuestion.trim(),
+      text: submittedQuestion,
       time: formatCurrentTime(),
     };
 
@@ -113,11 +146,19 @@ export default function QA() {
     // AI Companion reply emulation matching internal knowledge tokens mapping arrays
     setTimeout(async () => {
       let foundMatchedResponse = "";
+      let companionDisclaimer = defaultCompanionDisclaimer;
+      let companionSource = "local_fallback";
+      let suggestedQuestions = defaultSuggestedQuestions;
 
       try {
-        const result = await questionAnswerApi.ask(typedQuestion.trim());
+        const result = await questionAnswerApi.ask(submittedQuestion);
         foundMatchedResponse = result.answer;
-      } catch {
+        companionDisclaimer = result.disclaimer ?? companionDisclaimer;
+        companionSource = result.source;
+        suggestedQuestions = result.suggestedQuestions?.length
+          ? result.suggestedQuestions
+          : suggestedQuestions;
+      } catch (askError) {
         try {
           const result = await questionAnswerApi.getQuestions({
             search: cleanQuery,
@@ -126,10 +167,12 @@ export default function QA() {
           const matchedQuestion = result.data?.[0] ?? result.questions?.[0];
           if (matchedQuestion?.answer) {
             foundMatchedResponse = matchedQuestion.answer;
+            companionSource = "knowledge_base";
           }
         } catch (lookupError) {
           console.log(
             "Backend query failed, falling back to local knowledge base:",
+            askError,
             lookupError,
           );
         }
@@ -137,19 +180,24 @@ export default function QA() {
 
       if (!foundMatchedResponse) {
         // Internal keyword checking loop fallback
-        foundMatchedResponse = "That is a valid thing to wonder about. Try keywords like 'brown blood', 'period poop', 'tampon', 'cup', 'hygiene', or 'intimacy' so I can give a more specific answer.";
+        foundMatchedResponse =
+          "That is a valid thing to wonder about. Try keywords like 'brown blood', 'period poop', 'tampon', 'cup', 'hygiene', or 'intimacy' so I can give a more specific answer.";
 
         for (const entry of trainedLocalKnowledgeBase) {
           if (entry.keywords.some((keyword) => cleanQuery.includes(keyword))) {
             foundMatchedResponse = entry.response;
+            companionSource = entry.source ?? companionSource;
             break;
           }
         }
       }
 
       const companionReplyPayload: ChatMessage = {
+        disclaimer: companionDisclaimer,
         id: `msg_c_${Date.now()}`,
         sender: "companion",
+        source: companionSource,
+        suggestedQuestions,
         text: foundMatchedResponse,
         time: formatCurrentTime(),
       };
@@ -175,6 +223,11 @@ export default function QA() {
         className="flex-1"
         style={{ backgroundColor: colors.background }}
       >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          className="flex-1"
+          keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
+        >
         {/* Custom Companion Chat Header Section */}
         <View
           className="px-6 py-4 border-b flex-row justify-between items-center"
@@ -231,7 +284,9 @@ export default function QA() {
           ref={scrollViewRef}
           showsVerticalScrollIndicator={false}
           className="flex-1 px-5 pt-4"
-          contentContainerStyle={{ paddingBottom: 40 }}
+          contentContainerStyle={{ paddingBottom: 72 }}
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
           onContentSizeChange={() =>
             scrollViewRef.current?.scrollToEnd({ animated: true })
           }
@@ -239,25 +294,81 @@ export default function QA() {
           <View className="gap-4">
             {chatLog.map((message) => {
               const isCompanion = message.sender === "companion";
+              const isUrgent = message.source === "urgent_safety";
               return (
                 <View key={message.id}>
                   {isCompanion ? (
                     <View
                       className="max-w-[85%] p-4 rounded-2xl self-start rounded-tl-none border"
                       style={{
-                        backgroundColor: colors.surface,
-                        borderColor: colors.border,
+                        backgroundColor: isUrgent ? "#fff1f2" : colors.surface,
+                        borderColor: isUrgent ? "#ef4444" : colors.border,
                       }}
                     >
+                      {isUrgent && (
+                        <View className="mb-2 flex-row items-center gap-1.5">
+                          <Feather
+                            name="alert-triangle"
+                            size={13}
+                            color="#dc2626"
+                          />
+                          <Text
+                            className="text-[10px] font-black uppercase"
+                            style={{ color: "#dc2626" }}
+                          >
+                            Urgent care guidance
+                          </Text>
+                        </View>
+                      )}
                       <Text
                         className="text-xs font-medium leading-5"
-                        style={{ color: colors.foreground }}
+                        style={{
+                          color: isUrgent ? "#7f1d1d" : colors.foreground,
+                        }}
                       >
                         {message.text}
                       </Text>
+                      {message.disclaimer && (
+                        <Text
+                          className="text-[10px] font-semibold leading-4 mt-3"
+                          style={{
+                            color: isUrgent ? "#991b1b" : colors.mutedText,
+                          }}
+                        >
+                          {message.disclaimer}
+                        </Text>
+                      )}
+                      {message.suggestedQuestions?.length ? (
+                        <View className="mt-3 flex-row flex-wrap gap-2">
+                          {message.suggestedQuestions
+                            .slice(0, 3)
+                            .map((question) => (
+                              <TouchableOpacity
+                                activeOpacity={0.75}
+                                disabled={isCompanionTyping}
+                                key={question}
+                                onPress={() => setTypedQuestion(question)}
+                                className="rounded-full border px-3 py-1.5"
+                                style={{
+                                  backgroundColor: colors.input,
+                                  borderColor: colors.border,
+                                }}
+                              >
+                                <Text
+                                  className="text-[10px] font-bold"
+                                  style={{ color: colors.foreground }}
+                                >
+                                  {question}
+                                </Text>
+                              </TouchableOpacity>
+                            ))}
+                        </View>
+                      ) : null}
                       <Text
                         className="text-[8px] font-bold text-right mt-1.5 opacity-60"
-                        style={{ color: colors.mutedText }}
+                        style={{
+                          color: isUrgent ? "#991b1b" : colors.mutedText,
+                        }}
                       >
                         {message.time}
                       </Text>
@@ -302,7 +413,7 @@ export default function QA() {
                   className="text-xs font-bold tracking-widest animate-pulse"
                   style={{ color: colors.primary }}
                 >
-                  Companion is writing...
+                  Checking trusted guidance...
                 </Text>
               </View>
             )}
@@ -315,6 +426,7 @@ export default function QA() {
           style={{
             borderColor: colors.border,
             backgroundColor: colors.surface,
+            paddingBottom: Math.max(14, insets.bottom + 8),
           }}
         >
           <TextInput
@@ -323,7 +435,9 @@ export default function QA() {
             value={typedQuestion}
             onChangeText={setTypedQuestion}
             onSubmitEditing={handleTriggerConversation}
+            maxLength={500}
             returnKeyType="send"
+            blurOnSubmit={false}
             className="flex-1 px-4 py-3 rounded-xl text-sm"
             style={{
               color: colors.foreground,
@@ -331,12 +445,12 @@ export default function QA() {
             }}
           />
           <TouchableOpacity
-            disabled={!typedQuestion.trim()}
+            disabled={!typedQuestion.trim() || isCompanionTyping}
             onPress={handleTriggerConversation}
             activeOpacity={0.8}
             className="rounded-full overflow-hidden"
           >
-            {typedQuestion.trim() ? (
+            {typedQuestion.trim() && !isCompanionTyping ? (
               <LinearGradient
                 colors={actionGradient}
                 start={{ x: 0, y: 0 }}
@@ -355,6 +469,7 @@ export default function QA() {
             )}
           </TouchableOpacity>
         </View>
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </>
   );
