@@ -621,11 +621,54 @@ export default function Community() {
   }
 
   async function handleDeleteComment(postId: string, commentId: string) {
+    const performDelete = async () => {
+      // Optimistic local removal from both posts list and activePost
+      setPosts((current) =>
+        current.map((p) =>
+          p.id === postId
+            ? {
+              ...p,
+              commentsCount: Math.max(0, p.commentsCount - 1),
+              comments: p.comments.filter((c) => c.id !== commentId),
+            }
+            : p,
+        ),
+      );
+      setActivePost((prev) =>
+        prev && prev.id === postId
+          ? {
+            ...prev,
+            commentsCount: Math.max(0, prev.commentsCount - 1),
+            comments: prev.comments.filter((c) => c.id !== commentId),
+          }
+          : prev,
+      );
+      try {
+        await communityApi.deleteComment(postId, commentId);
+      } catch {
+        if (Platform.OS === "web") {
+          window.alert("Could not delete comment. Please try again.");
+        } else {
+          Alert.alert("Error", "Could not delete comment. Please try again.");
+        }
+        try {
+          const postsResponse = await communityApi.getPosts({ limit: 20 });
+          const mapped = postsResponse.posts.map(mapCommunityPost);
+          setPosts(mapped);
+          setActivePost((prev) =>
+            prev ? mapped.find((p) => p.id === prev.id) ?? prev : prev,
+          );
+        } catch {
+          // Best-effort resync; local state stays as-is until next reload.
+        }
+      }
+    };
+
     if (Platform.OS === "web") {
       const confirmed = window.confirm("Remove this comment permanently?");
-      if (!confirmed) return;
-
-      await communityApi.deleteComment(postId, commentId);
+      if (confirmed) {
+        await performDelete();
+      }
       return;
     }
 
@@ -637,44 +680,7 @@ export default function Community() {
         {
           text: "Delete",
           style: "destructive",
-          onPress: async () => {
-            // Optimistic local removal from both posts list and activePost
-            setPosts((current) =>
-              current.map((p) =>
-                p.id === postId
-                  ? {
-                    ...p,
-                    commentsCount: Math.max(0, p.commentsCount - 1),
-                    comments: p.comments.filter((c) => c.id !== commentId),
-                  }
-                  : p,
-              ),
-            );
-            setActivePost((prev) =>
-              prev && prev.id === postId
-                ? {
-                  ...prev,
-                  commentsCount: Math.max(0, prev.commentsCount - 1),
-                  comments: prev.comments.filter((c) => c.id !== commentId),
-                }
-                : prev,
-            );
-            try {
-              await communityApi.deleteComment(postId, commentId);
-            } catch {
-              Alert.alert("Error", "Could not delete comment. Please try again.");
-              try {
-                const postsResponse = await communityApi.getPosts({ limit: 20 });
-                const mapped = postsResponse.posts.map(mapCommunityPost);
-                setPosts(mapped);
-                setActivePost((prev) =>
-                  prev ? mapped.find((p) => p.id === prev.id) ?? prev : prev,
-                );
-              } catch {
-                // Best-effort resync; local state stays as-is until next reload.
-              }
-            }
-          },
+          onPress: performDelete,
         },
       ],
     );
