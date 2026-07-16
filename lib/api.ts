@@ -26,7 +26,7 @@ function getLocalDevApiBaseUrl() {
 }
 
 export const API_BASE_URL = (
-  envApiBaseUrl || (__DEV__ ? getLocalDevApiBaseUrl() : "")
+  envApiBaseUrl || (__DEV__ ? getLocalDevApiBaseUrl() : "https://period-buddy-be.onrender.com")
 ).replace(/\/+$/, "");
 export const WS_BASE_URL = API_BASE_URL.replace(/^http/, "ws");
 export const AUTH_SESSION_KEY = "period-buddy.auth-session";
