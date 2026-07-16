@@ -14,7 +14,7 @@ import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
-import { useTheme } from "../../components/theme";
+import { useTheme, type ThemeColors } from "../../components/theme";
 import { getSoftTints } from "../../components/ui-tokens";
 import { healthIssuesApi, type HealthIssue as ApiHealthIssue } from "../../lib/api";
 
@@ -111,6 +111,26 @@ const fallbackIssues: HealthIssue[] = [
   },
 ];
 
+function getIssueAccentColor(
+  issue: Pick<HealthIssue, "color">,
+  colors: ThemeColors,
+) {
+  switch (issue.color) {
+    case "#ef4444":
+      return colors.primary;
+    case "#f97316":
+      return colors.warning;
+    case "#fbbf24":
+      return colors.accent;
+    case "#ec4899":
+      return colors.rose;
+    case "#8b5cf6":
+      return colors.lavender;
+    default:
+      return colors.mint;
+  }
+}
+
 function mapHealthIssue(issue: ApiHealthIssue): HealthIssue {
   return {
     id: issue.id ?? issue._id ?? issue.title,
@@ -127,7 +147,7 @@ function mapHealthIssue(issue: ApiHealthIssue): HealthIssue {
 }
 
 export default function HealthIssues() {
-  const { colors, isDark } = useTheme();
+  const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
@@ -192,7 +212,7 @@ export default function HealthIssues() {
           </TouchableOpacity>
           <Text
             className="flex-1 text-2xl font-black tracking-tight ml-2"
-            style={{ color: colors.foreground }}
+            style={{ color: colors.foreground, fontFamily: fonts.heading }}
           >
             Health Concerns
           </Text>
@@ -205,7 +225,7 @@ export default function HealthIssues() {
           <View className="mx-6 mt-6">
             <Text
               className="mb-5 text-xs font-semibold"
-              style={{ color: colors.mutedText }}
+              style={{ color: colors.mutedText, fontFamily: fonts.body }}
             >
               Select an encyclopedia entry to explore insights and medical
               guidance.
@@ -224,6 +244,7 @@ export default function HealthIssues() {
                   softTints.mint,
                 ];
                 const activeTint = tintColors[index % tintColors.length];
+                const accentColor = getIssueAccentColor(issue, colors);
 
                 return (
                   <TouchableOpacity
@@ -243,19 +264,19 @@ export default function HealthIssues() {
                       <Ionicons
                         name={issue.icon as any}
                         size={20}
-                        color={issue.color}
+                        color={accentColor}
                       />
                     </View>
                     <View className="flex-1 pr-2">
                       <Text
                         className="text-[10px] font-black uppercase tracking-wider"
-                        style={{ color: colors.primary }}
+                        style={{ color: accentColor, fontFamily: fonts.body }}
                       >
                         {issue.category}
                       </Text>
                       <Text
                         className="text-sm font-extrabold tracking-tight mt-0.5"
-                        style={{ color: colors.foreground }}
+                        style={{ color: colors.foreground, fontFamily: fonts.heading }}
                       >
                         {issue.title}
                       </Text>
@@ -296,13 +317,16 @@ export default function HealthIssues() {
                 <View>
                   <Text
                     className="text-[10px] font-black uppercase tracking-widest pt-4"
-                    style={{ color: colors.primary }}
+                    style={{
+                      color: getIssueAccentColor(selectedIssueData, colors),
+                      fontFamily: fonts.body,
+                    }}
                   >
                     {selectedIssueData.category}
                   </Text>
                   <Text
                     className="text-base font-black tracking-tight mt-0.5"
-                    style={{ color: colors.foreground }}
+                    style={{ color: colors.foreground, fontFamily: fonts.heading }}
                   >
                     {selectedIssueData.title}
                   </Text>
@@ -342,13 +366,13 @@ export default function HealthIssues() {
                   {/* Part A: Clinical Interpretation Framework */}
                   <Text
                     className="text-xs font-bold tracking-widest uppercase mb-2.5"
-                    style={{ color: colors.primary }}
+                    style={{ color: colors.primary, fontFamily: fonts.heading }}
                   >
                     Clinical Understanding
                   </Text>
                   <Text
                     className="text-sm font-medium leading-6 mb-6"
-                    style={{ color: colors.foreground }}
+                    style={{ color: colors.foreground, fontFamily: fonts.body }}
                   >
                     {selectedIssueData.summary}
                   </Text>
@@ -362,7 +386,7 @@ export default function HealthIssues() {
                   {/* Part B: Specialized Active Interactive Symptom Guidance Roadmap */}
                   <Text
                     className="text-xs font-bold tracking-widest uppercase mb-3"
-                    style={{ color: colors.success }}
+                    style={{ color: colors.success, fontFamily: fonts.heading }}
                   >
                     Care Guidance
                   </Text>
@@ -375,7 +399,7 @@ export default function HealthIssues() {
                   >
                     <Text
                       className="text-xs font-semibold leading-6"
-                      style={{ color: colors.foreground }}
+                      style={{ color: colors.foreground, fontFamily: fonts.body }}
                     >
                       {selectedIssueData.guide}
                     </Text>
@@ -392,13 +416,13 @@ export default function HealthIssues() {
                     <View className="flex-1 pr-4">
                       <Text
                         className="text-xs font-bold"
-                        style={{ color: colors.foreground }}
+                        style={{ color: colors.foreground, fontFamily: fonts.heading }}
                       >
                         Persistent Symptoms?
                       </Text>
                       <Text
                         className="text-[10px] mt-0.5"
-                        style={{ color: colors.mutedText }}
+                        style={{ color: colors.mutedText, fontFamily: fonts.body }}
                       >
                         Connect privately with specialized OBGYNs instantly.
                       </Text>
@@ -413,7 +437,7 @@ export default function HealthIssues() {
                     >
                       <Text
                         className="text-[11px] font-black"
-                        style={{ color: colors.buttonText }}
+                        style={{ color: colors.buttonText, fontFamily: fonts.body }}
                       >
                         Consult
                       </Text>

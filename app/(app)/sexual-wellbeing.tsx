@@ -107,7 +107,7 @@ function normalizePositionCard(card: unknown, index: number): PositionCard {
 }
 
 export default function SexualWellbeing() {
-  const { colors, isDark } = useTheme();
+  const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
   const { earnTokens } = useAppState();
 
@@ -305,7 +305,7 @@ export default function SexualWellbeing() {
           </TouchableOpacity>
           <Text
             className="flex-1 text-2xl font-black tracking-tight ml-2"
-            style={{ color: colors.foreground }}
+            style={{ color: colors.foreground, fontFamily: fonts.heading }}
           >
             Wellbeing
           </Text>
@@ -318,7 +318,7 @@ export default function SexualWellbeing() {
           <View className="px-6 mt-4">
             <Text
               className="text-xs font-semibold"
-              style={{ color: colors.mutedText }}
+              style={{ color: colors.mutedText, fontFamily: fonts.body }}
             >
               Consent-centered intimacy guidance, safety resources, and private
               partner conversation tools.
@@ -343,13 +343,13 @@ export default function SexualWellbeing() {
                   />
                   <Text
                     className="text-base font-black tracking-tight mt-2.5"
-                    style={{ color: colors.foreground }}
+                    style={{ color: colors.foreground, fontFamily: fonts.heading }}
                   >
                     Partner Intimacy Game Center
                   </Text>
                   <Text
                     className="text-[11px] text-center px-4 leading-4 mt-1"
-                    style={{ color: colors.mutedText }}
+                    style={{ color: colors.mutedText, fontFamily: fonts.body }}
                   >
                     Choose a specialized conversational or physical card deck to
                     explore comfort, boundaries, and communication together.
@@ -367,7 +367,7 @@ export default function SexualWellbeing() {
                     >
                       <Text
                         className="text-xs font-bold"
-                        style={{ color: colors.primary }}
+                        style={{ color: colors.primary, fontFamily: fonts.body }}
                       >
                         Play Spark
                       </Text>
@@ -384,7 +384,7 @@ export default function SexualWellbeing() {
                     >
                       <Text
                         className="text-xs font-bold"
-                        style={{ color: colors.accent }}
+                        style={{ color: colors.lavender, fontFamily: fonts.body }}
                       >
                         Comfort Cards
                       </Text>
@@ -404,7 +404,7 @@ export default function SexualWellbeing() {
                       />
                       <Text
                         className="text-xs font-black tracking-widest uppercase"
-                        style={{ color: colors.foreground }}
+                        style={{ color: colors.foreground, fontFamily: fonts.heading }}
                       >
                         Spark Deck Active
                       </Text>
@@ -421,7 +421,7 @@ export default function SexualWellbeing() {
                   <View className="p-5 rounded-2xl min-h-[90px] justify-center" style={{ backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border }}>
                     <Text
                       className="text-xs font-bold text-center leading-5 italic"
-                      style={{ color: colors.foreground }}
+                      style={{ color: colors.foreground, fontFamily: fonts.body }}
                     >
                       {sparkCards[currentPromptIdx]}
                     </Text>
@@ -443,7 +443,7 @@ export default function SexualWellbeing() {
                       />
                       <Text
                         className="text-xs font-bold"
-                        style={{ color: colors.foreground }}
+                        style={{ color: colors.foreground, fontFamily: fonts.body }}
                       >
                         Next Card
                       </Text>
@@ -463,7 +463,7 @@ export default function SexualWellbeing() {
                       />
                       <Text
                         className="text-xs font-black tracking-widest uppercase"
-                        style={{ color: colors.foreground }}
+                        style={{ color: colors.foreground, fontFamily: fonts.heading }}
                       >
                         Positions Deck
                       </Text>
@@ -478,20 +478,20 @@ export default function SexualWellbeing() {
                   </View>
 
                   <View className="p-6 rounded-2xl" style={{ backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border }}>
-                    <Text className="text-sm font-black tracking-tight text-center text-pink-500">
+                    <Text className="text-sm font-black tracking-tight text-center" style={{ color: colors.primary, fontFamily: fonts.heading }}>
                       {positionCards[currentPositionIdx].name}
                     </Text>
                     <View className="my-2.5 px-3 py-1  self-center rounded-md">
                       <Text
                         className="text-[10px] font-bold uppercase tracking-wider text-center"
-                        style={{ color: colors.foreground }}
+                        style={{ color: colors.foreground, fontFamily: fonts.body }}
                       >
                         Focus: {positionCards[currentPositionIdx].focus}
                       </Text>
                     </View>
                     <Text
                       className="text-xs font-medium text-center leading-4 mt-1"
-                      style={{ color: colors.mutedText }}
+                      style={{ color: colors.mutedText, fontFamily: fonts.body }}
                     >
                       {positionCards[currentPositionIdx].tip}
                     </Text>
@@ -513,7 +513,7 @@ export default function SexualWellbeing() {
                       />
                       <Text
                         className="text-xs font-bold"
-                        style={{ color: colors.foreground }}
+                        style={{ color: colors.foreground, fontFamily: fonts.body }}
                       >
                         Shuffle Deck
                       </Text>
@@ -527,7 +527,7 @@ export default function SexualWellbeing() {
           {/* DYNAMIC SCROLLABLE CLICKABLE RESOURCE HUB */}
           <Text
             className="text-xs font-black tracking-widest uppercase mt-8 mb-4 px-7"
-            style={{ color: colors.primary }}
+            style={{ color: colors.primary, fontFamily: fonts.heading }}
           >
             Clinical Resource Hub
           </Text>
@@ -571,7 +571,7 @@ export default function SexualWellbeing() {
                     <View className="px-2.5 py-1 rounded-md" style={{ backgroundColor: colors.surfaceSoft }}>
                       <Text
                         className="text-[9px] font-bold tracking-wide"
-                        style={{ color: colors.mutedText }}
+                        style={{ color: colors.mutedText, fontFamily: fonts.body }}
                       >
                         {category.items} Hubs
                       </Text>
@@ -582,13 +582,13 @@ export default function SexualWellbeing() {
                     <View className="flex-1 pr-2">
                       <Text
                         className="text-sm font-black tracking-tight"
-                        style={{ color: colors.foreground }}
+                        style={{ color: colors.foreground, fontFamily: fonts.heading }}
                       >
                         {category.title}
                       </Text>
                       <Text
                         className="text-[11px] font-medium leading-4 mt-2"
-                        style={{ color: colors.mutedText }}
+                        style={{ color: colors.mutedText, fontFamily: fonts.body }}
                         numberOfLines={2}
                       >
                         {category.summary}
@@ -628,13 +628,13 @@ export default function SexualWellbeing() {
             <View className="flex-1">
               <Text
                 className="text-xs font-bold"
-                style={{ color: colors.foreground }}
+                style={{ color: colors.foreground, fontFamily: fonts.heading }}
               >
                 Verified Guidance
               </Text>
               <Text
                 className="mt-1 text-[11px] font-semibold leading-4"
-                style={{ color: colors.mutedText }}
+                style={{ color: colors.mutedText, fontFamily: fonts.body }}
               >
                 Every data asset is continuously mapped alongside
                 board-certified health specialists to eliminate misinformation.
@@ -670,7 +670,7 @@ export default function SexualWellbeing() {
                   </View>
                   <Text
                     className="text-base font-black tracking-tight"
-                    style={{ color: colors.foreground }}
+                    style={{ color: colors.foreground, fontFamily: fonts.heading }}
                   >
                     {selectedCategory.title}
                   </Text>
@@ -693,13 +693,13 @@ export default function SexualWellbeing() {
                 <View>
                   <Text
                     className="text-xs font-bold tracking-widest uppercase mb-1.5"
-                    style={{ color: colors.primary }}
+                    style={{ color: colors.primary, fontFamily: fonts.heading }}
                   >
                     Overview Summary
                   </Text>
                   <Text
                     className="text-sm font-medium leading-6"
-                    style={{ color: colors.text }}
+                    style={{ color: colors.text, fontFamily: fonts.body }}
                   >
                     {selectedCategory.summary}
                   </Text>
@@ -712,7 +712,7 @@ export default function SexualWellbeing() {
                 <View className="gap-3.5">
                   <Text
                     className="text-xs font-bold tracking-widest uppercase mb-1"
-                    style={{ color: colors.success }}
+                    style={{ color: colors.success, fontFamily: fonts.heading }}
                   >
                     Verified Care Strategies
                   </Text>
@@ -722,7 +722,7 @@ export default function SexualWellbeing() {
                       className="flex-row items-start p-4 rounded-2xl"
                       style={{ backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border }}
                     >
-                      <View className="mt-0.5 mr-3.5 p-1 rounded-full bg-emerald-500/10">
+                      <View className="mt-0.5 mr-3.5 p-1 rounded-full" style={{ backgroundColor: colors.successLight }}>
                         <Ionicons
                           name="shield-checkmark"
                           size={14}
@@ -731,7 +731,7 @@ export default function SexualWellbeing() {
                       </View>
                       <Text
                         className="flex-1 text-xs font-medium leading-5"
-                        style={{ color: colors.foreground }}
+                        style={{ color: colors.foreground, fontFamily: fonts.body }}
                       >
                         {line}
                       </Text>

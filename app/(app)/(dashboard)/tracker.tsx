@@ -100,10 +100,18 @@ function getCycleDay(
   return (((difference % cycleLength) + cycleLength) % cycleLength) + 1;
 }
 
-function getCyclePhase(cycleDay: number, periodLength = 5): CyclePhase {
+// Mirrors the backend's getCyclePhase (src/utils/cycle.js) so the calendar's
+// phase coloring scales with the user's actual cycle length instead of the
+// fixed 28-day assumption baked into the old 11/16-day thresholds.
+function getCyclePhase(
+  cycleDay: number,
+  periodLength = 5,
+  cycleLength = CYCLE_LENGTH,
+): CyclePhase {
   if (cycleDay <= periodLength) return "period";
-  if (cycleDay <= 11) return "follicular";
-  if (cycleDay <= 16) return "ovulation";
+  const ovulationDay = Math.max(periodLength + 1, cycleLength - 13);
+  if (cycleDay < ovulationDay - 5) return "follicular";
+  if (cycleDay <= ovulationDay + 1) return "ovulation";
   return "luteal";
 }
 
@@ -119,7 +127,7 @@ function formatSettingsDate(value?: string) {
 }
 
 export default function Tracker() {
-  const { colors, isDark } = useTheme();
+  const { colors, isDark, fonts } = useTheme();
   const [selectedDate, setSelectedDate] = useState<SelectedDate | null>(null);
   const [dayDetailsVisible, setDayDetailsVisible] = useState(false);
   const [selectedYear, setSelectedYear] = useState(() =>
@@ -136,6 +144,10 @@ export default function Tracker() {
   const [periodLengthInput, setPeriodLengthInput] = useState("5");
   const [remindersEnabled, setRemindersEnabled] = useState(true);
   const [reminderDaysBeforeInput, setReminderDaysBeforeInput] = useState("2");
+  const [ovulationReminder, setOvulationReminder] = useState(false);
+  const [fertilityReminder, setFertilityReminder] = useState(false);
+  const [pregnancyMode, setPregnancyMode] = useState(false);
+  const [trackingGoal, setTrackingGoal] = useState<CycleSettings["trackingGoal"]>("track_period");
   const [remoteDayEntries, setRemoteDayEntries] = useState<
     Record<string, LocalDayEntry>
   >({});
@@ -168,6 +180,13 @@ export default function Tracker() {
   const { dayEntries, dayNotes, earnTokens, saveDayEntry } = useAppState();
   const activeCycleLength = cycleSettings?.cycleLength ?? CYCLE_LENGTH;
   const activePeriodLength = cycleSettings?.periodLength ?? 5;
+  // Same pivot as getCyclePhase's internal "ovulationDay" — reused below to
+  // size the fertile window / ovulation-peak highlight to the real cycle
+  // length instead of the old hardcoded 10-16 / day-14 constants.
+  const ovulationDayPivot = Math.max(
+    activePeriodLength + 1,
+    activeCycleLength - 13,
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -198,6 +217,10 @@ export default function Tracker() {
     setReminderDaysBeforeInput(
       String(cycleSettings?.reminderDaysBefore ?? 2),
     );
+    setOvulationReminder(cycleSettings?.ovulationReminder ?? false);
+    setFertilityReminder(cycleSettings?.fertilityReminder ?? false);
+    setPregnancyMode(cycleSettings?.pregnancyMode ?? false);
+    setTrackingGoal(cycleSettings?.trackingGoal ?? "track_period");
   }, [cycleSettings]);
 
   useEffect(() => {
@@ -237,25 +260,20 @@ export default function Tracker() {
 
   function mapApiDayEntry(log: ApiDayEntry): LocalDayEntry {
     return {
-      energy:
-        log.energy === "medium"
-          ? "steady"
-          : (log.energy as LocalDayEntry["energy"]),
-      flow:
-        log.flow === "spotting"
-          ? "light"
-          : (log.flow as LocalDayEntry["flow"]),
-      mood:
-        log.mood === "sad" ||
-        log.mood === "anxious" ||
-        log.mood === "irritable" ||
-        log.mood === "neutral" ||
-        log.mood === "energetic"
-          ? "emotional"
-          : (log.mood as LocalDayEntry["mood"]),
+      // LocalDayEntry's energy/flow/mood unions now mirror the backend enum
+      // exactly, so no lossy collapsing is needed here anymore.
+      energy: log.energy,
+      flow: log.flow,
+      mood: log.mood,
       note: log.note ?? "",
       symptoms: log.symptoms ?? [],
       updatedAt: log.date ?? new Date().toISOString(),
+      sleepHours: log.sleepHours,
+      waterIntake: log.waterIntake,
+      weight: log.weight,
+      temperature: log.temperature,
+      stressLevel: log.stressLevel,
+      medication: log.medication,
     };
   }
 
@@ -267,7 +285,7 @@ export default function Tracker() {
         label: "Follicular",
       },
       luteal: {
-        color: colors.secondary,
+        color: colors.success,
         bg: softTints.mint,
         label: "Luteal",
       },
@@ -313,7 +331,7 @@ export default function Tracker() {
           day,
           kind: "day",
           key: `day-${year}-${month}-${day}`,
-          phase: getCyclePhase(cycleDay, activePeriodLength),
+          phase: getCyclePhase(cycleDay, activePeriodLength, activeCycleLength),
         };
       },
     );
@@ -323,13 +341,13 @@ export default function Tracker() {
 
   function openDate(date: Date) {
     const cycleDay = getCycleDay(date, cycleStartDate, activeCycleLength);
-    const phase = getCyclePhase(cycleDay, activePeriodLength);
+    const phase = getCyclePhase(cycleDay, activePeriodLength, activeCycleLength);
 
     setSelectedDate({
       dateKey: getDateKey(date),
       dateLabel: getDateLabel(date),
       day: date.getDate(),
-      phaseLabel: `${phaseStyles[phase].label} Phase • Day ${cycleDay}`,
+      phaseLabel: `${phaseStyles[phase].label} Phase · Day ${cycleDay}`,
     });
     setDayDetailsVisible(true);
   }
@@ -396,6 +414,10 @@ export default function Tracker() {
         periodLength,
         reminderDaysBefore,
         remindersEnabled,
+        ovulationReminder,
+        fertilityReminder,
+        pregnancyMode,
+        trackingGoal,
       });
       setCycleSettings(savedSettings);
       setSettingsVisible(false);
@@ -431,18 +453,18 @@ export default function Tracker() {
             <View>
               <Text
                 className="text-3xl font-extrabold tracking-tight"
-                style={{ color: colors.foreground }}
+                style={{ color: colors.foreground, fontFamily: fonts.heading }}
               >
                 Period Tracker
               </Text>
               <Text
                 className="mt-1 text-xs font-semibold"
-                style={{ color: colors.mutedText }}
+                style={{ color: colors.mutedText, fontFamily: fonts.body }}
               >
                 Track your cycle, flow, mood, and symptoms
               </Text>
             </View>
-            {/* <View className="flex-row gap-2">
+            <View className="flex-row gap-2">
               <TouchableOpacity
                 activeOpacity={0.7}
                 onPress={openCycleSettings}
@@ -458,19 +480,18 @@ export default function Tracker() {
               <TouchableOpacity
                 activeOpacity={0.7}
                 onPress={openToday}
-                className="p-2.5 rounded-full border shadow-2xs"
+                className="p-2.5 rounded-full shadow-2xs"
                 style={{
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
+                  backgroundColor: colors.primary,
                 }}
               >
                 <MaterialCommunityIcons
                   name="calendar-heart"
                   size={20}
-                  color={colors.primary}
+                  color={colors.buttonText}
                 />
               </TouchableOpacity>
-            </View> */}
+            </View>
           </View>
 
           {/* Elegant Horizontal Legend Row */}
@@ -490,7 +511,7 @@ export default function Tracker() {
                 />
                 <Text
                   className="text-[10px] font-bold tracking-wide"
-                  style={{ color: colors.foreground }}
+                  style={{ color: colors.foreground, fontFamily: fonts.body }}
                 >
                   {phaseStyles[key].label}
                 </Text>
@@ -499,56 +520,51 @@ export default function Tracker() {
           </View>
 
           <View
-            className="mx-6 mt-5 rounded-3xl border overflow-hidden shadow-sm"
-            style={{ borderColor: colors.border }}
+            className="mx-6 mt-5 rounded-3xl border overflow-hidden p-5 shadow-sm"
+            style={{
+              backgroundColor: colors.primaryLight,
+              borderColor: colors.primary,
+            }}
           >
-            <LinearGradient
-              colors={surfaceGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              className="p-4"
-              style={{ borderColor: colors.border }}
-            >
-              <View className="flex-row items-center justify-between gap-4">
-                <View className="flex-1">
-                  <Text
-                    className="text-xs font-bold tracking-widest uppercase"
-                    style={{ color: colors.primary }}
-                  >
-                    Cycle Setup
-                  </Text>
-                  <Text
-                    className="mt-1 text-sm font-extrabold"
-                    style={{ color: colors.foreground }}
-                  >
-                    {cycleSettings
-                      ? `${activeCycleLength}-day cycle • ${activePeriodLength}-day period`
-                      : "Add your cycle baseline"}
-                  </Text>
-                  <Text
-                    className="mt-1 text-[11px] font-semibold leading-4"
-                    style={{ color: colors.mutedText }}
-                  >
-                    Last period started {lastPeriodStartDate}. Update this to
-                    improve predictions and calendar phases.
-                  </Text>
-                </View>
-
-                <TouchableOpacity
-                  activeOpacity={0.85}
-                  onPress={openCycleSettings}
-                  className="rounded-full px-4 py-2.5"
-                  style={{ backgroundColor: colors.primary }}
+            <View className="flex-row items-center justify-between gap-4">
+              <View className="flex-1">
+                <Text
+                  className="text-xs font-bold tracking-widest uppercase"
+                  style={{ color: colors.primary, fontFamily: fonts.body }}
                 >
-                  <Text
-                    className="text-xs font-bold"
-                    style={{ color: colors.buttonText }}
-                  >
-                    Edit
-                  </Text>
-                </TouchableOpacity>
+                  Cycle Setup
+                </Text>
+                <Text
+                  className="mt-1 text-sm font-extrabold"
+                  style={{ color: colors.foreground, fontFamily: fonts.heading }}
+                >
+                  {cycleSettings
+                    ? `${activeCycleLength}-day cycle • ${activePeriodLength}-day period`
+                    : "Add your cycle baseline"}
+                </Text>
+                <Text
+                  className="mt-1 text-[11px] font-semibold leading-4"
+                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                >
+                  Last period started {lastPeriodStartDate}. Update this to
+                  improve predictions and calendar phases.
+                </Text>
               </View>
-            </LinearGradient>
+
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={openCycleSettings}
+                className="rounded-full px-4 py-2.5"
+                style={{ backgroundColor: colors.primary }}
+              >
+                <Text
+                  className="text-xs font-bold"
+                  style={{ color: colors.buttonText, fontFamily: fonts.body }}
+                >
+                  Edit
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Calendar Body Area */}
@@ -558,7 +574,7 @@ export default function Tracker() {
                 <View className="flex-1">
                   <Text
                     className="text-lg font-extrabold tracking-tight"
-                    style={{ color: colors.foreground }}
+                    style={{ color: colors.foreground, fontFamily: fonts.heading }}
                   >
                     Calendar
                   </Text>
@@ -581,7 +597,7 @@ export default function Tracker() {
                 >
                   <Text
                     className="text-xs font-black"
-                    style={{ color: colors.primary }}
+                    style={{ color: colors.mutedText, fontFamily: fonts.body }}
                   >
                     Today
                   </Text>
@@ -615,7 +631,8 @@ export default function Tracker() {
                     <Text
                       className="text-xs font-black"
                       style={{
-                        color: isSelected ? colors.background : colors.mutedText,
+                        color: isSelected ? colors.buttonText : colors.mutedText,
+                        fontFamily: fonts.body,
                       }}
                     >
                       {year}
@@ -638,15 +655,15 @@ export default function Tracker() {
                   <View>
                     <Text
                       className="text-xl font-black tracking-tight"
-                      style={{ color: colors.foreground }}
+                      style={{ color: colors.foreground, fontFamily: fonts.heading }}
                     >
                       {selectedYear}
                     </Text>
                     <Text
                       className="mt-0.5 text-[11px] font-bold"
-                      style={{ color: colors.mutedText }}
+                      style={{ color: colors.mutedText, fontFamily: fonts.body }}
                     >
-                      Period dates are shown in pink
+                      Period dates are shown in {isDark ? "blush" : "coral"}
                     </Text>
                   </View>
                 </View>
@@ -661,7 +678,7 @@ export default function Tracker() {
                     <Text
                       className="text-center text-[10px] font-black uppercase"
                       key={`${day}-${index}`}
-                      style={{ color: colors.mutedText, width: `${100 / 7}%` }}
+                      style={{ color: colors.mutedText, width: `${100 / 7}%`, fontFamily: fonts.body }}
                     >
                       {day}
                     </Text>
@@ -685,7 +702,7 @@ export default function Tracker() {
                     >
                       <Text
                         className="mb-4 text-center text-sm font-black"
-                        style={{ color: colors.foreground }}
+                        style={{ color: colors.foreground, fontFamily: fonts.heading }}
                       >
                         {monthDate.toLocaleDateString("en-US", {
                           month: "long",
@@ -723,12 +740,14 @@ export default function Tracker() {
                           const isPeriodDay =
                             cell.phase === "period" || hasFlowLog;
                           const isFertileDay =
-                            cell.cycleDay >= 10 && cell.cycleDay <= 16;
-                          const isOvulationPeak = cell.cycleDay === 14;
+                            cell.cycleDay >= ovulationDayPivot - 5 &&
+                            cell.cycleDay <= ovulationDayPivot + 1;
+                          const isOvulationPeak =
+                            cell.cycleDay === ovulationDayPivot;
                           const dayTextColor = isPeriodDay
                             ? colors.buttonText
                             : isFertileDay
-                              ? colors.secondary
+                              ? colors.success
                               : isSelected
                                 ? colors.primary
                                 : colors.foreground;
@@ -745,16 +764,16 @@ export default function Tracker() {
                                 className="items-center justify-center rounded-full border relative"
                                 style={{
                                   backgroundColor: isPeriodDay
-                                    ? colors.primary
+                                    ? colors.danger
                                     : isSelected
                                       ? colors.primaryLight
                                       : "transparent",
                                   borderColor: isPeriodDay
-                                    ? colors.primary
+                                    ? colors.danger
                                     : isSelected || isToday
                                       ? colors.primary
                                       : isOvulationPeak
-                                        ? colors.secondary
+                                        ? colors.success
                                         : "transparent",
                                   borderStyle:
                                     !isPeriodDay &&
@@ -774,7 +793,7 @@ export default function Tracker() {
                               >
                                 <Text
                                   className="text-xs font-black"
-                                  style={{ color: dayTextColor }}
+                                  style={{ color: dayTextColor, fontFamily: fonts.mono }}
                                 >
                                   {cell.day}
                                 </Text>
@@ -860,19 +879,19 @@ export default function Tracker() {
                 <View className="flex-1">
                   <Text
                     className="text-[11px] font-black uppercase tracking-widest"
-                    style={{ color: colors.primary }}
+                    style={{ color: colors.primary, fontFamily: fonts.body }}
                   >
                     Cycle Settings
                   </Text>
                   <Text
                     className="mt-1 text-2xl font-black tracking-tight"
-                    style={{ color: colors.foreground }}
+                    style={{ color: colors.foreground, fontFamily: fonts.heading }}
                   >
                     Set your baseline
                   </Text>
                   <Text
                     className="mt-2 text-xs font-semibold leading-5"
-                    style={{ color: colors.mutedText }}
+                    style={{ color: colors.mutedText, fontFamily: fonts.body }}
                   >
                     These values power cycle day, phase colors, reminders, and
                     predictions.
@@ -896,7 +915,7 @@ export default function Tracker() {
                 <View>
                   <Text
                     className="mb-2 text-xs font-bold"
-                    style={{ color: colors.foreground }}
+                    style={{ color: colors.foreground, fontFamily: fonts.body }}
                   >
                     Last period start date
                   </Text>
@@ -922,13 +941,13 @@ export default function Tracker() {
                       placeholder="YYYY-MM-DD"
                       placeholderTextColor={colors.mutedText}
                       className="ml-3 flex-1 text-sm font-bold outline-none"
-                      style={{ color: colors.foreground }}
+                      style={{ color: colors.foreground, fontFamily: fonts.body }}
                       value={lastPeriodStartDate}
                     />
                   </View>
                   <Text
                     className="mt-2 text-[11px] font-semibold"
-                    style={{ color: colors.mutedText }}
+                    style={{ color: colors.mutedText, fontFamily: fonts.body }}
                   >
                     Example: 2026-07-01
                   </Text>
@@ -966,13 +985,13 @@ export default function Tracker() {
                       <View className="flex-1">
                         <Text
                           className="text-xs font-bold"
-                          style={{ color: colors.foreground }}
+                          style={{ color: colors.foreground, fontFamily: fonts.body }}
                         >
                           {item.label}
                         </Text>
                         <Text
                           className="mt-1 text-[11px] font-semibold leading-4"
-                          style={{ color: colors.mutedText }}
+                          style={{ color: colors.mutedText, fontFamily: fonts.body }}
                         >
                           {item.helper}
                         </Text>
@@ -1008,7 +1027,7 @@ export default function Tracker() {
                         >
                           <Text
                             className="text-sm font-black"
-                            style={{ color: colors.foreground }}
+                            style={{ color: colors.foreground, fontFamily: fonts.mono }}
                           >
                             {item.value} {item.suffix}
                           </Text>
@@ -1049,13 +1068,13 @@ export default function Tracker() {
                     <View className="flex-1">
                       <Text
                         className="text-xs font-bold"
-                        style={{ color: colors.foreground }}
+                        style={{ color: colors.foreground, fontFamily: fonts.body }}
                       >
                         Period reminders
                       </Text>
                       <Text
                         className="mt-1 text-[11px] font-semibold leading-4"
-                        style={{ color: colors.mutedText }}
+                        style={{ color: colors.mutedText, fontFamily: fonts.body }}
                       >
                         Show reminders before your expected next period.
                       </Text>
@@ -1077,7 +1096,7 @@ export default function Tracker() {
                     <View className="mt-4 flex-row items-center justify-between rounded-2xl border px-4 py-3">
                       <Text
                         className="text-xs font-bold"
-                        style={{ color: colors.foreground }}
+                        style={{ color: colors.foreground, fontFamily: fonts.body }}
                       >
                         Remind me before
                       </Text>
@@ -1111,7 +1130,7 @@ export default function Tracker() {
                         >
                           <Text
                             className="text-xs font-black"
-                            style={{ color: colors.foreground }}
+                            style={{ color: colors.foreground, fontFamily: fonts.mono }}
                           >
                             {reminderDaysBeforeInput} days
                           </Text>
@@ -1139,6 +1158,96 @@ export default function Tracker() {
                       </View>
                     </View>
                   ) : null}
+
+                  {/* Ovulation & Fertility Reminders */}
+                  <View className="mt-4 flex-row items-center justify-between rounded-2xl border px-4 py-3" style={{ backgroundColor: colors.input, borderColor: colors.border }}>
+                    <View className="flex-1">
+                      <Text className="text-xs font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
+                        Ovulation reminders
+                      </Text>
+                      <Text className="mt-1 text-[11px] font-semibold leading-4" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                        Receive notifications for ovulation day.
+                      </Text>
+                    </View>
+                    <Switch
+                      onValueChange={setOvulationReminder}
+                      thumbColor={ovulationReminder ? colors.buttonText : colors.mutedText}
+                      trackColor={{ false: colors.border, true: colors.primary }}
+                      value={ovulationReminder}
+                    />
+                  </View>
+
+                  <View className="mt-4 flex-row items-center justify-between rounded-2xl border px-4 py-3" style={{ backgroundColor: colors.input, borderColor: colors.border }}>
+                    <View className="flex-1">
+                      <Text className="text-xs font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
+                        Fertility window reminders
+                      </Text>
+                      <Text className="mt-1 text-[11px] font-semibold leading-4" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                        Get notified when your fertile window starts.
+                      </Text>
+                    </View>
+                    <Switch
+                      onValueChange={setFertilityReminder}
+                      thumbColor={fertilityReminder ? colors.buttonText : colors.mutedText}
+                      trackColor={{ false: colors.border, true: colors.primary }}
+                      value={fertilityReminder}
+                    />
+                  </View>
+
+                  {/* Pregnancy Mode */}
+                  <View className="mt-4 flex-row items-center justify-between rounded-2xl border px-4 py-3" style={{ backgroundColor: colors.input, borderColor: colors.border }}>
+                    <View className="flex-1">
+                      <Text className="text-xs font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
+                        Pregnancy Mode
+                      </Text>
+                      <Text className="mt-1 text-[11px] font-semibold leading-4" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                        Pause cycle predictions and track pregnancy.
+                      </Text>
+                    </View>
+                    <Switch
+                      onValueChange={setPregnancyMode}
+                      thumbColor={pregnancyMode ? colors.buttonText : colors.mutedText}
+                      trackColor={{ false: colors.border, true: colors.primary }}
+                      value={pregnancyMode}
+                    />
+                  </View>
+
+                  {/* Tracking Goals */}
+                  <View className="mt-4 rounded-2xl border p-4" style={{ backgroundColor: colors.input, borderColor: colors.border }}>
+                    <Text className="text-xs font-bold mb-3" style={{ color: colors.foreground, fontFamily: fonts.body }}>
+                      Choose your tracking goal
+                    </Text>
+                    <View className="flex-row flex-wrap gap-2">
+                      {[
+                        { id: "track_period", label: "Track Period" },
+                        { id: "avoid_pregnancy", label: "Avoid Pregnancy" },
+                        { id: "achieve_pregnancy", label: "Achieve Pregnancy" },
+                        { id: "manage_symptoms", label: "Manage Symptoms" },
+                        { id: "general_health", label: "General Health" },
+                      ].map((goal) => {
+                        const isSelected = trackingGoal === goal.id;
+                        return (
+                          <TouchableOpacity
+                            key={goal.id}
+                            activeOpacity={0.8}
+                            onPress={() => setTrackingGoal(goal.id as any)}
+                            className="rounded-full border px-3.5 py-1.5"
+                            style={{
+                              backgroundColor: isSelected ? colors.primary : colors.surface,
+                              borderColor: isSelected ? colors.primary : colors.border,
+                            }}
+                          >
+                            <Text
+                              className="text-[11px] font-black"
+                              style={{ color: isSelected ? colors.buttonText : colors.foreground, fontFamily: fonts.body }}
+                            >
+                              {goal.label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
                 </View>
               </View>
 
@@ -1152,7 +1261,7 @@ export default function Tracker() {
                 >
                   <Text
                     className="text-center text-xs font-bold"
-                    style={{ color: colors.danger }}
+                    style={{ color: colors.danger, fontFamily: fonts.body }}
                   >
                     {settingsError}
                   </Text>
@@ -1161,27 +1270,23 @@ export default function Tracker() {
 
               <TouchableOpacity
                 activeOpacity={0.9}
-                className="mt-6 overflow-hidden rounded-full"
+                className="mt-6 rounded-full py-4 flex-row items-center justify-center gap-2"
                 disabled={settingsSaving}
                 onPress={handleSaveCycleSettings}
-                style={{ opacity: settingsSaving ? 0.7 : 1 }}
+                style={{
+                  backgroundColor: colors.primary,
+                  opacity: settingsSaving ? 0.7 : 1,
+                }}
               >
-                <LinearGradient
-                  colors={actionGradient}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  className="flex-row items-center justify-center gap-2 py-4"
+                {settingsSaving ? (
+                  <ActivityIndicator size="small" color={colors.buttonText} />
+                ) : null}
+                <Text
+                  className="text-sm font-black"
+                  style={{ color: colors.buttonText, fontFamily: fonts.body }}
                 >
-                  {settingsSaving ? (
-                    <ActivityIndicator size="small" color={colors.buttonText} />
-                  ) : null}
-                  <Text
-                    className="text-sm font-black"
-                    style={{ color: colors.buttonText }}
-                  >
-                    {settingsSaving ? "Saving Settings" : "Save Cycle Settings"}
-                  </Text>
-                </LinearGradient>
+                  {settingsSaving ? "Saving Settings" : "Save Cycle Settings"}
+                </Text>
               </TouchableOpacity>
             </ScrollView>
           </View>
@@ -1205,16 +1310,6 @@ export default function Tracker() {
         }
         onSaveEntry={(entry) => {
           if (selectedDate) {
-            const previousEntry =
-              dayEntries[selectedDate.dateKey] ??
-              remoteDayEntries[selectedDate.dateKey];
-            const hadLog = Boolean(
-              previousEntry?.note.trim() ||
-              previousEntry?.symptoms.length ||
-              previousEntry?.flow ||
-              previousEntry?.mood ||
-              previousEntry?.energy,
-            );
             saveDayEntry(selectedDate.dateKey, entry);
             cycleApi
               .saveLog({
@@ -1226,10 +1321,11 @@ export default function Tracker() {
                   ...current,
                   [selectedDate.dateKey]: mapApiDayEntry(result.cycleLog),
                 }));
+                // Award exactly what the backend actually credited — avoid
+                // double-counting with an optimistic local award.
                 if (result.tokensEarned) earnTokens(result.tokensEarned);
               })
               .catch(() => {});
-            if (!hadLog) earnTokens(5);
           }
         }}
         onLogSymptom={(symptom) => {
@@ -1257,10 +1353,11 @@ export default function Tracker() {
                   ...current,
                   [selectedDate.dateKey]: mapApiDayEntry(result.cycleLog),
                 }));
+                // Award exactly what the backend actually credited — avoid
+                // double-counting with an optimistic local award.
                 if (result.tokensEarned) earnTokens(result.tokensEarned);
               })
               .catch(() => {});
-            earnTokens(1);
           }
         }}
       />

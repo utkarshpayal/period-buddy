@@ -18,12 +18,13 @@ import { useAppState } from "../../../components/AppState";
 import { useAuth } from "../../../components/auth-context";
 import { ThemeToggle, useTheme } from "../../../components/theme";
 import { getSoftTints } from "../../../components/ui-tokens";
-import { authApi } from "../../../lib/api";
+import { authApi, type DashboardSummary } from "../../../lib/api";
 
 export default function Profile() {
-  const { colors, isDark } = useTheme();
-  const { signOut, user } = useAuth();
+  const { colors, isDark, fonts } = useTheme();
+  const { signOut, user, updateUser } = useAuth();
   const { trackedDays } = useAppState();
+  const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
   const router = useRouter();
   const displayName =
     [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Nura user";
@@ -45,6 +46,41 @@ export default function Profile() {
   // Settings Functional Flags
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [anonymousMode, setAnonymousMode] = useState(false);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    authApi.getProfile()
+      .then((latestUser) => {
+        if (isMounted) {
+          updateUser(latestUser);
+        }
+      })
+      .catch((err) => {
+        console.log("Profile refresh skipped or failed:", err);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [updateUser]);
+
+  // "Days Tracked" should reflect real cycle logs from the backend, not the
+  // device-local AppState mock (which only tracks notes typed into this
+  // session's local storage and resets on reinstall/new device).
+  React.useEffect(() => {
+    let isMounted = true;
+    authApi.getDashboard()
+      .then((summary) => {
+        if (isMounted) setDashboard(summary);
+      })
+      .catch((err) => {
+        console.log("Dashboard summary refresh skipped or failed:", err);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const softTints = getSoftTints(colors);
 
@@ -118,7 +154,7 @@ export default function Profile() {
               className="h-28 w-28 items-center justify-center rounded-full border-4 shadow-sm relative overflow-hidden"
               style={{
                 backgroundColor: softTints.pink,
-                borderColor: colors.border,
+                borderColor: colors.primary,
               }}
             >
               {user?.profilePicture ? (
@@ -130,24 +166,29 @@ export default function Profile() {
               ) : (
                 <Text
                   className="text-3xl font-black"
-                  style={{ color: colors.primary }}
+                  style={{ color: colors.primary, fontFamily: fonts.heading }}
                 >
                   {initials}
                 </Text>
               )}
 
-              <View className="absolute bottom-1 right-1 bg-emerald-500 w-5 h-5 rounded-full border-2 border-white dark:border-neutral-900" />
+              <View
+                className="absolute bottom-1 right-1 w-6 h-6 rounded-full items-center justify-center"
+                style={{ backgroundColor: colors.primary, borderWidth: 2, borderColor: colors.background }}
+              >
+                <Feather name="edit-3" size={11} color={colors.buttonText} />
+              </View>
             </View>
 
             <Text
               className="mt-4 text-2xl font-black tracking-tight"
-              style={{ color: colors.foreground }}
+              style={{ color: colors.foreground, fontFamily: fonts.heading }}
             >
               {displayName}
             </Text>
             <Text
               className="mt-1 text-xs font-semibold"
-              style={{ color: colors.mutedText }}
+              style={{ color: colors.mutedText, fontFamily: fonts.body }}
             >
               {displayEmail}
             </Text>
@@ -158,24 +199,24 @@ export default function Profile() {
             {[
               {
                 label: "Days Tracked",
-                value: trackedDays,
-                icon: "checkmark-done-circle-outline",
+                value: dashboard?.trackedDays ?? trackedDays,
+                icon: "calendar-outline",
                 color: colors.primary,
                 bg: softTints.pink,
               },
               {
-                label: "Tokens Earned",
-                value: user?.tokenEarned || 0,
-                icon: "star-outline",
-                color: colors.accent,
-                bg: softTints.amber,
+                label: "Care Points",
+                value: typeof user?.walletBalance === "number" ? user.walletBalance : (user?.tokenEarned || 0),
+                icon: "star",
+                color: colors.primary,
+                bg: softTints.pink,
               },
               {
                 label: "Day Streak",
                 value: user?.streakCount ?? trackedDays,
-                icon: "flame-outline",
-                color: colors.secondary,
-                bg: softTints.mint,
+                icon: "flame",
+                color: colors.primary,
+                bg: softTints.pink,
               },
             ].map((metric, i) => (
               <View
@@ -198,13 +239,13 @@ export default function Profile() {
                 </View>
                 <Text
                   className="mt-3 text-base font-black tracking-tight"
-                  style={{ color: colors.foreground }}
+                  style={{ color: colors.foreground, fontFamily: fonts.mono }}
                 >
                   {metric.value}
                 </Text>
                 <Text
                   className="text-[10px] font-bold text-center mt-0.5"
-                  style={{ color: colors.mutedText }}
+                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
                 >
                   {metric.label}
                 </Text>
@@ -236,7 +277,7 @@ export default function Profile() {
               </View>
               <Text
                 className="flex-1 text-sm font-bold"
-                style={{ color: colors.foreground }}
+                style={{ color: colors.foreground, fontFamily: fonts.body }}
               >
                 My Progress & Wellness Forest
               </Text>
@@ -259,17 +300,17 @@ export default function Profile() {
             >
               <View
                 className="p-2.5 rounded-xl mr-4"
-                style={{ backgroundColor: softTints.amber }}
+                style={{ backgroundColor: softTints.pink }}
               >
                 <Ionicons
                   name="trophy-outline"
                   size={18}
-                  color={colors.accent}
+                  color={colors.primary}
                 />
               </View>
               <Text
                 className="flex-1 text-sm font-bold"
-                style={{ color: colors.foreground }}
+                style={{ color: colors.foreground, fontFamily: fonts.body }}
               >
                 Achievements
               </Text>
@@ -300,17 +341,17 @@ export default function Profile() {
               >
                 <View
                   className="p-2.5 rounded-xl mr-4"
-                  style={{ backgroundColor: softTints.lavender }}
+                  style={{ backgroundColor: softTints.pink }}
                 >
                   <Ionicons
                     name="settings-outline"
                     size={18}
-                    color={colors.secondary}
+                    color={colors.primary}
                   />
                 </View>
                 <Text
                   className="flex-1 text-sm font-bold"
-                  style={{ color: colors.foreground }}
+                  style={{ color: colors.foreground, fontFamily: fonts.body }}
                 >
                   Preferences & Settings
                 </Text>
@@ -337,13 +378,13 @@ export default function Profile() {
                     <View>
                       <Text
                         className="text-xs font-bold"
-                        style={{ color: colors.foreground }}
+                        style={{ color: colors.foreground, fontFamily: fonts.body }}
                       >
                         Cycle Notifications
                       </Text>
                       <Text
                         className="text-[10px] mt-0.5"
-                        style={{ color: colors.mutedText }}
+                        style={{ color: colors.mutedText, fontFamily: fonts.body }}
                       >
                         Alert me before my next expected date
                       </Text>
@@ -359,13 +400,13 @@ export default function Profile() {
                     <View>
                       <Text
                         className="text-xs font-bold"
-                        style={{ color: colors.foreground }}
+                        style={{ color: colors.foreground, fontFamily: fonts.body }}
                       >
                         Anonymous Community Mode
                       </Text>
                       <Text
                         className="text-[10px] mt-0.5"
-                        style={{ color: colors.mutedText }}
+                        style={{ color: colors.mutedText, fontFamily: fonts.body }}
                       >
                         Mask my initials on forum posts
                       </Text>
@@ -402,7 +443,7 @@ export default function Profile() {
               </View>
               <Text
                 className="flex-1 text-sm font-bold"
-                style={{ color: colors.foreground }}
+                style={{ color: colors.foreground, fontFamily: fonts.body }}
               >
                 Help & Support
               </Text>
@@ -425,17 +466,17 @@ export default function Profile() {
             >
               <View
                 className="p-2.5 rounded-xl mr-4"
-                style={{ backgroundColor: softTints.emerald }}
+                style={{ backgroundColor: softTints.pink }}
               >
                 <Ionicons
                   name="shield-checkmark-outline"
                   size={18}
-                  color={colors.secondary}
+                  color={colors.primary}
                 />
               </View>
               <Text
                 className="flex-1 text-sm font-bold"
-                style={{ color: colors.foreground }}
+                style={{ color: colors.foreground, fontFamily: fonts.body }}
               >
                 Data Privacy & Security
               </Text>
@@ -460,7 +501,7 @@ export default function Profile() {
             <Feather name="log-out" size={16} color={colors.primary} />
             <Text
               className="ml-2 text-sm font-bold tracking-wide"
-              style={{ color: colors.primary }}
+              style={{ color: colors.primary, fontFamily: fonts.body }}
             >
               {isLoggingOut ? "Logging Out..." : "Log Out Securely"}
             </Text>
@@ -484,7 +525,7 @@ export default function Profile() {
           <View className="flex-row justify-between items-center mb-8">
             <Text
               className="text-xl font-black"
-              style={{ color: colors.foreground }}
+              style={{ color: colors.foreground, fontFamily: fonts.heading }}
             >
               Your Achievements
             </Text>
@@ -510,13 +551,13 @@ export default function Profile() {
             />
             <Text
               className="text-base font-black mt-4"
-              style={{ color: colors.foreground }}
+              style={{ color: colors.foreground, fontFamily: fonts.heading }}
             >
               Consistency Champion Badge
             </Text>
             <Text
               className="text-xs text-center mt-2 leading-4"
-              style={{ color: colors.mutedText }}
+              style={{ color: colors.mutedText, fontFamily: fonts.body }}
             >
               Unlocked for steady symptom logging and habit care across your
               recent cycle.
@@ -539,14 +580,14 @@ export default function Profile() {
           <View className="flex-row justify-between items-center mb-6">
             <Text
               className="text-xl font-black"
-              style={{ color: colors.foreground }}
+              style={{ color: colors.foreground, fontFamily: fonts.heading }}
             >
               Help & Support
             </Text>
             <TouchableOpacity onPress={() => setSupportModalVisible(false)}>
               <Text
                 className="text-sm font-bold"
-                style={{ color: colors.primary }}
+                style={{ color: colors.primary, fontFamily: fonts.body }}
               >
                 Done
               </Text>
@@ -554,7 +595,7 @@ export default function Profile() {
           </View>
           <Text
             className="text-sm leading-5 mb-4"
-            style={{ color: colors.foreground }}
+            style={{ color: colors.foreground, fontFamily: fonts.body }}
           >
             Need help with predictions, account access, cycle logs, or partner
             sharing? Send a support request and we will guide you through it.
@@ -571,7 +612,7 @@ export default function Profile() {
           >
             <Text
               className="text-sm font-bold"
-              style={{ color: colors.buttonText }}
+              style={{ color: colors.buttonText, fontFamily: fonts.body }}
             >
               Create Support Ticket
             </Text>
@@ -593,7 +634,7 @@ export default function Profile() {
           <View className="flex-row justify-between items-center mb-6">
             <Text
               className="text-xl font-black"
-              style={{ color: colors.foreground }}
+              style={{ color: colors.foreground, fontFamily: fonts.heading }}
             >
               Privacy Safeguard
             </Text>
@@ -607,7 +648,7 @@ export default function Profile() {
           >
             <Text
               className="text-xs leading-5"
-              style={{ color: colors.foreground }}
+              style={{ color: colors.foreground, fontFamily: fonts.body }}
             >
               Your tracking notes, cycle logs, and identity details are treated
               as private health data. Sharing controls stay with you, and

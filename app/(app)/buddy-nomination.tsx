@@ -18,6 +18,7 @@ import { useTheme } from "../../components/theme";
 import { getSoftTints } from "../../components/ui-tokens";
 import {
   buddyApi,
+  getWebSocketUrl,
   type BuddyMatch as ApiBuddyMatch,
   type BuddyMessage as ApiBuddyMessage,
 } from "../../lib/api";
@@ -39,6 +40,7 @@ interface BuddyMessage {
   sender: "me" | "buddy";
   text: string;
   time: string;
+  sentAt?: string;
 }
 
 const fallbackNominees: PeriodBuddy[] = [
@@ -78,7 +80,7 @@ const fallbackNominees: PeriodBuddy[] = [
 
 function mapBuddy(match: ApiBuddyMatch): PeriodBuddy {
   return {
-    id: match.id ?? match._id ?? match.alias,
+    id: match.matchKey ?? match.buddyUserId ?? match.id ?? match._id ?? match.alias,
     alias: match.alias,
     avatarSeed: match.avatarSeed,
     cyclePhase: match.cyclePhase,
@@ -100,11 +102,49 @@ function mapBuddyMessage(message: ApiBuddyMessage): BuddyMessage {
           minute: "2-digit",
         })
       : "Just now",
+    sentAt: message.sentAt,
   };
 }
 
+function mergeBuddyMessages(prev: BuddyMessage[], newMsgs: ApiBuddyMessage[]): BuddyMessage[] {
+  const next = [...prev];
+  for (const msg of newMsgs) {
+    const mapped = mapBuddyMessage(msg);
+    let found = false;
+    for (let i = 0; i < next.length; i++) {
+      const m = next[i];
+      if (m.id === mapped.id) {
+        found = true;
+        break;
+      }
+
+      const isOptimisticMatch =
+        String(m.id).startsWith("msg_u_") &&
+        m.sender === mapped.sender &&
+        m.text === mapped.text;
+
+      const isTimeMatch =
+        m.sender === mapped.sender &&
+        m.text === mapped.text &&
+        m.sentAt &&
+        mapped.sentAt &&
+        Math.abs(new Date(m.sentAt).getTime() - new Date(mapped.sentAt).getTime()) < 5000;
+
+      if (isOptimisticMatch || isTimeMatch) {
+        next[i] = mapped;
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      next.push(mapped);
+    }
+  }
+  return next;
+}
+
 export default function BuddyNomination() {
-  const { colors, isDark } = useTheme();
+  const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
   const { earnTokens } = useAppState();
   const scrollViewRef = useRef<ScrollView>(null);
@@ -136,23 +176,43 @@ export default function BuddyNomination() {
     async function loadBuddySpace() {
       try {
         const [matchesResponse, activeBuddy, messages] = await Promise.all([
-          buddyApi.getMatches(),
-          buddyApi.getActive(),
-          buddyApi.getMessages(),
+          buddyApi.getMatches().catch(() => ({ matches: [] })),
+          buddyApi.getActive().catch(() => null),
+          buddyApi.getMessages().catch(() => []),
         ]);
 
         if (!isMounted) return;
 
-        if (matchesResponse.matches.length > 0) {
-          setNominees(matchesResponse.matches.map(mapBuddy));
+        let finalNominees = [...fallbackNominees];
+        if (matchesResponse && matchesResponse.matches && matchesResponse.matches.length > 0) {
+          finalNominees = matchesResponse.matches.map(mapBuddy);
         }
+
         if (activeBuddy) {
-          setActiveNominatedId(activeBuddy.id ?? activeBuddy._id ?? null);
+          const mappedActive = mapBuddy(activeBuddy);
+          setActiveNominatedId(mappedActive.id);
+
+          // Ensure the active buddy is in the nominees list
+          const exists = finalNominees.some((b) => b.id === mappedActive.id);
+          if (!exists) {
+            finalNominees = [mappedActive, ...finalNominees];
+          }
+          setIsChatConsoleOpen(true);
         }
-        if (messages.length > 0) {
-          setChatLog(messages.map(mapBuddyMessage));
+
+        setNominees(finalNominees);
+
+        const chatMessages = (messages && messages.length > 0)
+          ? messages
+          : (activeBuddy && activeBuddy.messages && activeBuddy.messages.length > 0)
+            ? activeBuddy.messages
+            : [];
+
+        if (chatMessages.length > 0) {
+          setChatLog(chatMessages.map(mapBuddyMessage));
         }
-      } catch {
+      } catch (err) {
+        console.warn("Failed to load buddy space:", err);
         if (isMounted) {
           setNominees(fallbackNominees);
         }
@@ -166,12 +226,86 @@ export default function BuddyNomination() {
     };
   }, []);
 
-  const filteredNominees = nominees.filter((buddy) =>
-    [buddy.alias, buddy.cyclePhase]
-      .join(" ")
-      .toLowerCase()
-      .includes(searchQuery.trim().toLowerCase()),
-  );
+  // WebSocket live synchronization
+  useEffect(() => {
+    if (!isChatConsoleOpen || !activeNominatedId) return;
+
+    let socket: WebSocket | null = null;
+    let isDisconnected = false;
+
+    async function connectWS() {
+      try {
+        const wsUrl = await getWebSocketUrl();
+        socket = new WebSocket(wsUrl);
+
+        socket.onopen = () => {
+          if (isDisconnected) return;
+          console.log("WebSocket connected for buddy chat");
+          socket?.send(JSON.stringify({
+            type: "join",
+            room: `buddy_${activeNominatedId}`,
+          }));
+        };
+
+        socket.onmessage = (event) => {
+          if (isDisconnected) return;
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === "message" && data.room === `buddy_${activeNominatedId}`) {
+              if (data.messages && Array.isArray(data.messages)) {
+                setChatLog((prev) => mergeBuddyMessages(prev, data.messages));
+                setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+              }
+            }
+          } catch (err) {
+            console.error("Error parsing WebSocket message:", err);
+          }
+        };
+
+        socket.onerror = (err) => {
+          console.warn("WebSocket error:", err);
+        };
+
+        socket.onclose = () => {
+          console.log("WebSocket closed");
+        };
+      } catch (err) {
+        console.warn("Failed to setup WebSocket:", err);
+      }
+    }
+
+    connectWS();
+
+    return () => {
+      isDisconnected = true;
+      if (socket) {
+        try {
+          socket.send(JSON.stringify({
+            type: "leave",
+            room: `buddy_${activeNominatedId}`,
+          }));
+        } catch {}
+        socket.close();
+      }
+    };
+  }, [isChatConsoleOpen, activeNominatedId]);
+
+
+  const sortedNominees = React.useMemo(() => {
+    const filtered = nominees.filter((buddy) =>
+      [buddy.alias, buddy.cyclePhase]
+        .join(" ")
+        .toLowerCase()
+        .includes(searchQuery.trim().toLowerCase()),
+    );
+    return [...filtered].sort((a, b) => {
+      const aIsActive = a.id === activeNominatedId;
+      const bIsActive = b.id === activeNominatedId;
+      if (aIsActive && !bIsActive) return -1;
+      if (!aIsActive && bIsActive) return 1;
+      return 0;
+    });
+  }, [nominees, activeNominatedId, searchQuery]);
 
   const activeBuddyData = nominees.find((b) => b.id === activeNominatedId);
 
@@ -189,12 +323,18 @@ export default function BuddyNomination() {
 
     setActiveNominatedId(id);
     earnTokens(25);
+    setIsChatConsoleOpen(true);
 
     try {
       const result = await buddyApi.nominate(id);
-      setActiveNominatedId(result.buddy.id ?? result.buddy._id ?? id);
+      const matchObj = result.match ?? result.buddy;
+      if (matchObj) {
+        const activeId = matchObj.matchKey ?? matchObj.buddyUserId ?? matchObj.id ?? matchObj._id ?? id;
+        setActiveNominatedId(activeId);
+      }
       if (result.tokensAwarded) earnTokens(result.tokensAwarded);
-    } catch {
+    } catch (err) {
+      console.warn("Failed to nominate buddy:", err);
       // Keep the local buddy active for offline development.
     }
 
@@ -209,6 +349,7 @@ export default function BuddyNomination() {
       sender: "me",
       text: typedMessage.trim(),
       time: "Just now",
+      sentAt: new Date().toISOString(),
     };
 
     setChatLog((prev) => [...prev, myPayload]);
@@ -221,25 +362,11 @@ export default function BuddyNomination() {
     try {
       const result = await buddyApi.sendMessage(myPayload.text);
       if (result.tokensAwarded) earnTokens(result.tokensAwarded);
-      if (result.messages.length > 0) {
-        setChatLog(result.messages.map(mapBuddyMessage));
+      if (result.messages && result.messages.length > 0) {
+        setChatLog((prev) => mergeBuddyMessages(prev, result.messages));
       }
-    } catch {
-      setTimeout(() => {
-        setChatLog((prev) => [
-          ...prev,
-          {
-            id: `msg_b_${Date.now()}`,
-            sender: "buddy",
-            text: "Totally. Let's check our habit updates later and compare how the day felt.",
-            time: "Just now",
-          },
-        ]);
-        setTimeout(
-          () => scrollViewRef.current?.scrollToEnd({ animated: true }),
-          50,
-        );
-      }, 1200);
+    } catch (err) {
+      console.warn("Failed to send buddy message:", err);
     }
   }
 
@@ -285,7 +412,7 @@ export default function BuddyNomination() {
             </TouchableOpacity>
             <Text
               className="flex-1 text-2xl font-black tracking-tight ml-2"
-              style={{ color: colors.foreground }}
+              style={{ color: colors.foreground, fontFamily: fonts.heading }}
             >
               Period Buddy
             </Text>
@@ -314,7 +441,7 @@ export default function BuddyNomination() {
                   />
                   <Text
                     className="text-xs font-black tracking-widest uppercase"
-                    style={{ color: colors.foreground }}
+                    style={{ color: colors.foreground, fontFamily: fonts.heading }}
                   >
                     Monthly Peer Match
                   </Text>
@@ -322,13 +449,13 @@ export default function BuddyNomination() {
 
                 <Text
                   className="text-base font-black tracking-tight leading-5 mb-1.5"
-                  style={{ color: colors.foreground }}
+                  style={{ color: colors.foreground, fontFamily: fonts.heading }}
                 >
                   Nominate Your Period Buddy
                 </Text>
                 <Text
                   className="text-xs leading-4"
-                  style={{ color: colors.mutedText }}
+                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
                 >
                   Sync timelines anonymously with another profile holding
                   similar cycle milestones. Compare patterns and chat with
@@ -356,20 +483,20 @@ export default function BuddyNomination() {
                     onChangeText={setSearchQuery}
                     returnKeyType="search"
                     className="ml-3 flex-1 py-4 text-sm"
-                    style={{ color: colors.foreground }}
+                    style={{ color: colors.foreground, fontFamily: fonts.body }}
                   />
                 </View>
 
                 <Text
                   className="text-xs font-black tracking-widest uppercase mb-4 px-1"
-                  style={{ color: colors.primary }}
+                  style={{ color: colors.primary, fontFamily: fonts.heading }}
                 >
                   Top Match Profiles for You
                 </Text>
 
                 {/* MATCH STACK FEED TIMELINE LOOP */}
                 <View className="gap-4">
-                  {filteredNominees.map((buddy) => {
+                  {sortedNominees.map((buddy) => {
                     const isSelectedBuddy = activeNominatedId === buddy.id;
                     const isAnyBuddyLocked = activeNominatedId !== null;
 
@@ -378,10 +505,13 @@ export default function BuddyNomination() {
                         key={buddy.id}
                         className="rounded-3xl border shadow-2xl overflow-hidden"
                         style={{
-                          backgroundColor: colors.surface,
+                          backgroundColor: isSelectedBuddy
+                            ? colors.primaryLight
+                            : colors.surface,
                           borderColor: isSelectedBuddy
                             ? colors.primary
                             : colors.border,
+                          borderWidth: isSelectedBuddy ? 2.5 : 1,
                           opacity:
                             isAnyBuddyLocked && !isSelectedBuddy ? 0.45 : 1,
                         }}
@@ -395,28 +525,48 @@ export default function BuddyNomination() {
                                 borderColor: colors.border,
                               }}
                             >
-                              <Text className="text-2xl">
+                              <Text className="text-2xl" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                                 {buddy.avatarSeed}
                               </Text>
                             </View>
 
                             <View className="flex-1">
-                              <Text
-                                className="text-sm font-black tracking-tight"
-                                style={{ color: colors.foreground }}
-                              >
-                                {buddy.alias}
-                              </Text>
+                              <View className="flex-row items-center gap-2 flex-wrap">
+                                <Text
+                                  className="text-sm font-black tracking-tight"
+                                  style={{ color: colors.foreground, fontFamily: fonts.heading }}
+                                >
+                                  {buddy.alias}
+                                </Text>
+                                {isSelectedBuddy && (
+                                  <View
+                                    className="px-2 py-0.5 rounded-full flex-row items-center gap-1"
+                                    style={{
+                                      backgroundColor: colors.successLight,
+                                      borderColor: `${colors.success}33`,
+                                      borderWidth: 1,
+                                    }}
+                                  >
+                                    <View className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: colors.success }} />
+                                    <Text
+                                      className="text-[8px] font-black uppercase tracking-wider"
+                                      style={{ color: colors.success, fontFamily: fonts.body }}
+                                    >
+                                      Active
+                                    </Text>
+                                  </View>
+                                )}
+                              </View>
                               <View className="flex-row items-center gap-1.5 mt-0.5">
-                                <View className="w-1.5 h-1.5 rounded-full bg-pink-500" />
+                                <View className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: colors.primary }} />
                                 <Text
                                   className="text-[11px] font-bold"
-                                  style={{ color: colors.mutedText }}
+                                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
                                 >
                                   {buddy.cyclePhase}
                                 </Text>
                               </View>
-                              <Text className="mt-1 text-[9px] font-black uppercase text-neutral-400">
+                              <Text className="mt-1 text-[9px] font-black uppercase" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                                 {buddy.lastUpdate}
                               </Text>
                             </View>
@@ -428,11 +578,11 @@ export default function BuddyNomination() {
                               className="h-11 w-11 items-center justify-center rounded-full"
                               style={{ backgroundColor: softTints.emerald }}
                             >
-                              <Text className="text-xs font-black text-emerald-500">
+                              <Text className="text-xs font-black" style={{ color: colors.success, fontFamily: fonts.mono }}>
                                 {buddy.compatibility}%
                               </Text>
                             </View>
-                            <Text className="mt-1 text-[10px] font-bold uppercase tracking-wider text-neutral-400">
+                            <Text className="mt-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                               Overlap
                             </Text>
                           </View>
@@ -452,7 +602,7 @@ export default function BuddyNomination() {
                             >
                               <Text
                                 className="text-[9px] font-bold"
-                                style={{ color: colors.foreground }}
+                                style={{ color: colors.foreground, fontFamily: fonts.body }}
                               >
                                 #{chip}
                               </Text>
@@ -464,55 +614,38 @@ export default function BuddyNomination() {
                         <TouchableOpacity
                           activeOpacity={0.8}
                           disabled={isAnyBuddyLocked && !isSelectedBuddy}
-                          className="mx-5 mb-5 rounded-xl py-3 items-center justify-center border shadow-3xs"
-                          onPress={() => handleNominateBuddy(buddy.id)}
+                          className="mx-5 mb-5 rounded-xl py-3 flex-row items-center justify-center gap-2 border shadow-3xs"
+                          onPress={() => {
+                            if (isSelectedBuddy) {
+                              setIsChatConsoleOpen(true);
+                            } else {
+                              handleNominateBuddy(buddy.id);
+                            }
+                          }}
                           style={{
-                            backgroundColor: isSelectedBuddy
-                              ? softTints.emerald
-                              : colors.primary,
-                            borderColor: isSelectedBuddy
-                              ? colors.success
-                              : colors.primary,
+                            backgroundColor: colors.primary,
+                            borderColor: colors.primary,
                           }}
                         >
-                          <Text
-                            className="text-xs font-bold tracking-wide"
-                            style={{
-                              color: isSelectedBuddy
-                                ? colors.success
-                                : colors.buttonText,
-                            }}
-                          >
-                            {isSelectedBuddy
-                              ? "Buddy Nominated"
-                              : "Nominate as Buddy"}
-                          </Text>
-                        </TouchableOpacity>
-
-                        {/* Short cut console trigger accessible once synced configuration activates */}
-                        {isSelectedBuddy && (
-                          <TouchableOpacity
-                            onPress={() => setIsChatConsoleOpen(true)}
-                            className="mx-5 mb-5 -mt-2 p-3 rounded-xl flex-row items-center justify-center gap-2"
-                            style={{
-                              backgroundColor: colors.surfaceSoft,
-                              borderWidth: 1,
-                              borderColor: colors.border,
-                            }}
-                          >
-                            <Ionicons
-                              name="chatbubble-ellipses-outline"
-                              size={14}
-                              color={colors.primary}
-                            />
+                          {isSelectedBuddy ? (
+                            <>
+                              <Ionicons name="chatbubble-ellipses" size={15} color={colors.buttonText} />
+                              <Text
+                                className="text-xs font-bold tracking-wide"
+                                style={{ color: colors.buttonText, fontFamily: fonts.body }}
+                              >
+                                Chat with Buddy
+                              </Text>
+                            </>
+                          ) : (
                             <Text
-                              className="text-xs font-black"
-                              style={{ color: colors.foreground }}
+                              className="text-xs font-bold tracking-wide"
+                              style={{ color: colors.buttonText, fontFamily: fonts.body }}
                             >
-                              Open Anonymous Chat
+                              Nominate as Buddy
                             </Text>
-                          </TouchableOpacity>
-                        )}
+                          )}
+                        </TouchableOpacity>
                       </View>
                     );
                   })}
@@ -531,18 +664,18 @@ export default function BuddyNomination() {
                     }}
                   >
                     <View className="flex-row items-center gap-3">
-                      <Text className="text-lg">
+                      <Text className="text-lg" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                         {activeBuddyData.avatarSeed}
                       </Text>
                       <View>
                         <Text
                           className="text-xs font-black"
-                          style={{ color: colors.foreground }}
+                          style={{ color: colors.foreground, fontFamily: fonts.heading }}
                         >
                           {activeBuddyData.alias}
                         </Text>
-                        <Text className="text-[10px] font-bold text-emerald-500 mt-0.5">
-                          Secure Encrypted Session Active
+                        <Text className="text-[10px] font-bold uppercase tracking-wide mt-0.5" style={{ color: colors.success, fontFamily: fonts.body }}>
+                          Secure Encrypted Session
                         </Text>
                       </View>
                     </View>
@@ -553,7 +686,7 @@ export default function BuddyNomination() {
                     >
                       <Text
                         className="text-[10px] font-black"
-                        style={{ color: colors.foreground }}
+                        style={{ color: colors.foreground, fontFamily: fonts.body }}
                       >
                         View Stack
                       </Text>
@@ -586,6 +719,7 @@ export default function BuddyNomination() {
                               color: isMe
                                 ? colors.buttonText
                                 : colors.foreground,
+                              fontFamily: fonts.body,
                             }}
                           >
                             {message.text}
@@ -620,6 +754,7 @@ export default function BuddyNomination() {
               style={{
                 backgroundColor: colors.input,
                 color: colors.foreground,
+                fontFamily: fonts.body,
               }}
               onSubmitEditing={handleSendBuddyMessage}
               blurOnSubmit={false}
@@ -636,8 +771,8 @@ export default function BuddyNomination() {
               }}
             >
               <Feather
-                name="send"
-                size={14}
+                name="arrow-up"
+                size={16}
                 color={
                   typedMessage.trim() ? colors.buttonText : colors.mutedText
                 }

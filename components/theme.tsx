@@ -48,10 +48,19 @@ export type ThemeColors = {
   overlay: string;
 };
 
+export type ThemeFonts = {
+  heading: string;
+  body: string;
+  mono: string;
+  monoSemiBold: string;
+};
+
 type ThemeContextValue = {
   colors: ThemeColors;
+  fonts: ThemeFonts;
   isDark: boolean;
   mode: ThemeMode;
+  hasHydrated: boolean;
   toggleTheme: () => void;
 };
 
@@ -63,88 +72,100 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [hasHydrated, setHasHydrated] = useState(false);
   const isDark = mode === "dark";
 
+  const fonts = useMemo<ThemeFonts>(
+    () => ({
+      heading: isDark ? "PlayfairDisplay" : "Manrope",
+      body: isDark ? "WorkSans" : "Manrope",
+      mono: "IBM Plex Mono",
+      monoSemiBold: "IBMPlexMono-SemiBold",
+    }),
+    [isDark]
+  );
+
   const value = useMemo<ThemeContextValue>(
     () => ({
       colors: isDark
         ? {
-            background: "#141118",
-            surface: "#211c29",
-            surfaceSoft: "#2b2534",
-            surfaceStrong: "#31283c",
-            primary: "#f472a6",
-            primaryDark: "#d9467d",
-            primaryLight: "#3f2332",
-            secondary: "#5eead4",
-            secondaryLight: "#173c3a",
-            accent: "#a78bfa",
-            accentLight: "#2f264f",
-            foreground: "#faf7fb",
-            border: "#373040",
-            button: "#f472a6",
-            buttonText: "#ffffff",
-            text: "#f4eef6",
-            mutedText: "#b8aebe",
-            input: "#2a2432",
-            success: "#34d399",
-            successLight: "#173b2d",
-            warning: "#fbbf24",
-            warningLight: "#3f2f14",
-            danger: "#fb7185",
-            dangerLight: "#42212b",
-            info: "#7dd3fc",
-            infoLight: "#17344a",
-            rose: "#fb7185",
-            roseLight: "#3c202c",
-            lavender: "#c4b5fd",
-            lavenderLight: "#30274d",
-            mint: "#6ee7b7",
-            mintLight: "#173a2b",
-            shadow: "#050408",
-            overlay: "rgba(7, 5, 12, 0.58)",
+            background: "#211722",
+            surface: "#332538",
+            surfaceSoft: "rgba(255, 255, 255, 0.05)",
+            surfaceStrong: "rgba(255, 255, 255, 0.08)",
+            primary: "#E8A6A0",
+            primaryDark: "#D28C86",
+            primaryLight: "rgba(232, 166, 160, 0.14)",
+            secondary: "#B49CAE",
+            secondaryLight: "rgba(255, 255, 255, 0.06)",
+            accent: "#D9B26B",
+            accentLight: "rgba(217, 178, 107, 0.12)",
+            foreground: "#F3E9EE",
+            border: "rgba(255, 255, 255, 0.13)",
+            button: "#E8A6A0",
+            buttonText: "#2C1F2E",
+            text: "#F3E9EE",
+            mutedText: "#B49CAE",
+            input: "rgba(255, 255, 255, 0.05)",
+            success: "#6FA89A",
+            successLight: "rgba(111, 168, 154, 0.15)",
+            warning: "#D9B26B",
+            warningLight: "rgba(217, 178, 107, 0.12)",
+            danger: "#E8A6A0",
+            dangerLight: "rgba(232, 166, 160, 0.14)",
+            info: "#B49CAE",
+            infoLight: "rgba(180, 156, 174, 0.15)",
+            rose: "#E8A6A0",
+            roseLight: "rgba(232, 166, 160, 0.14)",
+            lavender: "#B49CAE",
+            lavenderLight: "rgba(180, 156, 174, 0.15)",
+            mint: "#6FA89A",
+            mintLight: "rgba(111, 168, 154, 0.15)",
+            shadow: "rgba(0, 0, 0, 0.4)",
+            overlay: "rgba(33, 23, 34, 0.6)",
           }
         : {
-            background: "#f8fafc",
-            surface: "#ffffff",
-            surfaceSoft: "#eef4f8",
-            surfaceStrong: "#e7f0f5",
-            primary: "#d9467d",
-            primaryDark: "#be185d",
-            primaryLight: "#fce7f0",
-            secondary: "#0f766e",
-            secondaryLight: "#dff7f1",
-            accent: "#7c3aed",
-            accentLight: "#eee7ff",
-            foreground: "#111827",
-            border: "#cbd5e1",
-            button: "#d9467d",
-            buttonText: "#ffffff",
-            text: "#1f2937",
-            mutedText: "#475569",
-            input: "#f1f5f9",
-            success: "#059669",
-            successLight: "#dcfce7",
-            warning: "#d97706",
-            warningLight: "#fef3c7",
-            danger: "#e11d48",
-            dangerLight: "#ffe4e6",
-            info: "#2563eb",
-            infoLight: "#dbeafe",
-            rose: "#e11d48",
-            roseLight: "#ffe4ec",
-            lavender: "#7c3aed",
-            lavenderLight: "#f1edff",
-            mint: "#0d9488",
-            mintLight: "#ccfbf1",
-            shadow: "#0f172a",
-            overlay: "rgba(15, 23, 42, 0.36)",
+            background: "#F5F7FA",
+            surface: "#FFFFFF",
+            surfaceSoft: "#F0F2F6",
+            surfaceStrong: "#E3E7ED",
+            primary: "#E4694F",
+            primaryDark: "#C24C34",
+            primaryLight: "#FFF1ED",
+            secondary: "#66748A",
+            secondaryLight: "#E8EAEF",
+            accent: "#2E8B7A",
+            accentLight: "#EAF6F4",
+            foreground: "#17212E",
+            border: "#E3E7ED",
+            button: "#E4694F",
+            buttonText: "#FFFFFF",
+            text: "#17212E",
+            mutedText: "#66748A",
+            input: "#F0F2F6",
+            success: "#2E8B7A",
+            successLight: "#EAF6F4",
+            warning: "#D9B26B",
+            warningLight: "#FCF6EA",
+            danger: "#E53E3E",
+            dangerLight: "#FED7D7",
+            info: "#3182CE",
+            infoLight: "#EBF8FF",
+            rose: "#E4694F",
+            roseLight: "#FFF1ED",
+            lavender: "#805AD5",
+            lavenderLight: "#FAF5FF",
+            mint: "#2E8B7A",
+            mintLight: "#EAF6F4",
+            shadow: "rgba(23, 33, 46, 0.08)",
+            overlay: "rgba(23, 33, 46, 0.4)",
           },
+      fonts,
       isDark,
       mode,
+      hasHydrated,
       toggleTheme: () => {
         setMode((currentMode) => (currentMode === "dark" ? "light" : "dark"));
       },
     }),
-    [isDark, mode],
+    [isDark, mode, fonts, hasHydrated],
   );
 
   useEffect(() => {

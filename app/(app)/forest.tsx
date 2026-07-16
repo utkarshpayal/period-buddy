@@ -28,7 +28,7 @@ interface Tree {
 }
 
 export default function Forest() {
-  const { colors, isDark } = useTheme();
+  const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
   const { trackedDays } = useAppState();
   const swayAnim = useRef(new Animated.Value(0)).current;
@@ -150,8 +150,29 @@ export default function Forest() {
     forestStatus?.averageHealth ??
     Math.round(trees.reduce((acc, t) => acc + t.health, 0) / trees.length);
 
-  let forestTier = forestStatus?.forestTier ?? "Sprout Woodland";
-  let tierColor = "#10b981"; // Emerald
+  // Maps every tier string the backend can actually return (see
+  // forestController.js `getTier`) to a color. Keyed by name rather than by
+  // `!forestStatus` so the badge is colored correctly for real API data too,
+  // not just the offline/demo fallback — previously any real forestTier
+  // (including top tiers) silently fell back to the default coral.
+  const TIER_COLORS: Record<string, string> = {
+    "Ancient Evergreen Canopy": colors.success,
+    "Lush Tropical Forest": colors.accent,
+    "Growing Cycle Grove": colors.warning,
+    "Sprout Woodland": colors.primary,
+  };
+
+  // Only used while forestStatus hasn't loaded yet (offline/demo state) —
+  // once real status arrives, forestStatus.forestTier always wins.
+  const fallbackTier =
+    !forestStatus && healthyTreeCount >= 20
+      ? "Ancient Evergreen Canopy"
+      : !forestStatus && healthyTreeCount >= 14
+        ? "Lush Tropical Forest"
+        : "Sprout Woodland";
+
+  const forestTier = forestStatus?.forestTier ?? fallbackTier;
+  const tierColor = TIER_COLORS[forestTier] ?? colors.primary;
   const treeSway = swayAnim.interpolate({
     inputRange: [0, 1],
     outputRange: ["-3deg", "3deg"],
@@ -164,14 +185,6 @@ export default function Forest() {
     inputRange: [0, 0.5, 1],
     outputRange: [0.45, 1, 0.45],
   });
-
-  if (!forestStatus && healthyTreeCount >= 20) {
-    forestTier = "Ancient Evergreen Canopy";
-    tierColor = "#047857";
-  } else if (!forestStatus && healthyTreeCount >= 14) {
-    forestTier = "Lush Tropical Forest";
-    tierColor = "#059669";
-  }
 
   async function handleLogCare() {
     setIsNourished(true);
@@ -217,7 +230,7 @@ export default function Forest() {
             </TouchableOpacity>
             <Text
               className="flex-1 text-2xl font-bold"
-              style={{ color: colors.foreground }}
+              style={{ color: colors.foreground, fontFamily: fonts.heading }}
             >
               Your Wellness Forest
             </Text>
@@ -259,7 +272,7 @@ export default function Forest() {
                 <Ionicons
                   name={isDark ? "moon" : "sunny"}
                   size={30}
-                  color={isDark ? "#fde68a" : "#f59e0b"}
+                  color={isDark ? colors.secondary : colors.warning}
                 />
               </Animated.View>
 
@@ -314,7 +327,7 @@ export default function Forest() {
                     <MaterialCommunityIcons
                       name="leaf"
                       size={20}
-                      color="#34d399"
+                      color={colors.success}
                     />
                   </Animated.View>
                   <Animated.View
@@ -327,7 +340,7 @@ export default function Forest() {
                     <MaterialCommunityIcons
                       name="flower-tulip"
                       size={22}
-                      color="#fb7185"
+                      color={colors.primary}
                     />
                   </Animated.View>
 
@@ -341,14 +354,14 @@ export default function Forest() {
                       <FontAwesome5
                         name="tree"
                         size={54}
-                        color={isDark ? "#047857" : "#0f766e"}
+                        color={colors.accent}
                       />
                     </Animated.View>
                     <Animated.View style={{ transform: [{ rotate: treeSway }] }}>
                       <MaterialCommunityIcons
                         name="pine-tree"
                         size={94}
-                        color={isDark ? "#34d399" : "#059669"}
+                        color={colors.success}
                       />
                     </Animated.View>
                     <Animated.View
@@ -359,7 +372,7 @@ export default function Forest() {
                       <FontAwesome5
                         name="tree"
                         size={78}
-                        color={isDark ? "#10b981" : "#16a34a"}
+                        color={colors.success}
                       />
                     </Animated.View>
                     <Animated.View
@@ -371,7 +384,7 @@ export default function Forest() {
                       <MaterialCommunityIcons
                         name="tree"
                         size={58}
-                        color={isDark ? "#047857" : "#0d9488"}
+                        color={colors.accent}
                       />
                     </Animated.View>
                   </View>
@@ -380,17 +393,17 @@ export default function Forest() {
                     <MaterialCommunityIcons
                       name="flower"
                       size={18}
-                      color="#f472b6"
+                      color={colors.primary}
                     />
                     <MaterialCommunityIcons
                       name="sprout"
                       size={20}
-                      color="#22c55e"
+                      color={colors.success}
                     />
                     <MaterialCommunityIcons
                       name="flower"
                       size={16}
-                      color="#fb923c"
+                      color={colors.accent}
                     />
                   </View>
                 </View>
@@ -405,13 +418,13 @@ export default function Forest() {
                     <MaterialCommunityIcons
                       name="tree-outline"
                       size={70}
-                      color={isDark ? "#a3a3a3" : "#78716c"}
+                      color={colors.mutedText}
                       style={{ opacity: 0.78 }}
                     />
                     <MaterialCommunityIcons
                       name="pine-tree-box"
                       size={82}
-                      color={isDark ? "#78716c" : "#57534e"}
+                      color={colors.mutedText}
                     />
                   </Animated.View>
                   <Animated.View
@@ -424,7 +437,7 @@ export default function Forest() {
                     <MaterialCommunityIcons
                       name="leaf-off"
                       size={24}
-                      color={isDark ? "#a8a29e" : "#78716c"}
+                      color={colors.mutedText}
                     />
                   </Animated.View>
                 </View>
@@ -433,13 +446,13 @@ export default function Forest() {
               <View
                 className="absolute left-4 top-4 rounded-2xl border px-3 py-1.5 shadow-sm"
                 style={{
-                  backgroundColor: isDark ? "#02061799" : "#ffffffdd",
-                  borderColor: isDark ? "#ffffff22" : "#ffffff",
+                  backgroundColor: isDark ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.85)",
+                  borderColor: isDark ? "rgba(255,255,255,0.15)" : colors.border,
                 }}
               >
                 <Text
                   className="text-[11px] font-black tracking-widest uppercase"
-                  style={{ color: tierColor }}
+                  style={{ color: tierColor, fontFamily: fonts.body }}
                 >
                   {forestTier}
                 </Text>
@@ -448,19 +461,19 @@ export default function Forest() {
               <View
                 className="absolute bottom-4 left-4 rounded-2xl border px-3 py-2"
                 style={{
-                  backgroundColor: isDark ? "#02061799" : "#ffffffdd",
-                  borderColor: isDark ? "#ffffff20" : colors.border,
+                  backgroundColor: isDark ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.85)",
+                  borderColor: isDark ? "rgba(255,255,255,0.1)" : colors.border,
                 }}
               >
                 <Text
                   className="text-[10px] font-black uppercase"
-                  style={{ color: colors.mutedText }}
+                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
                 >
                   Care streak
                 </Text>
                 <Text
                   className="text-sm font-black"
-                  style={{ color: colors.foreground }}
+                  style={{ color: colors.foreground, fontFamily: fonts.mono }}
                 >
                   {forestStatus?.careActions ?? trackedDays} actions
                 </Text>
@@ -470,21 +483,21 @@ export default function Forest() {
                 <Animated.View
                   className="absolute inset-0 items-center justify-center"
                   style={{
-                    backgroundColor: "#0284c733",
+                    backgroundColor: colors.infoLight,
                     opacity: sparkleOpacity,
                   }}
                 >
                   <View
                     className="flex-row items-center gap-2 rounded-full border px-4 py-2"
                     style={{
-                      backgroundColor: isDark ? "#082f49ee" : "#eff6ffee",
-                      borderColor: "#38bdf8",
+                      backgroundColor: colors.surface,
+                      borderColor: colors.info,
                     }}
                   >
-                    <Ionicons name="water" size={16} color="#0284c7" />
+                    <Ionicons name="water" size={16} color={colors.info} />
                     <Text
                       className="text-xs font-black"
-                      style={{ color: isDark ? "#bae6fd" : "#075985" }}
+                      style={{ color: colors.foreground, fontFamily: fonts.body }}
                     >
                       Forest hydrated +5% vitality
                     </Text>
@@ -502,13 +515,13 @@ export default function Forest() {
                 <View>
                   <Text
                     className="text-xs font-medium"
-                    style={{ color: colors.mutedText }}
+                    style={{ color: colors.mutedText, fontFamily: fonts.body }}
                   >
                     Forest Size
                   </Text>
                   <Text
                     className="text-lg font-bold mt-0.5"
-                    style={{ color: colors.foreground }}
+                    style={{ color: colors.foreground, fontFamily: fonts.heading }}
                   >
                     {healthyTreeCount} Active Trees
                   </Text>
@@ -517,14 +530,15 @@ export default function Forest() {
                 <View className="items-end">
                   <Text
                     className="text-xs font-medium"
-                    style={{ color: colors.mutedText }}
+                    style={{ color: colors.mutedText, fontFamily: fonts.body }}
                   >
                     Forest Health
                   </Text>
                   <Text
                     className="text-lg font-bold mt-0.5"
                     style={{
-                      color: averageHealth >= 70 ? "#10b981" : "#ef4444",
+                      color: averageHealth >= 70 ? colors.success : colors.primary,
+                      fontFamily: fonts.mono,
                     }}
                   >
                     {averageHealth}%
@@ -536,7 +550,7 @@ export default function Forest() {
               <TouchableOpacity
                 className="mt-4 w-full py-3 rounded-xl flex-row items-center justify-center gap-2 active:opacity-90"
                 style={{
-                  backgroundColor: isNourished ? colors.border : "#0284c7",
+                  backgroundColor: isNourished ? colors.border : colors.info,
                 }}
                 disabled={isNourished || forestStatus?.todayCareLogged}
                 onPress={handleLogCare}
@@ -546,7 +560,7 @@ export default function Forest() {
                   size={18}
                   color="white"
                 />
-                <Text className="text-white font-bold text-sm">
+                <Text className="text-white font-bold text-sm" style={{ fontFamily: fonts.body }}>
                   {isNourished || forestStatus?.todayCareLogged
                     ? "Nourished Today"
                     : "Log Care for Forest"}
@@ -559,7 +573,7 @@ export default function Forest() {
           <View className="mx-6 mt-6">
             <Text
               className="mb-4 text-lg font-bold"
-              style={{ color: colors.foreground }}
+              style={{ color: colors.foreground, fontFamily: fonts.heading }}
             >
               Cycle Tree Logs
             </Text>
@@ -578,7 +592,7 @@ export default function Forest() {
                     <View className="flex-1">
                       <Text
                         className="text-base font-bold"
-                        style={{ color: colors.foreground }}
+                        style={{ color: colors.foreground, fontFamily: fonts.heading }}
                       >
                         {tree.month} Cycle
                       </Text>
@@ -593,13 +607,13 @@ export default function Forest() {
                           style={{
                             width: `${tree.health}%`,
                             backgroundColor:
-                              tree.status === "healthy" ? "#10b981" : "#f43f5e",
+                              tree.status === "healthy" ? colors.success : colors.primary,
                           }}
                         />
                       </View>
                       <Text
                         className="mt-2 text-[11px] font-semibold"
-                        style={{ color: colors.mutedText }}
+                        style={{ color: colors.mutedText, fontFamily: fonts.body }}
                       >
                         Tree Stability: {tree.health}%
                       </Text>
@@ -614,20 +628,21 @@ export default function Forest() {
                         <MaterialCommunityIcons
                           name="tree"
                           size={36}
-                          color="#10b981"
+                          color={colors.success}
                         />
                       ) : (
                         <MaterialCommunityIcons
                           name="sprout-outline"
                           size={32}
-                          color="#f43f5e"
+                          color={colors.primary}
                         />
                       )}
                       <Text
                         className="text-[9px] font-bold uppercase tracking-wider mt-1.5"
                         style={{
                           color:
-                            tree.status === "healthy" ? "#10b981" : "#f43f5e",
+                            tree.status === "healthy" ? colors.success : colors.primary,
+                          fontFamily: fonts.body,
                         }}
                       >
                         {tree.status === "healthy" ? "Thriving" : "Wilted"}
@@ -641,7 +656,7 @@ export default function Forest() {
             {/* Ranking Board */}
             <Text
               className="mb-4 mt-8 text-lg font-bold"
-              style={{ color: colors.foreground }}
+              style={{ color: colors.foreground, fontFamily: fonts.heading }}
             >
               Canopy Leaderboard
             </Text>
@@ -671,6 +686,7 @@ export default function Forest() {
                           className="font-bold text-sm w-4"
                           style={{
                             color: isMe ? colors.primary : colors.mutedText,
+                            fontFamily: fonts.mono,
                           }}
                         >
                           #{idx + 1}
@@ -678,13 +694,13 @@ export default function Forest() {
                         <View>
                           <Text
                             className="font-bold text-sm"
-                            style={{ color: colors.foreground }}
+                            style={{ color: colors.foreground, fontFamily: fonts.heading }}
                           >
                           {isMe ? `${user.name} (you)` : user.name}
                           </Text>
                           <Text
                             className="text-[11px]"
-                            style={{ color: colors.mutedText }}
+                            style={{ color: colors.mutedText, fontFamily: fonts.body }}
                           >
                             {user.tier}
                           </Text>
@@ -704,7 +720,7 @@ export default function Forest() {
                         />
                         <Text
                           className="font-bold text-xs"
-                          style={{ color: colors.foreground }}
+                          style={{ color: colors.foreground, fontFamily: fonts.mono }}
                         >
                           {user.trees} Trees
                         </Text>

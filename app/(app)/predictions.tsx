@@ -17,15 +17,10 @@ import {
   getActionGradient,
   getSoftTints,
   getSurfaceGradient,
+  getShadow,
 } from "../../components/ui-tokens";
 import { cycleApi, type Predictions as CyclePredictions } from "../../lib/api";
 
-const PHASE_META: Record<string, { label: string; color: string; description: string }> = {
-  period: { label: "Period", color: "#e11d48", description: "Rest, hydrate, and notice what your body needs." },
-  follicular: { label: "Follicular", color: "#d97706", description: "Energy often starts to rise after bleeding slows." },
-  ovulation: { label: "Ovulation", color: "#d9467d", description: "A common peak-fertility window for many cycles." },
-  luteal: { label: "Luteal", color: "#7c3aed", description: "Mood, cravings, and sleep can shift before your period." },
-};
 
 type AnalyticsBar = {
   daysLogged?: number;
@@ -96,8 +91,15 @@ function buildFiveMonthAnalytics(
 }
 
 export default function Predictions() {
-  const { colors, isDark } = useTheme();
+  const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
+
+  const PHASE_META: Record<string, { label: string; color: string; description: string }> = {
+    period: { label: "Period", color: colors.rose, description: "Rest, hydrate, and notice what your body needs." },
+    follicular: { label: "Follicular", color: colors.warning, description: "Energy often starts to rise after bleeding slows." },
+    ovulation: { label: "Ovulation", color: colors.primary, description: "A common peak-fertility window for many cycles." },
+    luteal: { label: "Luteal", color: colors.secondary, description: "Mood, cravings, and sleep can shift before your period." },
+  };
 
   const [data, setData] = useState<CyclePredictions | null>(null);
   const [loading, setLoading] = useState(true);
@@ -158,7 +160,7 @@ export default function Predictions() {
           >
             <Feather name="arrow-left" size={18} color={colors.foreground} />
           </TouchableOpacity>
-          <Text className="flex-1 text-2xl font-black tracking-tight ml-2" style={{ color: colors.foreground }}>
+          <Text className="flex-1 text-2xl font-black tracking-tight ml-2" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
             Smart Predictions
           </Text>
         </View>
@@ -166,17 +168,17 @@ export default function Predictions() {
         {loading ? (
           <View className="flex-1 items-center justify-center">
             <ActivityIndicator size="large" color={colors.primary} />
-            <Text className="mt-4 text-sm font-semibold" style={{ color: colors.mutedText }}>
+            <Text className="mt-4 text-sm font-semibold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
               Computing your cycle…
             </Text>
           </View>
         ) : error ? (
           <View className="flex-1 items-center justify-center px-8">
             <MaterialCommunityIcons name="calendar-alert" size={48} color={colors.primary} />
-            <Text className="mt-4 text-base font-bold text-center" style={{ color: colors.foreground }}>
+            <Text className="mt-4 text-base font-bold text-center" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
               {error.includes("setup") ? "No cycle data yet" : "Couldn't load predictions"}
             </Text>
-            <Text className="mt-2 text-xs text-center leading-5" style={{ color: colors.mutedText }}>
+            <Text className="mt-2 text-xs text-center leading-5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
               {error.includes("setup")
                 ? "Set up your cycle settings in the tracker to unlock predictions."
                 : error}
@@ -186,7 +188,7 @@ export default function Predictions() {
               className="mt-6 px-6 py-3 rounded-2xl"
               style={{ backgroundColor: colors.primary }}
             >
-              <Text className="text-sm font-bold" style={{ color: colors.buttonText }}>
+              <Text className="text-sm font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
                 {error.includes("setup") ? "Go to Tracker" : "Retry"}
               </Text>
             </TouchableOpacity>
@@ -208,14 +210,14 @@ export default function Predictions() {
               {phaseMeta && (
                 <View
                   className="flex-row items-center gap-3 p-4 rounded-2xl border mb-5"
-                  style={{ backgroundColor: colors.surface, borderColor: `${phaseMeta.color}40` }}
+                  style={{ backgroundColor: `${phaseMeta.color}0D`, borderColor: `${phaseMeta.color}40`, borderRadius: 28 }}
                 >
                   <View className="w-3 h-3 rounded-full" style={{ backgroundColor: phaseMeta.color }} />
                   <View className="flex-1">
-                    <Text className="text-xs font-black uppercase tracking-widest" style={{ color: phaseMeta.color }}>
+                    <Text className="text-xs font-black uppercase tracking-widest" style={{ color: phaseMeta.color, fontFamily: fonts.heading }}>
                       {phaseMeta.label} Phase — Day {data.currentCycleDay}
                     </Text>
-                    <Text className="text-[11px] mt-0.5 font-medium" style={{ color: colors.mutedText }}>
+                    <Text className="text-[11px] mt-0.5 font-medium" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                       {phaseMeta.description}
                     </Text>
                   </View>
@@ -224,8 +226,12 @@ export default function Predictions() {
 
               {/* Hero: Next Period */}
               <View
-                className="rounded-3xl border overflow-hidden shadow-lg mb-5"
-                style={{ borderColor: colors.border }}
+                className="border overflow-hidden mb-5"
+                style={{
+                  borderColor: colors.border,
+                  borderRadius: 28,
+                  ...getShadow(colors, isDark),
+                }}
               >
                 <LinearGradient
                   colors={surfaceGradient}
@@ -234,13 +240,13 @@ export default function Predictions() {
                   className="p-6 flex-row items-center justify-between"
                 >
                   <View className="flex-1 pr-4">
-                    <Text className="text-xs font-bold tracking-widest uppercase mb-1" style={{ color: colors.primary }}>
+                    <Text className="text-xs font-bold tracking-widest uppercase mb-1" style={{ color: colors.primary, fontFamily: fonts.heading }}>
                       Next Period
                     </Text>
-                    <Text className="text-3xl font-black tracking-tighter" style={{ color: colors.foreground }}>
+                    <Text className="text-3xl font-black tracking-tighter" style={{ color: colors.foreground, fontFamily: fonts.mono }}>
                       {data.nextPeriodDate}
                     </Text>
-                    <Text className="mt-1.5 text-xs font-semibold" style={{ color: colors.mutedText }}>
+                    <Text className="mt-1.5 text-xs font-semibold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                       {data.nextPeriodDaysAway === 0
                         ? "Starting today"
                         : `In ${data.nextPeriodDaysAway} days`}
@@ -255,40 +261,50 @@ export default function Predictions() {
               {/* Fertile Window + Ovulation */}
               <View className="flex-row gap-4 mb-5">
                 <View
-                  className="flex-1 rounded-3xl border p-5 shadow-sm justify-between min-h-[140px]"
-                  style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+                  className="flex-1 border p-5 justify-between min-h-[140px]"
+                  style={{
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                    borderRadius: 28,
+                    ...getShadow(colors, isDark),
+                  }}
                 >
-                  <View className="self-start p-2.5 rounded-xl" style={{ backgroundColor: softTints.blue }}>
-                    <Ionicons name="heart-outline" size={18} color={colors.secondary} />
+                  <View className="self-start p-2.5 rounded-xl" style={{ backgroundColor: softTints.purple }}>
+                    <Ionicons name="heart-outline" size={18} color={colors.accent} />
                   </View>
                   <View className="mt-4">
-                    <Text className="text-[11px] font-bold tracking-wide" style={{ color: colors.mutedText }}>
+                    <Text className="text-[11px] font-bold tracking-wide" style={{ color: colors.mutedText, fontFamily: fonts.heading }}>
                       Fertile Window
                     </Text>
-                    <Text className="text-lg font-black tracking-tight mt-0.5" style={{ color: colors.foreground }}>
+                    <Text className="text-lg font-black tracking-tight mt-0.5" style={{ color: colors.foreground, fontFamily: fonts.mono }}>
                       {data.fertileWindowRange}
                     </Text>
-                    <Text className="text-[10px] font-semibold mt-0.5" style={{ color: colors.mutedText }}>
+                    <Text className="text-[10px] font-semibold mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                       {data.fertileWindowDuration}
                     </Text>
                   </View>
                 </View>
 
                 <View
-                  className="flex-1 rounded-3xl border p-5 shadow-sm justify-between min-h-[140px]"
-                  style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+                  className="flex-1 border p-5 justify-between min-h-[140px]"
+                  style={{
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                    borderRadius: 28,
+                    ...getShadow(colors, isDark),
+                  }}
                 >
-                  <View className="self-start p-2.5 rounded-xl" style={{ backgroundColor: softTints.amber }}>
-                    <Feather name="zap" size={16} color={colors.accent} />
+                  <View className="self-start p-2.5 rounded-xl" style={{ backgroundColor: softTints.pink }}>
+                    <Feather name="zap" size={16} color={colors.primary} />
                   </View>
                   <View className="mt-4">
-                    <Text className="text-[11px] font-bold tracking-wide" style={{ color: colors.mutedText }}>
+                    <Text className="text-[11px] font-bold tracking-wide" style={{ color: colors.mutedText, fontFamily: fonts.heading }}>
                       Ovulation Day
                     </Text>
-                    <Text className="text-lg font-black tracking-tight mt-0.5" style={{ color: colors.foreground }}>
+                    <Text className="text-lg font-black tracking-tight mt-0.5" style={{ color: colors.foreground, fontFamily: fonts.mono }}>
                       {data.ovulationDate}
                     </Text>
-                    <Text className="text-[10px] font-semibold mt-0.5" style={{ color: colors.mutedText }}>
+                    <Text className="text-[10px] font-semibold mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                       {data.ovulationDaysAway === 0 ? "Today!" : `In ${data.ovulationDaysAway} days`}
                     </Text>
                   </View>
@@ -297,8 +313,12 @@ export default function Predictions() {
 
               {/* Analytics graph */}
               <View
-                className="rounded-3xl border overflow-hidden shadow-sm mb-5"
-                style={{ borderColor: colors.border }}
+                className="border overflow-hidden mb-5"
+                style={{
+                  borderColor: colors.border,
+                  borderRadius: 28,
+                  ...getShadow(colors, isDark),
+                }}
               >
                 <LinearGradient
                   colors={surfaceGradient}
@@ -306,25 +326,25 @@ export default function Predictions() {
                   end={{ x: 1, y: 1 }}
                   className="p-5"
                 >
-                  <Text className="text-xs font-bold tracking-widest uppercase mb-1" style={{ color: colors.secondary }}>
+                  <Text className="text-xs font-bold tracking-widest uppercase mb-1" style={{ color: colors.secondary, fontFamily: fonts.heading }}>
                     Analytics
                   </Text>
                   <View className="mb-5 flex-row items-start justify-between gap-3">
                     <View className="flex-1">
-                      <Text className="text-base font-extrabold tracking-tight" style={{ color: colors.foreground }}>
+                      <Text className="text-base font-extrabold tracking-tight" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
                         Last 5 Cycle Entries
                       </Text>
-                      <Text className="mt-1 text-[11px] font-semibold leading-4" style={{ color: colors.mutedText }}>
+                      <Text className="mt-1 text-[11px] font-semibold leading-4" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                         {hasAnalyticsHistory
-                          ? "Missing months stay visible as 0 so trends are easy to read."
-                          : "Log your first cycle month to start building this trend."}
+                           ? "Missing months stay visible as 0 so trends are easy to read."
+                           : "Log your first cycle month to start building this trend."}
                       </Text>
                     </View>
                     <View
                       className="rounded-full px-3 py-1"
-                      style={{ backgroundColor: softTints.blue }}
+                      style={{ backgroundColor: softTints.emerald }}
                     >
-                      <Text className="text-[10px] font-black uppercase" style={{ color: colors.info }}>
+                      <Text className="text-[10px] font-black uppercase" style={{ color: colors.success, fontFamily: fonts.body }}>
                         5 months
                       </Text>
                     </View>
@@ -336,7 +356,7 @@ export default function Predictions() {
                       const isLatest = i === analyticsBars.length - 1;
                       return (
                         <View key={`${d.month}-${i}`} className="items-center flex-1 gap-1.5">
-                          <Text className="text-[10px] font-bold" style={{ color: d.length ? colors.foreground : colors.mutedText }}>
+                          <Text className="text-[10px] font-bold" style={{ color: d.length ? colors.foreground : colors.mutedText, fontFamily: fonts.mono }}>
                             {d.length}d
                           </Text>
                           <View
@@ -350,7 +370,7 @@ export default function Predictions() {
                           >
                             {d.length > 0 ? (
                               <LinearGradient
-                                colors={isLatest ? actionGradient : [colors.secondary, colors.info]}
+                                colors={isLatest ? actionGradient : [colors.secondary, colors.secondaryLight]}
                                 start={{ x: 0, y: 0 }}
                                 end={{ x: 0, y: 1 }}
                                 style={{
@@ -371,7 +391,7 @@ export default function Predictions() {
                               />
                             )}
                           </View>
-                          <Text className="text-[10px] font-bold mt-0.5" style={{ color: colors.mutedText }}>
+                          <Text className="text-[10px] font-bold mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                             {d.month}
                           </Text>
                         </View>
@@ -389,14 +409,19 @@ export default function Predictions() {
                 ].map((s) => (
                   <View
                     key={s.label}
-                    className="flex-1 rounded-2xl border p-4 items-center"
-                    style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+                    className="flex-1 border p-4 items-center"
+                    style={{
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                      borderRadius: 20,
+                      ...getShadow(colors, isDark),
+                    }}
                   >
                     <Feather name={s.icon as any} size={18} color={s.color} />
-                    <Text className="mt-2 text-lg font-black" style={{ color: colors.foreground }}>
+                    <Text className="mt-2 text-lg font-black" style={{ color: colors.foreground, fontFamily: fonts.mono }}>
                       {s.value}
                     </Text>
-                    <Text className="text-[10px] font-semibold mt-0.5" style={{ color: colors.mutedText }}>
+                    <Text className="text-[10px] font-semibold mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                       {s.label}
                     </Text>
                   </View>
@@ -405,17 +430,22 @@ export default function Predictions() {
 
               {/* AI notice */}
               <View
-                className="p-5 rounded-2xl border flex-row items-start gap-4"
-                style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+                className="p-5 border flex-row items-start gap-4"
+                style={{
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  borderRadius: 28,
+                  ...getShadow(colors, isDark),
+                }}
               >
                 <View className="p-2 rounded-xl" style={{ backgroundColor: softTints.emerald }}>
                   <MaterialCommunityIcons name="shield-check-outline" size={18} color={colors.success} />
                 </View>
                 <View className="flex-1">
-                  <Text className="text-xs font-bold" style={{ color: colors.foreground }}>
+                  <Text className="text-xs font-bold" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
                     {data.isDataHighlyAccurate ? "✓ High accuracy" : "Improving accuracy"}
                   </Text>
-                  <Text className="mt-1 text-xs leading-4 font-medium" style={{ color: colors.mutedText }}>
+                  <Text className="mt-1 text-xs leading-4 font-medium" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                     Built from your logged cycle history. Keep logging regularly
                     to make predictions more personal and useful.
                   </Text>

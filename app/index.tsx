@@ -24,7 +24,7 @@ import {
 export default function Index() {
   const router = useRouter();
   const { isAuthenticated } = useAuth();
-  const { colors, isDark } = useTheme();
+  const { colors, fonts, isDark } = useTheme();
   const { width } = useWindowDimensions();
   const hasNavigated = useRef(false);
   const contentWidth = Math.min(Math.max(width - 40, 280), 540);
@@ -70,7 +70,7 @@ export default function Index() {
             </View>
             <Text
               className="text-lg font-black tracking-widest"
-              style={{ color: colors.foreground }}
+              style={{ color: colors.foreground, fontFamily: fonts.heading }}
             >
               NURA
             </Text>
@@ -99,7 +99,7 @@ export default function Index() {
               >
                 <Text
                   className="text-[11px] font-black uppercase tracking-widest"
-                  style={{ color: colors.primary }}
+                  style={{ color: colors.primary, fontFamily: fonts.body }}
                 >
                   Private cycle care
                 </Text>
@@ -128,14 +128,14 @@ export default function Index() {
 
               <Text
                 className="text-4xl font-black text-center leading-10"
-                style={{ color: colors.foreground }}
+                style={{ color: colors.foreground, fontFamily: fonts.heading }}
               >
                 Nura
               </Text>
 
               <Text
                 className="mt-3 text-center text-base font-semibold leading-6"
-                style={{ color: colors.mutedText }}
+                style={{ color: colors.mutedText, fontFamily: fonts.body }}
               >
                 A calm, modern space to track your cycle, understand your body,
                 ask private questions, and feel supported every day.
@@ -187,13 +187,13 @@ export default function Index() {
                 <View className="flex-1">
                   <Text
                     className="text-sm font-black"
-                    style={{ color: colors.foreground }}
+                    style={{ color: colors.foreground, fontFamily: fonts.heading }}
                   >
                     {feat.title}
                   </Text>
                   <Text
                     className="text-xs font-semibold mt-1 leading-4"
-                    style={{ color: colors.mutedText }}
+                    style={{ color: colors.mutedText, fontFamily: fonts.body }}
                   >
                     {feat.desc}
                   </Text>
@@ -206,21 +206,15 @@ export default function Index() {
             <Link href="/(tabs)/login" asChild>
               <TouchableOpacity
                 activeOpacity={0.9}
-                className="rounded-full overflow-hidden"
+                className="rounded-full py-4 items-center justify-center"
+                style={{ backgroundColor: colors.primary }}
               >
-                <LinearGradient
-                  colors={actionGradient}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  className="py-4 items-center justify-center"
+                <Text
+                  className="text-center text-sm font-black tracking-wide"
+                  style={{ color: colors.buttonText, fontFamily: fonts.body }}
                 >
-                  <Text
-                    className="text-center text-sm font-black tracking-wide"
-                    style={{ color: colors.buttonText }}
-                  >
-                    Log In
-                  </Text>
-                </LinearGradient>
+                  Log In
+                </Text>
               </TouchableOpacity>
             </Link>
 
@@ -235,7 +229,7 @@ export default function Index() {
               >
                 <Text
                   className="text-center text-sm font-black tracking-wide"
-                  style={{ color: colors.foreground }}
+                  style={{ color: colors.foreground, fontFamily: fonts.body }}
                 >
                   Create Account
                 </Text>
@@ -243,14 +237,14 @@ export default function Index() {
             </Link>
           </View>
 
-            <Text
-              className="mt-5 text-center text-[11px] font-semibold leading-4"
-              style={{ color: colors.mutedText }}
-            >
-              No awkward dashboards. No judgment. Just clear care for real life.
-            </Text>
-          </View>
-        </ScrollView>
+          <Text
+            className="mt-5 text-center text-[11px] font-semibold leading-4"
+            style={{ color: colors.mutedText, fontFamily: fonts.body }}
+          >
+            No awkward dashboards. No judgment. Just clear care for real life.
+          </Text>
+        </View>
+      </ScrollView>
       </SafeAreaView>
     </LinearGradient>
   );

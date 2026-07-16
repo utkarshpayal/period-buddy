@@ -31,7 +31,7 @@ function computeTreeState(pct: number) {
 }
 
 export default function Habits() {
-  const { colors, isDark } = useTheme();
+  const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
 
   const [habits, setHabits] = useState<Habit[]>([]);
@@ -92,8 +92,8 @@ export default function Habits() {
     }
   };
 
-  const totalTokens = habits.reduce((acc, h) => acc + (h.completed ? h.tokens : 0), 0);
-  const maxPossibleTokens = Math.max(180, habits.reduce((acc, h) => acc + h.tokens, 0));
+  const totalTokens = habits.reduce((acc, h) => acc + (h.completed ? (h.rewardPoints ?? h.tokens) : 0), 0);
+  const maxPossibleTokens = Math.max(180, habits.reduce((acc, h) => acc + (h.rewardPoints ?? h.tokens), 0));
   const growthPct = Math.min((totalTokens / maxPossibleTokens) * 100, 100);
   const treeState = computeTreeState(growthPct);
   const hasSuggestedHabits = HABIT_IDEAS.some(
@@ -115,7 +115,7 @@ export default function Habits() {
           >
             <Feather name="arrow-left" size={18} color={colors.foreground} />
           </TouchableOpacity>
-          <Text className="flex-1 text-2xl font-black tracking-tight ml-2" style={{ color: colors.foreground }}>
+          <Text className="flex-1 text-2xl font-black tracking-tight ml-2" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
             Habit Tracker
           </Text>
           <TouchableOpacity onPress={() => load(true)} className="p-2.5 rounded-full border" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
@@ -126,7 +126,7 @@ export default function Habits() {
         {loading ? (
           <View className="flex-1 items-center justify-center px-6">
             <ActivityIndicator size="large" color={colors.primary} />
-            <Text className="mt-4 text-xs font-bold text-center" style={{ color: colors.mutedText }}>
+            <Text className="mt-4 text-xs font-bold text-center" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
               Loading your daily routines...
             </Text>
           </View>
@@ -150,20 +150,20 @@ export default function Habits() {
                   <View className="flex-1 pr-2">
                     <Text
                       className="text-[10px] font-black tracking-widest uppercase"
-                      style={{ color: colors.primary }}
+                      style={{ color: colors.primary, fontFamily: fonts.body }}
                     >
                       Current Cycle Tree
                     </Text>
-                    <Text className="mt-1 text-base font-black tracking-tight" style={{ color: colors.foreground }}>
+                    <Text className="mt-1 text-base font-black tracking-tight" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
                       {treeState.label}
                     </Text>
-                    <Text className="mt-1 text-[11px] font-medium leading-4" style={{ color: colors.mutedText }}>
+                    <Text className="mt-1 text-[11px] font-medium leading-4" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                       {treeState.motivation}
                     </Text>
                   </View>
                   <View
-                    className="h-20 w-20 items-center justify-center rounded-2xl border border-dashed border-pink-300"
-                    style={{ backgroundColor: softTints.pink }}
+                    className="h-20 w-20 items-center justify-center rounded-2xl border border-dashed"
+                    style={{ backgroundColor: softTints.pink, borderColor: `${colors.primary}40` }}
                   >
                     <MaterialCommunityIcons name={treeState.icon as any} size={36} color={colors.primary} />
                   </View>
@@ -172,10 +172,10 @@ export default function Habits() {
                 {/* Progress Bar */}
                 <View className="mt-5">
                   <View className="flex-row justify-between items-center mb-1.5 px-0.5">
-                    <Text className="text-[10px] font-bold" style={{ color: colors.mutedText }}>
+                    <Text className="text-[10px] font-bold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                       Score: {totalTokens} / {maxPossibleTokens} Tokens
                     </Text>
-                    <Text className="text-[10px] font-black" style={{ color: colors.primary }}>
+                    <Text className="text-[10px] font-black" style={{ color: colors.primary, fontFamily: fonts.mono }}>
                       {Math.round(growthPct)}% Growth
                     </Text>
                   </View>
@@ -193,7 +193,7 @@ export default function Habits() {
 
             {/* Habits List */}
             <View className="mx-6 mt-8">
-              <Text className="mb-4 text-xs font-black tracking-widest uppercase px-1" style={{ color: colors.primary }}>
+              <Text className="mb-4 text-xs font-black tracking-widest uppercase px-1" style={{ color: colors.primary, fontFamily: fonts.heading }}>
                 Daily Routines Checklist
               </Text>
 
@@ -204,15 +204,25 @@ export default function Habits() {
                     style={{ backgroundColor: colors.surface, borderColor: colors.border }}
                   >
                     <MaterialCommunityIcons name="sprout-outline" size={30} color={colors.primary} />
-                    <Text className="mt-3 text-sm font-black" style={{ color: colors.foreground }}>
+                    <Text className="mt-3 text-sm font-black" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
                       Start with one gentle habit
                     </Text>
-                    <Text className="mt-1 text-xs text-center leading-5" style={{ color: colors.mutedText }}>
+                    <Text className="mt-1 text-xs text-center leading-5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                       Add a suggested routine and your tree will begin growing from today.
                     </Text>
                   </View>
                 ) : habits.map((habit) => {
                   const isToggling = togglingId === habit.id;
+                  const resolveHabitColor = (hex: string) => {
+                    if (!hex) return colors.primary;
+                    const h = hex.toLowerCase();
+                    if (h === "#7c3aed" || h.includes("7c")) return colors.lavender;
+                    if (h === "#d97706" || h.includes("d9")) return colors.warning;
+                    if (h === "#0f766e" || h.includes("0f")) return colors.success;
+                    return colors.primary;
+                  };
+                  const resolvedColor = resolveHabitColor(habit.color);
+
                   return (
                     <TouchableOpacity
                       key={habit.id}
@@ -222,7 +232,7 @@ export default function Habits() {
                       className="rounded-2xl border shadow-sm overflow-hidden"
                       style={{
                         backgroundColor: colors.surface,
-                        borderColor: habit.completed ? `${habit.color}40` : colors.border,
+                        borderColor: habit.completed ? `${resolvedColor}40` : colors.border,
                         opacity: isToggling ? 0.7 : 1,
                       }}
                     >
@@ -232,8 +242,8 @@ export default function Habits() {
                           <View
                             className="h-10 w-10 items-center justify-center rounded-xl border"
                             style={{
-                              backgroundColor: habit.completed ? habit.color : "transparent",
-                              borderColor: habit.completed ? habit.color : colors.border,
+                              backgroundColor: habit.completed ? resolvedColor : "transparent",
+                              borderColor: habit.completed ? resolvedColor : colors.border,
                             }}
                           >
                             {isToggling ? (
@@ -252,13 +262,14 @@ export default function Habits() {
                                 color: habit.completed ? colors.mutedText : colors.foreground,
                                 textDecorationLine: habit.completed ? "line-through" : "none",
                                 opacity: habit.completed ? 0.6 : 1,
+                                fontFamily: fonts.heading,
                               }}
                             >
                               {habit.title}
                             </Text>
                             <View className="flex-row items-center gap-1 mt-0.5">
-                              <MaterialCommunityIcons name="fire" size={12} color="#f97316" />
-                              <Text className="text-[10px] font-bold" style={{ color: colors.mutedText }}>
+                              <MaterialCommunityIcons name="fire" size={12} color={colors.warning} />
+                              <Text className="text-[10px] font-bold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                                 {habit.streak} day streak
                               </Text>
                             </View>
@@ -267,13 +278,13 @@ export default function Habits() {
 
                         <View
                           className="rounded-lg px-2.5 py-1"
-                          style={{ backgroundColor: habit.completed ? colors.border : `${habit.color}18` }}
+                          style={{ backgroundColor: habit.completed ? colors.border : `${resolvedColor}18` }}
                         >
                           <Text
                             className="text-[10px] font-black"
-                            style={{ color: habit.completed ? colors.mutedText : habit.color }}
+                            style={{ color: habit.completed ? colors.mutedText : resolvedColor, fontFamily: fonts.mono }}
                           >
-                            +{habit.tokens} pts
+                            +{habit.rewardPoints ?? habit.tokens} pts
                           </Text>
                         </View>
                       </View>
@@ -296,7 +307,7 @@ export default function Habits() {
               >
                 <View className="flex-row items-center gap-2">
                   <Feather name="plus-circle" size={15} color={colors.primary} />
-                  <Text className="text-xs font-black tracking-wide" style={{ color: colors.primary }}>
+                  <Text className="text-xs font-black tracking-wide" style={{ color: colors.primary, fontFamily: fonts.body }}>
                     {hasSuggestedHabits ? "Add Suggested Habit" : "All Suggestions Added"}
                   </Text>
                 </View>

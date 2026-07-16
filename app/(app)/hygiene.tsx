@@ -74,7 +74,7 @@ function inferHygieneCategory(
 }
 
 export default function Hygiene() {
-  const { colors, isDark } = useTheme();
+  const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
 
   // Tab controller to filter hygiene sections gracefully
@@ -165,7 +165,16 @@ export default function Hygiene() {
 
   const softTints = getSoftTints(colors);
 
-  const activeResources = apiHygieneTips.length > 0 ? apiHygieneTips : hygieneTips;
+  // Merge per category rather than swapping the whole list: the live API can
+  // return fewer resources than there are tabs, and a wholesale swap would
+  // leave tabs with no matching category blank (worse than static fallback).
+  const activeResources: HygieneItem[] = (
+    ["products", "daily", "activities", "prevention"] as const
+  ).map(
+    (category) =>
+      apiHygieneTips.find((item) => item.category === category) ??
+      hygieneTips.find((item) => item.category === category)!,
+  );
 
   const currentActiveData = activeResources.find(
     (item) => item.category === activeTab,
@@ -218,7 +227,7 @@ export default function Hygiene() {
           </TouchableOpacity>
           <Text
             className="flex-1 text-2xl font-black tracking-tight ml-2"
-            style={{ color: colors.foreground }}
+            style={{ color: colors.foreground, fontFamily: fonts.heading }}
           >
             Hygiene & Care
           </Text>
@@ -262,6 +271,7 @@ export default function Hygiene() {
                         color: isSelected
                           ? colors.buttonText
                           : colors.foreground,
+                        fontFamily: fonts.body,
                       }}
                     >
                       {tab.label}
@@ -297,13 +307,13 @@ export default function Hygiene() {
                   <View className="flex-1 z-10 pr-2">
                     <Text
                       className="text-base font-black tracking-tight"
-                      style={{ color: colors.foreground }}
+                      style={{ color: colors.foreground, fontFamily: fonts.heading }}
                     >
                       {currentActiveData.title}
                     </Text>
                     <Text
                       className="text-xs font-semibold mt-1 leading-4"
-                      style={{ color: colors.mutedText }}
+                      style={{ color: colors.mutedText, fontFamily: fonts.body }}
                     >
                       {currentActiveData.description}
                     </Text>
@@ -313,7 +323,7 @@ export default function Hygiene() {
                 {/* Sub-Section Title Container */}
                 <Text
                   className="text-xs font-bold tracking-widest uppercase mt-2 px-1"
-                  style={{ color: colors.primary }}
+                  style={{ color: colors.primary, fontFamily: fonts.heading }}
                 >
                   Recommended Care Checklists
                 </Text>
@@ -341,7 +351,7 @@ export default function Hygiene() {
                       </View>
                       <Text
                         className="flex-1 text-xs font-medium leading-5"
-                        style={{ color: colors.foreground }}
+                        style={{ color: colors.foreground, fontFamily: fonts.body }}
                       >
                         {tip}
                       </Text>
@@ -362,13 +372,13 @@ export default function Hygiene() {
               <View className="flex-1 pr-4">
                 <Text
                   className="text-xs font-bold"
-                  style={{ color: colors.foreground }}
+                  style={{ color: colors.foreground, fontFamily: fonts.heading }}
                 >
                   Experiencing rash or itching irritation?
                 </Text>
                 <Text
                   className="text-[10px] font-semibold mt-0.5"
-                  style={{ color: colors.mutedText }}
+                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
                 >
                   Talk privately with an OBGYN if symptoms persist or worsen.
                 </Text>
@@ -380,7 +390,7 @@ export default function Hygiene() {
               >
                 <Text
                   className="text-[11px] font-black"
-                  style={{ color: colors.buttonText }}
+                  style={{ color: colors.buttonText, fontFamily: fonts.body }}
                 >
                   Consult
                 </Text>

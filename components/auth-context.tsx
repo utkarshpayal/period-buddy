@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { AuthUser } from "../lib/auth";
+import { setUnauthorizedHandler } from "../lib/api";
 
 type AuthSession = {
   token: string;
@@ -13,6 +14,7 @@ type AuthContextValue = {
   signOut: () => Promise<void>;
   token: string | null;
   user: AuthUser | null;
+  updateUser: (user: AuthUser) => void;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -35,6 +37,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .finally(() => setLoaded(true));
   }, []);
 
+  const signOut = useCallback(async () => {
+    setSession(null);
+    await AsyncStorage.removeItem(AUTH_SESSION_KEY).catch(() => {});
+  }, []);
+
+  // Any API call that comes back 401 (expired/invalid token, deactivated
+  // account) clears the local session instead of failing silently, so the
+  // dashboard's auth guard can redirect back to login.
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      signOut();
+    });
+    return () => setUnauthorizedHandler(null);
+  }, [signOut]);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       isAuthenticated: Boolean(session?.token),
@@ -42,14 +59,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(s);
         AsyncStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(s)).catch(() => {});
       },
-      signOut: async () => {
-        setSession(null);
-        await AsyncStorage.removeItem(AUTH_SESSION_KEY).catch(() => {});
-      },
+      signOut,
       token: session?.token ?? null,
       user: session?.user ?? null,
+      updateUser: (u) => {
+        setSession((current) => {
+          if (!current) return null;
+          const next = { ...current, user: u };
+          AsyncStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(next)).catch(() => {});
+          return next;
+        });
+      },
     }),
-    [session],
+    [session, signOut],
   );
 
   // Don't render children until we know auth state (avoids flash)

@@ -28,7 +28,9 @@ function getLocalDevApiBaseUrl() {
 export const API_BASE_URL = (
   envApiBaseUrl || (__DEV__ ? getLocalDevApiBaseUrl() : "")
 ).replace(/\/+$/, "");
+export const WS_BASE_URL = API_BASE_URL.replace(/^http/, "ws");
 export const AUTH_SESSION_KEY = "period-buddy.auth-session";
+
 
 type QueryValue = boolean | number | string | null | undefined;
 
@@ -60,20 +62,31 @@ export type Pagination = {
 export type AuthUser = {
   _id?: string;
   createdAt?: string;
+  country?: string;
   dateOfBirth?: string;
+  deletedAt?: string | null;
   email?: string;
   firstName?: string;
   gender?: string;
+  isActive?: boolean;
   isEmailVerified?: boolean;
   isProfileComplete?: boolean;
+  language?: string;
   lastLogin?: string;
+  lastStreakDate?: string;
   lastName?: string;
+  notificationToken?: string;
   phone?: string;
   profilePicture?: string;
   role?: string;
   streakCount?: number;
+  subscriptionExpiry?: string;
+  subscriptionPlan?: "basic" | "free" | "premium";
+  timezone?: string;
+  /** @deprecated use walletBalance */
   tokenEarned?: number;
   updatedAt?: string;
+  walletBalance?: number;
 };
 
 export type AuthResponse = ApiEnvelope<AuthUser>;
@@ -98,6 +111,7 @@ export type DayEntry = {
   dateKey: string;
   energy?: "high" | "low" | "medium" | "steady";
   flow?: "heavy" | "light" | "medium" | "none" | "spotting";
+  medication?: string[];
   mood?:
     | "anxious"
     | "calm"
@@ -110,17 +124,28 @@ export type DayEntry = {
     | "tired";
   note?: string;
   phase?: "follicular" | "luteal" | "ovulation" | "period" | string;
+  rewardPoints?: number;
+  sleepHours?: number;
+  stressLevel?: number;
   symptoms?: string[];
+  temperature?: number;
+  /** @deprecated use rewardPoints */
   tokensEarned?: number;
+  waterIntake?: number;
+  weight?: number;
 };
 
 export type CycleSettings = {
   _id?: string;
   cycleLength: number;
+  fertilityReminder?: boolean;
   lastPeriodStartDate: string;
+  ovulationReminder?: boolean;
   periodLength: number;
+  pregnancyMode?: boolean;
   reminderDaysBefore?: number;
   remindersEnabled?: boolean;
+  trackingGoal?: "achieve_pregnancy" | "avoid_pregnancy" | "general_health" | "manage_symptoms" | "track_period";
 };
 
 export type Predictions = {
@@ -153,10 +178,15 @@ export type Habit = {
   _id?: string;
   color: string;
   completed: boolean;
+  frequency?: "custom" | "daily" | "weekly";
   icon: string;
   id: string;
+  reminderTime?: string;
+  rewardPoints?: number;
   streak: number;
+  target?: number;
   title: string;
+  /** @deprecated use rewardPoints */
   tokens: number;
 };
 
@@ -182,23 +212,30 @@ export type ForestStatus = {
 export type ForestLog = {
   _id: string;
   careType: "habit_completion" | "manual" | "reflection" | "symptom_log" | "water";
+  completed?: boolean;
   dateKey: string;
+  duration?: number;
   healthDelta: number;
   note?: string;
-  tokensEarned: number;
+  rewardPoints?: number;
+  treeType?: string;
 };
 
 export type Doctor = {
   _id: string;
   avatarEmoji?: string;
+  /** @deprecated use DoctorAvailability */
   availability?: string;
   bio?: string;
   currency: string;
+  education?: string[];
   experience?: string;
   firstName?: string;
+  hospital?: string;
   isAvailable: boolean;
   languages?: string[];
   lastName?: string;
+  licenses?: string[];
   name?: string;
   pricePerSession: number;
   rating: number;
@@ -220,7 +257,11 @@ export type Consultation = {
   createdAt?: string;
   currency: string;
   doctorId: Doctor | string;
+  feedback?: string;
+  meetingLink?: string;
   messages: ConsultationMessage[];
+  paymentStatus?: "failed" | "paid" | "refunded" | "unpaid";
+  prescription?: string;
   startedAt?: string;
   status: "active" | "cancelled" | "completed" | "paid" | "pending";
 };
@@ -241,24 +282,35 @@ export type PartnerPermissions = {
 
 export type PartnerProfile = {
   _id: string;
+  blocked?: boolean;
   connectedAt?: string;
+  connectionStatus?: "connected" | "disconnected" | "pending";
   inviteCode?: string;
   inviteCodeExpiry?: string;
   isConnected: boolean;
+  lastSeen?: string;
   messages: PartnerMessage[];
   partnerId?: string | Pick<AuthUser, "firstName" | "lastName">;
   permissions: PartnerPermissions;
   userId: string;
 };
 
+export type PartnerSymptomLogSummary = {
+  dateKey: string;
+  energy?: DayEntry["energy"];
+  flow?: DayEntry["flow"];
+  mood?: DayEntry["mood"];
+  symptoms?: string[];
+};
+
 export type PartnerSharedData = {
-  alerts: string[];
+  alerts?: string[];
   cycle?: Pick<
     Predictions,
     "currentCycleDay" | "currentPhase" | "nextPeriodDaysAway"
   >;
   permissions: Partial<PartnerPermissions>;
-  recentSymptoms: string[];
+  recentSymptoms?: PartnerSymptomLogSummary[];
 };
 
 export type BuddyMatch = {
@@ -270,10 +322,15 @@ export type BuddyMatch = {
   cycleOverlapDays: number;
   cyclePhase: string;
   id: string;
+  lastMessage?: string;
+  lastMessageAt?: string;
   matchKey?: string;
+  buddyUserId?: string;
   nominatedAt?: string;
   similarities: string[];
   status?: "active" | "ended";
+  unreadCount?: number;
+  messages?: BuddyMessage[];
 };
 
 export type BuddyMessage = {
@@ -286,12 +343,16 @@ export type BuddyMessage = {
 
 export type Nomination = {
   _id: string;
+  acceptedAt?: string;
   createdAt?: string;
+  expiresAt?: string;
+  inviteCode?: string;
   message?: string;
   nomineeEmail: string;
   nomineeId?: string | AuthUser | null;
   nomineeName?: string;
   nominatorId?: string | AuthUser;
+  rejectedAt?: string;
   status: "accepted" | "declined" | "pending";
 };
 
@@ -308,41 +369,61 @@ export type CommunityComment = {
 export type CommunityPost = {
   _id: string;
   category?: string;
+  commentCount?: number;
   comments?: CommunityComment[];
+  /** @deprecated use commentCount */
   commentsCount: number;
   content: string;
   createdAt?: string;
   id: string;
   isAnonymous?: boolean;
+  likeCount?: number;
   likedByMe?: boolean;
+  /** @deprecated use likeCount */
   likes: number;
+  reportCount?: number;
   savedByMe?: boolean;
+  status?: "active" | "flagged" | "removed";
   tags?: string[];
   title?: string;
   userId?: string | (Pick<AuthUser, "firstName" | "lastName" | "profilePicture"> & { isOwn?: boolean });
 };
 
+export type BlogCategory = "general" | "health" | "lifestyle" | "beauty";
+export type BlogStatus = "draft" | "published" | "archived";
+
 export type Blog = {
   _id: string;
   author?: string;
-  category?: string;
+  authorId?: string;
+  canonicalUrl?: string;
+  category?: BlogCategory;
   content?: string;
   coverImageUrl?: string;
   excerpt?: string;
   isPublished: boolean;
-  likes: number;
+  /** @deprecated use likeCount */
+  likesCount: number;
+  likeCount?: number;
   publishedAt?: string;
   readTimeMinutes?: number;
+  seoDescription?: string;
+  seoTitle?: string;
   slug: string;
+  status: BlogStatus;
   tags?: string[];
   title: string;
-  views: number;
+  /** @deprecated use viewCount */
+  viewsCount: number;
+  viewCount?: number;
 };
 
 export type ContentFeedItem = {
   author: string;
   id: string;
   imageUrl: string;
+  publishedAt?: string;
+  slug?: string;
   sourceId: string;
   summary: string;
   time: string;
@@ -360,38 +441,54 @@ export type ReelPollOption = {
 export type Reel = {
   _id?: string;
   category: string;
+  commentCount?: number;
+  /** @deprecated */
   creatorAvatar?: string;
   creatorId: string;
+  /** @deprecated */
   creatorName: string;
   directMp4Url: string;
   duration: string;
   followedByMe?: boolean;
   id: string;
+  likeCount?: number;
   pollOptions: ReelPollOption[];
   pollQuestion?: string;
+  saveCount?: number;
+  shareCount?: number;
   thumbnailUrl: string;
   title: string;
   verified: boolean;
+  /** @deprecated use likeCount */
   views: number;
+  viewCount?: number;
   votedOptionId?: string | null;
+  watchTime?: number;
 };
 
 export type HealthIssue = {
   _id?: string;
   category: string;
+  causes?: string[];
   color: string;
   guide: string;
   icon: string;
   id?: string;
   imageUrl?: string;
   order?: number;
+  prevention?: string;
   summary: string;
+  symptoms?: string[];
   title: string;
+  treatment?: string;
+  whenToSeeDoctor?: string;
 };
 
 export type WellbeingResource = {
   _id?: string;
+  audioUrl?: string;
   color: string;
+  estimatedReadTime?: number;
   extendedGuide: string[];
   icon: string;
   id?: string;
@@ -400,6 +497,7 @@ export type WellbeingResource = {
   summary: string;
   title: string;
   type: "hygiene" | "sexual_wellbeing";
+  videoUrl?: string;
 };
 
 export type WellbeingGameDeck = {
@@ -411,12 +509,17 @@ export type QuestionAnswer = {
   _id: string;
   answer: string;
   category?: string;
+  keywords?: string[];
+  likeCount?: number;
   medicallyReviewed?: boolean;
   question: string;
   reviewedBy?: string;
   shortAnswer?: string;
   slug?: string;
   tags?: string[];
+  version?: number;
+  viewCount?: number;
+  /** @deprecated use viewCount */
   views?: number;
 };
 
@@ -430,6 +533,64 @@ export type AskQuestionResponse = {
   tokensAwarded?: number;
 };
 
+export type RewardTransaction = {
+  _id: string;
+  amount: number;
+  balanceAfter: number;
+  createdAt?: string;
+  description?: string;
+  referenceId?: string;
+  referenceModel?: string;
+  type:
+    | "adjustment"
+    | "buddy_message"
+    | "community_like"
+    | "community_post"
+    | "content_read"
+    | "cycle_log"
+    | "forest_care"
+    | "habit_complete"
+    | "purchase"
+    | "qa_ask"
+    | "redemption"
+    | "referral"
+    | "reel_vote"
+    | "streak_bonus";
+  userId: string;
+};
+
+export type AppNotification = {
+  _id: string;
+  body?: string;
+  createdAt?: string;
+  data?: Record<string, unknown>;
+  isRead: boolean;
+  readAt?: string | null;
+  scheduledFor?: string | null;
+  sentAt?: string | null;
+  title: string;
+  type:
+    | "buddy_message"
+    | "community_reply"
+    | "consultation_update"
+    | "habit_reminder"
+    | "ovulation_reminder"
+    | "partner_message"
+    | "period_reminder"
+    | "reward_earned"
+    | "streak_bonus"
+    | "system";
+  userId: string;
+};
+
+// Registered by AuthProvider so a 401 from any endpoint (expired/invalid token,
+// deactivated account) clears the local session instead of failing silently.
+let onUnauthorized: (() => void) | null = null;
+
+export function setUnauthorizedHandler(handler: (() => void) | null) {
+  onUnauthorized = handler;
+}
+
 async function getToken(): Promise<string | null> {
   try {
     const raw = await AsyncStorage.getItem(AUTH_SESSION_KEY);
@@ -441,6 +602,12 @@ async function getToken(): Promise<string | null> {
   }
 }
 
+export async function getWebSocketUrl(): Promise<string> {
+  const token = await getToken();
+  return `${WS_BASE_URL}${token ? `?token=${token}` : ""}`;
+}
+
+
 function getErrorMessage(data: unknown, status: number): string {
   if (data && typeof data === "object") {
     const errorData = data as {
@@ -449,9 +616,9 @@ function getErrorMessage(data: unknown, status: number): string {
       message?: unknown;
     };
 
-    if (typeof errorData.message === "string") return errorData.message;
-    if (typeof errorData.error === "string") return errorData.error;
-
+    // Prefer the detailed per-field messages (e.g. Mongoose validation errors)
+    // over the generic top-level `message` ("Validation Error"), which would
+    // otherwise always win and hide the actually useful text.
     if (Array.isArray(errorData.errors) && errorData.errors.length > 0) {
       return errorData.errors
         .map((error) =>
@@ -461,6 +628,9 @@ function getErrorMessage(data: unknown, status: number): string {
         )
         .join("\n");
     }
+
+    if (typeof errorData.message === "string") return errorData.message;
+    if (typeof errorData.error === "string") return errorData.error;
   }
 
   return `Request failed (${status})`;
@@ -514,6 +684,9 @@ export async function apiEnvelopeRequest<T>(
   }
 
   if (!response.ok) {
+    if (response.status === 401 && !options.skipAuth) {
+      onUnauthorized?.();
+    }
     throw new Error(getErrorMessage(data, response.status));
   }
 
@@ -525,7 +698,7 @@ export async function apiRequest<T>(
   options: RequestOptions = {},
 ): Promise<T> {
   const envelope = await apiEnvelopeRequest<T>(path, options);
-  return (envelope.data ?? envelope) as T;
+  return (envelope.data !== undefined ? envelope.data : envelope) as T;
 }
 
 export const healthApi = {
@@ -547,7 +720,6 @@ export const authApi = {
     }),
 
   signup: (payload: {
-    confirmPassword: string;
     dateOfBirth?: string;
     email: string;
     firstName: string;
@@ -661,9 +833,9 @@ export const forestApi = {
     note?: string;
   }) =>
     apiRequest<{
-      forestLog: ForestLog;
+      log: ForestLog;
       status: ForestStatus;
-      tokensAwarded: number;
+      tokensEarned: number;
     }>("/api/forest/care", {
       body: JSON.stringify(payload),
       method: "POST",
@@ -758,7 +930,7 @@ export const buddyApi = {
   getActive: () => apiRequest<BuddyMatch | null>("/api/buddies/active"),
 
   nominate: (matchId: string) =>
-    apiRequest<{ buddy: BuddyMatch; tokensAwarded: number }>(
+    apiRequest<{ buddy?: BuddyMatch; match?: BuddyMatch; tokensAwarded: number }>(
       `/api/buddies/${matchId}/nominate`,
       { method: "POST" },
     ),
@@ -886,7 +1058,7 @@ export const blogsApi = {
   getBlogBySlug: (slug: string) => apiRequest<Blog>(`/api/blogs/${slug}`),
 
   likeBlog: (id: string) =>
-    apiRequest<{ likes: number }>(`/api/blogs/${id}/like`, {
+    apiRequest<{ likesCount: number }>(`/api/blogs/${id}/like`, {
       method: "PATCH",
     }),
 

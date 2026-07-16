@@ -9,12 +9,27 @@ import React, {
 import { Share } from "react-native";
 
 export type DayEntry = {
-  energy?: "high" | "low" | "steady";
-  flow?: "heavy" | "light" | "medium" | "none";
-  mood?: "calm" | "emotional" | "happy" | "tired";
+  energy?: "high" | "low" | "medium" | "steady";
+  flow?: "heavy" | "light" | "medium" | "none" | "spotting";
+  mood?:
+    | "anxious"
+    | "calm"
+    | "emotional"
+    | "energetic"
+    | "happy"
+    | "irritable"
+    | "neutral"
+    | "sad"
+    | "tired";
   note: string;
   symptoms: string[];
   updatedAt: string;
+  sleepHours?: number;
+  waterIntake?: number;
+  weight?: number;
+  temperature?: number;
+  stressLevel?: number;
+  medication?: string[];
 };
 
 type AppStateType = {

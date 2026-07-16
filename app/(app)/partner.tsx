@@ -21,12 +21,13 @@ import { useTheme } from "../../components/theme";
 import { getSoftTints } from "../../components/ui-tokens";
 import {
   partnerApi,
+  getWebSocketUrl,
   type PartnerMessage,
   type PartnerProfile,
 } from "../../lib/api";
 
 export default function Partner() {
-  const { colors, isDark } = useTheme();
+  const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
   const chatScrollRef = useRef<ScrollView>(null);
   const insets = useSafeAreaInsets();
@@ -94,6 +95,103 @@ export default function Partner() {
   useEffect(() => {
     if (activeTab === "chat") loadMessages();
   }, [activeTab, loadMessages]);
+
+  // WebSocket live synchronization
+  useEffect(() => {
+    const activeProfile = profile;
+    if (activeTab !== "chat" || !activeProfile?._id || !activeProfile.isConnected) return;
+
+    let socket: WebSocket | null = null;
+    let isDisconnected = false;
+
+    async function connectWS() {
+      try {
+        const wsUrl = await getWebSocketUrl();
+        socket = new WebSocket(wsUrl);
+
+        socket.onopen = () => {
+          if (isDisconnected) return;
+          console.log("WebSocket connected for partner chat");
+          socket?.send(JSON.stringify({
+            type: "join",
+            room: `partner_${activeProfile!._id}`,
+          }));
+        };
+
+        socket.onmessage = (event) => {
+          if (isDisconnected) return;
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === "message" && data.room === `partner_${activeProfile!._id}`) {
+              if (data.message) {
+                setChatMessages((prev) => {
+                  const next = [...prev];
+                  let found = false;
+                  for (let i = 0; i < next.length; i++) {
+                    const m = next[i];
+                    if (m._id === data.message._id) {
+                      found = true;
+                      break;
+                    }
+                    const isOptimisticMatch =
+                      !m._id &&
+                      m.sender === data.message.sender &&
+                      m.text === data.message.text;
+
+                    const isTimeMatch =
+                      m.sender === data.message.sender &&
+                      m.text === data.message.text &&
+                      m.sentAt &&
+                      data.message.sentAt &&
+                      Math.abs(new Date(m.sentAt).getTime() - new Date(data.message.sentAt).getTime()) < 5000;
+
+                    if (isOptimisticMatch || isTimeMatch) {
+                      next[i] = data.message;
+                      found = true;
+                      break;
+                    }
+                  }
+                  if (!found) {
+                    next.push(data.message);
+                  }
+                  return next;
+                });
+                setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 100);
+              }
+            }
+          } catch (err) {
+            console.error("Error parsing WebSocket message:", err);
+          }
+        };
+
+        socket.onerror = (err) => {
+          console.warn("WebSocket error:", err);
+        };
+
+        socket.onclose = () => {
+          console.log("WebSocket closed");
+        };
+      } catch (err) {
+        console.warn("Failed to setup WebSocket:", err);
+      }
+    }
+
+    connectWS();
+
+    return () => {
+      isDisconnected = true;
+      if (socket) {
+        try {
+          socket.send(JSON.stringify({
+            type: "leave",
+            room: `partner_${activeProfile!._id}`,
+          }));
+        } catch {}
+        socket.close();
+      }
+    };
+  }, [activeTab, profile?._id, profile?.isConnected]);
+
 
   const handleGenerateCode = async () => {
     setGeneratingCode(true);
@@ -191,15 +289,20 @@ export default function Partner() {
           >
             <Feather name="arrow-left" size={18} color={colors.foreground} />
           </TouchableOpacity>
-          <Text className="flex-1 text-2xl font-black tracking-tight ml-2" style={{ color: colors.foreground }}>
+          <Text className="flex-1 text-2xl font-black tracking-tight ml-2" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
             Partner Sync
           </Text>
-          {isConnected && (
+          {isConnected ? (
             <View className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-full" style={{ backgroundColor: softTints.emerald }}>
-              <View className="w-2 h-2 rounded-full bg-emerald-500" />
-              <Text className="text-[10px] font-black text-emerald-600">Connected</Text>
+              <View className="w-2 h-2 rounded-full" style={{ backgroundColor: colors.success }} />
+              <Text className="text-[10px] font-black" style={{ color: colors.success, fontFamily: fonts.body }}>Connected</Text>
             </View>
-          )}
+          ) : inviteCode ? (
+            <View className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-full" style={{ backgroundColor: softTints.lavender }}>
+              <View className="w-2 h-2 rounded-full" style={{ backgroundColor: colors.lavender }} />
+              <Text className="text-[10px] font-black" style={{ color: colors.lavender, fontFamily: fonts.body }}>Invite Pending</Text>
+            </View>
+          ) : null}
         </View>
 
         {/* Tab pills */}
@@ -229,7 +332,7 @@ export default function Partner() {
                 >
                   <Text
                     className="text-xs font-bold tracking-wide"
-                    style={{ color: isSelected ? colors.buttonText : colors.foreground }}
+                    style={{ color: isSelected ? colors.buttonText : colors.foreground, fontFamily: fonts.body }}
                   >
                     {tab.label}
                   </Text>
@@ -261,8 +364,8 @@ export default function Partner() {
                     className="flex-row items-center p-4 rounded-2xl border gap-3"
                     style={{ backgroundColor: softTints.emerald, borderColor: colors.successLight }}
                   >
-                    <View className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                    <Text className="text-xs font-black text-emerald-700 flex-1">
+                    <View className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: colors.success }} />
+                    <Text className="text-xs font-black flex-1" style={{ color: colors.success, fontFamily: fonts.body }}>
                       Synced with {partnerName}
                     </Text>
                   </View>
@@ -271,7 +374,7 @@ export default function Partner() {
                 {[
                   { icon: "people-outline", bg: softTints.pink, color: colors.primary, title: "What's Shared", desc: "Cycle phase, comfort tips, and alerts can be shared only when you allow them." },
                   { icon: "heart-outline", bg: softTints.emerald, color: colors.success, title: "Better Support", desc: "Help your partner understand what kind of care, space, or reminders may help." },
-                  { icon: "shield-checkmark-outline", bg: softTints.lavender, color: colors.accent, title: "Privacy First", desc: "Everything shared is your choice. You can change permissions any time." },
+                  { icon: "shield-checkmark-outline", bg: softTints.lavender, color: colors.lavender, title: "Privacy First", desc: "Everything shared is your choice. You can change permissions any time." },
                 ].map((card) => (
                   <View
                     key={card.title}
@@ -282,10 +385,10 @@ export default function Partner() {
                       <Ionicons name={card.icon as any} size={20} color={card.color} />
                     </View>
                     <View className="flex-1">
-                      <Text className="text-sm font-black tracking-tight" style={{ color: colors.foreground }}>
+                      <Text className="text-sm font-black tracking-tight" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
                         {card.title}
                       </Text>
-                      <Text className="text-xs mt-1 leading-4" style={{ color: colors.mutedText }}>
+                      <Text className="text-xs mt-1 leading-4" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                         {card.desc}
                       </Text>
                     </View>
@@ -298,7 +401,7 @@ export default function Partner() {
                   className="mt-4 rounded-2xl py-4 items-center justify-center shadow-md"
                   style={{ backgroundColor: colors.primary }}
                 >
-                  <Text className="text-sm font-bold tracking-wide text-white">
+                  <Text className="text-sm font-bold tracking-wide text-white" style={{ fontFamily: fonts.body }}>
                     {isConnected ? "Manage Permissions" : "Proceed to Sync Setup"}
                   </Text>
                 </TouchableOpacity>
@@ -316,10 +419,10 @@ export default function Partner() {
                   <View className="p-4 rounded-2xl mb-4" style={{ backgroundColor: softTints.pink }}>
                     <MaterialCommunityIcons name="heart-flash" size={32} color={colors.primary} />
                   </View>
-                  <Text className="text-base font-black tracking-tight" style={{ color: colors.foreground }}>
+                  <Text className="text-base font-black tracking-tight" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
                     Invite Your Partner
                   </Text>
-                  <Text className="text-xs text-center mt-1.5 leading-4 px-4" style={{ color: colors.mutedText }}>
+                  <Text className="text-xs text-center mt-1.5 leading-4 px-4" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                     Generate a secure invite code and share it with your partner so they can connect to your profile.
                   </Text>
 
@@ -332,10 +435,10 @@ export default function Partner() {
                         className="p-4 rounded-xl border"
                         style={{ borderColor: `${colors.primary}30` }}
                       >
-                        <Text className="text-[10px] text-center font-bold uppercase text-neutral-400">
+                        <Text className="text-[10px] text-center font-bold uppercase" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                           Your Secure Sync Key
                         </Text>
-                        <Text className="text-center text-xl font-black mt-1 tracking-widest" style={{ color: colors.primary }}>
+                        <Text className="text-center text-xl font-black mt-1 tracking-widest" style={{ color: colors.primary, fontFamily: fonts.mono }}>
                           {inviteCode}
                         </Text>
                       </LinearGradient>
@@ -346,13 +449,13 @@ export default function Partner() {
                         className="w-full rounded-xl py-3.5 items-center justify-center border"
                         style={{ backgroundColor: softTints.pink, borderColor: `${colors.primary}30` }}
                       >
-                        <Text className="text-xs font-bold" style={{ color: colors.primary }}>
+                        <Text className="text-xs font-bold" style={{ color: colors.primary, fontFamily: fonts.body }}>
                           Share Invite Code
                         </Text>
                       </TouchableOpacity>
 
                       <TouchableOpacity onPress={handleGenerateCode} className="mt-1 py-1">
-                        <Text className="text-center text-[11px] font-bold underline" style={{ color: colors.mutedText }}>
+                        <Text className="text-center text-[11px] font-bold underline" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                           Generate new code
                         </Text>
                       </TouchableOpacity>
@@ -368,7 +471,7 @@ export default function Partner() {
                       {generatingCode ? (
                         <ActivityIndicator color={colors.buttonText} />
                       ) : (
-                        <Text className="text-xs font-bold tracking-wide text-white uppercase">
+                        <Text className="text-xs font-bold tracking-wide text-white uppercase" style={{ fontFamily: fonts.body }}>
                           Generate Unique Code
                         </Text>
                       )}
@@ -382,7 +485,7 @@ export default function Partner() {
                     className="rounded-3xl border p-5 shadow-sm"
                     style={{ backgroundColor: colors.surface, borderColor: colors.border }}
                   >
-                    <Text className="text-sm font-black mb-3" style={{ color: colors.foreground }}>
+                    <Text className="text-sm font-black mb-3" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
                       Got a Partner Code?
                     </Text>
                     <View
@@ -397,7 +500,7 @@ export default function Partner() {
                         autoCapitalize="characters"
                         returnKeyType="done"
                         className="flex-1 py-3 text-sm font-bold"
-                        style={{ color: colors.foreground }}
+                        style={{ color: colors.foreground, fontFamily: fonts.body }}
                       />
                     </View>
                     <TouchableOpacity
@@ -413,7 +516,15 @@ export default function Partner() {
                       {connecting ? (
                         <ActivityIndicator color={colors.buttonText} />
                       ) : (
-                        <Text className="text-sm font-bold text-white">Connect Partner</Text>
+                        <Text
+                          className="text-sm font-bold"
+                          style={{
+                            color: connectCode.trim() ? colors.buttonText : colors.mutedText,
+                            fontFamily: fonts.body,
+                          }}
+                        >
+                          Connect Partner
+                        </Text>
                       )}
                     </TouchableOpacity>
                   </View>
@@ -428,13 +539,13 @@ export default function Partner() {
                   className="flex-row items-center gap-3 p-4 rounded-2xl border"
                   style={{ backgroundColor: isConnected ? softTints.emerald : colors.surface, borderColor: colors.border }}
                 >
-                  <View className={`w-2.5 h-2.5 rounded-full ${isConnected ? "bg-emerald-500" : "bg-neutral-400"}`} />
-                  <Text className="text-xs font-black flex-1" style={{ color: colors.foreground }}>
+                  <View className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: isConnected ? colors.success : colors.mutedText }} />
+                  <Text className="text-xs font-black flex-1" style={{ color: colors.foreground, fontFamily: fonts.body }}>
                     Partner: {isConnected ? `● ${partnerName} is linked` : "No partner connected yet"}
                   </Text>
                 </View>
 
-                <Text className="text-xs font-black tracking-widest uppercase mt-3 px-1" style={{ color: colors.primary }}>
+                <Text className="text-xs font-black tracking-widest uppercase mt-3 px-1" style={{ color: colors.primary, fontFamily: fonts.heading }}>
                     Sharing Permissions
                 </Text>
 
@@ -451,10 +562,10 @@ export default function Partner() {
                     <View key={item.key}>
                       <View className="flex-row justify-between items-center">
                         <View className="flex-1 pr-4">
-                          <Text className="text-xs font-extrabold" style={{ color: colors.foreground }}>
+                          <Text className="text-xs font-extrabold" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
                             {item.title}
                           </Text>
-                          <Text className="text-[10px] mt-0.5 font-medium leading-3.5" style={{ color: colors.mutedText }}>
+                          <Text className="text-[10px] mt-0.5 font-medium leading-3.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                             {item.desc}
                           </Text>
                         </View>
@@ -479,10 +590,10 @@ export default function Partner() {
                 {!isConnected ? (
                   <View className="items-center py-16">
                     <MaterialCommunityIcons name="account-heart-outline" size={48} color={colors.mutedText} />
-                    <Text className="mt-4 text-sm font-bold text-center" style={{ color: colors.foreground }}>
+                    <Text className="mt-4 text-sm font-bold text-center" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
                       No partner connected
                     </Text>
-                    <Text className="mt-2 text-xs text-center" style={{ color: colors.mutedText }}>
+                    <Text className="mt-2 text-xs text-center" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                       Link a partner first to start messaging.
                     </Text>
                     <TouchableOpacity
@@ -490,13 +601,13 @@ export default function Partner() {
                       className="mt-5 px-6 py-3 rounded-2xl"
                       style={{ backgroundColor: colors.primary }}
                     >
-                      <Text className="text-sm font-bold text-white">Link Partner</Text>
+                      <Text className="text-sm font-bold text-white" style={{ fontFamily: fonts.body }}>Link Partner</Text>
                     </TouchableOpacity>
                   </View>
                 ) : chatMessages.length === 0 ? (
                   <View className="items-center py-12">
                     <MaterialCommunityIcons name="chat-outline" size={40} color={colors.mutedText} />
-                    <Text className="mt-3 text-xs text-center" style={{ color: colors.mutedText }}>
+                    <Text className="mt-3 text-xs text-center" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                       No messages yet. Say hello! 👋
                     </Text>
                   </View>
@@ -514,7 +625,7 @@ export default function Partner() {
                       >
                         <Text
                           className="text-xs font-medium leading-5"
-                          style={{ color: isPartner ? colors.foreground : colors.buttonText }}
+                          style={{ color: isPartner ? colors.foreground : colors.buttonText, fontFamily: fonts.body }}
                         >
                           {msg.text}
                         </Text>
@@ -543,7 +654,7 @@ export default function Partner() {
               value={typedMessage}
               onChangeText={setTypedMessage}
               className="flex-1 px-4 py-3 rounded-xl text-sm"
-              style={{ backgroundColor: colors.input, color: colors.foreground }}
+              style={{ backgroundColor: colors.input, color: colors.foreground, fontFamily: fonts.body }}
               onSubmitEditing={handleSendMessage}
               blurOnSubmit={false}
               returnKeyType="send"

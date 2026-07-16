@@ -34,6 +34,7 @@ const symptomOptions: LogOption<string>[] = [
 
 const flowOptions: LogOption<NonNullable<DayEntry["flow"]>>[] = [
   { icon: "remove-circle-outline", label: "None", value: "none" },
+  { icon: "ellipse-outline", label: "Spotting", value: "spotting" },
   { icon: "water-outline", label: "Light", value: "light" },
   { icon: "water", label: "Medium", value: "medium" },
   { icon: "rainy-outline", label: "Heavy", value: "heavy" },
@@ -44,11 +45,17 @@ const moodOptions: LogOption<NonNullable<DayEntry["mood"]>>[] = [
   { icon: "leaf-outline", label: "Calm", value: "calm" },
   { icon: "cloud-outline", label: "Emotional", value: "emotional" },
   { icon: "moon-outline", label: "Tired", value: "tired" },
+  { icon: "sad-outline", label: "Sad", value: "sad" },
+  { icon: "alert-circle-outline", label: "Anxious", value: "anxious" },
+  { icon: "flash-outline", label: "Irritable", value: "irritable" },
+  { icon: "remove-circle-outline", label: "Neutral", value: "neutral" },
+  { icon: "sunny-outline", label: "Energetic", value: "energetic" },
 ];
 
 const energyOptions: LogOption<NonNullable<DayEntry["energy"]>>[] = [
   { icon: "battery-charging-outline", label: "High", value: "high" },
   { icon: "battery-half-outline", label: "Steady", value: "steady" },
+  { icon: "battery-half-outline", label: "Medium", value: "medium" },
   { icon: "battery-dead-outline", label: "Low", value: "low" },
 ];
 
@@ -75,7 +82,7 @@ export default function DayDetailsModal({
   onSaveNote?: (note: string) => void;
   onLogSymptom?: (symptom: string) => void;
 }) {
-  const { colors } = useTheme();
+  const { colors, fonts } = useTheme();
   const insets = useSafeAreaInsets();
   const actionGradient = getActionGradient(colors) as [string, string];
   const [noteText, setNoteText] = useState(details ?? "");
@@ -83,6 +90,12 @@ export default function DayDetailsModal({
   const [selectedFlow, setSelectedFlow] = useState<DayEntry["flow"]>();
   const [selectedMood, setSelectedMood] = useState<DayEntry["mood"]>();
   const [selectedSymptoms, setSelectedSymptoms] = useState<string[]>([]);
+  const [sleepHours, setSleepHours] = useState<number | undefined>();
+  const [waterIntake, setWaterIntake] = useState<number | undefined>();
+  const [weightText, setWeightText] = useState("");
+  const [tempText, setTempText] = useState("");
+  const [stressLevel, setStressLevel] = useState<number | undefined>();
+  const [medText, setMedText] = useState("");
 
   useEffect(() => {
     if (!visible) return;
@@ -92,16 +105,35 @@ export default function DayDetailsModal({
     setSelectedFlow(entry?.flow);
     setSelectedMood(entry?.mood);
     setSelectedSymptoms(entry?.symptoms ?? []);
+    setSleepHours(entry?.sleepHours);
+    setWaterIntake(entry?.waterIntake);
+    setWeightText(entry?.weight ? String(entry.weight) : "");
+    setTempText(entry?.temperature ? String(entry.temperature) : "");
+    setStressLevel(entry?.stressLevel);
+    setMedText(entry?.medication ? entry.medication.join(", ") : "");
   }, [visible, details, entry]);
 
   function handleSave() {
     if (onSaveEntry) {
+      const parsedWeight = parseFloat(weightText) || undefined;
+      const parsedTemp = parseFloat(tempText) || undefined;
+      const meds = medText
+        .split(",")
+        .map((m) => m.trim())
+        .filter(Boolean);
+
       onSaveEntry({
         energy: selectedEnergy,
         flow: selectedFlow,
         mood: selectedMood,
         note: noteText.trim(),
         symptoms: selectedSymptoms,
+        sleepHours,
+        waterIntake,
+        weight: parsedWeight,
+        temperature: parsedTemp,
+        stressLevel,
+        medication: meds.length > 0 ? meds : undefined,
       });
     } else if (onSaveNote) {
       onSaveNote(noteText.trim());
@@ -169,6 +201,7 @@ export default function DayDetailsModal({
                 color: colors.buttonText,
                 fontSize: 12,
                 fontWeight: "700",
+                fontFamily: fonts.body,
               }}
             >
               {label}
@@ -195,6 +228,7 @@ export default function DayDetailsModal({
                 color: colors.foreground,
                 fontSize: 12,
                 fontWeight: "700",
+                fontFamily: fonts.body,
               }}
             >
               {label}
@@ -275,6 +309,7 @@ export default function DayDetailsModal({
                   flex: 1,
                   fontSize: 18,
                   fontWeight: "700",
+                  fontFamily: fonts.heading,
                 }}
               >
                 {dateLabel ?? `Day ${day}`}
@@ -290,10 +325,10 @@ export default function DayDetailsModal({
             </View>
 
             <Text
-              style={{ color: colors.mutedText, marginTop: 8, lineHeight: 20 }}
+              style={{ color: colors.mutedText, marginTop: 8, lineHeight: 20, fontFamily: fonts.body }}
             >
               {phaseLabel
-                ? `${phaseLabel} - log what changed today`
+                ? `${phaseLabel} — log what changed today`
                 : "Log what changed today"}
             </Text>
 
@@ -350,6 +385,191 @@ export default function DayDetailsModal({
               )}
             </View>
 
+            <SectionTitle title="Sleep Hours" />
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 10 }}>
+              <TouchableOpacity
+                onPress={() => setSleepHours((h) => Math.max(0, (h ?? 8) - 1))}
+                style={{
+                  backgroundColor: colors.input,
+                  borderColor: colors.border,
+                  borderWidth: 1,
+                  borderRadius: 12,
+                  width: 40,
+                  height: 40,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "bold", fontFamily: fonts.body }}>-</Text>
+              </TouchableOpacity>
+              <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "700", fontFamily: fonts.mono }}>
+                {sleepHours !== undefined ? `${sleepHours} hrs` : "Not logged"}
+              </Text>
+              <TouchableOpacity
+                onPress={() => setSleepHours((h) => Math.min(24, (h ?? 8) + 1))}
+                style={{
+                  backgroundColor: colors.input,
+                  borderColor: colors.border,
+                  borderWidth: 1,
+                  borderRadius: 12,
+                  width: 40,
+                  height: 40,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "bold", fontFamily: fonts.body }}>+</Text>
+              </TouchableOpacity>
+              {sleepHours !== undefined && (
+                <TouchableOpacity onPress={() => setSleepHours(undefined)} style={{ marginLeft: "auto" }}>
+                  <Text style={{ color: colors.mutedText, fontSize: 12, fontFamily: fonts.body }}>Clear</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <SectionTitle title="Water Intake" />
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 10 }}>
+              <TouchableOpacity
+                onPress={() => setWaterIntake((w) => Math.max(0, (w ?? 250) - 250))}
+                style={{
+                  backgroundColor: colors.input,
+                  borderColor: colors.border,
+                  borderWidth: 1,
+                  borderRadius: 12,
+                  width: 40,
+                  height: 40,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "bold", fontFamily: fonts.body }}>-</Text>
+              </TouchableOpacity>
+              <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "700", fontFamily: fonts.mono }}>
+                {waterIntake !== undefined ? `${waterIntake} ml` : "Not logged"}
+              </Text>
+              <TouchableOpacity
+                onPress={() => setWaterIntake((w) => Math.min(8000, (w ?? 0) + 250))}
+                style={{
+                  backgroundColor: colors.input,
+                  borderColor: colors.border,
+                  borderWidth: 1,
+                  borderRadius: 12,
+                  width: 40,
+                  height: 40,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "bold", fontFamily: fonts.body }}>+</Text>
+              </TouchableOpacity>
+              {waterIntake !== undefined && (
+                <TouchableOpacity onPress={() => setWaterIntake(undefined)} style={{ marginLeft: "auto" }}>
+                  <Text style={{ color: colors.mutedText, fontSize: 12, fontFamily: fonts.body }}>Clear</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <View style={{ flexDirection: "row", gap: 16, marginTop: 18 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: colors.foreground, fontWeight: "700", fontSize: 14, fontFamily: fonts.body }}>Weight (kg)</Text>
+                <TextInput
+                  value={weightText}
+                  onChangeText={setWeightText}
+                  keyboardType="numeric"
+                  placeholder="e.g. 60.5"
+                  placeholderTextColor={colors.mutedText}
+                  style={{
+                    backgroundColor: colors.input,
+                    borderColor: colors.border,
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    color: colors.foreground,
+                    marginTop: 8,
+                    paddingHorizontal: 12,
+                    paddingVertical: 10,
+                    fontSize: 13,
+                    fontFamily: fonts.body,
+                  }}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: colors.foreground, fontWeight: "700", fontSize: 14, fontFamily: fonts.body }}>BBT Temp (°C)</Text>
+                <TextInput
+                  value={tempText}
+                  onChangeText={setTempText}
+                  keyboardType="numeric"
+                  placeholder="e.g. 36.6"
+                  placeholderTextColor={colors.mutedText}
+                  style={{
+                    backgroundColor: colors.input,
+                    borderColor: colors.border,
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    color: colors.foreground,
+                    marginTop: 8,
+                    paddingHorizontal: 12,
+                    paddingVertical: 10,
+                    fontSize: 13,
+                    fontFamily: fonts.body,
+                  }}
+                />
+              </View>
+            </View>
+
+            <SectionTitle title="Stress Level (1 - 10)" />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, marginTop: 10 }}>
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((level) => {
+                const isSelected = stressLevel === level;
+                return (
+                  <TouchableOpacity
+                    key={level}
+                    onPress={() => setStressLevel(isSelected ? undefined : level)}
+                    style={{
+                      width: 34,
+                      height: 34,
+                      borderRadius: 17,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      borderWidth: 1,
+                      borderColor: isSelected ? "transparent" : colors.border,
+                      backgroundColor: isSelected ? colors.primary : colors.input,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: isSelected ? colors.buttonText : colors.foreground,
+                        fontSize: 12,
+                        fontWeight: "bold",
+                        fontFamily: fonts.mono,
+                      }}
+                    >
+                      {level}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            <SectionTitle title="Medications" />
+            <TextInput
+              value={medText}
+              onChangeText={setMedText}
+              placeholder="e.g. Ibuprofen, Vitamins (comma separated)"
+              placeholderTextColor={colors.mutedText}
+              style={{
+                backgroundColor: colors.input,
+                borderColor: colors.border,
+                borderRadius: 12,
+                borderWidth: 1,
+                color: colors.foreground,
+                marginTop: 10,
+                paddingHorizontal: 12,
+                paddingVertical: 10,
+                fontSize: 13,
+                fontFamily: fonts.body,
+              }}
+            />
+
             <SectionTitle title="Notes" />
             <TextInput
               value={noteText}
@@ -368,6 +588,7 @@ export default function DayDetailsModal({
                 minHeight: 96,
                 padding: 12,
                 textAlignVertical: "top",
+                fontFamily: fonts.body,
               }}
             />
           </ScrollView>
@@ -405,6 +626,7 @@ export default function DayDetailsModal({
                     color: colors.buttonText,
                     fontWeight: "700",
                     textAlign: "center",
+                    fontFamily: fonts.body,
                   }}
                 >
                   Save Log
@@ -429,6 +651,7 @@ export default function DayDetailsModal({
                   color: colors.foreground,
                   fontWeight: "700",
                   textAlign: "center",
+                  fontFamily: fonts.body,
                 }}
               >
                 Quick Log
@@ -442,7 +665,7 @@ export default function DayDetailsModal({
 }
 
 function SectionTitle({ title }: { title: string }) {
-  const { colors } = useTheme();
+  const { colors, fonts } = useTheme();
 
   return (
     <Text
@@ -450,6 +673,7 @@ function SectionTitle({ title }: { title: string }) {
         color: colors.foreground,
         fontWeight: "700",
         marginTop: 18,
+        fontFamily: fonts.heading,
       }}
     >
       {title}

@@ -95,7 +95,7 @@ function mapFeedItem(item: ContentFeedItem): ContentItem {
 }
 
 export default function Blogs() {
-  const { colors, isDark } = useTheme();
+  const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
   const { earnTokens } = useAppState();
 
@@ -201,7 +201,7 @@ export default function Blogs() {
           </TouchableOpacity>
           <Text
             className="flex-1 text-2xl font-black tracking-tight ml-2"
-            style={{ color: colors.foreground }}
+            style={{ color: colors.foreground, fontFamily: fonts.heading }}
           >
             Insights Feed
           </Text>
@@ -236,6 +236,7 @@ export default function Blogs() {
                     className="text-xs font-bold tracking-wide"
                     style={{
                       color: isSelected ? colors.buttonText : colors.foreground,
+                      fontFamily: fonts.body,
                     }}
                   >
                     {tab.label}
@@ -293,7 +294,7 @@ export default function Blogs() {
                           <Text
                             className="flex-1 text-sm font-black tracking-tight leading-4.5"
                             numberOfLines={2}
-                            style={{ color: colors.foreground }}
+                            style={{ color: colors.foreground, fontFamily: fonts.heading }}
                           >
                             {item.title}
                           </Text>
@@ -325,7 +326,7 @@ export default function Blogs() {
                         <View className="flex-row items-center gap-1.5 mt-1.5 flex-wrap">
                           <Text
                             className="text-[11px] font-semibold"
-                            style={{ color: colors.mutedText }}
+                            style={{ color: colors.mutedText, fontFamily: fonts.body }}
                             numberOfLines={1}
                           >
                             {item.author}
@@ -350,7 +351,7 @@ export default function Blogs() {
                           />
                           <Text
                             className="text-[10px] font-bold tracking-wide"
-                            style={{ color: colors.mutedText }}
+                            style={{ color: colors.mutedText, fontFamily: fonts.body }}
                           >
                             {item.time}
                           </Text>
@@ -369,6 +370,7 @@ export default function Blogs() {
                             className="text-[11px] font-black"
                             style={{
                               color: isVideo ? colors.accent : colors.primary,
+                              fontFamily: fonts.body,
                             }}
                           >
                             {isVideo ? "Watch" : "Read"}
@@ -404,7 +406,7 @@ export default function Blogs() {
                   <View className="px-2.5 py-0.5 rounded-md bg-neutral-100 dark:bg-neutral-800">
                     <Text
                       className="text-[9px] font-black uppercase tracking-wider"
-                      style={{ color: !isDark ? "white" : "black" }}
+                      style={{ color: !isDark ? "white" : "black", fontFamily: fonts.body }}
                     >
                       {selectedItem.type === "blog" ? "Journal" : "Video"}
                     </Text>
@@ -437,10 +439,10 @@ export default function Blogs() {
 
                   {/* Title text overlay embedded on asset hero container templates */}
                   <View className="absolute bottom-5 left-6 right-6">
-                    <Text className="text-xl font-black text-white tracking-tight leading-6 shadow-sm">
+                    <Text className="text-xl font-black text-white tracking-tight leading-6 shadow-sm" style={{ fontFamily: fonts.heading }}>
                       {selectedItem.title}
                     </Text>
-                    <Text className="text-xs text-white/90 font-medium mt-1">
+                    <Text className="text-xs text-white/90 font-medium mt-1" style={{ fontFamily: fonts.body }}>
                       By {selectedItem.author}
                     </Text>
                   </View>
@@ -450,13 +452,13 @@ export default function Blogs() {
                 <View className="p-6">
                   <Text
                     className="text-xs font-bold tracking-widest uppercase mb-3"
-                    style={{ color: colors.primary }}
+                    style={{ color: colors.primary, fontFamily: fonts.heading }}
                   >
                     Verified Health Summary
                   </Text>
                   <Text
                     className="text-sm font-medium leading-6 mb-8"
-                    style={{ color: colors.foreground }}
+                    style={{ color: colors.foreground, fontFamily: fonts.body }}
                   >
                     {selectedItem.summary}
                   </Text>
@@ -487,7 +489,7 @@ export default function Blogs() {
                       />
                       <Text
                         className="text-xs font-bold"
-                        style={{ color: colors.foreground }}
+                        style={{ color: colors.foreground, fontFamily: fonts.body }}
                       >
                         {bookmarkedIds.has(selectedItem.id)
                           ? "Saved to Care"

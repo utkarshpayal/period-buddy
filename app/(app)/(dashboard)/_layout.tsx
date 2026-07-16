@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Tabs } from "expo-router";
-import React from "react";
+import { Tabs, useRouter } from "expo-router";
+import React, { useState, useEffect } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -16,10 +16,115 @@ import { useAuth } from "../../../components/auth-context";
 import { ProfileOnboarding } from "../../../components/profile-onboarding";
 import { submitOnboarding } from "../../../lib/auth";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { getWebSocketUrl } from "../../../lib/api";
 
 export default function DashboardLayout() {
-  const { colors, isDark } = useTheme();
+  const { colors, isDark, fonts } = useTheme();
   const { token, user, signIn } = useAuth();
+  const router = useRouter();
+  const [unreadCommunity, setUnreadCommunity] = useState(false);
+
+  // Auth guard: if there's no session (never logged in, logged out, or the
+  // session was cleared after a 401 from an expired/invalid token) bounce
+  // back to login instead of rendering the dashboard with empty/stale data.
+  useEffect(() => {
+    if (!token) {
+      router.replace("/(tabs)/login");
+    }
+  }, [token, router]);
+
+  useEffect(() => {
+    if (!token || !user?._id) return;
+
+    const userId = user._id;
+    let socket: WebSocket | null = null;
+    let isDisconnected = false;
+    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    function connectWS() {
+      if (isDisconnected) return;
+
+      getWebSocketUrl()
+        .then((wsUrl) => {
+          if (isDisconnected) return;
+
+          socket = new WebSocket(wsUrl);
+
+          socket.onopen = () => {
+            if (isDisconnected) return;
+            console.log("WebSocket connected for global notifications");
+
+            // Join personal room for comment/like notifications on our posts
+            socket?.send(
+              JSON.stringify({
+                type: "join",
+                room: `user_${userId}`,
+              })
+            );
+
+            // Join general community room for new posts
+            socket?.send(
+              JSON.stringify({
+                type: "join",
+                room: "community",
+              })
+            );
+          };
+
+          socket.onmessage = (event) => {
+            if (isDisconnected) return;
+            try {
+              const data = JSON.parse(event.data);
+              if (data.type === "community_notification") {
+                if (data.senderId !== userId) {
+                  setUnreadCommunity(true);
+                }
+              }
+            } catch (err) {
+              console.error("Error parsing notification WS message:", err);
+            }
+          };
+
+          socket.onerror = (err) => {
+            console.warn("Notification WebSocket error:", err);
+          };
+
+          socket.onclose = () => {
+            if (isDisconnected) return;
+            console.log("Notification WebSocket closed, retrying in 3s...");
+            reconnectTimeout = setTimeout(connectWS, 3000);
+          };
+        })
+        .catch((err) => {
+          console.warn("Failed to get WebSocket URL, retrying in 5s...", err);
+          reconnectTimeout = setTimeout(connectWS, 5000);
+        });
+    }
+
+    connectWS();
+
+    return () => {
+      isDisconnected = true;
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (socket) {
+        try {
+          socket.send(
+            JSON.stringify({
+              type: "leave",
+              room: `user_${userId}`,
+            })
+          );
+          socket.send(
+            JSON.stringify({
+              type: "leave",
+              room: "community",
+            })
+          );
+        } catch {}
+        socket.close();
+      }
+    };
+  }, [token, user?._id]);
 
   async function handleOnboardingSubmit(values: any) {
     if (!token) return;
@@ -74,20 +179,20 @@ export default function DashboardLayout() {
         tabBarShowLabel: false,
         tabBarStyle: {
           position: "absolute",
-          bottom: Platform.OS === "ios" ? 28 : 20,
-          left: 20,
-          right: 20,
+          bottom: 0,
+          left: 0,
+          right: 0,
           backgroundColor: colors.surface,
           borderColor: colors.border,
-          borderWidth: 1,
-          borderRadius: 24,
-          height: 68,
-          elevation: 4,
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: isDark ? 0.22 : 0.08,
-          shadowRadius: 12,
-          paddingBottom: 0,
+          borderTopWidth: 1,
+          borderLeftWidth: 0,
+          borderRightWidth: 0,
+          borderBottomWidth: 0,
+          height: Platform.OS === "ios" ? 84 : 70,
+          elevation: 0,
+          shadowColor: "transparent",
+          paddingBottom: Platform.OS === "ios" ? 24 : 12,
+          paddingTop: 8,
         },
       }}
     >
@@ -120,6 +225,13 @@ export default function DashboardLayout() {
         <Tabs.Screen
           key={tab.name}
           name={tab.name}
+          listeners={{
+            tabPress: () => {
+              if (tab.name === "community") {
+                setUnreadCommunity(false);
+              }
+            },
+          }}
           options={{
             tabBarButton: (props) => {
               const cleanProps = Object.fromEntries(
@@ -139,22 +251,43 @@ export default function DashboardLayout() {
             },
             tabBarIcon: ({ focused }) => (
               <View
-                className="items-center justify-center rounded-2xl px-2"
+                className="items-center justify-center relative"
                 style={{
-                  backgroundColor: focused ? colors.primaryLight : "transparent",
+                  backgroundColor: focused ? (isDark ? "rgba(232, 166, 160, 0.12)" : "#FFF1ED") : "transparent",
+                  borderRadius: 12,
+                  paddingVertical: 5,
+                  paddingHorizontal: 12,
                   minWidth: 64,
-                  height: 52,
+                  height: 48,
+                  gap: 3,
                 }}
               >
                 <Ionicons
                   name={(focused ? tab.iconFocused : tab.iconUnfocused) as any}
-                  size={21}
+                  size={17}
                   color={focused ? colors.primary : colors.mutedText}
                 />
+                {tab.name === "community" && unreadCommunity && (
+                  <View
+                    style={{
+                      position: "absolute",
+                      top: 4,
+                      right: 10,
+                      width: 6,
+                      height: 6,
+                      borderRadius: 3,
+                      backgroundColor: colors.danger,
+                    }}
+                  />
+                )}
                 <Text
-                  className="mt-1 text-[10px] font-black"
                   numberOfLines={1}
-                  style={{ color: focused ? colors.primary : colors.mutedText }}
+                  style={{
+                    fontFamily: fonts.body,
+                    fontSize: 9.5,
+                    fontWeight: focused ? "700" : "600",
+                    color: focused ? colors.primary : colors.mutedText,
+                  }}
                 >
                   {tab.label}
                 </Text>

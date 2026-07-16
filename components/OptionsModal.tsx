@@ -32,7 +32,7 @@ export default function OptionsModal({
   isReported?: boolean;
   isSaved?: boolean;
 }) {
-  const { colors } = useTheme();
+  const { colors, fonts } = useTheme();
   const insets = useSafeAreaInsets();
   const [pendingAction, setPendingAction] = React.useState<OptionAction | null>(
     null,
@@ -59,6 +59,7 @@ export default function OptionsModal({
     description,
     disabled = false,
     icon,
+    iconBackground = colors.input,
     label,
     onPress,
     statusLabel,
@@ -69,6 +70,7 @@ export default function OptionsModal({
     description: string;
     disabled?: boolean;
     icon: keyof typeof Ionicons.glyphMap;
+    iconBackground?: string;
     label: string;
     onPress?: () => Promise<void> | void;
     statusLabel?: string;
@@ -91,7 +93,7 @@ export default function OptionsModal({
           <View
             style={{
               alignItems: "center",
-              backgroundColor: colors.input,
+              backgroundColor: iconBackground,
               borderRadius: 9,
               height: 34,
               justifyContent: "center",
@@ -101,10 +103,11 @@ export default function OptionsModal({
             <Ionicons name={icon} size={18} color={color} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={{ color, fontWeight: weight }}>{label}</Text>
+            <Text style={{ color, fontFamily: fonts.body, fontWeight: weight }}>{label}</Text>
             <Text
               style={{
                 color: colors.mutedText,
+                fontFamily: fonts.body,
                 fontSize: 11,
                 fontWeight: "600",
                 lineHeight: 16,
@@ -128,6 +131,7 @@ export default function OptionsModal({
               <Text
                 style={{
                   color: colors.mutedText,
+                  fontFamily: fonts.body,
                   fontSize: 10,
                   fontWeight: "800",
                 }}
@@ -187,6 +191,7 @@ export default function OptionsModal({
           <Text
             style={{
               color: colors.foreground,
+              fontFamily: fonts.heading,
               fontSize: 16,
               fontWeight: "800",
               marginBottom: 8,
@@ -223,6 +228,7 @@ export default function OptionsModal({
               : "Flag unsafe, spammy, or harmful content for review.",
             disabled: isReported,
             icon: isReported ? "flag" : "flag-outline",
+            iconBackground: colors.dangerLight,
             label: isReported ? "Reported" : "Report",
             onPress: onReport,
             statusLabel: isReported ? "Done" : "Safety",
@@ -234,6 +240,7 @@ export default function OptionsModal({
             color: colors.danger,
             description: "Permanently remove this post from the community.",
             icon: "trash-outline",
+            iconBackground: colors.dangerLight,
             label: "Delete Post",
             onPress: onDelete,
             weight: "700",
@@ -252,6 +259,7 @@ export default function OptionsModal({
             <Text
               style={{
                 color: colors.foreground,
+                fontFamily: fonts.body,
                 fontSize: 12,
                 fontWeight: "800",
               }}
@@ -261,6 +269,7 @@ export default function OptionsModal({
             <Text
               style={{
                 color: colors.mutedText,
+                fontFamily: fonts.body,
                 fontSize: 11,
                 fontWeight: "600",
                 lineHeight: 16,
@@ -277,7 +286,7 @@ export default function OptionsModal({
             onPress={onClose}
             style={{ paddingVertical: 12, marginTop: 6 }}
           >
-            <Text style={{ color: colors.mutedText, textAlign: "center" }}>
+            <Text style={{ color: colors.mutedText, fontFamily: fonts.body, fontWeight: "700", textAlign: "center" }}>
               Cancel
             </Text>
           </TouchableOpacity>

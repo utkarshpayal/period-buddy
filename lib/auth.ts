@@ -12,10 +12,13 @@ type LoginPayload = {
   password: string;
 };
 
-type SignupPayload = LoginPayload & {
-  confirmPassword: string;
+type SignupPayload = {
+  dateOfBirth?: string;
+  email: string;
   firstName: string;
+  gender?: string;
   lastName: string;
+  password: string;
   phone?: string;
 };
 

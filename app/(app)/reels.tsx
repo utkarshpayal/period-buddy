@@ -7,6 +7,7 @@ import {
   Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Platform,
   ScrollView,
   StatusBar,
   Text,
@@ -104,30 +105,30 @@ const fallbackReels: HealthReel[] = [
 function mapApiReel(reel: ApiReel): HealthReel {
   return {
     id: reel.id ?? reel._id ?? reel.creatorId,
-    title: reel.title,
+    title: reel.title ?? "Untitled Reel",
     creatorId: reel.creatorId,
-    creatorName: reel.creatorName,
+    creatorName: reel.creatorName ?? "Anonymous Creator",
     creatorAvatar:
       reel.creatorAvatar ||
       "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?q=80&w=150&auto=format&fit=crop",
-    duration: reel.duration,
-    views: reel.views,
-    category: reel.category,
-    verified: reel.verified,
-    thumbnailUrl: reel.thumbnailUrl,
+    duration: reel.duration || "0:30",
+    views: reel.viewCount ?? reel.views ?? 0,
+    category: reel.category ?? "Wellness",
+    verified: reel.verified ?? false,
+    thumbnailUrl: reel.thumbnailUrl || "https://placehold.co/640x360?text=Period+Buddy",
     directMp4Url: reel.directMp4Url,
     pollQuestion: reel.pollQuestion || "Vote for the next topic:",
     votedOptionId: reel.votedOptionId ?? null,
-    pollOptions: reel.pollOptions.map((option) => ({
+    pollOptions: (reel.pollOptions || []).map((option) => ({
       id: option.optionId,
       topic: option.topic,
-      votes: option.votes,
+      votes: option.votes ?? 0,
     })),
   };
 }
 
 export default function Reels() {
-  const { colors } = useTheme();
+  const { colors, fonts } = useTheme();
   const router = useRouter();
   const { earnTokens } = useAppState();
   const { height, width } = useWindowDimensions();
@@ -294,8 +295,41 @@ export default function Reels() {
     };
   }
 
-  // Pure HTML5 Video Engine — Bypasses all YouTube iframe blocks natively
-  function generateHTML5VideoPlayer(mp4Url: string) {
+  // Extract YouTube ID if present
+  function getYouTubeId(url: string): string | null {
+    if (!url) return null;
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=|shorts\/)([^#\&\?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : null;
+  }
+
+  // Generates appropriate HTML based on video type
+  function generateVideoPlayerHTML(videoUrl: string) {
+    const ytId = getYouTubeId(videoUrl);
+    if (ytId) {
+      return `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+            <style>
+              body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: #000000; overflow: hidden; }
+              iframe { width: 100%; height: 100%; border: 0; }
+            </style>
+          </head>
+          <body>
+            <iframe 
+              src="https://www.youtube.com/embed/${ytId}?autoplay=1&loop=1&playlist=${ytId}&mute=1&playsinline=1&controls=0&modestbranding=1&rel=0" 
+              frameborder="0" 
+              allow="autoplay; encrypted-media; picture-in-picture" 
+              allowfullscreen>
+            </iframe>
+          </body>
+        </html>
+      `;
+    }
+
     return `
       <!DOCTYPE html>
       <html>
@@ -308,7 +342,7 @@ export default function Reels() {
           </style>
         </head>
         <body>
-          <video src="${mp4Url}" autoplay loop muted playsinline></video>
+          <video src="${videoUrl}" autoplay loop muted playsinline></video>
         </body>
       </html>
     `;
@@ -353,24 +387,72 @@ export default function Reels() {
                 }}
               >
                 {isPlaying ? (
-                  <WebView
-                    allowsInlineMediaPlayback
-                    domStorageEnabled
-                    javaScriptEnabled
-                    mediaPlaybackRequiresUserAction={false}
-                    originWhitelist={["*"]}
-                    source={{
-                      html: generateHTML5VideoPlayer(item.directMp4Url),
-                    }}
-                    style={{
-                      backgroundColor: "black",
-                      bottom: 0,
-                      left: 0,
-                      position: "absolute",
-                      right: 0,
-                      top: 0,
-                    }}
-                  />
+                  Platform.OS === "web" ? (
+                    (() => {
+                      const ytId = getYouTubeId(item.directMp4Url);
+                      if (ytId) {
+                        return (
+                          <iframe
+                            src={`https://www.youtube.com/embed/${ytId}?autoplay=1&loop=1&playlist=${ytId}&mute=1&playsinline=1&controls=0&modestbranding=1&rel=0`}
+                            style={{
+                              border: 0,
+                              width: "100%",
+                              height: "100%",
+                              position: "absolute",
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              backgroundColor: "black",
+                            }}
+                            allow="autoplay; encrypted-media; picture-in-picture"
+                            allowFullScreen
+                          />
+                        );
+                      }
+                      return (
+                        <video
+                          src={item.directMp4Url}
+                          autoPlay
+                          loop
+                          muted
+                          playsInline
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                            position: "absolute",
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            backgroundColor: "black",
+                          }}
+                        />
+                      );
+                    })()
+                  ) : (
+                    <WebView
+                      allowsInlineMediaPlayback
+                      domStorageEnabled
+                      javaScriptEnabled
+                      mediaPlaybackRequiresUserAction={false}
+                      originWhitelist={["*"]}
+                      allowsFullscreenVideo
+                      androidLayerType="hardware"
+                      source={{
+                        html: generateVideoPlayerHTML(item.directMp4Url),
+                      }}
+                      style={{
+                        backgroundColor: "black",
+                        bottom: 0,
+                        left: 0,
+                        position: "absolute",
+                        right: 0,
+                        top: 0,
+                      }}
+                    />
+                  )
                 ) : (
                   <TouchableOpacity
                     activeOpacity={0.92}
@@ -422,15 +504,15 @@ export default function Reels() {
                     <Feather name="arrow-left" size={18} color="white" />
                   </TouchableOpacity>
                   <View className="flex-1">
-                    <Text className="text-lg font-black text-white">
+                    <Text className="text-lg font-black text-white" style={{ fontFamily: fonts.heading }}>
                       Reels
                     </Text>
-                    <Text className="text-[10px] font-bold uppercase text-white/65">
+                    <Text className="text-[10px] font-bold uppercase text-white/65" style={{ fontFamily: fonts.body }}>
                       {index + 1} of {reels.length}
                     </Text>
                   </View>
                   <View className="rounded-full bg-white/15 px-3 py-1.5">
-                    <Text className="text-[10px] font-black uppercase text-white">
+                    <Text className="text-[10px] font-black uppercase text-white" style={{ fontFamily: fonts.body }}>
                       For You
                     </Text>
                   </View>
@@ -447,7 +529,10 @@ export default function Reels() {
                       className="h-12 w-12 rounded-full border-2 border-white bg-neutral-200"
                     />
                     {item.verified ? (
-                      <View className="-mt-3 rounded-full bg-emerald-500 p-0.5">
+                      <View
+                        className="-mt-3 rounded-full p-0.5"
+                        style={{ backgroundColor: colors.success }}
+                      >
                         <MaterialCommunityIcons
                           name="check"
                           size={12}
@@ -469,7 +554,7 @@ export default function Reels() {
                         color="white"
                       />
                     </View>
-                    <Text className="mt-1 text-[10px] font-black text-white">
+                    <Text className="mt-1 text-[10px] font-black text-white" style={{ fontFamily: fonts.body }}>
                       {isFollowing ? "Following" : "Follow"}
                     </Text>
                   </TouchableOpacity>
@@ -478,7 +563,7 @@ export default function Reels() {
                     <View className="h-11 w-11 items-center justify-center rounded-full bg-white/18">
                       <Feather name="eye" size={20} color="white" />
                     </View>
-                    <Text className="mt-1 text-[10px] font-black text-white">
+                    <Text className="mt-1 text-[10px] font-black text-white" style={{ fontFamily: fonts.mono }}>
                       {item.views.toLocaleString()}
                     </Text>
                   </View>
@@ -493,11 +578,12 @@ export default function Reels() {
                     <Text
                       className="flex-1 text-sm font-black text-white"
                       numberOfLines={1}
+                      style={{ fontFamily: fonts.heading }}
                     >
                       {item.creatorName}
                     </Text>
                     <View className="rounded-full bg-white/18 px-2 py-0.5">
-                      <Text className="text-[9px] font-black uppercase text-white">
+                      <Text className="text-[9px] font-black uppercase text-white" style={{ fontFamily: fonts.body }}>
                         {item.category}
                       </Text>
                     </View>
@@ -506,6 +592,7 @@ export default function Reels() {
                   <Text
                     className="text-base font-black leading-5 text-white"
                     numberOfLines={3}
+                    style={{ fontFamily: fonts.heading }}
                   >
                     {item.title}
                   </Text>
@@ -517,11 +604,11 @@ export default function Reels() {
                         size={12}
                         color="rgba(255,255,255,0.82)"
                       />
-                      <Text className="text-[10px] font-bold text-white/85">
+                      <Text className="text-[10px] font-bold text-white/85" style={{ fontFamily: fonts.mono }}>
                         {item.duration}
                       </Text>
                     </View>
-                    <Text className="text-[10px] font-bold text-white/70">
+                    <Text className="text-[10px] font-bold text-white/70" style={{ fontFamily: fonts.body }}>
                       Board-certified cycle education
                     </Text>
                   </View>
@@ -533,13 +620,14 @@ export default function Reels() {
                         size={14}
                         color="white"
                       />
-                      <Text className="text-[10px] font-black uppercase text-white/75">
+                      <Text className="text-[10px] font-black uppercase text-white/75" style={{ fontFamily: fonts.body }}>
                         Next topic poll
                       </Text>
                     </View>
                     <Text
                       className="mb-2 text-xs font-bold text-white"
                       numberOfLines={2}
+                      style={{ fontFamily: fonts.heading }}
                     >
                       {item.pollQuestion}
                     </Text>
@@ -572,6 +660,7 @@ export default function Reels() {
                               <Text
                                 className="flex-1 text-[11px] font-bold text-white"
                                 numberOfLines={2}
+                                style={{ fontFamily: fonts.body }}
                               >
                                 {option.topic}
                               </Text>
@@ -580,8 +669,9 @@ export default function Reels() {
                                   className="text-[11px] font-black"
                                   style={{
                                     color: isThisChoiceVoted
-                                      ? "#f9a8d4"
+                                      ? colors.rose
                                       : "rgba(255,255,255,0.7)",
+                                    fontFamily: fonts.mono,
                                   }}
                                 >
                                   {percentValue}%
@@ -618,7 +708,7 @@ export default function Reels() {
               <View className="flex-row items-center justify-between px-6 pt-6">
                 <Text
                   className="text-xl font-black tracking-tight"
-                  style={{ color: colors.foreground }}
+                  style={{ color: colors.foreground, fontFamily: fonts.heading }}
                 >
                   Creator Profile
                 </Text>
@@ -643,7 +733,7 @@ export default function Reels() {
                 <View className="mt-4 flex-row items-center gap-1.5">
                   <Text
                     className="text-2xl font-black tracking-tight text-center"
-                    style={{ color: colors.foreground }}
+                    style={{ color: colors.foreground, fontFamily: fonts.heading }}
                   >
                     {selectedCreator.creatorName}
                   </Text>
@@ -657,7 +747,7 @@ export default function Reels() {
                 </View>
                 <Text
                   className="mt-1 text-xs font-bold uppercase tracking-wider"
-                  style={{ color: colors.mutedText }}
+                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
                 >
                   {selectedCreator.category} creator
                 </Text>
@@ -700,13 +790,13 @@ export default function Reels() {
                     />
                     <Text
                       className="mt-2 text-base font-black"
-                      style={{ color: colors.foreground }}
+                      style={{ color: colors.foreground, fontFamily: fonts.mono }}
                     >
                       {metric.value}
                     </Text>
                     <Text
                       className="text-[10px] font-bold"
-                      style={{ color: colors.mutedText }}
+                      style={{ color: colors.mutedText, fontFamily: fonts.body }}
                     >
                       {metric.label}
                     </Text>
@@ -723,13 +813,13 @@ export default function Reels() {
               >
                 <Text
                   className="text-sm font-black"
-                  style={{ color: colors.foreground }}
+                  style={{ color: colors.foreground, fontFamily: fonts.heading }}
                 >
                   About this creator
                 </Text>
                 <Text
                   className="mt-2 text-xs font-semibold leading-5"
-                  style={{ color: colors.mutedText }}
+                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
                 >
                   Follow this specialist to keep their cycle education videos,
                   polls, and comfort-first health guidance close in your feed.
@@ -764,6 +854,7 @@ export default function Reels() {
                       color: followingCreatorIds.has(selectedCreator.creatorId)
                         ? colors.foreground
                         : colors.buttonText,
+                      fontFamily: fonts.body,
                     }}
                   >
                     {followingCreatorIds.has(selectedCreator.creatorId)
@@ -776,7 +867,7 @@ export default function Reels() {
               <View className="mx-6 mt-6">
                 <Text
                   className="mb-3 text-xs font-black uppercase tracking-widest"
-                  style={{ color: colors.primary }}
+                  style={{ color: colors.primary, fontFamily: fonts.heading }}
                 >
                   Videos by this creator
                 </Text>
@@ -808,13 +899,13 @@ export default function Reels() {
                           <Text
                             className="text-xs font-black"
                             numberOfLines={2}
-                            style={{ color: colors.foreground }}
+                            style={{ color: colors.foreground, fontFamily: fonts.heading }}
                           >
                             {reel.title}
                           </Text>
                           <Text
                             className="mt-1 text-[10px] font-bold"
-                            style={{ color: colors.mutedText }}
+                            style={{ color: colors.mutedText, fontFamily: fonts.body }}
                           >
                             {reel.duration} • {reel.views.toLocaleString()} views
                           </Text>

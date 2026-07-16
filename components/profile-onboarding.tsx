@@ -40,7 +40,12 @@ const onboardingSteps = [
   },
 ] as const;
 
-const genderOptions = ["female", "male", "non-binary", "prefer not to say"];
+const genderOptions: { label: string; value: string }[] = [
+  { label: "Female", value: "female" },
+  { label: "Male", value: "male" },
+  { label: "Other / Non-binary", value: "other" },
+  { label: "Prefer not to say", value: "prefer_not_to_say" },
+];
 
 type OnboardingStepId = (typeof onboardingSteps)[number]["id"];
 
@@ -103,13 +108,23 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
   function goToNextOnboardingStep() {
     if (isSubmitting) return;
 
-    // Basic validation
-    if (currentStep.id === "dateOfBirth" && dateOfBirth.trim()) {
+    // Date of birth and gender are required by the backend (POST /api/auth/onboarding
+    // rejects an empty dateOfBirth/gender with a 422), so they can't be skipped here.
+    if (currentStep.id === "dateOfBirth") {
+      if (!dateOfBirth.trim()) {
+        setErrorMessage("Date of birth is required to continue.");
+        return;
+      }
       const dobPattern = /^\d{4}-\d{2}-\d{2}$/;
       if (!dobPattern.test(dateOfBirth.trim())) {
         setErrorMessage("Please enter date of birth in YYYY-MM-DD format.");
         return;
       }
+    }
+
+    if (currentStep.id === "gender" && !gender) {
+      setErrorMessage("Please select a gender to continue.");
+      return;
     }
 
     setErrorMessage("");
@@ -125,7 +140,7 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
   async function handleSubmitOnboarding() {
     const values = {
       dateOfBirth: dateOfBirth.trim(),
-      gender: gender || "prefer not to say",
+      gender: gender || "prefer_not_to_say",
       phone: phone.trim(),
       profilePicture: profilePicture ?? "",
     };
@@ -201,14 +216,14 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
       return (
         <View className="mb-4 gap-3">
           {genderOptions.map((option) => {
-            const isSelected = gender === option;
+            const isSelected = gender === option.value;
 
             return (
               <TouchableOpacity
                 activeOpacity={0.9}
                 className="flex-row items-center justify-between rounded-2xl border px-5 py-4"
-                key={option}
-                onPress={() => setGender(option)}
+                key={option.value}
+                onPress={() => setGender(option.value)}
                 style={{
                   backgroundColor: isSelected ? colors.primaryLight : colors.input,
                   borderColor: isSelected ? colors.primary : colors.border,
@@ -216,12 +231,12 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
                 }}
               >
                 <Text
-                  className="text-sm font-bold capitalize"
+                  className="text-sm font-bold"
                   style={{
                     color: isSelected ? colors.primary : colors.foreground,
                   }}
                 >
-                  {option}
+                  {option.label}
                 </Text>
 
                 {isSelected ? (
@@ -421,23 +436,28 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
 
         {/* Action Buttons */}
         <View className="flex-row gap-3 mt-4">
-          <TouchableOpacity
-            activeOpacity={0.8}
-            className="flex-1 rounded-full border py-4 items-center justify-center"
-            disabled={isSubmitting}
-            onPress={goToNextOnboardingStep}
-            style={{
-              backgroundColor: colors.input,
-              borderColor: colors.border,
-            }}
-          >
-            <Text
-              className="text-center text-sm font-bold"
-              style={{ color: colors.mutedText }}
+          {/* Skip is only offered for fields the backend treats as optional
+              (phone, profilePicture) — dateOfBirth and gender are required by
+              POST /api/auth/onboarding and must be filled in to proceed. */}
+          {(currentStep.id === "phone" || currentStep.id === "profilePicture") && (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              className="flex-1 rounded-full border py-4 items-center justify-center"
+              disabled={isSubmitting}
+              onPress={goToNextOnboardingStep}
+              style={{
+                backgroundColor: colors.input,
+                borderColor: colors.border,
+              }}
             >
-              Skip
-            </Text>
-          </TouchableOpacity>
+              <Text
+                className="text-center text-sm font-bold"
+                style={{ color: colors.mutedText }}
+              >
+                Skip
+              </Text>
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity
             activeOpacity={0.9}

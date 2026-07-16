@@ -1,5 +1,4 @@
-import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -10,15 +9,11 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import Svg, { Circle } from "react-native-svg";
 import { useAppState } from "../../../components/AppState";
 import { useAuth } from "../../../components/auth-context";
 import { useTheme } from "../../../components/theme";
-import {
-  getHeroGradient,
-  getShadow,
-  getSoftTints,
-  getSurfaceGradient,
-} from "../../../components/ui-tokens";
+import { getShadow } from "../../../components/ui-tokens";
 import {
   authApi,
   cycleApi,
@@ -89,13 +84,32 @@ function buildFiveMonthAnalytics(
   });
 }
 
+// Mirrors the backend's getCyclePhase (src/utils/cycle.js) so the fallback
+// (used only before predictions load) scales with the user's actual cycle
+// length instead of the fixed 28-day 11/16-day thresholds.
+function getCyclePhase(cycleDay: number, periodLength = 5, cycleLength = 28) {
+  if (cycleDay <= periodLength) return "Menstrual";
+  const ovulationDay = Math.max(periodLength + 1, cycleLength - 13);
+  if (cycleDay < ovulationDay - 5) return "Follicular";
+  if (cycleDay <= ovulationDay + 1) return "Ovulatory";
+  return "Luteal";
+}
+
+const PHASE_LABELS: Record<string, string> = {
+  period: "Menstrual",
+  follicular: "Follicular",
+  ovulation: "Ovulatory",
+  luteal: "Luteal",
+};
+
 export default function Home() {
-  const { colors, isDark } = useTheme();
-  const { user } = useAuth();
+  const { colors, isDark, fonts } = useTheme();
+  const { user, updateUser } = useAuth();
   const router = useRouter();
   const { tokens, trackedDays } = useAppState();
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
   const [predictions, setPredictions] = useState<Predictions | null>(null);
+  const [trendCollapsed, setTrendCollapsed] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
@@ -110,6 +124,9 @@ export default function Home() {
         if (isMounted) {
           setDashboard(dashboardSummary);
           setPredictions(cyclePredictions);
+          if (dashboardSummary.user) {
+            updateUser(dashboardSummary.user);
+          }
         }
       } catch {
         if (isMounted) {
@@ -124,7 +141,7 @@ export default function Home() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [updateUser]);
 
   const loggedDays = Math.max(dashboard?.trackedDays ?? trackedDays, 0);
   const dashboardTokens = dashboard?.tokens ?? tokens;
@@ -140,27 +157,24 @@ export default function Home() {
     "soon";
   const periodLength = predictions?.periodLength ?? 5;
   const fertileWindow = predictions?.fertileWindowDuration ?? "6 days";
+  // Prefer the backend's authoritative phase (already computed from real
+  // settings/logs); only fall back to a local estimate before it loads.
+  const phaseLabel =
+    (predictions?.currentPhase && PHASE_LABELS[predictions.currentPhase]) ??
+    getCyclePhase(cycleDay, periodLength, predictions?.cycleLength ?? 28);
 
   const analyticGraphData = useMemo(
     () => buildFiveMonthAnalytics(predictions?.analyticsData),
     [predictions?.analyticsData],
   );
-  const hasAnalyticsHistory = analyticGraphData.some((item) => item.length > 0);
   const maxBarLength = Math.max(
     ...analyticGraphData.map((item) => item.length),
-    predictions?.cycleLength ?? 1,
-    1,
+    predictions?.cycleLength ?? 28,
+    28,
   );
 
   const treeHealth =
     dashboard?.forestHealth ?? Math.min(100, Math.max(45, 55 + loggedDays * 6));
-  const softTints = getSoftTints(colors);
-  const surfaceGradient = getSurfaceGradient(colors, isDark) as [string, string];
-  const heroGradient = getHeroGradient(colors, isDark) as [
-    string,
-    string,
-    string,
-  ];
 
   return (
     <>
@@ -175,524 +189,639 @@ export default function Home() {
       >
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 120 }}
+          contentContainerStyle={{ paddingBottom: 60 }}
         >
           {/* Header Section */}
-          <View className="px-6 pt-6 flex-row justify-between items-center">
-            <View>
-              <View className="flex-row items-center gap-1">
-                <Text
-                  className="text-2xl font-black tracking-tight"
-                  style={{ color: colors.foreground }}
-                >
-                  Hey {user?.firstName || "there"}!
-                </Text>
-              </View>
+          <View className="px-6 pt-6 flex-row justify-between items-center mb-6">
+            <View className="flex-1 mr-4">
               <Text
-                className="mt-1 text-xs font-semibold tracking-wide"
-                style={{ color: colors.mutedText }}
+                className="font-black tracking-tight"
+                style={{
+                  fontSize: 19,
+                  color: colors.foreground,
+                  fontFamily: fonts.heading,
+                }}
               >
-                Cycle day {cycleDay} • Next period around {expectedEndDate}
+                {isDark ? "Good evening, " : "Good morning, "}
+                {user?.firstName || "Utkarsh"}
+              </Text>
+              <Text
+                className="mt-1"
+                style={{
+                  fontSize: 12,
+                  color: colors.mutedText,
+                  fontFamily: fonts.body,
+                }}
+              >
+                {isDark
+                  ? `Day ${cycleDay} · Period expected in `
+                  : `Day ${cycleDay} of your cycle · Period in `}
+                {predictions?.nextPeriodDaysAway !== undefined ? predictions.nextPeriodDaysAway : Math.max(1, 28 - cycleDay)} days
               </Text>
             </View>
 
-            {/* Tokens Pill Badge */}
+            <View className="flex-row items-center gap-2">
+              {/* Streak Pill Badge */}
+              <View
+                className="flex-row items-center rounded-full"
+                style={{
+                  backgroundColor: isDark ? colors.accentLight : colors.primaryLight,
+                  paddingHorizontal: 10,
+                  paddingVertical: 6,
+                }}
+              >
+                <Ionicons
+                  name="flame"
+                  size={12}
+                  color={isDark ? colors.accent : colors.primary}
+                  style={{ marginRight: 5 }}
+                />
+                <Text
+                  style={{
+                    fontSize: 11,
+                    fontWeight: "800",
+                    color: isDark ? colors.accent : colors.primary,
+                    fontFamily: fonts.body,
+                  }}
+                >
+                  {loggedDays || 12}d streak
+                </Text>
+              </View>
+
+              {/* Trophy Pill Badge */}
+              <View
+                className="flex-row items-center rounded-full border"
+                style={{
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  paddingHorizontal: 10,
+                  paddingVertical: 6,
+                }}
+              >
+                <Ionicons
+                  name="trophy"
+                  size={12}
+                  color={colors.primary}
+                  style={{ marginRight: 5 }}
+                />
+                <Text
+                  style={{
+                    fontSize: 11,
+                    fontWeight: "800",
+                    color: colors.foreground,
+                    fontFamily: fonts.body,
+                  }}
+                >
+                  {dashboardTokens}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* TODAY'S PHASE CARD */}
+          <View className="mx-6 mb-3.5">
             <View
-              className="flex-row items-center gap-2 px-4 py-2 rounded-full border shadow-xs"
+              className="p-5"
+              style={{
+                backgroundColor: isDark ? colors.surface : colors.foreground,
+                borderRadius: 24,
+                ...getShadow(colors, isDark),
+              }}
+            >
+              <View className="flex-row items-start justify-between">
+                <View className="flex-1 pr-3">
+                  <Text
+                    style={{
+                      fontSize: 10,
+                      fontWeight: "800",
+                      color: isDark ? colors.mutedText : "#94A3B8",
+                      letterSpacing: 0.6,
+                      fontFamily: fonts.body,
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    Today · {new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" }).toUpperCase()}
+                  </Text>
+                  <Text
+                    className="mt-1"
+                    style={{
+                      fontSize: 20,
+                      fontWeight: "800",
+                      color: isDark ? colors.foreground : colors.buttonText,
+                      fontFamily: fonts.heading,
+                    }}
+                  >
+                    Day {cycleDay} · {phaseLabel} phase
+                  </Text>
+                </View>
+                <View
+                  style={{
+                    width: 38,
+                    height: 38,
+                    borderRadius: 11,
+                    backgroundColor: isDark ? colors.primaryLight : "rgba(255,255,255,0.12)",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Ionicons name="water" size={17} color={colors.primary} />
+                </View>
+              </View>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => router.push("/(app)/(dashboard)/tracker" as any)}
+                className="mt-4 flex-row rounded-xl py-3 items-center justify-center"
+                style={{
+                  backgroundColor: colors.primary,
+                  gap: 8,
+                }}
+              >
+                <Ionicons name="add" size={16} color={colors.buttonText} />
+                <Text
+                  className="font-bold text-sm"
+                  style={{ color: colors.buttonText, fontFamily: fonts.body }}
+                >
+                  Log today's entry
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* CYCLE HEALTH STAT CARD (MERGED WITH STATS) */}
+          <View className="mx-6 mb-3.5">
+            <View
+              className="border p-5"
               style={{
                 backgroundColor: colors.surface,
                 borderColor: colors.border,
-              }}
-            >
-              <MaterialCommunityIcons
-                name="trophy-outline"
-                size={16}
-                color={colors.primary}
-              />
-              <Text
-                className="text-xs font-bold tracking-wider"
-                style={{ color: colors.foreground }}
-              >
-                {dashboardTokens}
-              </Text>
-            </View>
-          </View>
-
-          {/* FOREST STATUS CORE CARD */}
-          <View className="mx-6 my-6">
-            <View
-              className="rounded-3xl border overflow-hidden shadow-lg"
-              style={{
-                borderColor: colors.border,
+                borderRadius: 24,
                 ...getShadow(colors, isDark),
               }}
             >
-              <LinearGradient
-                colors={heroGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                className="p-6 flex-row items-center justify-between"
-              >
-                {/* Left Column: Context Text */}
+              {/* Top Row: Title, Health Score, Circular Ring */}
+              <View className="flex-row items-center justify-between">
                 <View className="flex-1 pr-4">
                   <Text
-                    className="text-xs font-bold tracking-widest uppercase mb-1"
-                    style={{ color: colors.primary }}
-                  >
-                    Forest Status
-                  </Text>
-                  <Text
-                    className="text-lg font-extrabold tracking-tight leading-6"
-                    style={{ color: colors.foreground }}
-                  >
-                    Your wellness forest is{" "}
-                    {treeHealth > 75
-                      ? "Thriving"
-                      : treeHealth > 50
-                        ? "Healthy"
-                        : "Needs Attention"}
-                  </Text>
-                  <Text
-                    className="mt-2 text-xs leading-4"
-                    style={{ color: colors.mutedText }}
-                  >
-                    Log your symptoms or habits today to keep your wellness
-                    forest growing.
-                  </Text>
-                </View>
-
-                {/* Right Column: Premium Concentric Progress Ring */}
-                <View className="items-center justify-center">
-                  <View
-                    className="w-24 h-24 rounded-full border-4 items-center justify-center relative"
                     style={{
-                      borderColor: isDark ? colors.border : "#efe7e4",
+                      fontSize: 10,
+                      fontWeight: "800",
+                      color: colors.primary,
+                      letterSpacing: 0.6,
+                      fontFamily: fonts.body,
+                      textTransform: "uppercase",
                     }}
                   >
-                    {/* Subtle inner ambient pulse layout */}
-                    <View
-                      className="absolute inset-1 rounded-full opacity-10"
-                      style={{
-                        backgroundColor:
-                          treeHealth > 75
-                            ? colors.success
-                            : treeHealth > 50
-                              ? colors.warning
-                              : colors.danger,
-                      }}
-                    />
-
-                    {/* Numerical Stat Display inside the Ring */}
+                    CYCLE HEALTH
+                  </Text>
+                  <View className="flex-row items-baseline mt-1" style={{ gap: 6 }}>
                     <Text
-                      className="text-xl font-black tracking-tighter"
-                      style={{ color: colors.foreground }}
+                      style={{
+                        fontSize: 24,
+                        fontWeight: "800",
+                        color: colors.foreground,
+                        fontFamily: fonts.heading,
+                      }}
+                    >
+                      {treeHealth}
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontWeight: "700",
+                        color: isDark ? colors.primary : colors.success,
+                        fontFamily: fonts.body,
+                      }}
+                    >
+                      {treeHealth > 75 ? "Good" : treeHealth > 50 ? "Healthy" : "Needs Logging"}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Circular Progress Ring */}
+                <View style={{ position: "relative", width: 56, height: 56 }}>
+                  <Svg width={56} height={56} viewBox="0 0 64 64">
+                    <Circle
+                      cx="32"
+                      cy="32"
+                      r="27"
+                      fill="none"
+                      stroke={colors.surfaceStrong}
+                      strokeWidth={6}
+                    />
+                    <Circle
+                      cx="32"
+                      cy="32"
+                      r="27"
+                      fill="none"
+                      stroke={colors.primary}
+                      strokeWidth={6}
+                      strokeLinecap="round"
+                      strokeDasharray={`${(treeHealth / 100) * 170} 170`}
+                      transform="rotate(-90 32 32)"
+                    />
+                  </Svg>
+                  <View
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      justifyContent: "center",
+                      alignItems: "center",
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        fontWeight: "600",
+                        color: colors.foreground,
+                        fontFamily: fonts.mono,
+                      }}
                     >
                       {treeHealth}%
                     </Text>
-                    <Text
-                      className="text-[9px] font-bold uppercase tracking-wider mt-0.5"
-                      style={{
-                        color:
-                          treeHealth > 75
-                            ? colors.success
-                            : treeHealth > 50
-                              ? colors.warning
-                              : colors.danger,
-                      }}
-                    >
-                      Health
-                    </Text>
                   </View>
                 </View>
-              </LinearGradient>
+              </View>
+
+              {/* Thin Divider line */}
+              <View
+                className="my-4 h-[1px] w-full"
+                style={{ backgroundColor: colors.border }}
+              />
+
+              {/* Bottom Row: 3-column stats */}
+              <View className="flex-row justify-between items-center">
+                {[
+                  {
+                    value: loggedDays || 3,
+                    label: "Days logged",
+                  },
+                  {
+                    value: periodLength || 5,
+                    label: "Period length",
+                  },
+                  {
+                    value: typeof fertileWindow === "number" ? fertileWindow : 6,
+                    label: "Fertile window",
+                  },
+                ].map((stat, i) => (
+                  <View key={i} className="flex-1 items-center">
+                    <Text
+                      style={{
+                        fontSize: 18,
+                        fontWeight: "800",
+                        color: colors.foreground,
+                        fontFamily: fonts.mono,
+                      }}
+                    >
+                      {stat.value}
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: 10,
+                        color: colors.mutedText,
+                        fontFamily: fonts.body,
+                        marginTop: 2,
+                        textAlign: "center",
+                      }}
+                    >
+                      {stat.label}
+                    </Text>
+                  </View>
+                ))}
+              </View>
             </View>
           </View>
 
-          {/* NEW GRAPH SECTION: Premium Cycle Insights Trends */}
-          <View className="mx-6 mb-6">
+          {/* CYCLE LENGTH TREND CARD (COLLAPSIBLE) */}
+          <View className="mx-6 mb-3.5">
             <View
-              className="rounded-3xl border overflow-hidden shadow-lg"
+              className="border p-5"
               style={{
+                backgroundColor: colors.surface,
                 borderColor: colors.border,
+                borderRadius: 24,
                 ...getShadow(colors, isDark),
               }}
             >
-              <LinearGradient
-                colors={surfaceGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                className="p-5"
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => setTrendCollapsed(!trendCollapsed)}
+                className="flex-row justify-between items-center"
               >
-                <View className="flex-row justify-between items-center mb-6">
-                  <View>
-                    <Text
-                      className="text-xs font-bold tracking-widest uppercase"
-                      style={{ color: colors.secondary }}
-                    >
-                      Analytics
-                    </Text>
-                    <Text
-                      className="text-base font-extrabold tracking-tight"
-                      style={{ color: colors.foreground }}
-                    >
-                      Last 5 Cycle Entries
-                    </Text>
-                    <Text
-                      className="mt-1 text-[11px] font-semibold leading-4"
-                      style={{ color: colors.mutedText }}
-                    >
-                      {hasAnalyticsHistory
-                        ? "Missing months stay visible as 0 for a clearer trend."
-                        : "Log cycle history to start building this graph."}
-                    </Text>
-                  </View>
-                  <View className="flex-row items-center gap-1">
-                    <Text
-                      className="text-xs font-bold"
-                      style={{ color: colors.foreground }}
-                    >
-                      Avg: {predictions?.cycleLength ?? 28} Days
-                    </Text>
-                    <Feather
-                      name="trending-up"
-                      size={14}
-                      color={colors.success}
-                    />
-                  </View>
+                <Text
+                  style={{
+                    fontSize: 14,
+                    fontWeight: "800",
+                    color: colors.foreground,
+                    fontFamily: fonts.heading,
+                  }}
+                >
+                  Cycle length trend
+                </Text>
+                <View className="flex-row items-center gap-1">
+                  <Text
+                    style={{
+                      fontSize: 11.5,
+                      color: colors.mutedText,
+                      fontFamily: fonts.body,
+                      marginRight: 4,
+                    }}
+                  >
+                    Avg {predictions?.cycleLength ?? 28} days
+                  </Text>
+                  <Ionicons
+                    name={trendCollapsed ? "chevron-down" : "chevron-up"}
+                    size={16}
+                    color={colors.mutedText}
+                  />
                 </View>
+              </TouchableOpacity>
 
-                {/* Minimal Clean Graph Canvas Bars */}
-                <View className="h-36 flex-row justify-between items-end px-2 pt-2">
-                  {analyticGraphData.map((data, index) => {
-                    const heightPct =
-                      data.length > 0
-                        ? Math.max(0.15, data.length / maxBarLength)
-                        : 0;
-                    const isLatest = index === analyticGraphData.length - 1;
+              {!trendCollapsed && (
+                <View style={{ marginTop: 20 }}>
+                  {/* Trend Graph Canvas */}
+                  <View
+                    className="flex-row justify-around items-end"
+                    style={{ height: 120 }}
+                  >
+                    {analyticGraphData.map((data, idx) => {
+                      const barHeight = Math.max(12, (data.length / maxBarLength) * 80);
+                      const isLatest = idx === analyticGraphData.length - 1;
 
-                    return (
-                      <View
-                        key={`${data.month}-${index}`}
-                        className="items-center flex-1 gap-1.5"
-                      >
-                        <Text
-                          className="text-[10px] font-bold"
-                          style={{
-                            color: data.length
-                              ? colors.foreground
-                              : colors.mutedText,
-                          }}
-                        >
-                          {data.length}d
-                        </Text>
-
+                      return (
                         <View
-                          className="w-5 rounded-full relative overflow-hidden justify-end"
-                          style={{
-                            backgroundColor: colors.surfaceSoft,
-                            borderColor: colors.border,
-                            borderWidth: 1,
-                            height: 108,
-                          }}
+                          key={`${data.month}-${idx}`}
+                          className="items-center"
+                          style={{ width: 44 }}
                         >
-                          {data.length > 0 ? (
-                            <LinearGradient
-                              colors={
-                                isLatest
-                                  ? [colors.primary, colors.secondary]
-                                  : [colors.secondary, colors.accent]
-                              }
-                              start={{ x: 0, y: 0 }}
-                              end={{ x: 0, y: 1 }}
-                              style={{
-                                borderRadius: 999,
-                                height: 108 * heightPct,
-                                opacity: isLatest ? 1 : 0.5,
-                                width: "100%",
-                              }}
-                            />
-                          ) : (
+                          {/* Value Label */}
+                          <Text
+                            style={{
+                              fontSize: 9.5,
+                              fontWeight: "600",
+                              color: isLatest ? colors.primary : colors.mutedText,
+                              fontFamily: fonts.mono,
+                              marginBottom: 6,
+                            }}
+                          >
+                            {data.length > 0 ? `${data.length}d` : "0d"}
+                          </Text>
+
+                          {/* Bar Container with track background */}
+                          <View
+                            style={{
+                              height: 80,
+                              width: 14,
+                              backgroundColor: colors.surfaceSoft,
+                              borderRadius: 99,
+                              justifyContent: "flex-end",
+                              overflow: "hidden",
+                            }}
+                          >
                             <View
                               style={{
-                                backgroundColor: colors.border,
-                                borderRadius: 999,
-                                height: 4,
-                                margin: 4,
+                                height: barHeight,
+                                width: "100%",
+                                backgroundColor: colors.primary,
+                                opacity: isLatest ? 1 : 0.55,
+                                borderRadius: 99,
                               }}
                             />
-                          )}
-                        </View>
+                          </View>
 
-                        <Text
-                          className="text-[10px] font-bold mt-0.5"
-                          style={{ color: colors.mutedText }}
-                        >
-                          {data.month}
-                        </Text>
-                      </View>
-                    );
-                  })}
+                          {/* Month Label */}
+                          <Text
+                            style={{
+                              fontSize: 10,
+                              fontWeight: "600",
+                              color: isLatest ? colors.foreground : colors.mutedText,
+                              fontFamily: fonts.body,
+                              marginTop: 8,
+                            }}
+                          >
+                            {data.month}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
                 </View>
-              </LinearGradient>
+              )}
             </View>
           </View>
 
-          {/* Minimal Metric Tiles */}
-          <View className="mx-6 mt-2 flex-row gap-3">
-            {[
-              {
-                label: "Days Logged",
-                value: `${loggedDays} Days`,
-                icon: "calendar-outline",
-                color: colors.primary,
-                bg: softTints.pink,
-              },
-              {
-                label: "Period Length",
-                value: `${periodLength} Days`,
-                icon: "hourglass-outline",
-                color: colors.secondary,
-                bg: softTints.mint,
-              },
-              {
-                label: "Fertile Window",
-                value:
-                  typeof fertileWindow === "number"
-                    ? `${fertileWindow} Days`
-                    : fertileWindow,
-                icon: "heart-outline",
-                color: colors.accent,
-                bg: softTints.amber,
-              },
-            ].map((metric, i) => (
-              <View
-                key={i}
-                className="flex-1 items-center rounded-2xl border overflow-hidden shadow-sm relative min-h-[110px]"
-                style={{
-                  borderColor: colors.border,
-                }}
-              >
-                <LinearGradient
-                  colors={surfaceGradient}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  className="absolute inset-0"
-                />
-                <View className="items-center p-4 w-full">
-                  <View
-                    className="p-2.5 rounded-xl"
-                    style={{ backgroundColor: metric.bg }}
-                  >
-                    <Ionicons
-                      name={metric.icon as any}
-                      size={18}
-                      color={metric.color}
-                    />
-                  </View>
-                  <Text
-                    className="mt-3 text-sm font-extrabold tracking-tight"
-                    style={{ color: colors.foreground }}
-                  >
-                    {metric.value}
-                  </Text>
-                  <Text
-                    className="text-[10px] font-semibold mt-0.5 text-center"
-                    style={{ color: colors.mutedText }}
-                  >
-                    {metric.label}
-                  </Text>
-                </View>
-              </View>
-            ))}
-          </View>
-
-          {/* Features Layout Section */}
-          <View className="mt-8 px-6">
+          {/* YOUR CARE LIST */}
+          <View className="mx-6 mb-6">
             <Text
-              className="mb-4 text-base font-bold tracking-tight"
-              style={{ color: colors.foreground }}
+              className="mb-2.5"
+              style={{
+                fontSize: 14.5,
+                fontWeight: "800",
+                color: colors.foreground,
+                fontFamily: fonts.heading,
+              }}
             >
-              Your Core Features
+              Your care
             </Text>
 
-            {/* CATEGORY 1: High-Priority Daily Trackers (Wide Rows) */}
-            <View className="gap-3 mb-6">
+            <View style={{ gap: 9 }}>
               {[
                 {
                   title: "Period Tracker",
                   desc: "Log flow, mood, symptoms, and notes",
-                  icon: "water-outline",
+                  icon: "water",
                   route: "/(app)/(dashboard)/tracker",
-                  bg: softTints.pink,
-                  iconColor: colors.primary,
                 },
                 {
                   title: "Smart Predictions",
-                  desc: "Cycle forecasts, windows, and trend charts",
-                  icon: "analytics-outline",
+                  desc: "Cycle forecasts, windows, and trends",
+                  icon: "trending-up-outline",
                   route: "/(app)/predictions",
-                  bg: softTints.lavender,
-                  iconColor: colors.secondary,
                 },
                 {
-                  title: "Gynec Consultation",
-                  desc: "Private specialist booking and secure chat",
-                  icon: "chatbubble-ellipses-outline",
+                  title: "Gynecologist Consultation",
+                  desc: "Private specialist booking, secure chat",
+                  icon: "chatbubbles-outline",
                   route: "/(app)/consultation",
-                  bg: softTints.emerald,
-                  iconColor: colors.success,
                 },
-              ].map((f) => (
+              ].map((careItem, i) => (
                 <TouchableOpacity
-                  key={f.title}
-                  onPress={() => router.push(f.route as any)}
+                  key={i}
+                  onPress={() => router.push(careItem.route as any)}
                   activeOpacity={0.7}
-                  className="rounded-2xl border overflow-hidden shadow-sm"
+                  className="flex-row items-center border"
                   style={{
+                    backgroundColor: colors.surface,
                     borderColor: colors.border,
+                    borderRadius: 16,
+                    padding: 13,
                   }}
                 >
-                  <LinearGradient
-                    colors={surfaceGradient}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    className="flex-row items-center p-4"
+                  <View
+                    style={{
+                      width: 38,
+                      height: 38,
+                      borderRadius: 11,
+                      backgroundColor: colors.primaryLight,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      marginRight: 12,
+                    }}
                   >
-                    <View
-                      className="p-3 rounded-xl mr-4"
-                      style={{ backgroundColor: f.bg }}
+                    <Ionicons name={careItem.icon as any} size={17} color={colors.primary} />
+                  </View>
+                  <View className="flex-1">
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        fontWeight: "800",
+                        color: colors.foreground,
+                        fontFamily: fonts.body,
+                      }}
                     >
-                      <Ionicons
-                        name={f.icon as any}
-                        size={20}
-                        color={f.iconColor}
-                      />
-                    </View>
-                    <View className="flex-1">
-                      <Text
-                        className="text-sm font-bold"
-                        style={{ color: colors.foreground }}
-                      >
-                        {f.title}
-                      </Text>
-                      <Text
-                        className="text-xs mt-0.5"
-                        style={{ color: colors.mutedText }}
-                      >
-                        {f.desc}
-                      </Text>
-                    </View>
-                    <Feather
-                      name="chevron-right"
-                      size={16}
-                      color={colors.mutedText}
-                    />
-                  </LinearGradient>
+                      {careItem.title}
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        color: colors.mutedText,
+                        marginTop: 1,
+                        fontFamily: fonts.body,
+                      }}
+                    >
+                      {careItem.desc}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={14} color={colors.mutedText} />
                 </TouchableOpacity>
               ))}
             </View>
+          </View>
 
-            {/* CATEGORY 2: Discovery & Medical Support (Comfortable 2x2 Grid) */}
+          {/* ADDITIONAL ECOSYSTEM OPTIONS */}
+          <View className="mx-6 mb-6">
             <Text
-              className="mb-4 text-base font-bold tracking-tight"
-              style={{ color: colors.foreground }}
+              className="mb-2.5"
+              style={{
+                fontSize: 14.5,
+                fontWeight: "800",
+                color: colors.foreground,
+                fontFamily: fonts.heading,
+              }}
             >
-              Wellness & Support
+              Wellness & support
             </Text>
-            <View className="flex-row flex-wrap justify-between gap-3 mb-6">
+            {isDark && (
+              <Text
+                className="mb-3.5 -mt-2"
+                style={{
+                  fontSize: 11.5,
+                  color: colors.mutedText,
+                  fontFamily: fonts.body,
+                }}
+              >
+                Pick a topic to explore, at your own pace
+              </Text>
+            )}
+
+            <View className="flex-row flex-wrap justify-between" style={{ gap: 10 }}>
               {[
                 {
-                  title: "Health Issues",
+                  title: "Health Concerns",
                   desc: "Irregularities & symptom tracking",
                   icon: "alert-circle-outline",
                   route: "/(app)/health-issues",
-                  bg: softTints.amber,
-                  iconColor: colors.accent,
                 },
                 {
                   title: "Anonymous Q&A",
-                  desc: "Safe, anonymous health questions",
+                  desc: "Ask privately, expert-answered",
                   icon: "help-circle-outline",
                   route: "/(app)/qa",
-                  bg: softTints.blue,
-                  iconColor: colors.info,
                 },
                 {
                   title: "Hygiene & Care",
-                  desc: "Product hygiene and comfort tips",
+                  desc: "Product guidance & comfort tips",
                   icon: "leaf-outline",
                   route: "/(app)/hygiene",
-                  bg: softTints.emerald,
-                  iconColor: colors.secondary,
                 },
                 {
                   title: "Sexual Wellbeing",
-                  desc: "Consent, intimacy, and safety resources",
+                  desc: "Consent, intimacy & safety",
                   icon: "heart-outline",
                   route: "/(app)/sexual-wellbeing",
-                  bg: softTints.pink,
-                  iconColor: colors.primary,
                 },
-              ].map((f) => (
+              ].map((wellness, idx) => (
                 <TouchableOpacity
-                  key={f.title}
-                  onPress={() => router.push(f.route as any)}
+                  key={idx}
+                  onPress={() => router.push(wellness.route as any)}
                   activeOpacity={0.7}
-                  className="w-[48%] rounded-2xl border overflow-hidden min-h-[110px]"
+                  className="border"
                   style={{
+                    width: "48%",
+                    backgroundColor: colors.surface,
                     borderColor: colors.border,
+                    borderRadius: 16,
+                    padding: 12,
                   }}
                 >
-                  <LinearGradient
-                    colors={surfaceGradient}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    className="p-4 flex-1 justify-between"
+                  <View
+                    style={{
+                      alignSelf: "flex-start",
+                      padding: 8,
+                      borderRadius: 10,
+                      backgroundColor: colors.primaryLight,
+                      marginBottom: 10,
+                    }}
                   >
-                    <View
-                      className="self-start p-2 rounded-xl"
-                      style={{ backgroundColor: f.bg }}
-                    >
-                      <Ionicons
-                        name={f.icon as any}
-                        size={18}
-                        color={f.iconColor}
-                      />
-                    </View>
-                    <View className="mt-3">
-                      <Text
-                        className="text-xs font-bold"
-                        style={{ color: colors.foreground }}
-                      >
-                        {f.title}
-                      </Text>
-                      <Text
-                        className="text-[10px] mt-0.5"
-                        numberOfLines={1}
-                        style={{ color: colors.mutedText }}
-                      >
-                        {f.desc}
-                      </Text>
-                    </View>
-                  </LinearGradient>
+                    <Ionicons name={wellness.icon as any} size={16} color={colors.primary} />
+                  </View>
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      fontWeight: "800",
+                      color: colors.foreground,
+                      fontFamily: fonts.body,
+                    }}
+                  >
+                    {wellness.title}
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: 10,
+                      color: colors.mutedText,
+                      marginTop: 2,
+                      fontFamily: fonts.body,
+                    }}
+                    numberOfLines={1}
+                  >
+                    {wellness.desc}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>
+          </View>
 
-            {/* CATEGORY 3: Media & Ecosystem Options (Sleek Three-Column Footer Grid) */}
+          {/* MORE EXPERIENCES ROW GRID */}
+          <View className="mx-6">
             <Text
-              className="mb-4 text-base font-bold tracking-tight"
-              style={{ color: colors.foreground }}
+              className="mb-2.5"
+              style={{
+                fontSize: 14.5,
+                fontWeight: "800",
+                color: colors.foreground,
+                fontFamily: fonts.heading,
+              }}
             >
-              Explore More
+              Explore
             </Text>
-            <View className="flex-row flex-wrap gap-2.5">
+
+            <View className="flex-row flex-wrap" style={{ gap: 8 }}>
               {[
                 {
                   title: "Forest",
                   icon: "leaf-outline",
                   route: "/(app)/forest",
-                  color: colors.secondary,
+                  color: colors.success,
                 },
                 {
                   title: "Blogs",
@@ -701,22 +830,22 @@ export default function Home() {
                   color: colors.info,
                 },
                 {
-                  title: "Video Content",
+                  title: "Videos",
                   icon: "play-circle-outline",
                   route: "/(app)/reels",
-                  color: colors.accent,
+                  color: colors.primary,
                 },
                 {
                   title: "Partner sync",
                   icon: "git-merge-outline",
                   route: "/(app)/partner",
-                  color: colors.primary,
+                  color: colors.accent,
                 },
                 {
-                  title: "Build Habits",
+                  title: "Habits",
                   icon: "toggle-outline",
                   route: "/(app)/habits",
-                  color: colors.info,
+                  color: colors.success,
                 },
                 {
                   title: "Nominate Buddy",
@@ -724,31 +853,34 @@ export default function Home() {
                   route: "/(app)/buddy-nomination",
                   color: colors.accent,
                 },
-              ].map((f) => (
+              ].map((exp, idx) => (
                 <TouchableOpacity
-                  key={f.title}
-                  onPress={() => router.push(f.route as any)}
+                  key={idx}
+                  onPress={() => router.push(exp.route as any)}
                   activeOpacity={0.8}
-                  className="w-[31.2%] rounded-xl border overflow-hidden"
+                  className="border items-center justify-center"
                   style={{
+                    width: "31%",
+                    backgroundColor: colors.surface,
                     borderColor: colors.border,
+                    borderRadius: 14,
+                    paddingVertical: 12,
+                    paddingHorizontal: 8,
                   }}
                 >
-                  <LinearGradient
-                    colors={surfaceGradient}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 0, y: 1 }}
-                    className="items-center justify-center p-3"
+                  <Ionicons name={exp.icon as any} size={18} color={exp.color} />
+                  <Text
+                    style={{
+                      fontSize: 10,
+                      fontWeight: "700",
+                      color: colors.foreground,
+                      marginTop: 6,
+                      fontFamily: fonts.body,
+                    }}
+                    numberOfLines={1}
                   >
-                    <Ionicons name={f.icon as any} size={18} color={f.color} />
-                    <Text
-                      className="mt-1.5 text-center text-[10px] font-bold"
-                      numberOfLines={1}
-                      style={{ color: colors.foreground }}
-                    >
-                      {f.title}
-                    </Text>
-                  </LinearGradient>
+                    {exp.title}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>

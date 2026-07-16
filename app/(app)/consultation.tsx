@@ -20,6 +20,7 @@ import { useTheme } from "../../components/theme";
 import { getSoftTints } from "../../components/ui-tokens";
 import {
   consultationApi,
+  getWebSocketUrl,
   type Consultation,
   type ConsultationMessage,
   type Doctor,
@@ -38,7 +39,7 @@ function getDoctorDisplayName(doctor: Doctor) {
 }
 
 export default function ConsultationScreen() {
-  const { colors, isDark } = useTheme();
+  const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
   const chatScrollRef = useRef<ScrollView>(null);
   const insets = useSafeAreaInsets();
@@ -86,6 +87,72 @@ export default function ConsultationScreen() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // WebSocket live synchronization
+  useEffect(() => {
+    const consultation = activeConsultation;
+    if (!chatModalVisible || !consultation) return;
+
+    let socket: WebSocket | null = null;
+    let isDisconnected = false;
+
+    async function connectWS() {
+      try {
+        const wsUrl = await getWebSocketUrl();
+        socket = new WebSocket(wsUrl);
+
+        socket.onopen = () => {
+          if (isDisconnected) return;
+          console.log("WebSocket connected for consultation chat");
+          socket?.send(JSON.stringify({
+            type: "join",
+            room: `consultation_${consultation!._id}`,
+          }));
+        };
+
+        socket.onmessage = (event) => {
+          if (isDisconnected) return;
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === "message" && data.room === `consultation_${consultation!._id}`) {
+              if (data.messages && Array.isArray(data.messages)) {
+                setChatMessages(data.messages);
+                setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 100);
+              }
+            }
+          } catch (err) {
+            console.error("Error parsing WebSocket message:", err);
+          }
+        };
+
+        socket.onerror = (err) => {
+          console.warn("WebSocket error:", err);
+        };
+
+        socket.onclose = () => {
+          console.log("WebSocket closed");
+        };
+      } catch (err) {
+        console.warn("Failed to setup WebSocket:", err);
+      }
+    }
+
+    connectWS();
+
+    return () => {
+      isDisconnected = true;
+      if (socket) {
+        try {
+          socket.send(JSON.stringify({
+            type: "leave",
+            room: `consultation_${consultation!._id}`,
+          }));
+        } catch {}
+        socket.close();
+      }
+    };
+  }, [chatModalVisible, activeConsultation]);
+
 
   const getConsultationForDoctor = (doctorId: string) =>
     myConsultations.find((c) => {
@@ -178,7 +245,7 @@ export default function ConsultationScreen() {
           >
             <Feather name="arrow-left" size={18} color={colors.foreground} />
           </TouchableOpacity>
-          <Text className="flex-1 text-2xl font-black tracking-tight ml-2" style={{ color: colors.foreground }}>
+          <Text className="flex-1 text-2xl font-black tracking-tight ml-2" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
             Consultation
           </Text>
         </View>
@@ -203,7 +270,7 @@ export default function ConsultationScreen() {
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 className="ml-3 flex-1 py-4 text-sm"
-                style={{ color: colors.foreground }}
+                style={{ color: colors.foreground, fontFamily: fonts.body }}
               />
               {searchQuery.length > 0 && (
                 <TouchableOpacity onPress={() => setSearchQuery("")}>
@@ -215,7 +282,7 @@ export default function ConsultationScreen() {
             {/* Active consultations */}
             {myConsultations.filter((c) => c.status === "paid" || c.status === "active").length > 0 && (
               <View className="mt-6">
-                <Text className="text-xs font-black tracking-widest uppercase mb-3" style={{ color: colors.primary }}>
+                <Text className="text-xs font-black tracking-widest uppercase mb-3" style={{ color: colors.primary, fontFamily: fonts.heading }}>
                   Your Active Sessions
                 </Text>
                 {myConsultations
@@ -240,10 +307,10 @@ export default function ConsultationScreen() {
                             <Text className="text-lg">👩‍⚕️</Text>
                           </View>
                           <View className="flex-1">
-                            <Text className="text-sm font-bold" style={{ color: colors.foreground }}>
-                              {doc ? `${doc?.firstName ?? ""} ${doc?.lastName ?? ""}`.trim() || "Your Doctor" : "Your Doctor"}
+                            <Text className="text-sm font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
+                              {doc ? getDoctorDisplayName(doc) : "Your Doctor"}
                             </Text>
-                            <Text className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest mt-0.5">
+                            <Text className="text-[10px] font-bold uppercase tracking-widest mt-0.5" style={{ color: colors.success, fontFamily: fonts.body }}>
                               Session active - tap to chat
                             </Text>
                           </View>
@@ -257,7 +324,7 @@ export default function ConsultationScreen() {
 
             {/* Doctors list */}
             <View className="mt-6 gap-4">
-              <Text className="text-xs font-black tracking-widest uppercase" style={{ color: colors.primary }}>
+              <Text className="text-xs font-black tracking-widest uppercase" style={{ color: colors.primary, fontFamily: fonts.heading }}>
                 {loadingDoctors ? "Loading specialists…" : `${filteredDoctors.length} Available Specialists`}
               </Text>
 
@@ -274,26 +341,29 @@ export default function ConsultationScreen() {
                     >
                       <View className="flex-row items-start">
                         {/* Avatar */}
-                        <View className="h-14 w-14 items-center justify-center rounded-full bg-neutral-100 dark:bg-neutral-800 border border-neutral-200/50">
+                        <View
+                          className="h-14 w-14 items-center justify-center rounded-full border"
+                          style={{ backgroundColor: colors.surfaceSoft, borderColor: colors.border }}
+                        >
                           <Text className="text-2xl">{AVATAR_EMOJIS[i % AVATAR_EMOJIS.length]}</Text>
                         </View>
 
                         <View className="ml-4 flex-1">
-                          <Text className="text-base font-extrabold tracking-tight" style={{ color: colors.foreground }}>
+                          <Text className="text-base font-extrabold tracking-tight" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
                             {getDoctorDisplayName(doctor)}
                           </Text>
-                          <Text className="text-xs font-semibold mt-0.5" style={{ color: colors.mutedText }}>
+                          <Text className="text-xs font-semibold mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                             {doctor.specialty}
                           </Text>
                           <View className="mt-2.5 flex-row items-center gap-2">
-                            <View className="flex-row items-center gap-1 bg-amber-100 dark:bg-amber-950/40 px-2 py-0.5 rounded-md" style={{backgroundColor: isDark ? "#525151ff" : "#e7dde6ff"}}>
-                              <Ionicons name="star" size={11} color={colors.warning} />
-                              <Text className="text-[10px] font-black" style={{ color: colors.foreground }}>
+                            <View className="flex-row items-center gap-1 px-2 py-0.5 rounded-md" style={{ backgroundColor: colors.surfaceSoft }}>
+                              <Ionicons name="star" size={11} color={colors.foreground} />
+                              <Text className="text-[10px] font-black" style={{ color: colors.foreground, fontFamily: fonts.mono }}>
                                 {doctor.rating}
                               </Text>
                             </View>
                             {doctor.isAvailable && (
-                              <Text className="text-[11px] font-semibold text-emerald-500">
+                              <Text className="text-[11px] font-semibold" style={{ color: colors.success, fontFamily: fonts.body }}>
                                 Available now
                               </Text>
                             )}
@@ -301,10 +371,10 @@ export default function ConsultationScreen() {
                         </View>
 
                         <View className="items-end">
-                          <Text className="text-base font-black" style={{ color: colors.primary }}>
+                          <Text className="text-base font-black" style={{ color: colors.primary, fontFamily: fonts.mono }}>
                             ${doctor.pricePerSession}
                           </Text>
-                          <Text className="text-[9px] font-bold tracking-wide uppercase mt-0.5" style={{ color: colors.mutedText }}>
+                          <Text className="text-[9px] font-bold tracking-wide uppercase mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                             / session
                           </Text>
                         </View>
@@ -316,7 +386,7 @@ export default function ConsultationScreen() {
                         onPress={() => handleInitiateBooking(doctor)}
                         style={{ backgroundColor: hasSession ? colors.success : colors.primary }}
                       >
-                        <Text className="text-sm font-bold tracking-wide" style={{ color: colors.buttonText }}>
+                        <Text className="text-sm font-bold tracking-wide" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
                           {hasSession ? "Open Consultation Chat" : "Book Consultation Session"}
                         </Text>
                       </TouchableOpacity>
@@ -329,7 +399,7 @@ export default function ConsultationScreen() {
             {/* Privacy footer */}
             <View className="flex-row items-center justify-center gap-2 mt-8 opacity-70">
               <MaterialCommunityIcons name="shield-check-outline" size={14} color={colors.mutedText} />
-              <Text className="text-[11px] font-semibold tracking-wide text-center" style={{ color: colors.mutedText }}>
+              <Text className="text-[11px] font-semibold tracking-wide text-center" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                 Private consultation chat for sensitive health questions.
               </Text>
             </View>
@@ -346,18 +416,19 @@ export default function ConsultationScreen() {
           <View className="flex-1 px-6 pt-6 justify-between pb-10" style={{ backgroundColor: colors.background }}>
             <View>
               <View className="flex-row justify-between items-center mb-8">
-                <Text className="text-xl font-black" style={{ color: colors.foreground }}>
-                  Secure Checkout
+                <Text className="text-xl font-black" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
+                  Confirm Booking
                 </Text>
                 <TouchableOpacity
                   onPress={() => setPaymentModalVisible(false)}
-                  className="p-1.5 bg-neutral-100 dark:bg-neutral-200 rounded-full"
+                  className="p-1.5 rounded-full"
+                  style={{ backgroundColor: colors.surfaceSoft }}
                 >
-                  <Feather name="x" size={16} color={colors.background} />
+                  <Feather name="x" size={16} color={colors.mutedText} />
                 </TouchableOpacity>
               </View>
 
-              <Text className="text-xs font-bold tracking-widest uppercase mb-3" style={{ color: colors.primary }}>
+              <Text className="text-xs font-bold tracking-widest uppercase mb-3" style={{ color: colors.primary, fontFamily: fonts.heading }}>
                 Consultation Summary
               </Text>
               {selectedDoctor && (
@@ -366,14 +437,14 @@ export default function ConsultationScreen() {
                   style={{ backgroundColor: colors.surface, borderColor: colors.border }}
                 >
                   <View>
-                    <Text className="text-base font-extrabold" style={{ color: colors.foreground }}>
+                    <Text className="text-base font-extrabold" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
                       {getDoctorDisplayName(selectedDoctor)}
                     </Text>
-                    <Text className="text-xs font-semibold mt-0.5" style={{ color: colors.mutedText }}>
+                    <Text className="text-xs font-semibold mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                       {selectedDoctor.specialty}
                     </Text>
                   </View>
-                  <Text className="text-lg font-black" style={{ color: colors.foreground }}>
+                  <Text className="text-lg font-black" style={{ color: colors.foreground, fontFamily: fonts.mono }}>
                     ${selectedDoctor.pricePerSession}
                   </Text>
                 </View>
@@ -381,9 +452,9 @@ export default function ConsultationScreen() {
 
               <View className="p-4 rounded-xl flex-row items-start gap-3" style={{ backgroundColor: softTints.emerald }}>
                 <MaterialCommunityIcons name="lock-check-outline" size={18} color={colors.success} />
-                <Text className="text-xs leading-4 flex-1 font-medium" style={{ color: colors.mutedText }}>
-                  Booking opens a private chat with your specialist. Payment is
-                  handled before the session starts.
+                <Text className="text-xs leading-4 flex-1 font-medium" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                  Confirming instantly unlocks a private chat with your
+                  specialist — no card details are collected right now.
                 </Text>
               </View>
             </View>
@@ -398,8 +469,8 @@ export default function ConsultationScreen() {
               {booking ? (
                 <ActivityIndicator color={colors.buttonText} />
               ) : (
-                <Text className="text-sm font-extrabold tracking-wide" style={{ color: colors.buttonText }}>
-                  Pay & Start Consultation
+                <Text className="text-sm font-extrabold tracking-wide" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
+                  Confirm & Start Consultation
                 </Text>
               )}
             </TouchableOpacity>
@@ -428,10 +499,10 @@ export default function ConsultationScreen() {
                   <Feather name="chevron-down" size={20} color={colors.foreground} />
                 </TouchableOpacity>
                 <View>
-                  <Text className="text-sm font-black" style={{ color: colors.foreground }}>
+                  <Text className="text-sm font-black" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
                     Clinical Specialist
                   </Text>
-                  <Text className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest mt-0.5">
+                  <Text className="text-[10px] font-bold uppercase tracking-widest mt-0.5" style={{ color: colors.success, fontFamily: fonts.body }}>
                     Secure session active
                   </Text>
                 </View>
@@ -465,7 +536,7 @@ export default function ConsultationScreen() {
                       >
                         <Text
                           className="text-xs font-medium leading-5"
-                          style={{ color: isDoctor ? colors.foreground : colors.buttonText }}
+                          style={{ color: isDoctor ? colors.foreground : colors.buttonText, fontFamily: fonts.body }}
                         >
                           {msg.text}
                         </Text>
@@ -491,7 +562,7 @@ export default function ConsultationScreen() {
                 value={typedMessage}
                 onChangeText={setTypedMessage}
                 className="flex-1 px-4 py-3 rounded-xl text-sm"
-                style={{ backgroundColor: colors.input, color: colors.foreground }}
+                style={{ backgroundColor: colors.input, color: colors.foreground, fontFamily: fonts.body }}
                 onSubmitEditing={handleSendMessage}
                 blurOnSubmit={false}
                 returnKeyType="send"

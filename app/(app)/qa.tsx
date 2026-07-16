@@ -39,7 +39,7 @@ const defaultCompanionDisclaimer =
   "General guidance only. For severe, unusual, or urgent symptoms, contact a trusted clinician.";
 
 export default function QA() {
-  const { colors, isDark } = useTheme();
+  const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
   const { earnTokens } = useAppState();
   const scrollViewRef = useRef<ScrollView>(null);
@@ -256,17 +256,20 @@ export default function QA() {
               >
                 <Text className="text-xl">✨</Text>
               </View>
-              <View className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white dark:border-neutral-900" />
+              <View
+                className="absolute bottom-0 right-0 w-3 h-3 rounded-full"
+                style={{ backgroundColor: colors.success, borderWidth: 2, borderColor: colors.surface }}
+              />
             </View>
 
             <View>
               <Text
                 className="text-sm font-black tracking-tight"
-                style={{ color: colors.foreground }}
+                style={{ color: colors.foreground, fontFamily: fonts.heading }}
               >
                 Nura Companion
               </Text>
-              <Text className="text-[10px] font-bold text-emerald-500 tracking-wider uppercase mt-0.5">
+              <Text className="text-[10px] font-bold tracking-wider uppercase mt-0.5" style={{ color: colors.success, fontFamily: fonts.body }}>
                 Private guidance online
               </Text>
             </View>
@@ -301,8 +304,8 @@ export default function QA() {
                     <View
                       className="max-w-[85%] p-4 rounded-2xl self-start rounded-tl-none border"
                       style={{
-                        backgroundColor: isUrgent ? "#fff1f2" : colors.surface,
-                        borderColor: isUrgent ? "#ef4444" : colors.border,
+                        backgroundColor: isUrgent ? colors.dangerLight : colors.surface,
+                        borderColor: isUrgent ? colors.danger : colors.border,
                       }}
                     >
                       {isUrgent && (
@@ -310,11 +313,11 @@ export default function QA() {
                           <Feather
                             name="alert-triangle"
                             size={13}
-                            color="#dc2626"
+                            color={colors.danger}
                           />
                           <Text
                             className="text-[10px] font-black uppercase"
-                            style={{ color: "#dc2626" }}
+                            style={{ color: colors.danger, fontFamily: fonts.heading }}
                           >
                             Urgent care guidance
                           </Text>
@@ -323,7 +326,8 @@ export default function QA() {
                       <Text
                         className="text-xs font-medium leading-5"
                         style={{
-                          color: isUrgent ? "#7f1d1d" : colors.foreground,
+                          color: colors.foreground,
+                          fontFamily: fonts.body,
                         }}
                       >
                         {message.text}
@@ -332,7 +336,8 @@ export default function QA() {
                         <Text
                           className="text-[10px] font-semibold leading-4 mt-3"
                           style={{
-                            color: isUrgent ? "#991b1b" : colors.mutedText,
+                            color: colors.mutedText,
+                            fontFamily: fonts.body,
                           }}
                         >
                           {message.disclaimer}
@@ -356,7 +361,7 @@ export default function QA() {
                               >
                                 <Text
                                   className="text-[10px] font-bold"
-                                  style={{ color: colors.foreground }}
+                                  style={{ color: colors.foreground, fontFamily: fonts.body }}
                                 >
                                   {question}
                                 </Text>
@@ -367,7 +372,8 @@ export default function QA() {
                       <Text
                         className="text-[8px] font-bold text-right mt-1.5 opacity-60"
                         style={{
-                          color: isUrgent ? "#991b1b" : colors.mutedText,
+                          color: colors.mutedText,
+                          fontFamily: fonts.body,
                         }}
                       >
                         {message.time}
@@ -383,13 +389,13 @@ export default function QA() {
                       >
                         <Text
                           className="text-xs font-medium leading-5"
-                          style={{ color: colors.buttonText }}
+                          style={{ color: colors.buttonText, fontFamily: fonts.body }}
                         >
                           {message.text}
                         </Text>
                         <Text
                           className="text-[8px] font-bold text-right mt-1.5 opacity-60"
-                          style={{ color: colors.buttonText }}
+                          style={{ color: colors.buttonText, fontFamily: fonts.body }}
                         >
                           {message.time}
                         </Text>
@@ -411,7 +417,7 @@ export default function QA() {
               >
                 <Text
                   className="text-xs font-bold tracking-widest animate-pulse"
-                  style={{ color: colors.primary }}
+                  style={{ color: colors.primary, fontFamily: fonts.body }}
                 >
                   Checking trusted guidance...
                 </Text>
@@ -442,6 +448,7 @@ export default function QA() {
             style={{
               color: colors.foreground,
               backgroundColor: colors.input,
+              fontFamily: fonts.body,
             }}
           />
           <TouchableOpacity

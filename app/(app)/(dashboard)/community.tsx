@@ -17,12 +17,16 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppState } from "../../../components/AppState";
+import { useAuth } from "../../../components/auth-context";
 import OptionsModal from "../../../components/OptionsModal";
 import { useTheme } from "../../../components/theme";
 import { getSoftTints } from "../../../components/ui-tokens";
 import {
   blogsApi,
+  buddyApi,
   communityApi,
+  getWebSocketUrl,
+  type BuddyMatch,
   type CommunityPost,
   type ContentFeedItem,
 } from "../../../lib/api";
@@ -73,8 +77,8 @@ function mapCommunityPost(post: CommunityPost): Post {
     author: isOwner ? "You" : post.isAnonymous ? "Anonymous member" : "Community member",
     avatar: isOwner ? "✨" : "NU",
     content: post.content,
-    likes: post.likes,
-    commentsCount: post.commentsCount ?? post.comments?.length ?? 0,
+    likes: post.likeCount ?? post.likes,
+    commentsCount: post.commentCount ?? post.commentsCount ?? post.comments?.length ?? 0,
     time: formatRelativeTime(post.createdAt),
     isOwner,
     comments:
@@ -125,10 +129,161 @@ function formatRelativeTime(value?: string) {
 }
 
 export default function Community() {
-  const { colors, isDark } = useTheme();
+  const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
   const softTints = getSoftTints(colors);
   const insets = useSafeAreaInsets();
+  const { token, user } = useAuth();
+  const [unreadCommentPostIds, setUnreadCommentPostIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!token || !user?._id) return;
+
+    const userId = user._id;
+    let socket: WebSocket | null = null;
+    let isDisconnected = false;
+    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    function connectWS() {
+      if (isDisconnected) return;
+
+      getWebSocketUrl()
+        .then((wsUrl) => {
+          if (isDisconnected) return;
+
+          socket = new WebSocket(wsUrl);
+
+          socket.onopen = () => {
+            if (isDisconnected) return;
+            console.log("WebSocket connected in community screen");
+
+            // Join community room for real-time posts and comments updates
+            socket?.send(
+              JSON.stringify({
+                type: "join",
+                room: "community",
+              })
+            );
+          };
+
+          socket.onmessage = (event) => {
+            if (isDisconnected) return;
+            try {
+              const data = JSON.parse(event.data);
+              if (data.type === "community_notification") {
+                if (data.notificationType === "post") {
+                  if (data.senderId !== userId) {
+                    setPosts((current) => {
+                      const alreadyExists = current.some((p) => p.id === (data.post.id ?? data.post._id));
+                      if (alreadyExists) return current;
+                      return [mapCommunityPost(data.post), ...current];
+                    });
+                  }
+                } else if (data.notificationType === "comment") {
+                  const { postId, comment, senderId } = data;
+                  if (!postId || !comment) return;
+
+                  // Ignore comment notifications sent by ourselves since they are handled locally and synced via HTTP
+                  if (senderId === userId) return;
+
+                  const isCommentOwner = senderId === userId;
+                  const syncedComment: Comment = {
+                    id: comment.id ?? comment._id ?? `c_${Date.now()}`,
+                    author: isCommentOwner
+                      ? "You"
+                      : comment.isAnonymous
+                        ? "Anonymous member"
+                        : "Community member",
+                    avatar: isCommentOwner ? "U" : "AU",
+                    content: comment.content,
+                    time: formatRelativeTime(comment.createdAt),
+                    isOwner: isCommentOwner,
+                  };
+
+                  setPosts((current) =>
+                    current.map((item) => {
+                      if (item.id === postId) {
+                        const commentExists = item.comments.some((c) => c.id === syncedComment.id);
+                        if (commentExists) return item;
+
+                        return {
+                          ...item,
+                          commentsCount: item.commentsCount + 1,
+                          comments: [...item.comments, syncedComment],
+                        };
+                      }
+                      return item;
+                    })
+                  );
+
+                  setActivePost((prevActive) => {
+                    if (prevActive && prevActive.id === postId) {
+                      const commentExists = prevActive.comments.some((c) => c.id === syncedComment.id);
+                      if (commentExists) return prevActive;
+
+                      return {
+                        ...prevActive,
+                        commentsCount: prevActive.commentsCount + 1,
+                        comments: [...prevActive.comments, syncedComment],
+                      };
+                    }
+                    return prevActive;
+                  });
+
+                  if (senderId !== userId) {
+                    setActivePost((currentActive) => {
+                      const isSheetOpenForThisPost = currentActive && currentActive.id === postId;
+                      if (!isSheetOpenForThisPost) {
+                        setUnreadCommentPostIds((prev) => {
+                          const next = new Set(prev);
+                          next.add(postId);
+                          return next;
+                        });
+                      }
+                      return currentActive;
+                    });
+                  }
+                }
+              }
+            } catch (err) {
+              console.error("Error parsing WS message in community:", err);
+            }
+          };
+
+          socket.onerror = (err) => {
+            console.warn("Community screen WebSocket error:", err);
+          };
+
+          socket.onclose = () => {
+            if (isDisconnected) return;
+            console.log("Community screen WebSocket closed, retrying in 3s...");
+            reconnectTimeout = setTimeout(connectWS, 3000);
+          };
+        })
+        .catch((err) => {
+          console.warn("Failed to get WebSocket URL in community screen, retrying in 5s...", err);
+          reconnectTimeout = setTimeout(connectWS, 5000);
+        });
+    }
+
+    connectWS();
+
+    return () => {
+      isDisconnected = true;
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (socket) {
+        try {
+          socket.send(
+            JSON.stringify({
+              type: "leave",
+              room: "community",
+            })
+          );
+        } catch { }
+        socket.close();
+      }
+    };
+  }, [token, user?._id]);
 
   // UI States
   const [activeTab, setActiveTab] = useState<"posts" | "buddy" | "blogs">(
@@ -136,6 +291,8 @@ export default function Community() {
   );
   const [posts, setPosts] = useState<Post[]>([]);
   const [likedPostIds, setLikedPostIds] = useState<Set<string>>(new Set());
+  const [activeBuddy, setActiveBuddy] = useState<BuddyMatch | null>(null);
+  const [isLoadingBuddy, setIsLoadingBuddy] = useState(false);
   // isOwner is now tracked on each Post/Comment object from the API — no extra Set needed
   const [blogsData, setBlogsData] = useState<Blog[]>([]);
   const [reelsData, setReelsData] = useState<Reel[]>([]);
@@ -212,10 +369,23 @@ export default function Community() {
     }
   }, []);
 
+  const loadActiveBuddy = useCallback(async () => {
+    setIsLoadingBuddy(true);
+    try {
+      const buddy = await buddyApi.getActive();
+      setActiveBuddy(buddy);
+    } catch {
+      setActiveBuddy(null);
+    } finally {
+      setIsLoadingBuddy(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadPosts();
     loadEducationFeed();
-  }, [loadEducationFeed, loadPosts]);
+    loadActiveBuddy();
+  }, [loadEducationFeed, loadPosts, loadActiveBuddy]);
 
   // --- ACTIONS HANDLERS ---
   function openOptions(post: Post) {
@@ -231,6 +401,11 @@ export default function Community() {
   function openCommentsSheet(post: Post) {
     setActivePost(post);
     setCommentsModalVisible(true);
+    setUnreadCommentPostIds((prev) => {
+      const next = new Set(prev);
+      next.delete(post.id);
+      return next;
+    });
   }
 
   function closeCommentsSheet() {
@@ -387,6 +562,15 @@ export default function Community() {
             : item,
         ),
       );
+      setActivePost((prev) =>
+        prev && prev.id === activePost.id
+          ? {
+            ...prev,
+            commentsCount: result.commentsCount,
+            comments: [...prev.comments.slice(0, -1), syncedComment],
+          }
+          : prev
+      );
     } catch {
       // Keep local comment as an offline draft.
     }
@@ -437,6 +621,14 @@ export default function Community() {
   }
 
   async function handleDeleteComment(postId: string, commentId: string) {
+    if (Platform.OS === "web") {
+      const confirmed = window.confirm("Remove this comment permanently?");
+      if (!confirmed) return;
+
+      await communityApi.deleteComment(postId, commentId);
+      return;
+    }
+
     Alert.alert(
       "Delete Comment",
       "Remove this comment permanently?",
@@ -471,6 +663,16 @@ export default function Community() {
               await communityApi.deleteComment(postId, commentId);
             } catch {
               Alert.alert("Error", "Could not delete comment. Please try again.");
+              try {
+                const postsResponse = await communityApi.getPosts({ limit: 20 });
+                const mapped = postsResponse.posts.map(mapCommunityPost);
+                setPosts(mapped);
+                setActivePost((prev) =>
+                  prev ? mapped.find((p) => p.id === prev.id) ?? prev : prev,
+                );
+              } catch {
+                // Best-effort resync; local state stays as-is until next reload.
+              }
             }
           },
         },
@@ -498,15 +700,15 @@ export default function Community() {
             <View className="px-6 pt-6">
               <Text
                 className="text-3xl font-extrabold tracking-tight"
-                style={{ color: colors.foreground }}
+                style={{ color: colors.foreground, fontFamily: fonts.heading }}
               >
                 Community
               </Text>
               <Text
                 className="text-xs font-semibold mt-1"
-                style={{ color: colors.mutedText }}
+                style={{ color: colors.mutedText, fontFamily: fonts.body }}
               >
-                Share experiences, ask questions, and find care resources safely
+                Share experiences, ask questions, and find care resources safely.
               </Text>
             </View>
 
@@ -532,7 +734,7 @@ export default function Community() {
                     style={{
                       backgroundColor: isSelected
                         ? colors.primary
-                        : colors.surface,
+                        : colors.background,
                       borderColor: isSelected ? colors.primary : colors.border,
                     }}
                   >
@@ -542,6 +744,7 @@ export default function Community() {
                         color: isSelected
                           ? colors.buttonText
                           : colors.foreground,
+                        fontFamily: fonts.body,
                       }}
                     >
                       {tab.label}
@@ -565,7 +768,7 @@ export default function Community() {
                     <ActivityIndicator color={colors.primary} />
                     <Text
                       className="mt-3 text-xs font-bold"
-                      style={{ color: colors.mutedText }}
+                      style={{ color: colors.mutedText, fontFamily: fonts.body }}
                     >
                       Loading anonymous posts...
                     </Text>
@@ -586,13 +789,13 @@ export default function Community() {
                     />
                     <Text
                       className="mt-4 text-sm font-extrabold text-center"
-                      style={{ color: colors.foreground }}
+                      style={{ color: colors.foreground, fontFamily: fonts.heading }}
                     >
                       Could not load posts
                     </Text>
                     <Text
                       className="mt-1 text-xs text-center leading-4"
-                      style={{ color: colors.mutedText }}
+                      style={{ color: colors.mutedText, fontFamily: fonts.body }}
                     >
                       Check your connection and try again.
                     </Text>
@@ -604,7 +807,7 @@ export default function Community() {
                     >
                       <Text
                         className="text-xs font-bold"
-                        style={{ color: colors.buttonText }}
+                        style={{ color: colors.buttonText, fontFamily: fonts.body }}
                       >
                         Retry
                       </Text>
@@ -624,30 +827,29 @@ export default function Community() {
                         className="rounded-3xl border p-5 shadow-2xs relative"
                         style={{
                           backgroundColor: colors.surface,
-                          borderColor: isReported ? "#ef4444" : colors.border,
+                          borderColor: isReported ? colors.danger : colors.border,
                         }}
                       >
                         <View className="flex-row items-center justify-between">
                           <View className="flex-row items-center gap-3">
                             <View
-                              className="w-11 h-11 rounded-full items-center justify-center border"
+                              className="w-9 h-9 rounded-full items-center justify-center"
                               style={{
                                 backgroundColor: colors.surfaceSoft,
-                                borderColor: colors.border,
                               }}
                             >
-                              <Text className="text-xl">{post.avatar}</Text>
+                              <Text className="text-base">{post.avatar}</Text>
                             </View>
                             <View>
                               <Text
                                 className="text-sm font-bold"
-                                style={{ color: colors.foreground }}
+                                style={{ color: colors.foreground, fontFamily: fonts.body }}
                               >
                                 {post.author}
                               </Text>
                               <Text
                                 className="text-[11px] font-semibold mt-0.5"
-                                style={{ color: colors.mutedText }}
+                                style={{ color: colors.mutedText, fontFamily: fonts.body }}
                               >
                                 {post.time}
                               </Text>
@@ -667,7 +869,7 @@ export default function Community() {
 
                         <Text
                           className="mt-4 text-sm font-medium leading-5"
-                          style={{ color: colors.foreground }}
+                          style={{ color: colors.foreground, fontFamily: fonts.body }}
                         >
                           {post.content}
                         </Text>
@@ -684,11 +886,11 @@ export default function Community() {
                             <Ionicons
                               name={isLiked ? "heart" : "heart-outline"}
                               size={20}
-                              color={isLiked ? "#e11d48" : colors.mutedText}
+                              color={isLiked ? colors.primary : colors.mutedText}
                             />
                             <Text
                               className="text-xs font-bold"
-                              style={{ color: colors.mutedText }}
+                              style={{ color: colors.mutedText, fontFamily: fonts.mono }}
                             >
                               {post.likes}
                             </Text>
@@ -696,17 +898,32 @@ export default function Community() {
 
                           {/* Open Threads-Style sliding comments sub-module */}
                           <TouchableOpacity
-                            className="flex-row items-center gap-2 py-1"
+                            className="flex-row items-center gap-2 py-1 relative"
                             onPress={() => openCommentsSheet(post)}
                           >
-                            <Ionicons
-                              name="chatbubble-outline"
-                              size={18}
-                              color={colors.mutedText}
-                            />
+                            <View className="relative">
+                              <Ionicons
+                                name="chatbubble-outline"
+                                size={18}
+                                color={colors.mutedText}
+                              />
+                              {unreadCommentPostIds.has(post.id) && (
+                                <View
+                                  style={{
+                                    position: "absolute",
+                                    top: -2,
+                                    right: -2,
+                                    width: 6,
+                                    height: 6,
+                                    borderRadius: 3,
+                                    backgroundColor: colors.danger,
+                                  }}
+                                />
+                              )}
+                            </View>
                             <Text
                               className="text-xs font-bold"
-                              style={{ color: colors.mutedText }}
+                              style={{ color: colors.mutedText, fontFamily: fonts.mono }}
                             >
                               {post.commentsCount}
                             </Text>
@@ -734,7 +951,7 @@ export default function Community() {
                               >
                                 <Text
                                   className="text-[10px] font-bold"
-                                  style={{ color: colors.primary }}
+                                  style={{ color: colors.primary, fontFamily: fonts.body }}
                                 >
                                   Saved
                                 </Text>
@@ -747,7 +964,7 @@ export default function Community() {
                               >
                                 <Text
                                   className="text-[10px] font-bold"
-                                  style={{ color: "#ef4444" }}
+                                  style={{ color: colors.danger, fontFamily: fonts.body }}
                                 >
                                   Reported
                                 </Text>
@@ -781,13 +998,13 @@ export default function Community() {
                     </View>
                     <Text
                       className="mt-4 text-sm font-extrabold text-center"
-                      style={{ color: colors.foreground }}
+                      style={{ color: colors.foreground, fontFamily: fonts.heading }}
                     >
                       No anonymous posts yet
                     </Text>
                     <Text
                       className="mt-1 text-xs text-center leading-4"
-                      style={{ color: colors.mutedText }}
+                      style={{ color: colors.mutedText, fontFamily: fonts.body }}
                     >
                       Start the first thread when you are ready to share.
                     </Text>
@@ -799,52 +1016,218 @@ export default function Community() {
             {/* BUDDY MATCHING SYSTEM */}
             {activeTab === "buddy" && (
               <View className="mt-6 px-6">
-                <View
-                  className="rounded-3xl border p-6 items-center shadow-xs"
-                  style={{
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  }}
-                >
+                {isLoadingBuddy ? (
                   <View
-                    className="p-4 rounded-2xl mb-4"
-                    style={{ backgroundColor: softTints.pink }}
+                    className="rounded-3xl border p-6 items-center"
+                    style={{
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    }}
                   >
-                    <MaterialCommunityIcons
-                      name="star-face"
-                      size={36}
-                      color={colors.primary}
-                    />
+                    <ActivityIndicator color={colors.primary} />
                   </View>
-                  <Text
-                    className="text-lg font-extrabold"
-                    style={{ color: colors.foreground }}
+                ) : activeBuddy ? (
+                  <View
+                    className="rounded-3xl border p-5 shadow-xs relative overflow-hidden"
+                    style={{
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    }}
                   >
-                    Nominate Period Buddy
-                  </Text>
-                  <Text
-                    className="mt-2 text-xs text-center px-4 leading-4"
-                    style={{ color: colors.mutedText }}
-                  >
-                    Find a private buddy with a similar cycle phase and care
-                    routine.
-                  </Text>
-                  <TouchableOpacity
-                    activeOpacity={0.85}
-                    className="mt-6 w-full rounded-xl py-3.5 items-center justify-center"
-                    onPress={() =>
-                      router.push("/(app)/buddy-nomination" as any)
-                    }
-                    style={{ backgroundColor: colors.primary }}
-                  >
-                    <Text
-                      className="text-sm font-bold"
-                      style={{ color: colors.buttonText }}
+                    <View
+                      className="absolute -right-6 -top-6 w-20 h-20 rounded-full opacity-35"
+                      style={{ backgroundColor: softTints.pink }}
+                    />
+
+                    {/* Header with active status badge */}
+                    <View className="flex-row items-center justify-between mb-4">
+                      <View className="flex-row items-center gap-2">
+                        <MaterialCommunityIcons
+                          name="moon-waning-crescent"
+                          size={16}
+                          color={colors.primary}
+                        />
+                        <Text
+                          className="text-xs font-black tracking-widest uppercase"
+                          style={{ color: colors.foreground, fontFamily: fonts.heading }}
+                        >
+                          Nominated Buddy
+                        </Text>
+                      </View>
+                      <View
+                        className="px-2.5 py-1 rounded-full flex-row items-center gap-1.5"
+                        style={{
+                          backgroundColor: isDark ? "rgba(16, 185, 129, 0.15)" : "rgba(16, 185, 129, 0.1)",
+                          borderColor: "rgba(16, 185, 129, 0.2)",
+                          borderWidth: 1,
+                        }}
+                      >
+                        <View className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        <Text
+                          className="text-[9px] font-black uppercase tracking-wider"
+                          style={{ color: "#10b981", fontFamily: fonts.body }}
+                        >
+                          Connected
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Buddy Details */}
+                    <View className="flex-row items-center gap-4 mb-4">
+                      <View
+                        className="h-14 w-14 items-center justify-center rounded-full border"
+                        style={{
+                          backgroundColor: colors.surfaceSoft,
+                          borderColor: colors.border,
+                        }}
+                      >
+                        <Text className="text-2xl">
+                          {activeBuddy.avatarSeed || "✨"}
+                        </Text>
+                      </View>
+                      <View className="flex-1">
+                        <Text
+                          className="text-base font-extrabold"
+                          style={{ color: colors.foreground, fontFamily: fonts.heading }}
+                        >
+                          {activeBuddy.alias}
+                        </Text>
+                        <View className="flex-row items-center gap-1.5 mt-0.5">
+                          <View className="w-1.5 h-1.5 rounded-full bg-pink-500" />
+                          <Text
+                            className="text-xs font-bold"
+                            style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                          >
+                            {activeBuddy.cyclePhase}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {/* Compatibility Overlap */}
+                      <View className="items-center">
+                        <View
+                          className="h-11 w-11 items-center justify-center rounded-full"
+                          style={{ backgroundColor: softTints.emerald }}
+                        >
+                          <Text className="text-xs font-black text-emerald-500" style={{ fontFamily: fonts.mono }}>
+                            {activeBuddy.compatibility}%
+                          </Text>
+                        </View>
+                        <Text className="mt-1 text-[9px] font-bold uppercase tracking-wider text-neutral-400" style={{ fontFamily: fonts.body }}>
+                          Overlap
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Similarities Chips */}
+                    {activeBuddy.similarities && activeBuddy.similarities.length > 0 && (
+                      <View className="flex-row flex-wrap gap-1.5 mb-5">
+                        {activeBuddy.similarities.map((chip, cIdx) => (
+                          <View
+                            key={cIdx}
+                            className="px-2.5 py-1 rounded-md"
+                            style={{
+                              backgroundColor: colors.surfaceSoft,
+                              borderWidth: 1,
+                              borderColor: colors.border,
+                            }}
+                          >
+                            <Text
+                              className="text-[9px] font-bold"
+                              style={{ color: colors.foreground, fontFamily: fonts.body }}
+                            >
+                              #{chip}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+
+                    {/* Chat Action Button */}
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      className="w-full rounded-xl py-3.5 flex-row items-center justify-center gap-2 border shadow-3xs"
+                      onPress={() =>
+                        router.push("/(app)/buddy-nomination" as any)
+                      }
+                      style={{
+                        backgroundColor: colors.primary,
+                        borderColor: colors.primary,
+                      }}
                     >
-                      Nominate Now
+                      <Ionicons name="chatbubble-ellipses" size={16} color={colors.buttonText} />
+                      <Text
+                        className="text-sm font-bold"
+                        style={{ color: colors.buttonText, fontFamily: fonts.body }}
+                      >
+                        Chat with Buddy
+                      </Text>
+                    </TouchableOpacity>
+
+                    {/* Find another buddy secondary option */}
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      className="mt-3 w-full py-2 items-center justify-center"
+                      onPress={() =>
+                        router.push("/(app)/buddy-nomination" as any)
+                      }
+                    >
+                      <Text
+                        className="text-xs font-bold"
+                        style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                      >
+                        Manage Buddy Connection
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <View
+                    className="rounded-3xl border p-6 items-center shadow-xs"
+                    style={{
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    }}
+                  >
+                    <View
+                      className="p-4 rounded-2xl mb-4"
+                      style={{ backgroundColor: softTints.pink }}
+                    >
+                      <MaterialCommunityIcons
+                        name="star-face"
+                        size={36}
+                        color={colors.primary}
+                      />
+                    </View>
+                    <Text
+                      className="text-lg font-extrabold"
+                      style={{ color: colors.foreground, fontFamily: fonts.heading }}
+                    >
+                      Nominate Period Buddy
                     </Text>
-                  </TouchableOpacity>
-                </View>
+                    <Text
+                      className="mt-2 text-xs text-center px-4 leading-4"
+                      style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                    >
+                      Find a private buddy with a similar cycle phase and care
+                      routine.
+                    </Text>
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      className="mt-6 w-full rounded-xl py-3.5 items-center justify-center"
+                      onPress={() =>
+                        router.push("/(app)/buddy-nomination" as any)
+                      }
+                      style={{ backgroundColor: colors.primary }}
+                    >
+                      <Text
+                        className="text-sm font-bold"
+                        style={{ color: colors.buttonText, fontFamily: fonts.body }}
+                      >
+                        Nominate Now
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
               </View>
             )}
 
@@ -926,13 +1309,13 @@ export default function Community() {
                       <View className="flex-1 p-3 justify-center">
                         <Text
                           className="font-extrabold text-sm"
-                          style={{ color: colors.foreground }}
+                          style={{ color: colors.foreground, fontFamily: fonts.heading }}
                         >
                           {blog.title}
                         </Text>
                         <Text
                           className="text-[11px] mt-1"
-                          style={{ color: colors.mutedText }}
+                          style={{ color: colors.mutedText, fontFamily: fonts.body }}
                           numberOfLines={2}
                         >
                           {blog.subtitle}
@@ -967,13 +1350,13 @@ export default function Community() {
                       <View className="flex-1 p-3 justify-center">
                         <Text
                           className="font-extrabold text-sm"
-                          style={{ color: colors.foreground }}
+                          style={{ color: colors.foreground, fontFamily: fonts.heading }}
                         >
                           {reel.title}
                         </Text>
                         <Text
                           className="text-[11px] mt-1"
-                          style={{ color: colors.mutedText }}
+                          style={{ color: colors.mutedText, fontFamily: fonts.body }}
                         >
                           {reel.videoDuration}
                         </Text>
@@ -998,13 +1381,13 @@ export default function Community() {
                       />
                       <Text
                         className="mt-4 text-sm font-extrabold text-center"
-                        style={{ color: colors.foreground }}
+                        style={{ color: colors.foreground, fontFamily: fonts.heading }}
                       >
                         No learning content yet
                       </Text>
                       <Text
                         className="mt-1 text-xs text-center leading-4"
-                        style={{ color: colors.mutedText }}
+                        style={{ color: colors.mutedText, fontFamily: fonts.body }}
                       >
                         Published blogs and reels will appear here.
                       </Text>
@@ -1053,14 +1436,14 @@ export default function Community() {
               <TouchableOpacity onPress={() => setCreatePostVisible(false)}>
                 <Text
                   className="text-base font-semibold"
-                  style={{ color: colors.mutedText }}
+                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
                 >
                   Cancel
                 </Text>
               </TouchableOpacity>
               <Text
                 className="text-lg font-black"
-                style={{ color: colors.foreground }}
+                style={{ color: colors.foreground, fontFamily: fonts.heading }}
               >
                 New Thread
               </Text>
@@ -1071,7 +1454,7 @@ export default function Community() {
               >
                 <Text
                   className="text-xs font-bold"
-                  style={{ color: colors.buttonText }}
+                  style={{ color: colors.buttonText, fontFamily: fonts.body }}
                 >
                   Post
                 </Text>
@@ -1090,7 +1473,7 @@ export default function Community() {
                 value={newPostContent}
                 onChangeText={setNewPostContent}
                 className="flex-1 text-base pt-1"
-                style={{ color: colors.foreground, verticalAlign: "top" }}
+                style={{ color: colors.foreground, verticalAlign: "top", fontFamily: fonts.body }}
                 textAlignVertical="top"
               />
             </View>
@@ -1120,7 +1503,7 @@ export default function Community() {
               </TouchableOpacity>
               <Text
                 className="text-base font-black"
-                style={{ color: colors.foreground }}
+                style={{ color: colors.foreground, fontFamily: fonts.heading }}
               >
                 Thread Discussion
               </Text>
@@ -1140,17 +1523,22 @@ export default function Community() {
                   style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}
                 >
                   <View className="flex-row items-center gap-3">
-                    <Text className="text-2xl">{activePost.avatar}</Text>
+                    <View
+                      className="w-9 h-9 rounded-full items-center justify-center"
+                      style={{ backgroundColor: colors.surfaceSoft }}
+                    >
+                      <Text className="text-base">{activePost.avatar}</Text>
+                    </View>
                     <Text
                       className="text-sm font-bold"
-                      style={{ color: colors.foreground }}
+                      style={{ color: colors.foreground, fontFamily: fonts.body }}
                     >
                       {activePost.author}
                     </Text>
                   </View>
                   <Text
                     className="mt-3 text-sm leading-5"
-                    style={{ color: colors.foreground }}
+                    style={{ color: colors.foreground, fontFamily: fonts.body }}
                   >
                     {activePost.content}
                   </Text>
@@ -1161,7 +1549,7 @@ export default function Community() {
               <View className="mt-5 gap-4 pb-20">
                 <Text
                   className="text-xs font-bold tracking-widest uppercase mb-1"
-                  style={{ color: colors.mutedText }}
+                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
                 >
                   Responses
                 </Text>
@@ -1187,21 +1575,23 @@ export default function Community() {
                       <View className="flex-row justify-between items-center">
                         <Text
                           className="text-xs font-bold"
-                          style={{ color: colors.foreground }}
+                          style={{ color: colors.foreground, fontFamily: fonts.body }}
                         >
                           {comment.author}
                         </Text>
                         <View className="flex-row items-center gap-2">
                           <Text
                             className="text-[10px] font-semibold"
-                            style={{ color: colors.mutedText }}
+                            style={{ color: colors.mutedText, fontFamily: fonts.body }}
                           >
                             {comment.time}
                           </Text>
                           {comment.isOwner && activePost && (
                             <TouchableOpacity
-                              onPress={() =>
+                              onPress={() => {
+                                console.log(activePost.id, comment.id)
                                 handleDeleteComment(activePost.id, comment.id)
+                              }
                               }
                               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                             >
@@ -1216,7 +1606,7 @@ export default function Community() {
                       </View>
                       <Text
                         className="text-xs font-medium mt-1.5 leading-4"
-                        style={{ color: colors.foreground }}
+                        style={{ color: colors.foreground, fontFamily: fonts.body }}
                       >
                         {comment.content}
                       </Text>
@@ -1226,7 +1616,7 @@ export default function Community() {
                 {activePost?.comments.length === 0 && (
                   <Text
                     className="text-xs text-center italic my-6"
-                    style={{ color: colors.mutedText }}
+                    style={{ color: colors.mutedText, fontFamily: fonts.body }}
                   >
                     Be the first one to leave a supportive reply!
                   </Text>
@@ -1253,6 +1643,7 @@ export default function Community() {
                 style={{
                   backgroundColor: colors.input,
                   color: colors.foreground,
+                  fontFamily: fonts.body,
                 }}
                 onSubmitEditing={handlePublishComment}
                 returnKeyType="send"
