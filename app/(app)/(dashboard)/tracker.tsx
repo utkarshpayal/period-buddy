@@ -13,16 +13,10 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { LinearGradient } from "expo-linear-gradient";
 import { useAppState } from "../../../components/AppState";
 import DayDetailsModal from "../../../components/DayDetailsModal";
 import { useTheme } from "../../../components/theme";
-import {
-  getActionGradient,
-  getShadow,
-  getSoftTints,
-  getSurfaceGradient,
-} from "../../../components/ui-tokens";
+import { getShadow, getSoftTints } from "../../../components/ui-tokens";
 import {
   cycleApi,
   type CycleSettings,
@@ -152,8 +146,6 @@ export default function Tracker() {
     Record<string, LocalDayEntry>
   >({});
   const softTints = getSoftTints(colors);
-  const surfaceGradient = getSurfaceGradient(colors, isDark) as [string, string];
-  const actionGradient = getActionGradient(colors) as [string, string];
 
   const cycleStartDate = useMemo(() => {
     if (cycleSettings?.lastPeriodStartDate) {
@@ -817,27 +809,6 @@ export default function Tracker() {
                 })}
               </View>
             </View>
-
-            {/* Core Action Button */}
-            {/* <TouchableOpacity
-              activeOpacity={0.85}
-              className="mt-6 rounded-full overflow-hidden shadow-lg"
-              onPress={openToday}
-            >
-              <LinearGradient
-                colors={actionGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                className="py-4 items-center justify-center"
-              >
-                <Text
-                  className="text-center text-base font-bold tracking-wide"
-                  style={{ color: colors.buttonText }}
-                >
-                  {"Log Today's Symptoms"}
-                </Text>
-              </LinearGradient>
-            </TouchableOpacity> */}
           </View>
         </ScrollView>
       </SafeAreaView>

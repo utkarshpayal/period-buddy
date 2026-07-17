@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
+import { Platform } from "react-native";
 
 const LOCAL_DEV_API_PORT = "5000";
 const envApiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
@@ -728,7 +729,34 @@ export const authApi = {
     password: string;
     phone?: string;
   }) =>
-    apiEnvelopeRequest<AuthUser>("/api/auth/signup", {
+    apiEnvelopeRequest<{ email: string; expiresInMinutes: number }>(
+      "/api/auth/signup",
+      {
+        body: JSON.stringify(payload),
+        method: "POST",
+        skipAuth: true,
+      },
+    ),
+
+  verifyOtp: (payload: { email: string; otp: string }) =>
+    apiEnvelopeRequest<AuthUser>("/api/auth/verify-otp", {
+      body: JSON.stringify(payload),
+      method: "POST",
+      skipAuth: true,
+    }),
+
+  resendOtp: (payload: { email: string }) =>
+    apiEnvelopeRequest<{ email: string; expiresInMinutes: number }>(
+      "/api/auth/resend-otp",
+      {
+        body: JSON.stringify(payload),
+        method: "POST",
+        skipAuth: true,
+      },
+    ),
+
+  googleAuth: (payload: { idToken: string }) =>
+    apiEnvelopeRequest<AuthUser>("/api/auth/google", {
       body: JSON.stringify(payload),
       method: "POST",
       skipAuth: true,
@@ -1217,6 +1245,54 @@ export const questionAnswerApi = {
 
   deleteQuestion: (id: string) =>
     apiRequest<void>(`/api/questions/${id}`, { method: "DELETE" }),
+};
+
+export const uploadApi = {
+  /**
+   * Uploads a local file (e.g. an `expo-image-picker` result URI) to the
+   * backend, which stores it in S3 and returns its public URL.
+   */
+  uploadImage: async (localUri: string, folder = "profile-pictures") => {
+    const token = await getToken();
+    if (!token) throw new Error("You must be signed in to upload a file.");
+
+    const fileName = localUri.split("/").pop()?.split("?")[0] || "upload.jpg";
+    const extensionMatch = /\.(\w+)$/.exec(fileName);
+    const extension = extensionMatch?.[1]?.toLowerCase() || "jpg";
+    const mimeType = extension === "png" ? "image/png" : "image/jpeg";
+
+    const formData = new FormData();
+    formData.append("folder", folder);
+
+    if (Platform.OS === "web") {
+      // On web, FormData needs a real Blob/File — the RN {uri,name,type}
+      // shape below gets silently stringified to "[object Object]" instead
+      // of becoming a file part.
+      const blob = await (await fetch(localUri)).blob();
+      formData.append("file", blob, fileName);
+    } else {
+      formData.append("file", {
+        uri: localUri,
+        name: fileName,
+        type: mimeType,
+      } as unknown as Blob);
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/upload`, {
+      body: formData,
+      headers: { Authorization: `Bearer ${token}` },
+      method: "POST",
+    });
+
+    const text = await response.text();
+    const data = text ? JSON.parse(text) : {};
+
+    if (!response.ok) {
+      throw new Error(getErrorMessage(data, response.status));
+    }
+
+    return data.data as { key: string; url: string };
+  },
 };
 
 export const profileApi = {

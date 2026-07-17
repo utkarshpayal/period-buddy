@@ -1,8 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import { LinearGradient } from "expo-linear-gradient";
 import React, { useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Image,
   Text,
@@ -10,8 +10,10 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { CalendarModal } from "./CalendarModal";
+import { uploadApi } from "../lib/api";
 import { useTheme } from "./theme";
-import { getActionGradient, getShadow } from "./ui-tokens";
+import { getShadow } from "./ui-tokens";
 
 const onboardingSteps = [
   {
@@ -62,15 +64,36 @@ type ProfileOnboardingProps = {
 
 export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
   const { colors, isDark } = useTheme();
-  const actionGradient = getActionGradient(colors) as [string, string];
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [dateOfBirth, setDateOfBirth] = useState("");
+  const [isDatePickerVisible, setIsDatePickerVisible] = useState(false);
   const [gender, setGender] = useState("");
   const [phone, setPhone] = useState("");
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
+  const [profilePictureUrl, setProfilePictureUrl] = useState<string | null>(null);
+  const [isUploadingPicture, setIsUploadingPicture] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
+
+  const minAdultDate = new Date();
+  minAdultDate.setFullYear(minAdultDate.getFullYear() - 13);
+  const earliestDate = new Date(1900, 0, 1);
+
+  function formatDisplayDate(dateKey: string) {
+    const date = new Date(`${dateKey}T00:00:00`);
+    return date.toLocaleDateString(undefined, {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+  }
+
+  function handleSelectDate(dateKey: string) {
+    setErrorMessage("");
+    setDateOfBirth(dateKey);
+    setIsDatePickerVisible(false);
+  }
 
   const currentStep = onboardingSteps[currentStepIndex];
   const isLastOnboardingStep = currentStepIndex === onboardingSteps.length - 1;
@@ -94,8 +117,25 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
       quality: 0.8,
     });
 
-    if (!result.canceled) {
-      setProfilePicture(result.assets[0].uri);
+    if (result.canceled) return;
+
+    const localUri = result.assets[0].uri;
+    setProfilePicture(localUri);
+    setProfilePictureUrl(null);
+
+    try {
+      setIsUploadingPicture(true);
+      const uploaded = await uploadApi.uploadImage(localUri, "profile-pictures");
+      setProfilePictureUrl(uploaded.url);
+    } catch (error) {
+      Alert.alert(
+        "Upload failed",
+        error instanceof Error
+          ? error.message
+          : "Unable to upload your profile picture right now.",
+      );
+    } finally {
+      setIsUploadingPicture(false);
     }
   }
 
@@ -110,20 +150,18 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
 
     // Date of birth and gender are required by the backend (POST /api/auth/onboarding
     // rejects an empty dateOfBirth/gender with a 422), so they can't be skipped here.
-    if (currentStep.id === "dateOfBirth") {
-      if (!dateOfBirth.trim()) {
-        setErrorMessage("Date of birth is required to continue.");
-        return;
-      }
-      const dobPattern = /^\d{4}-\d{2}-\d{2}$/;
-      if (!dobPattern.test(dateOfBirth.trim())) {
-        setErrorMessage("Please enter date of birth in YYYY-MM-DD format.");
-        return;
-      }
+    if (currentStep.id === "dateOfBirth" && !dateOfBirth.trim()) {
+      setErrorMessage("Date of birth is required to continue.");
+      return;
     }
 
     if (currentStep.id === "gender" && !gender) {
       setErrorMessage("Please select a gender to continue.");
+      return;
+    }
+
+    if (currentStep.id === "profilePicture" && isUploadingPicture) {
+      setErrorMessage("Please wait for the photo upload to finish.");
       return;
     }
 
@@ -142,7 +180,7 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
       dateOfBirth: dateOfBirth.trim(),
       gender: gender || "prefer_not_to_say",
       phone: phone.trim(),
-      profilePicture: profilePicture ?? "",
+      profilePicture: profilePictureUrl ?? "",
     };
 
     try {
@@ -173,41 +211,44 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
     if (stepId === "dateOfBirth") {
       return (
         <View className="mb-4">
-          <View
-            className="flex-row items-center rounded-2xl border px-4 py-4.5"
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => setIsDatePickerVisible(true)}
+            className="flex-row items-center rounded-2xl border px-4 h-14"
             style={{
               backgroundColor: colors.input,
-              borderColor: isFocused ? colors.primary : colors.border,
-              borderWidth: isFocused ? 1.5 : 1,
+              borderColor: isDatePickerVisible ? colors.primary : colors.border,
+              borderWidth: isDatePickerVisible ? 1.5 : 1,
             }}
           >
             <Ionicons
               name="calendar-outline"
               size={20}
-              color={isFocused ? colors.primary : colors.mutedText}
+              color={isDatePickerVisible ? colors.primary : colors.mutedText}
             />
 
-            <TextInput
-              autoComplete="birthdate-full"
-              keyboardType="numbers-and-punctuation"
-              onChangeText={(text) => {
-                setErrorMessage("");
-                setDateOfBirth(text);
-              }}
-              onFocus={() => setIsFocused(true)}
-              onBlur={() => setIsFocused(false)}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor={colors.mutedText}
-              returnKeyType="next"
-              className="ml-3 flex-1 text-base outline-none font-semibold"
-              style={{ color: colors.foreground }}
-              textContentType="birthdate"
-              value={dateOfBirth}
-            />
-          </View>
+            <Text
+              className="ml-3 flex-1 text-base font-semibold"
+              style={{ color: dateOfBirth ? colors.foreground : colors.mutedText }}
+            >
+              {dateOfBirth ? formatDisplayDate(dateOfBirth) : "Select your date of birth"}
+            </Text>
+
+            <Ionicons name="chevron-down" size={16} color={colors.mutedText} />
+          </TouchableOpacity>
+
           <Text className="mt-2 text-xs font-semibold px-1" style={{ color: colors.mutedText }}>
-            Format: YYYY-MM-DD (e.g. 1998-05-24)
+            This helps us tailor cycle predictions to your age.
           </Text>
+
+          <CalendarModal
+            initialDateKey={dateOfBirth || undefined}
+            maximumDate={minAdultDate}
+            minimumDate={earliestDate}
+            onClose={() => setIsDatePickerVisible(false)}
+            onSelect={handleSelectDate}
+            visible={isDatePickerVisible}
+          />
         </View>
       );
     }
@@ -266,7 +307,7 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
     if (stepId === "phone") {
       return (
         <View
-          className="mb-4 flex-row items-center rounded-2xl border px-4 py-4.5"
+          className="mb-4 flex-row items-center rounded-2xl border px-4 h-14"
           style={{
             backgroundColor: colors.input,
             borderColor: isFocused ? colors.primary : colors.border,
@@ -330,9 +371,18 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
               </Text>
             </View>
           )}
+
+          {isUploadingPicture && (
+            <View
+              className="absolute inset-0 items-center justify-center"
+              style={{ backgroundColor: "rgba(0,0,0,0.35)" }}
+            >
+              <ActivityIndicator color="#fff" />
+            </View>
+          )}
         </TouchableOpacity>
 
-        {profilePicture && (
+        {profilePicture && !isUploadingPicture && (
           <TouchableOpacity
             activeOpacity={0.8}
             className="mt-4 rounded-full border px-5 py-2.5"
@@ -461,30 +511,24 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
 
           <TouchableOpacity
             activeOpacity={0.9}
-            className="flex-1 rounded-full overflow-hidden"
+            className="flex-1 rounded-full py-4 items-center justify-center"
             disabled={isSubmitting}
             onPress={goToNextOnboardingStep}
             style={{
+              backgroundColor: colors.primary,
               opacity: isSubmitting ? 0.65 : 1,
             }}
           >
-            <LinearGradient
-              colors={actionGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              className="py-4 items-center justify-center"
+            <Text
+              className="text-center text-sm font-bold"
+              style={{ color: colors.buttonText }}
             >
-              <Text
-                className="text-center text-sm font-bold"
-                style={{ color: colors.buttonText }}
-              >
-                {isSubmitting
-                  ? "Saving..."
-                  : isLastOnboardingStep
-                    ? "Finish Setup"
-                    : "Next Step"}
-              </Text>
-            </LinearGradient>
+              {isSubmitting
+                ? "Saving..."
+                : isLastOnboardingStep
+                  ? "Finish Setup"
+                  : "Next Step"}
+            </Text>
           </TouchableOpacity>
         </View>
 

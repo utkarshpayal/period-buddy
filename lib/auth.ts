@@ -37,6 +37,18 @@ export function signupUser(payload: SignupPayload) {
   return authApi.signup(payload);
 }
 
+export function verifyOtp(payload: { email: string; otp: string }) {
+  return authApi.verifyOtp(payload);
+}
+
+export function resendOtp(payload: { email: string }) {
+  return authApi.resendOtp(payload);
+}
+
+export function googleAuth(payload: { idToken: string }) {
+  return authApi.googleAuth(payload);
+}
+
 export function submitOnboarding(payload: OnboardingPayload, token: string) {
   return apiEnvelopeRequest<AuthUser>("/api/auth/onboarding", {
     body: JSON.stringify(payload),

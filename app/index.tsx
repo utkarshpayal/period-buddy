@@ -15,7 +15,6 @@ import { ThemeToggle, useTheme } from "../components/theme";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import {
-  getActionGradient,
   getScreenGradient,
   getShadow,
   getSoftTints,
@@ -33,7 +32,6 @@ export default function Index() {
     string,
     string,
   ];
-  const actionGradient = getActionGradient(colors) as [string, string];
   const softTints = getSoftTints(colors);
 
   useEffect(() => {

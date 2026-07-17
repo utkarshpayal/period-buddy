@@ -1,5 +1,4 @@
 import {
-  FontAwesome5,
   Ionicons,
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
@@ -15,10 +14,21 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { LinearGradient } from "expo-linear-gradient";
-import { useAppState } from "../../components/AppState";
+import { ForestScene, type ForestPhase } from "../../components/ForestScene";
 import { useTheme } from "../../components/theme";
-import { forestApi, type ForestStatus } from "../../lib/api";
+import { cycleApi, forestApi, type ForestStatus } from "../../lib/api";
+
+function toForestPhase(currentPhase: string | undefined, averageHealth: number): ForestPhase {
+  const normalized = currentPhase?.toLowerCase();
+  if (normalized === "period" || normalized === "follicular" || normalized === "ovulation" || normalized === "luteal") {
+    return normalized;
+  }
+  // No cycle data yet — fall back to a health-based mood so the scene still varies.
+  if (averageHealth >= 80) return "ovulation";
+  if (averageHealth >= 60) return "follicular";
+  if (averageHealth >= 40) return "luteal";
+  return "period";
+}
 
 interface Tree {
   id: number;
@@ -30,72 +40,34 @@ interface Tree {
 export default function Forest() {
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
-  const { trackedDays } = useAppState();
-  const swayAnim = useRef(new Animated.Value(0)).current;
-  const floatAnim = useRef(new Animated.Value(0)).current;
   const sparkleAnim = useRef(new Animated.Value(0)).current;
 
   const [isNourished, setIsNourished] = useState(false);
   const [forestStatus, setForestStatus] = useState<ForestStatus | null>(null);
+  const [currentPhase, setCurrentPhase] = useState<string | undefined>(undefined);
 
   useEffect(() => {
-    const animations = [
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(swayAnim, {
-            duration: 1800,
-            easing: Easing.inOut(Easing.sin),
-            toValue: 1,
-            useNativeDriver: true,
-          }),
-          Animated.timing(swayAnim, {
-            duration: 1800,
-            easing: Easing.inOut(Easing.sin),
-            toValue: 0,
-            useNativeDriver: true,
-          }),
-        ]),
-      ),
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(floatAnim, {
-            duration: 2200,
-            easing: Easing.inOut(Easing.quad),
-            toValue: 1,
-            useNativeDriver: true,
-          }),
-          Animated.timing(floatAnim, {
-            duration: 2200,
-            easing: Easing.inOut(Easing.quad),
-            toValue: 0,
-            useNativeDriver: true,
-          }),
-        ]),
-      ),
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(sparkleAnim, {
-            duration: 1200,
-            easing: Easing.inOut(Easing.ease),
-            toValue: 1,
-            useNativeDriver: true,
-          }),
-          Animated.timing(sparkleAnim, {
-            duration: 1200,
-            easing: Easing.inOut(Easing.ease),
-            toValue: 0,
-            useNativeDriver: true,
-          }),
-        ]),
-      ),
-    ];
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(sparkleAnim, {
+          duration: 1200,
+          easing: Easing.inOut(Easing.ease),
+          toValue: 1,
+          useNativeDriver: true,
+        }),
+        Animated.timing(sparkleAnim, {
+          duration: 1200,
+          easing: Easing.inOut(Easing.ease),
+          toValue: 0,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
 
-    animations.forEach((animation) => animation.start());
+    animation.start();
 
-    return () => {
-      animations.forEach((animation) => animation.stop());
-    };
-  }, [floatAnim, sparkleAnim, swayAnim]);
+    return () => animation.stop();
+  }, [sparkleAnim]);
 
   useEffect(() => {
     let isMounted = true;
@@ -111,13 +83,21 @@ export default function Forest() {
 
     loadForestStatus();
 
+    cycleApi
+      .getPredictions()
+      .then((predictions) => {
+        if (isMounted) setCurrentPhase(predictions?.currentPhase);
+      })
+      .catch(() => {
+        if (isMounted) setCurrentPhase(undefined);
+      });
+
     return () => {
       isMounted = false;
     };
   }, []);
 
-  const currentHealth =
-    forestStatus?.currentHealth ?? Math.min(100, Math.max(45, 55 + trackedDays * 6));
+  const currentHealth = forestStatus?.currentHealth ?? 55;
 
   const trees: Tree[] =
     forestStatus?.trees?.length
@@ -173,14 +153,6 @@ export default function Forest() {
 
   const forestTier = forestStatus?.forestTier ?? fallbackTier;
   const tierColor = TIER_COLORS[forestTier] ?? colors.primary;
-  const treeSway = swayAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["-3deg", "3deg"],
-  });
-  const leafFloat = floatAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, -12],
-  });
   const sparkleOpacity = sparkleAnim.interpolate({
     inputRange: [0, 0.5, 1],
     outputRange: [0.45, 1, 0.45],
@@ -244,204 +216,11 @@ export default function Forest() {
               borderColor: colors.border,
             }}
           >
-            {/* Visual Ecosystem Container */}
-            <LinearGradient
-              colors={
-                isDark
-                  ? ["#10231d", "#172033", "#0b1412"]
-                  : ["#ecfdf5", "#eef2ff", "#fff1f2"]
-              }
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={{
-                height: 236,
-                overflow: "hidden",
-                position: "relative",
-                width: "100%",
-              }}
-            >
-              <Animated.View
-                style={{
-                  opacity: sparkleOpacity,
-                  position: "absolute",
-                  right: 24,
-                  top: 22,
-                  transform: [{ translateY: leafFloat }],
-                }}
-              >
-                <Ionicons
-                  name={isDark ? "moon" : "sunny"}
-                  size={30}
-                  color={isDark ? colors.secondary : colors.warning}
-                />
-              </Animated.View>
-
-              <View
-                style={{
-                  backgroundColor: isDark ? "#ffffff12" : "#ffffffaa",
-                  borderRadius: 999,
-                  height: 42,
-                  left: 30,
-                  position: "absolute",
-                  top: 46,
-                  width: 88,
-                }}
-              />
-              <View
-                style={{
-                  backgroundColor: isDark ? "#ffffff0f" : "#ffffff9a",
-                  borderRadius: 999,
-                  height: 34,
-                  position: "absolute",
-                  right: 64,
-                  top: 70,
-                  width: 72,
-                }}
-              />
-
-              <View
-                className="absolute bottom-0 left-0 right-0 h-14 border-t"
-                style={{
-                  backgroundColor: isDark ? "#064e3b55" : "#bbf7d0",
-                  borderColor: isDark ? "#10b98133" : "#86efac",
-                }}
-              />
-              <View
-                className="absolute bottom-9 left-0 right-0 h-10"
-                style={{
-                  backgroundColor: isDark ? "#10b98118" : "#dcfce7aa",
-                  borderTopLeftRadius: 999,
-                  borderTopRightRadius: 999,
-                }}
-              />
-
-              {averageHealth >= 50 ? (
-                <View className="h-full w-full items-center justify-end pb-8">
-                  <Animated.View
-                    className="absolute bottom-32 left-16"
-                    style={{
-                      opacity: sparkleOpacity,
-                      transform: [{ translateY: leafFloat }],
-                    }}
-                  >
-                    <MaterialCommunityIcons
-                      name="leaf"
-                      size={20}
-                      color={colors.success}
-                    />
-                  </Animated.View>
-                  <Animated.View
-                    className="absolute bottom-28 right-20"
-                    style={{
-                      opacity: sparkleOpacity,
-                      transform: [{ translateY: leafFloat }],
-                    }}
-                  >
-                    <MaterialCommunityIcons
-                      name="flower-tulip"
-                      size={22}
-                      color={colors.primary}
-                    />
-                  </Animated.View>
-
-                  <View className="flex-row items-end justify-center gap-2">
-                    <Animated.View
-                      style={{
-                        opacity: 0.72,
-                        transform: [{ rotate: treeSway }],
-                      }}
-                    >
-                      <FontAwesome5
-                        name="tree"
-                        size={54}
-                        color={colors.accent}
-                      />
-                    </Animated.View>
-                    <Animated.View style={{ transform: [{ rotate: treeSway }] }}>
-                      <MaterialCommunityIcons
-                        name="pine-tree"
-                        size={94}
-                        color={colors.success}
-                      />
-                    </Animated.View>
-                    <Animated.View
-                      style={{
-                        transform: [{ rotate: treeSway }, { translateY: -4 }],
-                      }}
-                    >
-                      <FontAwesome5
-                        name="tree"
-                        size={78}
-                        color={colors.success}
-                      />
-                    </Animated.View>
-                    <Animated.View
-                      style={{
-                        opacity: 0.68,
-                        transform: [{ rotate: treeSway }],
-                      }}
-                    >
-                      <MaterialCommunityIcons
-                        name="tree"
-                        size={58}
-                        color={colors.accent}
-                      />
-                    </Animated.View>
-                  </View>
-
-                  <View className="mt-1 flex-row gap-3">
-                    <MaterialCommunityIcons
-                      name="flower"
-                      size={18}
-                      color={colors.primary}
-                    />
-                    <MaterialCommunityIcons
-                      name="sprout"
-                      size={20}
-                      color={colors.success}
-                    />
-                    <MaterialCommunityIcons
-                      name="flower"
-                      size={16}
-                      color={colors.accent}
-                    />
-                  </View>
-                </View>
-              ) : (
-                <View className="h-full w-full items-center justify-end pb-8">
-                  <Animated.View
-                    className="flex-row items-end gap-5"
-                    style={{
-                      transform: [{ rotate: treeSway }],
-                    }}
-                  >
-                    <MaterialCommunityIcons
-                      name="tree-outline"
-                      size={70}
-                      color={colors.mutedText}
-                      style={{ opacity: 0.78 }}
-                    />
-                    <MaterialCommunityIcons
-                      name="pine-tree-box"
-                      size={82}
-                      color={colors.mutedText}
-                    />
-                  </Animated.View>
-                  <Animated.View
-                    className="absolute bottom-20 right-24"
-                    style={{
-                      opacity: sparkleOpacity,
-                      transform: [{ translateY: leafFloat }],
-                    }}
-                  >
-                    <MaterialCommunityIcons
-                      name="leaf-off"
-                      size={24}
-                      color={colors.mutedText}
-                    />
-                  </Animated.View>
-                </View>
-              )}
+            {/* Visual Ecosystem Container — ported from the Marketing
+                website's forest simulator (Home.jsx) so the app and site
+                share the same sky/hills/tree scene. */}
+            <View style={{ position: "relative", width: "100%" }}>
+              <ForestScene height={236} phase={toForestPhase(currentPhase, averageHealth)} />
 
               <View
                 className="absolute left-4 top-4 rounded-2xl border px-3 py-1.5 shadow-sm"
@@ -475,7 +254,7 @@ export default function Forest() {
                   className="text-sm font-black"
                   style={{ color: colors.foreground, fontFamily: fonts.mono }}
                 >
-                  {forestStatus?.careActions ?? trackedDays} actions
+                  {forestStatus?.careActions ?? 0} actions
                 </Text>
               </View>
 
@@ -504,7 +283,7 @@ export default function Forest() {
                   </View>
                 </Animated.View>
               )}
-            </LinearGradient>
+            </View>
 
             {/* Stats Dashboard Under Canopy */}
             <View

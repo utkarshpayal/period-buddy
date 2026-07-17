@@ -14,8 +14,11 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../components/auth-context";
+import { GoogleSignInButton } from "../../components/GoogleSignInButton";
+import { OtpModal } from "../../components/OtpModal";
 import { ThemeToggle, useTheme } from "../../components/theme";
 import { signupUser } from "../../lib/auth";
+import type { AuthUser } from "../../lib/api";
 import { getShadow } from "../../components/ui-tokens";
 
 export default function SignUp() {
@@ -29,6 +32,7 @@ export default function SignUp() {
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isOtpModalVisible, setIsOtpModalVisible] = useState(false);
 
   // Focus states
   const [fnameFocused, setFnameFocused] = useState(false);
@@ -54,33 +58,17 @@ export default function SignUp() {
     try {
       setIsSubmitting(true);
 
-      const response = await signupUser({
+      // Signup no longer creates the account directly — it stashes the
+      // details and emails an OTP. The account is only created once the
+      // code is verified in the modal below.
+      await signupUser({
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         email: email.trim().toLowerCase(),
         password,
       });
 
-      if (!response.token) {
-        setErrorMessage("Account created, but no auth token was returned.");
-        return;
-      }
-
-      const user = response.data ?? response.user;
-      const isProfileComplete =
-        response.isProfileComplete ?? user?.isProfileComplete;
-      const signedInUser = user ?? {
-        email: email.trim().toLowerCase(),
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-      };
-
-      signIn({
-        token: response.token,
-        user: { ...signedInUser, isProfileComplete },
-      });
-
-      router.replace("/(app)/(dashboard)/home");
+      setIsOtpModalVisible(true);
     } catch (error) {
       setErrorMessage(
         error instanceof Error
@@ -90,6 +78,25 @@ export default function SignUp() {
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  function handleOtpVerified({
+    token,
+    user,
+  }: {
+    token: string;
+    user: Record<string, unknown>;
+  }) {
+    const signedInUser = user as AuthUser;
+    setIsOtpModalVisible(false);
+    signIn({ token, user: signedInUser });
+    router.replace("/(app)/(dashboard)/home");
+  }
+
+  function handleGoogleSignInSuccess({ token, user }: { token: string; user: AuthUser }) {
+    setErrorMessage("");
+    signIn({ token, user });
+    router.replace("/(app)/(dashboard)/home");
   }
 
   return (
@@ -418,6 +425,26 @@ export default function SignUp() {
                   </Text>
                 </TouchableOpacity>
 
+                {/* Continue with Google Divider */}
+                <View className="mb-4 flex-row items-center">
+                  <View className="h-[1px] flex-1" style={{ backgroundColor: colors.border }} />
+                  <Text
+                    className="mx-2 font-semibold"
+                    style={{ fontSize: 10, color: colors.mutedText, letterSpacing: 0.3, fontFamily: fonts.body }}
+                  >
+                    OR CONTINUE WITH
+                  </Text>
+                  <View className="h-[1px] flex-1" style={{ backgroundColor: colors.border }} />
+                </View>
+
+                <View className="mb-5">
+                  <GoogleSignInButton
+                    disabled={isSubmitting}
+                    onError={setErrorMessage}
+                    onSuccess={handleGoogleSignInSuccess}
+                  />
+                </View>
+
                 {/* Error Message block */}
                 {errorMessage ? (
                   <View
@@ -467,6 +494,13 @@ export default function SignUp() {
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
+
+      <OtpModal
+        email={email.trim().toLowerCase()}
+        onClose={() => setIsOtpModalVisible(false)}
+        onVerified={handleOtpVerified}
+        visible={isOtpModalVisible}
+      />
     </View>
   );
 }

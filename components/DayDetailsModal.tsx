@@ -12,10 +12,8 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { LinearGradient } from "expo-linear-gradient";
 import type { DayEntry } from "./AppState";
 import { useTheme } from "./theme";
-import { getActionGradient } from "./ui-tokens";
 
 type LogOption<Value extends string> = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -84,7 +82,6 @@ export default function DayDetailsModal({
 }) {
   const { colors, fonts } = useTheme();
   const insets = useSafeAreaInsets();
-  const actionGradient = getActionGradient(colors) as [string, string];
   const [noteText, setNoteText] = useState(details ?? "");
   const [selectedEnergy, setSelectedEnergy] = useState<DayEntry["energy"]>();
   const [selectedFlow, setSelectedFlow] = useState<DayEntry["flow"]>();
@@ -179,12 +176,10 @@ export default function DayDetailsModal({
         }}
       >
         {isSelected ? (
-          <LinearGradient
-            colors={actionGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
+          <View
             style={{
               alignItems: "center",
+              backgroundColor: colors.primary,
               flexDirection: "row",
               gap: 6,
               paddingHorizontal: 12,
@@ -206,7 +201,7 @@ export default function DayDetailsModal({
             >
               {label}
             </Text>
-          </LinearGradient>
+          </View>
         ) : (
           <View
             style={{
@@ -610,28 +605,21 @@ export default function DayDetailsModal({
                 flex: 1,
                 borderRadius: 12,
                 overflow: "hidden",
+                backgroundColor: colors.primary,
+                paddingHorizontal: 16,
+                paddingVertical: 13,
               }}
             >
-              <LinearGradient
-                colors={actionGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
+              <Text
                 style={{
-                  paddingHorizontal: 16,
-                  paddingVertical: 13,
+                  color: colors.buttonText,
+                  fontWeight: "700",
+                  textAlign: "center",
+                  fontFamily: fonts.body,
                 }}
               >
-                <Text
-                  style={{
-                    color: colors.buttonText,
-                    fontWeight: "700",
-                    textAlign: "center",
-                    fontFamily: fonts.body,
-                  }}
-                >
-                  Save Log
-                </Text>
-              </LinearGradient>
+                Save Log
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity

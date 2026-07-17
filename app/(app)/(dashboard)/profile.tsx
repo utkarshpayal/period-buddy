@@ -14,7 +14,6 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useAppState } from "../../../components/AppState";
 import { useAuth } from "../../../components/auth-context";
 import { ThemeToggle, useTheme } from "../../../components/theme";
 import { getSoftTints } from "../../../components/ui-tokens";
@@ -23,7 +22,6 @@ import { authApi, type DashboardSummary } from "../../../lib/api";
 export default function Profile() {
   const { colors, isDark, fonts } = useTheme();
   const { signOut, user, updateUser } = useAuth();
-  const { trackedDays } = useAppState();
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
   const router = useRouter();
   const displayName =
@@ -199,7 +197,7 @@ export default function Profile() {
             {[
               {
                 label: "Days Tracked",
-                value: dashboard?.trackedDays ?? trackedDays,
+                value: dashboard?.trackedDays ?? 0,
                 icon: "calendar-outline",
                 color: colors.primary,
                 bg: softTints.pink,
@@ -213,7 +211,7 @@ export default function Profile() {
               },
               {
                 label: "Day Streak",
-                value: user?.streakCount ?? trackedDays,
+                value: user?.streakCount ?? 1,
                 icon: "flame",
                 color: colors.primary,
                 bg: softTints.pink,

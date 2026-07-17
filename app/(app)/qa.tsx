@@ -12,10 +12,9 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { LinearGradient } from "expo-linear-gradient";
 import { useAppState } from "../../components/AppState";
 import { useTheme } from "../../components/theme";
-import { getActionGradient, getSoftTints } from "../../components/ui-tokens";
+import { getSoftTints } from "../../components/ui-tokens";
 import { questionAnswerApi } from "../../lib/api";
 
 // --- TELEHEALTH CONVERSATION MODEL CONTRACTS ---
@@ -44,7 +43,6 @@ export default function QA() {
   const { earnTokens } = useAppState();
   const scrollViewRef = useRef<ScrollView>(null);
   const insets = useSafeAreaInsets();
-  const actionGradient = getActionGradient(colors) as [string, string];
   const softTints = getSoftTints(colors);
 
   // Functional Input and Loading States
@@ -380,26 +378,22 @@ export default function QA() {
                       </Text>
                     </View>
                   ) : (
-                    <View className="max-w-[85%] self-end rounded-2xl rounded-tr-none overflow-hidden shadow-md">
-                      <LinearGradient
-                        colors={actionGradient}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        className="p-4"
+                    <View
+                      className="max-w-[85%] self-end rounded-2xl rounded-tr-none overflow-hidden shadow-md p-4"
+                      style={{ backgroundColor: colors.primary }}
+                    >
+                      <Text
+                        className="text-xs font-medium leading-5"
+                        style={{ color: colors.buttonText, fontFamily: fonts.body }}
                       >
-                        <Text
-                          className="text-xs font-medium leading-5"
-                          style={{ color: colors.buttonText, fontFamily: fonts.body }}
-                        >
-                          {message.text}
-                        </Text>
-                        <Text
-                          className="text-[8px] font-bold text-right mt-1.5 opacity-60"
-                          style={{ color: colors.buttonText, fontFamily: fonts.body }}
-                        >
-                          {message.time}
-                        </Text>
-                      </LinearGradient>
+                        {message.text}
+                      </Text>
+                      <Text
+                        className="text-[8px] font-bold text-right mt-1.5 opacity-60"
+                        style={{ color: colors.buttonText, fontFamily: fonts.body }}
+                      >
+                        {message.time}
+                      </Text>
                     </View>
                   )}
                 </View>
@@ -458,14 +452,12 @@ export default function QA() {
             className="rounded-full overflow-hidden"
           >
             {typedQuestion.trim() && !isCompanionTyping ? (
-              <LinearGradient
-                colors={actionGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
+              <View
                 className="p-2.5 items-center justify-center"
+                style={{ backgroundColor: colors.primary }}
               >
                 <Feather name="send" size={15} color={colors.buttonText} />
-              </LinearGradient>
+              </View>
             ) : (
               <View
                 className="p-2.5 items-center justify-center"

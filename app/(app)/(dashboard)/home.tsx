@@ -10,7 +10,6 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle } from "react-native-svg";
-import { useAppState } from "../../../components/AppState";
 import { useAuth } from "../../../components/auth-context";
 import { useTheme } from "../../../components/theme";
 import { getShadow } from "../../../components/ui-tokens";
@@ -106,8 +105,8 @@ export default function Home() {
   const { colors, isDark, fonts } = useTheme();
   const { user, updateUser } = useAuth();
   const router = useRouter();
-  const { tokens, trackedDays } = useAppState();
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
+  const [isDashboardLoading, setIsDashboardLoading] = useState(true);
   const [predictions, setPredictions] = useState<Predictions | null>(null);
   const [trendCollapsed, setTrendCollapsed] = useState(true);
 
@@ -133,6 +132,8 @@ export default function Home() {
           setDashboard(null);
           setPredictions(null);
         }
+      } finally {
+        if (isMounted) setIsDashboardLoading(false);
       }
     }
 
@@ -143,8 +144,11 @@ export default function Home() {
     };
   }, [updateUser]);
 
-  const loggedDays = Math.max(dashboard?.trackedDays ?? trackedDays, 0);
-  const dashboardTokens = dashboard?.tokens ?? tokens;
+  // These must reflect the signed-in account's real data only — never a
+  // locally-cached demo/fallback number, which would silently show a
+  // previous (or nonexistent) account's stats on this device/browser.
+  const loggedDays = Math.max(dashboard?.trackedDays ?? 0, 0);
+  const dashboardTokens = dashboard?.tokens ?? 0;
   const cycleDay = Math.max(
     predictions?.currentCycleDay ??
     dashboard?.predictions?.currentCycleDay ??
@@ -244,7 +248,7 @@ export default function Home() {
                     fontFamily: fonts.body,
                   }}
                 >
-                  {loggedDays || 12}d streak
+                  {dashboard?.user?.streakCount ?? user?.streakCount ?? 1}d streak
                 </Text>
               </View>
 
@@ -272,7 +276,7 @@ export default function Home() {
                     fontFamily: fonts.body,
                   }}
                 >
-                  {dashboardTokens}
+                  {isDashboardLoading ? "…" : dashboardTokens}
                 </Text>
               </View>
             </View>
@@ -452,7 +456,7 @@ export default function Home() {
               <View className="flex-row justify-between items-center">
                 {[
                   {
-                    value: loggedDays || 3,
+                    value: loggedDays,
                     label: "Days logged",
                   },
                   {

@@ -14,8 +14,10 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../components/auth-context";
+import { GoogleSignInButton } from "../../components/GoogleSignInButton";
 import { ThemeToggle, useTheme } from "../../components/theme";
 import { loginUser } from "../../lib/auth";
+import type { AuthUser } from "../../lib/api";
 import { getShadow } from "../../components/ui-tokens";
 
 export default function Login() {
@@ -40,16 +42,9 @@ export default function Login() {
     );
   }
 
-  function handleGoogleSignIn() {
-    signIn({
-      token: "demo-google-session",
-      user: {
-        email: "demo@nura.app",
-        firstName: "Nura",
-        isProfileComplete: true,
-        lastName: "Sister",
-      },
-    });
+  function handleGoogleSignInSuccess({ token, user }: { token: string; user: AuthUser }) {
+    setErrorMessage("");
+    signIn({ token, user });
     router.replace("/(app)/(dashboard)/home");
   }
 
@@ -383,33 +378,13 @@ export default function Login() {
                 </View>
 
                 {/* Google Button */}
-                <TouchableOpacity
-                  className="mb-5 flex-row items-center justify-center border"
-                  onPress={handleGoogleSignIn}
-                  style={{
-                    height: 44,
-                    borderRadius: 12,
-                    borderColor: colors.border,
-                    backgroundColor: isDark ? colors.surfaceStrong : colors.surface,
-                  }}
-                >
-                  <Ionicons
-                    name="logo-google"
-                    size={15}
-                    color={colors.foreground}
-                    style={{ marginRight: 8 }}
+                <View className="mb-5">
+                  <GoogleSignInButton
+                    disabled={isSubmitting}
+                    onError={setErrorMessage}
+                    onSuccess={handleGoogleSignInSuccess}
                   />
-                  <Text
-                    style={{
-                      fontSize: 13,
-                      fontWeight: "700",
-                      color: colors.foreground,
-                      fontFamily: fonts.body,
-                    }}
-                  >
-                    Continue with Google
-                  </Text>
-                </TouchableOpacity>
+                </View>
 
                 {/* Error Message block */}
                 {errorMessage ? (
