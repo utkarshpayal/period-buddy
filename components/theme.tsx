@@ -74,52 +74,53 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   const fonts = useMemo<ThemeFonts>(
     () => ({
-      heading: isDark ? "PlayfairDisplay" : "Manrope",
-      body: isDark ? "WorkSans" : "Manrope",
+      heading: "Manrope",
+      body: "Manrope",
       mono: "IBM Plex Mono",
       monoSemiBold: "IBMPlexMono-SemiBold",
     }),
-    [isDark]
+    []
   );
 
   const value = useMemo<ThemeContextValue>(
     () => ({
       colors: isDark
         ? {
-            background: "#211722",
-            surface: "#332538",
-            surfaceSoft: "rgba(255, 255, 255, 0.05)",
-            surfaceStrong: "rgba(255, 255, 255, 0.08)",
-            primary: "#E8A6A0",
-            primaryDark: "#D28C86",
-            primaryLight: "rgba(232, 166, 160, 0.14)",
-            secondary: "#B49CAE",
-            secondaryLight: "rgba(255, 255, 255, 0.06)",
-            accent: "#D9B26B",
-            accentLight: "rgba(217, 178, 107, 0.12)",
-            foreground: "#F3E9EE",
-            border: "rgba(255, 255, 255, 0.13)",
-            button: "#E8A6A0",
-            buttonText: "#2C1F2E",
-            text: "#F3E9EE",
-            mutedText: "#B49CAE",
-            input: "rgba(255, 255, 255, 0.05)",
-            success: "#6FA89A",
-            successLight: "rgba(111, 168, 154, 0.15)",
-            warning: "#D9B26B",
-            warningLight: "rgba(217, 178, 107, 0.12)",
-            danger: "#E8A6A0",
-            dangerLight: "rgba(232, 166, 160, 0.14)",
-            info: "#B49CAE",
-            infoLight: "rgba(180, 156, 174, 0.15)",
-            rose: "#E8A6A0",
-            roseLight: "rgba(232, 166, 160, 0.14)",
-            lavender: "#B49CAE",
-            lavenderLight: "rgba(180, 156, 174, 0.15)",
-            mint: "#6FA89A",
-            mintLight: "rgba(111, 168, 154, 0.15)",
-            shadow: "rgba(0, 0, 0, 0.4)",
-            overlay: "rgba(33, 23, 34, 0.6)",
+            // Warm dark — deep charcoal with rose-gold accents. Clear and soothing.
+            background: "#100E14",       // Deep warm near-black
+            surface: "#1C1825",          // Slightly lifted warm dark card
+            surfaceSoft: "#251F30",      // Subtle interactive surface
+            surfaceStrong: "#2E2840",    // Strong surface for inputs/selected
+            primary: "#F4927A",          // Rose-gold primary — warm and visible
+            primaryDark: "#D97060",
+            primaryLight: "rgba(244, 146, 122, 0.18)",
+            secondary: "#A78BCA",        // Soft violet secondary
+            secondaryLight: "rgba(167, 139, 202, 0.14)",
+            accent: "#6DC8A8",           // Clear sage/mint accent
+            accentLight: "rgba(109, 200, 168, 0.14)",
+            foreground: "#F0EBF5",       // Warm cream-white — very readable
+            border: "rgba(240, 235, 245, 0.12)",
+            button: "#F4927A",
+            buttonText: "#16101E",       // Near-black for high contrast on buttons
+            text: "#F0EBF5",
+            mutedText: "#A096B8",        // Clear muted — not too dim
+            input: "#1C1825",
+            success: "#6DC8A8",
+            successLight: "rgba(109, 200, 168, 0.16)",
+            warning: "#F2C97A",
+            warningLight: "rgba(242, 201, 122, 0.14)",
+            danger: "#F4927A",
+            dangerLight: "rgba(244, 146, 122, 0.16)",
+            info: "#A78BCA",
+            infoLight: "rgba(167, 139, 202, 0.16)",
+            rose: "#F4927A",
+            roseLight: "rgba(244, 146, 122, 0.16)",
+            lavender: "#C4AEE8",
+            lavenderLight: "rgba(196, 174, 232, 0.16)",
+            mint: "#6DC8A8",
+            mintLight: "rgba(109, 200, 168, 0.16)",
+            shadow: "rgba(0, 0, 0, 0.45)",
+            overlay: "rgba(16, 14, 20, 0.72)",
           }
         : {
             background: "#F5F7FA",

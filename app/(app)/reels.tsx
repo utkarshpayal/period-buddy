@@ -2,7 +2,6 @@ import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Alert,
   Image,
   Modal,
   NativeScrollEvent,
@@ -21,6 +20,7 @@ import {
 } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 import { useAppState } from "../../components/AppState";
+import { alert } from "../../lib/alert";
 import { useTheme } from "../../components/theme";
 import { reelsApi, type Reel as ApiReel } from "../../lib/api";
 import { LinearGradient } from "expo-linear-gradient";
@@ -223,7 +223,7 @@ export default function Reels() {
         );
 
         earnTokens(5);
-        Alert.alert(
+        alert(
           "Vote counted",
           "Your topic preference has been saved.",
         );

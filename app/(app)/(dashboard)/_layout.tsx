@@ -30,8 +30,10 @@ export default function DashboardLayout() {
   useEffect(() => {
     if (!token) {
       router.replace("/(tabs)/login");
+    } else if (user?.partnerRole === "viewer") {
+      router.replace("/(app)/(partner-view)/home");
     }
-  }, [token, router]);
+  }, [token, user?.partnerRole, router]);
 
   useEffect(() => {
     if (!token || !user?._id) return;
@@ -198,16 +200,16 @@ export default function DashboardLayout() {
     >
       {[
         {
-          name: "home",
-          label: "Home",
-          iconFocused: "home",
-          iconUnfocused: "home-outline",
-        },
-        {
           name: "tracker",
-          label: "Tracker",
+          label: "Calendar",
           iconFocused: "calendar",
           iconUnfocused: "calendar-outline",
+        },
+        {
+          name: "home",
+          label: "Dashboard",
+          iconFocused: "home",
+          iconUnfocused: "home-outline",
         },
         {
           name: "community",

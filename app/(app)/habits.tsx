@@ -4,7 +4,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   RefreshControl,
   ScrollView,
   StatusBar,
@@ -13,6 +12,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { alert } from "../../lib/alert";
 import { useTheme } from "../../components/theme";
 import { getActionGradient, getSoftTints } from "../../components/ui-tokens";
 import { habitsApi, type Habit } from "../../lib/api";
@@ -49,7 +49,7 @@ export default function Habits() {
       const data = await habitsApi.getHabits();
       setHabits(data);
     } catch (err) {
-      Alert.alert("Error", err instanceof Error ? err.message : "Failed to load habits");
+      alert("Error", err instanceof Error ? err.message : "Failed to load habits");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -72,7 +72,7 @@ export default function Habits() {
         ),
       );
     } catch (err) {
-      Alert.alert("Error", err instanceof Error ? err.message : "Could not update habit");
+      alert("Error", err instanceof Error ? err.message : "Could not update habit");
     } finally {
       setTogglingId(null);
     }
@@ -81,14 +81,14 @@ export default function Habits() {
   const addHabit = async () => {
     const idea = HABIT_IDEAS.find((idea) => !habits.some((h) => h.title === idea.title));
     if (!idea) {
-      Alert.alert("Habit list full", "You have already added all suggested habits.");
+      alert("Habit list full", "You have already added all suggested habits.");
       return;
     }
     try {
       const newHabit = await habitsApi.createHabit(idea);
       setHabits((prev) => [...prev, newHabit]);
     } catch (err) {
-      Alert.alert("Error", err instanceof Error ? err.message : "Could not add habit");
+      alert("Error", err instanceof Error ? err.message : "Could not add habit");
     }
   };
 

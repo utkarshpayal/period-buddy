@@ -2,7 +2,6 @@ import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -14,6 +13,8 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppState } from "../../components/AppState";
+import { BuddyVideoCall, type BuddyVideoCallHandle } from "../../components/BuddyVideoCall";
+import { alert } from "../../lib/alert";
 import { useTheme } from "../../components/theme";
 import { getSoftTints } from "../../components/ui-tokens";
 import {
@@ -149,6 +150,8 @@ export default function BuddyNomination() {
   const { earnTokens } = useAppState();
   const scrollViewRef = useRef<ScrollView>(null);
   const insets = useSafeAreaInsets();
+  const socketRef = useRef<WebSocket | null>(null);
+  const videoCallRef = useRef<BuddyVideoCallHandle>(null);
 
   // Interface Functional Controllers
   const [searchQuery, setSearchQuery] = useState("");
@@ -237,6 +240,7 @@ export default function BuddyNomination() {
       try {
         const wsUrl = await getWebSocketUrl();
         socket = new WebSocket(wsUrl);
+        socketRef.current = socket;
 
         socket.onopen = () => {
           if (isDisconnected) return;
@@ -251,11 +255,16 @@ export default function BuddyNomination() {
           if (isDisconnected) return;
           try {
             const data = JSON.parse(event.data);
-            if (data.type === "message" && data.room === `buddy_${activeNominatedId}`) {
+            if (data.room !== `buddy_${activeNominatedId}`) return;
+
+            if (data.type === "message") {
               if (data.messages && Array.isArray(data.messages)) {
                 setChatLog((prev) => mergeBuddyMessages(prev, data.messages));
                 setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
               }
+            } else if (data.type && data.type !== "join" && data.type !== "leave") {
+              // Video-call signaling (call_request/accept/decline/end, webrtc_*).
+              videoCallRef.current?.handleSignal(data);
             }
           } catch (err) {
             console.error("Error parsing WebSocket message:", err);
@@ -287,6 +296,7 @@ export default function BuddyNomination() {
         } catch {}
         socket.close();
       }
+      socketRef.current = null;
     };
   }, [isChatConsoleOpen, activeNominatedId]);
 
@@ -314,7 +324,7 @@ export default function BuddyNomination() {
   // --- BUSINESS OPERATION MECHANICS ---
   async function handleNominateBuddy(id: string) {
     if (activeNominatedId) {
-      Alert.alert(
+      alert(
         "Nomination Limit Reached",
         "You can keep one active anonymous Period Buddy for each cycle window.",
       );
@@ -338,7 +348,7 @@ export default function BuddyNomination() {
       // Keep the local buddy active for offline development.
     }
 
-    Alert.alert("Buddy nominated", "Your anonymous buddy space is ready.");
+    alert("Buddy nominated", "Your anonymous buddy space is ready.");
   }
 
   async function handleSendBuddyMessage() {
@@ -368,6 +378,30 @@ export default function BuddyNomination() {
     } catch (err) {
       console.warn("Failed to send buddy message:", err);
     }
+  }
+
+  function handleLeavePairing() {
+    alert(
+      "Leave this buddy pairing?",
+      "This ends your anonymous space with this buddy for good. Use this if a call or chat made you uncomfortable.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Leave",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await buddyApi.endActive();
+            } catch (err) {
+              console.warn("Failed to end buddy pairing:", err);
+            }
+            setActiveNominatedId(null);
+            setIsChatConsoleOpen(false);
+            setChatLog([]);
+          },
+        },
+      ],
+    );
   }
 
   return (
@@ -679,18 +713,34 @@ export default function BuddyNomination() {
                         </Text>
                       </View>
                     </View>
-                    <TouchableOpacity
-                      onPress={() => setIsChatConsoleOpen(false)}
-                      className="px-3 py-1.5 rounded-lg"
-                      style={{ backgroundColor: colors.surfaceSoft }}
-                    >
-                      <Text
-                        className="text-[10px] font-black"
-                        style={{ color: colors.foreground, fontFamily: fonts.body }}
+                    <View className="flex-row items-center gap-2">
+                      <TouchableOpacity
+                        onPress={() => videoCallRef.current?.startCall()}
+                        className="w-8 h-8 rounded-full items-center justify-center"
+                        style={{ backgroundColor: colors.primaryLight }}
                       >
-                        View Stack
-                      </Text>
-                    </TouchableOpacity>
+                        <Ionicons name="videocam" size={15} color={colors.primary} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={handleLeavePairing}
+                        className="w-8 h-8 rounded-full items-center justify-center"
+                        style={{ backgroundColor: colors.surfaceSoft }}
+                      >
+                        <Ionicons name="exit-outline" size={15} color={colors.mutedText} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => setIsChatConsoleOpen(false)}
+                        className="px-3 py-1.5 rounded-lg"
+                        style={{ backgroundColor: colors.surfaceSoft }}
+                      >
+                        <Text
+                          className="text-[10px] font-black"
+                          style={{ color: colors.foreground, fontFamily: fonts.body }}
+                        >
+                          View Stack
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
 
                   {/* Message Bubble Feed Row blocks lists loop mapping */}
@@ -782,6 +832,15 @@ export default function BuddyNomination() {
         )}
         </KeyboardAvoidingView>
       </SafeAreaView>
+
+      {isChatConsoleOpen && activeBuddyData && (
+        <BuddyVideoCall
+          ref={videoCallRef}
+          buddyAlias={activeBuddyData.alias}
+          roomId={`buddy_${activeNominatedId}`}
+          socketRef={socketRef}
+        />
+      )}
     </>
   );
 }

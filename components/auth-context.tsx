@@ -37,6 +37,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .finally(() => setLoaded(true));
   }, []);
 
+  useEffect(() => {
+    if (session?.token) {
+      // Register for push notifications after authentication
+      import("../lib/notifications")
+        .then(({ registerForPushNotificationsAsync }) => {
+          registerForPushNotificationsAsync().catch(() => {});
+        })
+        .catch(() => {});
+    }
+  }, [session?.token]);
+
   const signOut = useCallback(async () => {
     setSession(null);
     await AsyncStorage.removeItem(AUTH_SESSION_KEY).catch(() => {});

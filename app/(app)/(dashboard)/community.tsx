@@ -19,6 +19,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useAppState } from "../../../components/AppState";
 import { useAuth } from "../../../components/auth-context";
 import OptionsModal from "../../../components/OptionsModal";
+import { alert } from "../../../lib/alert";
 import { useTheme } from "../../../components/theme";
 import { getSoftTints } from "../../../components/ui-tokens";
 import {
@@ -456,7 +457,7 @@ export default function Community() {
   // Threads style real-time sub-array append mutation
   async function handlePublishPost() {
     if (!newPostContent.trim()) {
-      Alert.alert(
+      alert(
         "Empty Post",
         "Please type something before sharing with the community.",
       );
@@ -492,14 +493,14 @@ export default function Community() {
         ...current.filter((post) => post.id !== localId),
       ]);
     } catch {
-      Alert.alert(
+      alert(
         "Saved locally",
         "Your post is visible here. It will need the backend online to sync.",
       );
       return;
     }
 
-    Alert.alert("Shared", "Your post is now visible in the community feed.");
+    alert("Shared", "Your post is now visible in the community feed.");
   }
 
   async function handlePublishComment() {
@@ -615,7 +616,7 @@ export default function Community() {
     try {
       await communityApi.deletePost(postId);
     } catch {
-      Alert.alert("Error", "Could not delete post. Please try again.");
+      alert("Error", "Could not delete post. Please try again.");
       loadPosts();
     }
   }
@@ -880,31 +881,32 @@ export default function Community() {
                           {post.content}
                         </Text>
 
-                        {/* Action Bar */}
+                        {/* Action Bar - all icons left side together */}
                         <View
-                          className="mt-5 pt-3 flex-row justify-between items-center px-1"
-                          style={{ borderTopWidth: 1, borderTopColor: colors.border }}
+                          className="mt-5 pt-3 flex-row items-center"
+                          style={{ borderTopWidth: 1, borderTopColor: colors.border, gap: 20 }}
                         >
+                          {/* Like */}
                           <TouchableOpacity
-                            className="flex-row items-center gap-2 py-1"
+                            className="flex-row items-center gap-1.5 py-1"
                             onPress={() => toggleLike(post)}
                           >
                             <Ionicons
                               name={isLiked ? "heart" : "heart-outline"}
-                              size={20}
+                              size={19}
                               color={isLiked ? colors.primary : colors.mutedText}
                             />
                             <Text
                               className="text-xs font-bold"
-                              style={{ color: colors.mutedText, fontFamily: fonts.mono }}
+                              style={{ color: isLiked ? colors.primary : colors.mutedText, fontFamily: fonts.mono }}
                             >
                               {post.likes}
                             </Text>
                           </TouchableOpacity>
 
-                          {/* Open Threads-Style sliding comments sub-module */}
+                          {/* Comment */}
                           <TouchableOpacity
-                            className="flex-row items-center gap-2 py-1 relative"
+                            className="flex-row items-center gap-1.5 py-1 relative"
                             onPress={() => openCommentsSheet(post)}
                           >
                             <View className="relative">
@@ -916,12 +918,8 @@ export default function Community() {
                               {unreadCommentPostIds.has(post.id) && (
                                 <View
                                   style={{
-                                    position: "absolute",
-                                    top: -2,
-                                    right: -2,
-                                    width: 6,
-                                    height: 6,
-                                    borderRadius: 3,
+                                    position: "absolute", top: -2, right: -2,
+                                    width: 6, height: 6, borderRadius: 3,
                                     backgroundColor: colors.danger,
                                   }}
                                 />
@@ -935,15 +933,12 @@ export default function Community() {
                             </Text>
                           </TouchableOpacity>
 
+                          {/* Share */}
                           <TouchableOpacity
-                            className="py-1"
+                            className="flex-row items-center gap-1.5 py-1"
                             onPress={() => shareCommunityPost(post)}
                           >
-                            <Ionicons
-                              name="share-social-outline"
-                              size={19}
-                              color={colors.mutedText}
-                            />
+                            <Ionicons name="arrow-redo-outline" size={18} color={colors.mutedText} />
                           </TouchableOpacity>
                         </View>
 

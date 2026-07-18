@@ -4,7 +4,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -17,6 +16,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { alert } from "../../lib/alert";
 import { useTheme } from "../../components/theme";
 import { getSoftTints } from "../../components/ui-tokens";
 import {
@@ -40,14 +40,12 @@ export default function Partner() {
   // Invite
   const [generatingCode, setGeneratingCode] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
-  const [connectCode, setConnectCode] = useState("");
-  const [connecting, setConnecting] = useState(false);
 
   // Permissions (local mirrors, saved on toggle)
   const [perms, setPerms] = useState({
     shareCyclePhase: true,
     shareSymptoms: false,
-    shareIntimacyLog: true,
+    shareIntimacyLog: false,
     shareAlerts: true,
   });
 
@@ -66,7 +64,7 @@ export default function Partner() {
         setPerms({
           shareCyclePhase: p.permissions.shareCyclePhase ?? true,
           shareSymptoms: p.permissions.shareSymptoms ?? false,
-          shareIntimacyLog: p.permissions.shareIntimacyLog ?? true,
+          shareIntimacyLog: p.permissions.shareIntimacyLog ?? false,
           shareAlerts: p.permissions.shareAlerts ?? true,
         });
       }
@@ -199,9 +197,9 @@ export default function Partner() {
       const result = await partnerApi.generateInviteCode();
       setInviteCode(result.inviteCode);
       setProfile((p) => p ? { ...p, inviteCode: result.inviteCode } : p);
-      Alert.alert("Code Generated 🎉", `Your private sync key is:\n${result.inviteCode}\n\nShare this with your partner to connect.`);
+      alert("Code Generated 🎉", `Your private sync key is:\n${result.inviteCode}\n\nShare this with your partner to connect.`);
     } catch (err) {
-      Alert.alert("Error", err instanceof Error ? err.message : "Failed to generate code");
+      alert("Error", err instanceof Error ? err.message : "Failed to generate code");
     } finally {
       setGeneratingCode(false);
     }
@@ -214,24 +212,6 @@ export default function Partner() {
     });
   };
 
-  const handleConnect = async () => {
-    if (!connectCode.trim()) {
-      Alert.alert("Error", "Please enter a partner invite code");
-      return;
-    }
-    setConnecting(true);
-    try {
-      await partnerApi.connectPartner(connectCode.trim());
-      await load();
-      setConnectCode("");
-      setActiveTab("access");
-      Alert.alert("Connected", "Your partner has been linked. Configure sharing permissions below.");
-    } catch (err) {
-      Alert.alert("Connection Failed", err instanceof Error ? err.message : "Invalid or expired invite code");
-    } finally {
-      setConnecting(false);
-    }
-  };
 
   const updatePerm = async (key: keyof typeof perms, value: boolean) => {
     const next = { ...perms, [key]: value };
@@ -242,6 +222,33 @@ export default function Partner() {
       // revert on failure
       setPerms(perms);
     }
+  };
+
+  const handleDisconnect = () => {
+    alert(
+      "Disconnect partner?",
+      `This removes ${partnerName}'s access to everything you share. They'll need a new invite code to reconnect.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Disconnect",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await partnerApi.disconnect();
+              setProfile((p) =>
+                p ? { ...p, isConnected: false, partnerId: undefined, connectionStatus: "disconnected" } : p,
+              );
+              setInviteCode("");
+              setChatMessages([]);
+              setActiveTab("invite");
+            } catch (err) {
+              alert("Error", err instanceof Error ? err.message : "Failed to disconnect partner");
+            }
+          },
+        },
+      ],
+    );
   };
 
   const handleSendMessage = async () => {
@@ -477,58 +484,8 @@ export default function Partner() {
                       )}
                     </TouchableOpacity>
                   )}
+                      {/* Connect using a code block has been removed, connection is now handled during login/signup */}
                 </View>
-
-                {/* Connect using a code */}
-                {!isConnected && (
-                  <View
-                    className="rounded-3xl border p-5 shadow-sm"
-                    style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-                  >
-                    <Text className="text-sm font-black mb-3" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-                      Got a Partner Code?
-                    </Text>
-                    <View
-                      className="flex-row items-center rounded-2xl border px-4 mb-3"
-                      style={{ backgroundColor: colors.background, borderColor: colors.border }}
-                    >
-                      <TextInput
-                        placeholder="Enter invite code e.g. NURA-ABC123"
-                        placeholderTextColor={colors.mutedText}
-                        value={connectCode}
-                        onChangeText={(t) => setConnectCode(t.toUpperCase())}
-                        autoCapitalize="characters"
-                        returnKeyType="done"
-                        className="flex-1 py-3 text-sm font-bold"
-                        style={{ color: colors.foreground, fontFamily: fonts.body }}
-                      />
-                    </View>
-                    <TouchableOpacity
-                      activeOpacity={0.8}
-                      disabled={connecting || !connectCode.trim()}
-                      onPress={handleConnect}
-                      className="rounded-xl py-3.5 items-center justify-center"
-                      style={{
-                        backgroundColor: connectCode.trim() ? colors.primary : colors.border,
-                        opacity: connecting ? 0.7 : 1,
-                      }}
-                    >
-                      {connecting ? (
-                        <ActivityIndicator color={colors.buttonText} />
-                      ) : (
-                        <Text
-                          className="text-sm font-bold"
-                          style={{
-                            color: connectCode.trim() ? colors.buttonText : colors.mutedText,
-                            fontFamily: fonts.body,
-                          }}
-                        >
-                          Connect Partner
-                        </Text>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                )}
               </View>
             )}
 
@@ -550,14 +507,24 @@ export default function Partner() {
                 </Text>
 
                 <View
+                  className="flex-row items-start p-3.5 rounded-2xl border gap-2.5"
+                  style={{ backgroundColor: softTints.lavender, borderColor: colors.border }}
+                >
+                  <Ionicons name="shield-checkmark-outline" size={15} color={colors.lavender} style={{ marginTop: 1 }} />
+                  <Text className="flex-1 text-[11px] font-semibold leading-4" style={{ color: colors.foreground, fontFamily: fonts.body }}>
+                    You're in control — change these anytime, and disconnecting removes access immediately.
+                  </Text>
+                </View>
+
+                <View
                   className="rounded-3xl border shadow-sm p-4 gap-4"
                   style={{ backgroundColor: colors.surface, borderColor: colors.border }}
                 >
                   {[
-                    { key: "shareCyclePhase" as const, title: "Cycle Phase", desc: "Share phase names like luteal, ovulation, or period day.", value: perms.shareCyclePhase },
-                    { key: "shareSymptoms" as const, title: "Symptoms", desc: "Share selected symptoms such as cramps, fatigue, or mood changes.", value: perms.shareSymptoms },
-                    { key: "shareIntimacyLog" as const, title: "Intimacy Notes", desc: "Share intimacy-related logs only if you are comfortable.", value: perms.shareIntimacyLog },
-                    { key: "shareAlerts" as const, title: "Care Alerts", desc: "Send gentle reminders before expected period or PMS days.", value: perms.shareAlerts },
+                    { key: "shareCyclePhase" as const, title: "Cycle Phase", desc: "They'll see your current phase and countdown to your next period — not exact dates from past cycles.", value: perms.shareCyclePhase },
+                    { key: "shareSymptoms" as const, title: "Symptoms", desc: "They'll see mood, energy, and flow in plain words. Detailed numbers (sleep, water, stress, weight, temperature) stay tucked away unless they tap for more.", value: perms.shareSymptoms },
+                    { key: "shareIntimacyLog" as const, title: "Intimacy Notes", desc: "Off by default. Only turn this on if you're both comfortable — it's very personal, so take a moment to think it over.", value: perms.shareIntimacyLog },
+                    { key: "shareAlerts" as const, title: "Care Alerts", desc: "Gentle heads-up messages before your period or PMS days — a nudge, not raw data.", value: perms.shareAlerts },
                   ].map((item, i, arr) => (
                     <View key={item.key}>
                       <View className="flex-row justify-between items-center">
@@ -581,6 +548,19 @@ export default function Partner() {
                     </View>
                   ))}
                 </View>
+
+                {isConnected && (
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={handleDisconnect}
+                    className="mt-2 rounded-2xl py-3.5 items-center justify-center border"
+                    style={{ backgroundColor: colors.dangerLight, borderColor: colors.danger }}
+                  >
+                    <Text className="text-xs font-bold" style={{ color: colors.danger, fontFamily: fonts.body }}>
+                      Disconnect Partner
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
             )}
 

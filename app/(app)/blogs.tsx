@@ -2,7 +2,6 @@ import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-  Alert,
   Image,
   Modal,
   ScrollView,
@@ -14,6 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppState } from "../../components/AppState";
+import { alert } from "../../lib/alert";
 import { useTheme } from "../../components/theme";
 import { getSoftTints } from "../../components/ui-tokens";
 import { blogsApi, type ContentFeedItem } from "../../lib/api";
@@ -168,7 +168,7 @@ export default function Blogs() {
       });
       earnTokens(3);
     } catch {
-      Alert.alert(
+      alert(
         "Error",
         "Unable to open the share sheet right now.",
       );

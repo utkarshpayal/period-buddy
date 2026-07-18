@@ -77,6 +77,8 @@ export type AuthUser = {
   lastStreakDate?: string;
   lastName?: string;
   notificationToken?: string;
+  /** Client-side only: whether this account is a connected partner "viewer" or the data "owner". Not returned by the auth API — resolved separately from GET /api/partner and cached on the session. */
+  partnerRole?: "owner" | "viewer" | null;
   phone?: string;
   profilePicture?: string;
   role?: string;
@@ -293,6 +295,7 @@ export type PartnerProfile = {
   messages: PartnerMessage[];
   partnerId?: string | Pick<AuthUser, "firstName" | "lastName">;
   permissions: PartnerPermissions;
+  role?: "owner" | "viewer" | null;
   userId: string;
 };
 
@@ -301,17 +304,35 @@ export type PartnerSymptomLogSummary = {
   energy?: DayEntry["energy"];
   flow?: DayEntry["flow"];
   mood?: DayEntry["mood"];
+  sleepHours?: number;
+  stressLevel?: number;
   symptoms?: string[];
+  temperature?: number;
+  waterIntake?: number;
+  weight?: number;
 };
 
 export type PartnerSharedData = {
   alerts?: string[];
   cycle?: Pick<
     Predictions,
-    "currentCycleDay" | "currentPhase" | "nextPeriodDaysAway"
+    | "currentCycleDay"
+    | "currentPhase"
+    | "fertileWindowRange"
+    | "nextPeriodDate"
+    | "nextPeriodDaysAway"
+    | "ovulationDaysAway"
   >;
   permissions: Partial<PartnerPermissions>;
   recentSymptoms?: PartnerSymptomLogSummary[];
+  intimacyLogs?: { dateKey: string; note: string }[];
+  careSuggestions?: {
+    suggestions: { category: string; title: string; message: string }[];
+    dos: string[];
+    donts: string[];
+  };
+  /** Not gated by a sharing permission — low-sensitivity engagement info shown to any connected partner. */
+  streak?: { count: number };
 };
 
 export type BuddyMatch = {
@@ -728,6 +749,7 @@ export const authApi = {
     lastName: string;
     password: string;
     phone?: string;
+    role?: string;
   }) =>
     apiEnvelopeRequest<{ email: string; expiresInMinutes: number }>(
       "/api/auth/signup",
@@ -755,7 +777,7 @@ export const authApi = {
       },
     ),
 
-  googleAuth: (payload: { idToken: string }) =>
+  googleAuth: (payload: { idToken: string; role?: string }) =>
     apiEnvelopeRequest<AuthUser>("/api/auth/google", {
       body: JSON.stringify(payload),
       method: "POST",
@@ -774,6 +796,12 @@ export const authApi = {
     }),
 
   getProfile: () => apiRequest<AuthUser>("/api/auth/profile"),
+
+  updateFcmToken: (token: string) =>
+    apiEnvelopeRequest<{ notificationToken: string }>("/api/auth/fcm-token", {
+      body: JSON.stringify({ token }),
+      method: "POST",
+    }),
 
   updateProfile: (payload: Partial<AuthUser>) =>
     apiRequest<AuthUser>("/api/auth/profile", {
@@ -947,6 +975,13 @@ export const partnerApi = {
 
   disconnect: () =>
     apiRequest<void>("/api/partner/disconnect", { method: "DELETE" }),
+
+  getNotifications: () => apiRequest<AppNotification[]>("/api/partner/notifications"),
+
+  markNotificationAsRead: (id: string) =>
+    apiRequest<AppNotification>(`/api/partner/notifications/${id}/read`, {
+      method: "POST",
+    }),
 };
 
 export const buddyApi = {

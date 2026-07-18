@@ -22,7 +22,7 @@ import {
 
 export default function Index() {
   const router = useRouter();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const { colors, fonts, isDark } = useTheme();
   const { width } = useWindowDimensions();
   const hasNavigated = useRef(false);
@@ -38,13 +38,17 @@ export default function Index() {
     if (isAuthenticated && !hasNavigated.current) {
       hasNavigated.current = true;
       const timer = setTimeout(() => {
-        router.replace("/(app)/(dashboard)/home");
+        router.replace(
+          user?.partnerRole === "viewer"
+            ? "/(app)/(partner-view)/home"
+            : "/(app)/(dashboard)/tracker",
+        );
       }, 100);
       return () => clearTimeout(timer);
     } else if (!isAuthenticated) {
       hasNavigated.current = false;
     }
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, router, user?.partnerRole]);
 
   return (
     <LinearGradient
@@ -235,8 +239,27 @@ export default function Index() {
             </Link>
           </View>
 
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => router.push("/(tabs)/partner-connect")}
+            className="mt-5 flex-row justify-center items-center"
+          >
+            <Ionicons
+              name="heart-outline"
+              size={13}
+              color={colors.mutedText}
+              style={{ marginRight: 5 }}
+            />
+            <Text
+              className="text-center text-xs font-bold"
+              style={{ color: colors.mutedText, fontFamily: fonts.body }}
+            >
+              Connecting as a partner? Tap here
+            </Text>
+          </TouchableOpacity>
+
           <Text
-            className="mt-5 text-center text-[11px] font-semibold leading-4"
+            className="mt-4 text-center text-[11px] font-semibold leading-4"
             style={{ color: colors.mutedText, fontFamily: fonts.body }}
           >
             No awkward dashboards. No judgment. Just clear care for real life.

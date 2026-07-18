@@ -16,8 +16,11 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.uvin124.thenura",
+      "googleServicesFile": "./assets/GoogleService-Info.plist",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "The Nura uses your camera for video calls with your Period Buddy.",
+        "NSMicrophoneUsageDescription": "The Nura uses your microphone for video calls with your Period Buddy."
       }
     },
     "android": {
@@ -27,7 +30,9 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.uvin124.thenura"
+      "package": "com.uvin124.thenura",
+      "googleServicesFile": "./assets/google-services.json",
+      "permissions": ["android.permission.CAMERA", "android.permission.RECORD_AUDIO"]
     },
     "web": {
       "bundler": "metro",
@@ -36,6 +41,23 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableMinifyInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true
+          }
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/logo.png",
+          "color": "#fff0f6",
+          "sounds": ["./lib/notification.wav"]
+        }
+      ],
       [
         "expo-image-picker",
         {

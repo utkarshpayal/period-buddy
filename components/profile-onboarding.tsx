@@ -3,7 +3,6 @@ import * as ImagePicker from "expo-image-picker";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Text,
   TextInput,
@@ -11,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { CalendarModal } from "./CalendarModal";
+import { alert } from "../lib/alert";
 import { uploadApi } from "../lib/api";
 import { useTheme } from "./theme";
 import { getShadow } from "./ui-tokens";
@@ -103,7 +103,7 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
       await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permissionResult.granted) {
-      Alert.alert(
+      alert(
         "Permission required",
         "Photo library permission is required to choose a profile picture.",
       );
@@ -128,7 +128,7 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
       const uploaded = await uploadApi.uploadImage(localUri, "profile-pictures");
       setProfilePictureUrl(uploaded.url);
     } catch (error) {
-      Alert.alert(
+      alert(
         "Upload failed",
         error instanceof Error
           ? error.message
@@ -192,7 +192,7 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
         return;
       }
 
-      Alert.alert(
+      alert(
         "Profile Setup",
         "Profile complete! Ready to save.",
       );

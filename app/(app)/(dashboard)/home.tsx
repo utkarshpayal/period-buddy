@@ -142,7 +142,7 @@ export default function Home() {
     return () => {
       isMounted = false;
     };
-  }, [updateUser]);
+  }, []);
 
   // These must reflect the signed-in account's real data only — never a
   // locally-cached demo/fallback number, which would silently show a
@@ -187,103 +187,66 @@ export default function Home() {
         backgroundColor={colors.background}
       />
 
-      <SafeAreaView
-        className="flex-1"
-        style={{ backgroundColor: colors.background }}
-      >
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 60 }}
+      <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
+        {/* FIXED HEADER - stays in place while body scrolls */}
+        <View
+          className="px-6 pt-4 pb-4 flex-row justify-between items-center"
+          style={{ backgroundColor: colors.background }}
         >
-          {/* Header Section */}
-          <View className="px-6 pt-6 flex-row justify-between items-center mb-6">
-            <View className="flex-1 mr-4">
-              <Text
-                className="font-black tracking-tight"
-                style={{
-                  fontSize: 19,
-                  color: colors.foreground,
-                  fontFamily: fonts.heading,
-                }}
-              >
-                {isDark ? "Good evening, " : "Good morning, "}
-                {user?.firstName || "Utkarsh"}
-              </Text>
-              <Text
-                className="mt-1"
-                style={{
-                  fontSize: 12,
-                  color: colors.mutedText,
-                  fontFamily: fonts.body,
-                }}
-              >
-                {isDark
-                  ? `Day ${cycleDay} · Period expected in `
-                  : `Day ${cycleDay} of your cycle · Period in `}
-                {predictions?.nextPeriodDaysAway !== undefined ? predictions.nextPeriodDaysAway : Math.max(1, 28 - cycleDay)} days
-              </Text>
-            </View>
-
-            <View className="flex-row items-center gap-2">
-              {/* Streak Pill Badge */}
-              <View
-                className="flex-row items-center rounded-full"
-                style={{
-                  backgroundColor: isDark ? colors.accentLight : colors.primaryLight,
-                  paddingHorizontal: 10,
-                  paddingVertical: 6,
-                }}
-              >
-                <Ionicons
-                  name="flame"
-                  size={12}
-                  color={isDark ? colors.accent : colors.primary}
-                  style={{ marginRight: 5 }}
-                />
-                <Text
-                  style={{
-                    fontSize: 11,
-                    fontWeight: "800",
-                    color: isDark ? colors.accent : colors.primary,
-                    fontFamily: fonts.body,
-                  }}
-                >
-                  {dashboard?.user?.streakCount ?? user?.streakCount ?? 1}d streak
-                </Text>
-              </View>
-
-              {/* Trophy Pill Badge */}
-              <View
-                className="flex-row items-center rounded-full border"
-                style={{
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                  paddingHorizontal: 10,
-                  paddingVertical: 6,
-                }}
-              >
-                <Ionicons
-                  name="trophy"
-                  size={12}
-                  color={colors.primary}
-                  style={{ marginRight: 5 }}
-                />
-                <Text
-                  style={{
-                    fontSize: 11,
-                    fontWeight: "800",
-                    color: colors.foreground,
-                    fontFamily: fonts.body,
-                  }}
-                >
-                  {isDashboardLoading ? "…" : dashboardTokens}
-                </Text>
-              </View>
-            </View>
+          <View className="flex-1 mr-4">
+            <Text
+              className="font-black tracking-tight"
+              style={{ fontSize: 20, color: colors.foreground, fontFamily: fonts.heading }}
+            >
+              {isDark ? "Good evening, " : "Good morning, "}
+              {user?.firstName || "Utkarsh"} 👋
+            </Text>
+            <Text
+              className="mt-0.5"
+              style={{ fontSize: 12, color: colors.mutedText, fontFamily: fonts.body }}
+            >
+              Day {cycleDay} · {phaseLabel} phase ·{" "}
+              {predictions?.nextPeriodDaysAway !== undefined
+                ? predictions.nextPeriodDaysAway
+                : Math.max(1, 28 - cycleDay)}{" "}
+              days to period
+            </Text>
           </View>
 
+          <View className="flex-row items-center gap-2">
+            <View
+              className="flex-row items-center rounded-full"
+              style={{
+                backgroundColor: isDark ? colors.primaryLight : colors.primaryLight,
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+              }}
+            >
+              <Ionicons name="flame" size={12} color={colors.primary} style={{ marginRight: 5 }} />
+              <Text style={{ fontSize: 11, fontWeight: "800", color: colors.primary, fontFamily: fonts.body }}>
+                {dashboard?.user?.streakCount ?? user?.streakCount ?? 1}d
+              </Text>
+            </View>
+
+            <View
+              className="flex-row items-center rounded-full border"
+              style={{ backgroundColor: colors.surface, borderColor: colors.border, paddingHorizontal: 10, paddingVertical: 6 }}
+            >
+              <Ionicons name="trophy" size={12} color={colors.primary} style={{ marginRight: 5 }} />
+              <Text style={{ fontSize: 11, fontWeight: "800", color: colors.foreground, fontFamily: fonts.body }}>
+                {isDashboardLoading ? "…" : dashboardTokens}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* SCROLLABLE BODY */}
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 120 }}
+        >
           {/* TODAY'S PHASE CARD */}
-          <View className="mx-6 mb-3.5">
+          <View className="mx-6 mb-3.5 mt-2">
             <View
               className="p-5"
               style={{
@@ -317,177 +280,81 @@ export default function Home() {
                   >
                     Day {cycleDay} · {phaseLabel} phase
                   </Text>
+                  <Text
+                    className="mt-1"
+                    style={{ fontSize: 11, color: isDark ? colors.mutedText : "rgba(255,255,255,0.65)", fontFamily: fonts.body }}
+                  >
+                    Expected period: {expectedEndDate !== "soon" ? new Date(expectedEndDate).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "soon"} · Fertile window: {fertileWindow}
+                  </Text>
                 </View>
                 <View
                   style={{
-                    width: 38,
-                    height: 38,
-                    borderRadius: 11,
-                    backgroundColor: isDark ? colors.primaryLight : "rgba(255,255,255,0.12)",
-                    alignItems: "center",
-                    justifyContent: "center",
+                    width: 38, height: 38, borderRadius: 11,
+                    backgroundColor: isDark ? colors.primaryLight : "rgba(255,255,255,0.15)",
+                    alignItems: "center", justifyContent: "center",
                   }}
                 >
-                  <Ionicons name="water" size={17} color={colors.primary} />
+                  <Ionicons name="water" size={17} color={isDark ? colors.primary : "#FFFFFF"} />
                 </View>
               </View>
               <TouchableOpacity
                 activeOpacity={0.85}
                 onPress={() => router.push("/(app)/(dashboard)/tracker" as any)}
                 className="mt-4 flex-row rounded-xl py-3 items-center justify-center"
-                style={{
-                  backgroundColor: colors.primary,
-                  gap: 8,
-                }}
+                style={{ backgroundColor: isDark ? colors.primary : "rgba(255,255,255,0.18)", gap: 8 }}
               >
-                <Ionicons name="add" size={16} color={colors.buttonText} />
-                <Text
-                  className="font-bold text-sm"
-                  style={{ color: colors.buttonText, fontFamily: fonts.body }}
-                >
+                <Ionicons name="add" size={16} color={isDark ? colors.buttonText : "#FFFFFF"} />
+                <Text className="font-bold text-sm" style={{ color: isDark ? colors.buttonText : "#FFFFFF", fontFamily: fonts.body }}>
                   Log today's entry
                 </Text>
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* CYCLE HEALTH STAT CARD (MERGED WITH STATS) */}
+          {/* CYCLE HEALTH STAT CARD */}
           <View className="mx-6 mb-3.5">
-            <View
-              className="border p-5"
-              style={{
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-                borderRadius: 24,
-                ...getShadow(colors, isDark),
-              }}
-            >
-              {/* Top Row: Title, Health Score, Circular Ring */}
+            <View className="border p-5" style={{ backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 24, ...getShadow(colors, isDark) }}>
               <View className="flex-row items-center justify-between">
                 <View className="flex-1 pr-4">
-                  <Text
-                    style={{
-                      fontSize: 10,
-                      fontWeight: "800",
-                      color: colors.primary,
-                      letterSpacing: 0.6,
-                      fontFamily: fonts.body,
-                      textTransform: "uppercase",
-                    }}
-                  >
+                  <Text style={{ fontSize: 10, fontWeight: "800", color: colors.primary, letterSpacing: 0.6, fontFamily: fonts.body, textTransform: "uppercase" }}>
                     CYCLE HEALTH
                   </Text>
                   <View className="flex-row items-baseline mt-1" style={{ gap: 6 }}>
-                    <Text
-                      style={{
-                        fontSize: 24,
-                        fontWeight: "800",
-                        color: colors.foreground,
-                        fontFamily: fonts.heading,
-                      }}
-                    >
+                    <Text style={{ fontSize: 24, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
                       {treeHealth}
                     </Text>
-                    <Text
-                      style={{
-                        fontSize: 12,
-                        fontWeight: "700",
-                        color: isDark ? colors.primary : colors.success,
-                        fontFamily: fonts.body,
-                      }}
-                    >
-                      {treeHealth > 75 ? "Good" : treeHealth > 50 ? "Healthy" : "Needs Logging"}
+                    <Text style={{ fontSize: 12, fontWeight: "700", color: treeHealth > 75 ? colors.success : treeHealth > 50 ? colors.primary : colors.warning, fontFamily: fonts.body }}>
+                      {treeHealth > 75 ? "Great" : treeHealth > 50 ? "Healthy" : "Needs Logging"}
                     </Text>
                   </View>
                 </View>
 
-                {/* Circular Progress Ring */}
                 <View style={{ position: "relative", width: 56, height: 56 }}>
                   <Svg width={56} height={56} viewBox="0 0 64 64">
-                    <Circle
-                      cx="32"
-                      cy="32"
-                      r="27"
-                      fill="none"
-                      stroke={colors.surfaceStrong}
-                      strokeWidth={6}
-                    />
-                    <Circle
-                      cx="32"
-                      cy="32"
-                      r="27"
-                      fill="none"
-                      stroke={colors.primary}
-                      strokeWidth={6}
-                      strokeLinecap="round"
-                      strokeDasharray={`${(treeHealth / 100) * 170} 170`}
-                      transform="rotate(-90 32 32)"
-                    />
+                    <Circle cx="32" cy="32" r="27" fill="none" stroke={isDark ? colors.surfaceStrong : "#E3E7ED"} strokeWidth={6} />
+                    <Circle cx="32" cy="32" r="27" fill="none" stroke={colors.primary} strokeWidth={6} strokeLinecap="round" strokeDasharray={`${(treeHealth / 100) * 170} 170`} transform="rotate(-90 32 32)" />
                   </Svg>
-                  <View
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      justifyContent: "center",
-                      alignItems: "center",
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 11,
-                        fontWeight: "600",
-                        color: colors.foreground,
-                        fontFamily: fonts.mono,
-                      }}
-                    >
+                  <View style={{ position: "absolute", inset: 0, justifyContent: "center", alignItems: "center" }}>
+                    <Text style={{ fontSize: 11, fontWeight: "600", color: colors.foreground, fontFamily: fonts.mono }}>
                       {treeHealth}%
                     </Text>
                   </View>
                 </View>
               </View>
 
-              {/* Thin Divider line */}
-              <View
-                className="my-4 h-[1px] w-full"
-                style={{ backgroundColor: colors.border }}
-              />
+              <View className="my-4 h-[1px] w-full" style={{ backgroundColor: colors.border }} />
 
-              {/* Bottom Row: 3-column stats */}
               <View className="flex-row justify-between items-center">
                 {[
-                  {
-                    value: loggedDays,
-                    label: "Days logged",
-                  },
-                  {
-                    value: periodLength || 5,
-                    label: "Period length",
-                  },
-                  {
-                    value: typeof fertileWindow === "number" ? fertileWindow : 6,
-                    label: "Fertile window",
-                  },
+                  { value: loggedDays, label: "Days logged" },
+                  { value: periodLength || 5, label: "Period length" },
+                  { value: typeof fertileWindow === "number" ? fertileWindow : 6, label: "Fertile window" },
                 ].map((stat, i) => (
                   <View key={i} className="flex-1 items-center">
-                    <Text
-                      style={{
-                        fontSize: 18,
-                        fontWeight: "800",
-                        color: colors.foreground,
-                        fontFamily: fonts.mono,
-                      }}
-                    >
+                    <Text style={{ fontSize: 18, fontWeight: "800", color: colors.foreground, fontFamily: fonts.mono }}>
                       {stat.value}
                     </Text>
-                    <Text
-                      style={{
-                        fontSize: 10,
-                        color: colors.mutedText,
-                        fontFamily: fonts.body,
-                        marginTop: 2,
-                        textAlign: "center",
-                      }}
-                    >
+                    <Text style={{ fontSize: 10, color: colors.mutedText, fontFamily: fonts.body, marginTop: 2, textAlign: "center" }}>
                       {stat.label}
                     </Text>
                   </View>
@@ -496,205 +363,65 @@ export default function Home() {
             </View>
           </View>
 
-          {/* CYCLE LENGTH TREND CARD (COLLAPSIBLE) */}
+          {/* CYCLE LENGTH TREND — ALWAYS VISIBLE */}
           <View className="mx-6 mb-3.5">
-            <View
-              className="border p-5"
-              style={{
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-                borderRadius: 24,
-                ...getShadow(colors, isDark),
-              }}
-            >
-              <TouchableOpacity
-                activeOpacity={0.7}
-                onPress={() => setTrendCollapsed(!trendCollapsed)}
-                className="flex-row justify-between items-center"
-              >
-                <Text
-                  style={{
-                    fontSize: 14,
-                    fontWeight: "800",
-                    color: colors.foreground,
-                    fontFamily: fonts.heading,
-                  }}
-                >
+            <View className="border p-5" style={{ backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 24, ...getShadow(colors, isDark) }}>
+              <View className="flex-row justify-between items-center mb-5">
+                <Text style={{ fontSize: 14, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
                   Cycle length trend
                 </Text>
-                <View className="flex-row items-center gap-1">
-                  <Text
-                    style={{
-                      fontSize: 11.5,
-                      color: colors.mutedText,
-                      fontFamily: fonts.body,
-                      marginRight: 4,
-                    }}
-                  >
-                    Avg {predictions?.cycleLength ?? 28} days
-                  </Text>
-                  <Ionicons
-                    name={trendCollapsed ? "chevron-down" : "chevron-up"}
-                    size={16}
-                    color={colors.mutedText}
-                  />
-                </View>
-              </TouchableOpacity>
+                <Text style={{ fontSize: 11.5, color: colors.mutedText, fontFamily: fonts.body }}>
+                  Avg {predictions?.cycleLength ?? 28} days
+                </Text>
+              </View>
 
-              {!trendCollapsed && (
-                <View style={{ marginTop: 20 }}>
-                  {/* Trend Graph Canvas */}
-                  <View
-                    className="flex-row justify-around items-end"
-                    style={{ height: 120 }}
-                  >
-                    {analyticGraphData.map((data, idx) => {
-                      const barHeight = Math.max(12, (data.length / maxBarLength) * 80);
-                      const isLatest = idx === analyticGraphData.length - 1;
-
-                      return (
-                        <View
-                          key={`${data.month}-${idx}`}
-                          className="items-center"
-                          style={{ width: 44 }}
-                        >
-                          {/* Value Label */}
-                          <Text
-                            style={{
-                              fontSize: 9.5,
-                              fontWeight: "600",
-                              color: isLatest ? colors.primary : colors.mutedText,
-                              fontFamily: fonts.mono,
-                              marginBottom: 6,
-                            }}
-                          >
-                            {data.length > 0 ? `${data.length}d` : "0d"}
-                          </Text>
-
-                          {/* Bar Container with track background */}
-                          <View
-                            style={{
-                              height: 80,
-                              width: 14,
-                              backgroundColor: colors.surfaceSoft,
-                              borderRadius: 99,
-                              justifyContent: "flex-end",
-                              overflow: "hidden",
-                            }}
-                          >
-                            <View
-                              style={{
-                                height: barHeight,
-                                width: "100%",
-                                backgroundColor: colors.primary,
-                                opacity: isLatest ? 1 : 0.55,
-                                borderRadius: 99,
-                              }}
-                            />
-                          </View>
-
-                          {/* Month Label */}
-                          <Text
-                            style={{
-                              fontSize: 10,
-                              fontWeight: "600",
-                              color: isLatest ? colors.foreground : colors.mutedText,
-                              fontFamily: fonts.body,
-                              marginTop: 8,
-                            }}
-                          >
-                            {data.month}
-                          </Text>
-                        </View>
-                      );
-                    })}
-                  </View>
-                </View>
-              )}
+              <View className="flex-row justify-around items-end" style={{ height: 120 }}>
+                {analyticGraphData.map((data, idx) => {
+                  const barHeight = Math.max(12, (data.length / maxBarLength) * 80);
+                  const isLatest = idx === analyticGraphData.length - 1;
+                  return (
+                    <View key={`${data.month}-${idx}`} className="items-center" style={{ width: 44 }}>
+                      <Text style={{ fontSize: 9.5, fontWeight: "600", color: isLatest ? colors.primary : colors.mutedText, fontFamily: fonts.mono, marginBottom: 6 }}>
+                        {data.length > 0 ? `${data.length}d` : "—"}
+                      </Text>
+                      <View style={{ height: 80, width: 14, backgroundColor: isDark ? colors.surfaceStrong : "#E8EDF3", borderRadius: 99, justifyContent: "flex-end", overflow: "hidden" }}>
+                        <View style={{ height: barHeight, width: "100%", backgroundColor: colors.primary, opacity: isLatest ? 1 : 0.5, borderRadius: 99 }} />
+                      </View>
+                      <Text style={{ fontSize: 10, fontWeight: "600", color: isLatest ? colors.foreground : colors.mutedText, fontFamily: fonts.body, marginTop: 8 }}>
+                        {data.month}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
             </View>
           </View>
 
           {/* YOUR CARE LIST */}
           <View className="mx-6 mb-6">
-            <Text
-              className="mb-2.5"
-              style={{
-                fontSize: 14.5,
-                fontWeight: "800",
-                color: colors.foreground,
-                fontFamily: fonts.heading,
-              }}
-            >
+            <Text className="mb-2.5" style={{ fontSize: 14.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
               Your care
             </Text>
 
             <View style={{ gap: 9 }}>
               {[
-                {
-                  title: "Period Tracker",
-                  desc: "Log flow, mood, symptoms, and notes",
-                  icon: "water",
-                  route: "/(app)/(dashboard)/tracker",
-                },
-                {
-                  title: "Smart Predictions",
-                  desc: "Cycle forecasts, windows, and trends",
-                  icon: "trending-up-outline",
-                  route: "/(app)/predictions",
-                },
-                {
-                  title: "Gynecologist Consultation",
-                  desc: "Private specialist booking, secure chat",
-                  icon: "chatbubbles-outline",
-                  route: "/(app)/consultation",
-                },
+                { title: "Period Tracker", desc: "Log flow, mood, symptoms, and notes", icon: "water", route: "/(app)/(dashboard)/tracker" },
+                { title: "Smart Predictions", desc: "Cycle forecasts, windows, and trends", icon: "trending-up-outline", route: "/(app)/predictions" },
+                { title: "Gynecologist Consultation", desc: "Private specialist booking, secure chat", icon: "chatbubbles-outline", route: "/(app)/consultation" },
               ].map((careItem, i) => (
                 <TouchableOpacity
                   key={i}
                   onPress={() => router.push(careItem.route as any)}
                   activeOpacity={0.7}
                   className="flex-row items-center border"
-                  style={{
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                    borderRadius: 16,
-                    padding: 13,
-                  }}
+                  style={{ backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 16, padding: 13 }}
                 >
-                  <View
-                    style={{
-                      width: 38,
-                      height: 38,
-                      borderRadius: 11,
-                      backgroundColor: colors.primaryLight,
-                      alignItems: "center",
-                      justifyContent: "center",
-                      marginRight: 12,
-                    }}
-                  >
+                  <View style={{ width: 38, height: 38, borderRadius: 11, backgroundColor: colors.primaryLight, alignItems: "center", justifyContent: "center", marginRight: 12 }}>
                     <Ionicons name={careItem.icon as any} size={17} color={colors.primary} />
                   </View>
                   <View className="flex-1">
-                    <Text
-                      style={{
-                        fontSize: 13,
-                        fontWeight: "800",
-                        color: colors.foreground,
-                        fontFamily: fonts.body,
-                      }}
-                    >
-                      {careItem.title}
-                    </Text>
-                    <Text
-                      style={{
-                        fontSize: 11,
-                        color: colors.mutedText,
-                        marginTop: 1,
-                        fontFamily: fonts.body,
-                      }}
-                    >
-                      {careItem.desc}
-                    </Text>
+                    <Text style={{ fontSize: 13, fontWeight: "800", color: colors.foreground, fontFamily: fonts.body }}>{careItem.title}</Text>
+                    <Text style={{ fontSize: 11, color: colors.mutedText, marginTop: 1, fontFamily: fonts.body }}>{careItem.desc}</Text>
                   </View>
                   <Ionicons name="chevron-forward" size={14} color={colors.mutedText} />
                 </TouchableOpacity>
@@ -702,187 +429,60 @@ export default function Home() {
             </View>
           </View>
 
-          {/* ADDITIONAL ECOSYSTEM OPTIONS */}
+          {/* WELLNESS & SUPPORT GRID */}
           <View className="mx-6 mb-6">
-            <Text
-              className="mb-2.5"
-              style={{
-                fontSize: 14.5,
-                fontWeight: "800",
-                color: colors.foreground,
-                fontFamily: fonts.heading,
-              }}
-            >
+            <Text className="mb-2.5" style={{ fontSize: 14.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
               Wellness & support
             </Text>
-            {isDark && (
-              <Text
-                className="mb-3.5 -mt-2"
-                style={{
-                  fontSize: 11.5,
-                  color: colors.mutedText,
-                  fontFamily: fonts.body,
-                }}
-              >
-                Pick a topic to explore, at your own pace
-              </Text>
-            )}
 
             <View className="flex-row flex-wrap justify-between" style={{ gap: 10 }}>
               {[
-                {
-                  title: "Health Concerns",
-                  desc: "Irregularities & symptom tracking",
-                  icon: "alert-circle-outline",
-                  route: "/(app)/health-issues",
-                },
-                {
-                  title: "Anonymous Q&A",
-                  desc: "Ask privately, expert-answered",
-                  icon: "help-circle-outline",
-                  route: "/(app)/qa",
-                },
-                {
-                  title: "Hygiene & Care",
-                  desc: "Product guidance & comfort tips",
-                  icon: "leaf-outline",
-                  route: "/(app)/hygiene",
-                },
-                {
-                  title: "Sexual Wellbeing",
-                  desc: "Consent, intimacy & safety",
-                  icon: "heart-outline",
-                  route: "/(app)/sexual-wellbeing",
-                },
+                { title: "Health Concerns", desc: "Irregularities & symptoms", icon: "alert-circle-outline", route: "/(app)/health-issues" },
+                { title: "Anonymous Q&A", desc: "Ask privately, expert-answered", icon: "help-circle-outline", route: "/(app)/qa" },
+                { title: "Hygiene & Care", desc: "Product guidance & comfort", icon: "leaf-outline", route: "/(app)/hygiene" },
+                { title: "Sexual Wellbeing", desc: "Consent, intimacy & safety", icon: "heart-outline", route: "/(app)/sexual-wellbeing" },
               ].map((wellness, idx) => (
                 <TouchableOpacity
                   key={idx}
                   onPress={() => router.push(wellness.route as any)}
                   activeOpacity={0.7}
                   className="border"
-                  style={{
-                    width: "48%",
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                    borderRadius: 16,
-                    padding: 12,
-                  }}
+                  style={{ width: "48%", backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 16, padding: 12 }}
                 >
-                  <View
-                    style={{
-                      alignSelf: "flex-start",
-                      padding: 8,
-                      borderRadius: 10,
-                      backgroundColor: colors.primaryLight,
-                      marginBottom: 10,
-                    }}
-                  >
+                  <View style={{ alignSelf: "flex-start", padding: 8, borderRadius: 10, backgroundColor: colors.primaryLight, marginBottom: 10 }}>
                     <Ionicons name={wellness.icon as any} size={16} color={colors.primary} />
                   </View>
-                  <Text
-                    style={{
-                      fontSize: 12,
-                      fontWeight: "800",
-                      color: colors.foreground,
-                      fontFamily: fonts.body,
-                    }}
-                  >
-                    {wellness.title}
-                  </Text>
-                  <Text
-                    style={{
-                      fontSize: 10,
-                      color: colors.mutedText,
-                      marginTop: 2,
-                      fontFamily: fonts.body,
-                    }}
-                    numberOfLines={1}
-                  >
-                    {wellness.desc}
-                  </Text>
+                  <Text style={{ fontSize: 12, fontWeight: "800", color: colors.foreground, fontFamily: fonts.body }}>{wellness.title}</Text>
+                  <Text style={{ fontSize: 10, color: colors.mutedText, marginTop: 2, fontFamily: fonts.body }} numberOfLines={1}>{wellness.desc}</Text>
                 </TouchableOpacity>
               ))}
             </View>
           </View>
 
-          {/* MORE EXPERIENCES ROW GRID */}
-          <View className="mx-6">
-            <Text
-              className="mb-2.5"
-              style={{
-                fontSize: 14.5,
-                fontWeight: "800",
-                color: colors.foreground,
-                fontFamily: fonts.heading,
-              }}
-            >
+          {/* EXPLORE GRID */}
+          <View className="mx-6 mb-8">
+            <Text className="mb-2.5" style={{ fontSize: 14.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
               Explore
             </Text>
 
             <View className="flex-row flex-wrap" style={{ gap: 8 }}>
               {[
-                {
-                  title: "Forest",
-                  icon: "leaf-outline",
-                  route: "/(app)/forest",
-                  color: colors.success,
-                },
-                {
-                  title: "Blogs",
-                  icon: "book-open-outline",
-                  route: "/(app)/blogs",
-                  color: colors.info,
-                },
-                {
-                  title: "Videos",
-                  icon: "play-circle-outline",
-                  route: "/(app)/reels",
-                  color: colors.primary,
-                },
-                {
-                  title: "Partner sync",
-                  icon: "git-merge-outline",
-                  route: "/(app)/partner",
-                  color: colors.accent,
-                },
-                {
-                  title: "Habits",
-                  icon: "toggle-outline",
-                  route: "/(app)/habits",
-                  color: colors.success,
-                },
-                {
-                  title: "Nominate Buddy",
-                  icon: "star-outline",
-                  route: "/(app)/buddy-nomination",
-                  color: colors.accent,
-                },
+                { title: "Forest", icon: "leaf-outline", route: "/(app)/forest", color: colors.success },
+                { title: "Blogs", icon: "book-open-outline", route: "/(app)/blogs", color: colors.info },
+                { title: "Videos", icon: "play-circle-outline", route: "/(app)/reels", color: colors.primary },
+                { title: "Partner sync", icon: "git-merge-outline", route: "/(app)/partner", color: colors.accent },
+                { title: "Habits", icon: "toggle-outline", route: "/(app)/habits", color: colors.success },
+                { title: "Nominate Buddy", icon: "star-outline", route: "/(app)/buddy-nomination", color: colors.accent },
               ].map((exp, idx) => (
                 <TouchableOpacity
                   key={idx}
                   onPress={() => router.push(exp.route as any)}
                   activeOpacity={0.8}
                   className="border items-center justify-center"
-                  style={{
-                    width: "31%",
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                    borderRadius: 14,
-                    paddingVertical: 12,
-                    paddingHorizontal: 8,
-                  }}
+                  style={{ width: "31%", backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 8 }}
                 >
                   <Ionicons name={exp.icon as any} size={18} color={exp.color} />
-                  <Text
-                    style={{
-                      fontSize: 10,
-                      fontWeight: "700",
-                      color: colors.foreground,
-                      marginTop: 6,
-                      fontFamily: fonts.body,
-                    }}
-                    numberOfLines={1}
-                  >
+                  <Text style={{ fontSize: 10, fontWeight: "700", color: colors.foreground, marginTop: 6, fontFamily: fonts.body }} numberOfLines={1}>
                     {exp.title}
                   </Text>
                 </TouchableOpacity>
@@ -894,3 +494,4 @@ export default function Home() {
     </>
   );
 }
+

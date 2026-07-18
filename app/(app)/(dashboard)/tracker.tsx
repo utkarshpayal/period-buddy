@@ -1,4 +1,5 @@
-import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -13,14 +14,19 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import Svg, { Circle } from "react-native-svg";
 import { useAppState } from "../../../components/AppState";
 import DayDetailsModal from "../../../components/DayDetailsModal";
 import { useTheme } from "../../../components/theme";
 import { getShadow, getSoftTints } from "../../../components/ui-tokens";
+import { useAuth } from "../../../components/auth-context";
 import {
+  authApi,
   cycleApi,
   type CycleSettings,
   type DayEntry as ApiDayEntry,
+  type DashboardSummary,
+  type Predictions,
 } from "../../../lib/api";
 import type { DayEntry as LocalDayEntry } from "../../../components/AppState";
 
@@ -122,11 +128,17 @@ function formatSettingsDate(value?: string) {
 
 export default function Tracker() {
   const { colors, isDark, fonts } = useTheme();
+  const router = useRouter();
   const [selectedDate, setSelectedDate] = useState<SelectedDate | null>(null);
   const [dayDetailsVisible, setDayDetailsVisible] = useState(false);
   const [selectedYear, setSelectedYear] = useState(() =>
     new Date().getFullYear(),
   );
+  const [yearPickerVisible, setYearPickerVisible] = useState(false);
+  const [searchVisible, setSearchVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const mainScrollRef = React.useRef<ScrollView>(null);
+  const [monthLayouts, setMonthLayouts] = useState<Record<number, number>>({});
   const [cycleSettings, setCycleSettings] = useState<CycleSettings | null>(null);
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [settingsError, setSettingsError] = useState("");
@@ -146,6 +158,64 @@ export default function Tracker() {
     Record<string, LocalDayEntry>
   >({});
   const softTints = getSoftTints(colors);
+
+  const { user, updateUser } = useAuth();
+  const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
+  const [predictions, setPredictions] = useState<Predictions | null>(null);
+  const [isDashboardLoading, setIsDashboardLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadDashboard() {
+      try {
+        const [dashboardSummary, cyclePredictions] = await Promise.all([
+          authApi.getDashboard(),
+          cycleApi.getPredictions(),
+        ]);
+
+        if (isMounted) {
+          setDashboard(dashboardSummary);
+          setPredictions(cyclePredictions);
+          if (dashboardSummary.user) {
+            updateUser(dashboardSummary.user);
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to load dashboard/predictions data in tracker:", err);
+      } finally {
+        if (isMounted) setIsDashboardLoading(false);
+      }
+    }
+    loadDashboard();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const loggedDays = Math.max(dashboard?.trackedDays ?? 0, 0);
+  const cycleDay = Math.max(
+    predictions?.currentCycleDay ??
+    dashboard?.predictions?.currentCycleDay ??
+    1,
+    1,
+  );
+  const nextPeriodDaysAway = predictions?.nextPeriodDaysAway !== undefined ? predictions.nextPeriodDaysAway : Math.max(1, (cycleSettings?.cycleLength ?? CYCLE_LENGTH) - cycleDay);
+  const treeHealth =
+    dashboard?.forestHealth ?? Math.min(100, Math.max(45, 55 + loggedDays * 6));
+  const currentPhase = predictions?.currentPhase || dashboard?.predictions?.currentPhase || "follicular";
+
+  const weekDays = useMemo(() => {
+    const today = new Date();
+    const dayOfWeek = today.getDay(); // 0 is Sunday, 1 is Monday, etc.
+    const sunday = new Date(today);
+    sunday.setDate(today.getDate() - dayOfWeek); // Go back to Sunday
+
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(sunday);
+      d.setDate(sunday.getDate() + i);
+      return d;
+    });
+  }, []);
 
   const cycleStartDate = useMemo(() => {
     if (cycleSettings?.lastPeriodStartDate) {
@@ -249,6 +319,21 @@ export default function Tracker() {
       isMounted = false;
     };
   }, [calendarMonths]);
+
+  const currentMonthIndex = useMemo(() => new Date().getMonth(), []);
+  const currentYear = useMemo(() => new Date().getFullYear(), []);
+
+  useEffect(() => {
+    if (selectedYear === currentYear && monthLayouts[currentMonthIndex] !== undefined) {
+      const timer = setTimeout(() => {
+        mainScrollRef.current?.scrollTo({
+          y: monthLayouts[currentMonthIndex] + 280, // Offset to account for top headers
+          animated: true,
+        });
+      }, 400);
+      return () => clearTimeout(timer);
+    }
+  }, [selectedYear, monthLayouts, currentMonthIndex, currentYear]);
 
   function mapApiDayEntry(log: ApiDayEntry): LocalDayEntry {
     return {
@@ -436,31 +521,58 @@ export default function Tracker() {
         className="flex-1"
         style={{ backgroundColor: colors.background }}
       >
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 140 }}
-        >
-          {/* Header Bar */}
-          <View className="px-6 pt-6 flex-row justify-between items-start">
-            <View>
-              <Text
-                className="text-3xl font-extrabold tracking-tight"
-                style={{ color: colors.foreground, fontFamily: fonts.heading }}
+        {/* FIXED HEADER AND SELECTORS */}
+        <View style={{ backgroundColor: colors.background, zIndex: 10 }}>
+          {/* Personalized Greeting Header */}
+          <View className="px-6 pt-4 flex-row justify-between items-center">
+            <View className="flex-row items-center gap-3">
+              <View
+                className="h-12 w-12 rounded-full items-center justify-center border"
+                style={{
+                  backgroundColor: colors.primaryLight,
+                  borderColor: colors.primary,
+                }}
               >
-                Period Tracker
-              </Text>
-              <Text
-                className="mt-1 text-xs font-semibold"
-                style={{ color: colors.mutedText, fontFamily: fonts.body }}
-              >
-                Track your cycle, flow, mood, and symptoms
-              </Text>
+                <Text
+                  className="text-lg font-black"
+                  style={{ color: colors.primary, fontFamily: fonts.mono }}
+                >
+                  {user?.firstName ? user.firstName.charAt(0).toUpperCase() : "U"}
+                </Text>
+              </View>
+              <View>
+                <Text
+                  className="text-xs font-semibold"
+                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                >
+                  Hello,
+                </Text>
+                <Text
+                  className="text-lg font-black tracking-tight"
+                  style={{ color: colors.foreground, fontFamily: fonts.heading }}
+                >
+                  {user?.firstName || "Utkarsh"}
+                </Text>
+              </View>
             </View>
+
             <View className="flex-row gap-2">
               <TouchableOpacity
                 activeOpacity={0.7}
+                onPress={() => { setSearchQuery(""); setSearchVisible(true); }}
+                className="p-2.5 rounded-full border"
+                style={{
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                }}
+              >
+                <Feather name="search" size={18} color={colors.foreground} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.7}
                 onPress={openCycleSettings}
-                className="p-2.5 rounded-full border shadow-2xs"
+                className="p-2.5 rounded-full border"
                 style={{
                   backgroundColor: colors.surface,
                   borderColor: colors.border,
@@ -468,26 +580,269 @@ export default function Tracker() {
               >
                 <Feather name="settings" size={18} color={colors.foreground} />
               </TouchableOpacity>
-
-              <TouchableOpacity
-                activeOpacity={0.7}
-                onPress={openToday}
-                className="p-2.5 rounded-full shadow-2xs"
-                style={{
-                  backgroundColor: colors.primary,
-                }}
-              >
-                <MaterialCommunityIcons
-                  name="calendar-heart"
-                  size={20}
-                  color={colors.buttonText}
-                />
-              </TouchableOpacity>
             </View>
           </View>
 
+          {/* Month Selector */}
+          <View className="px-6 mt-4 flex-row items-center justify-between">
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => {
+                setSelectedYear(prev => prev - 1);
+              }}
+              className="p-1"
+            >
+              <Feather name="chevron-left" size={18} color={colors.mutedText} />
+            </TouchableOpacity>
+
+            <Text
+              className="text-sm font-extrabold tracking-tight"
+              style={{ color: colors.foreground, fontFamily: fonts.heading }}
+            >
+              {new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+            </Text>
+
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => {
+                setSelectedYear(prev => prev + 1);
+              }}
+              className="p-1"
+            >
+              <Feather name="chevron-right" size={18} color={colors.mutedText} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Horizontal dates week line */}
+          <View className="px-6 mt-3 pb-3 flex-row justify-between border-b" style={{ borderColor: colors.border }}>
+            {weekDays.map((d) => {
+              const dateKey = getDateKey(d);
+              const dayNum = d.getDate();
+              const isToday = dateKey === todayKey;
+              const weekday = d.toLocaleDateString("en-US", { weekday: "short" }).substring(0, 2);
+
+              // Cycle math for phase highlighting
+              const cDay = getCycleDay(d, cycleStartDate, activeCycleLength);
+              const phase = getCyclePhase(cDay, activePeriodLength, activeCycleLength);
+
+              const isPeriod = phase === "period";
+              const isFertile = cDay >= ovulationDayPivot - 5 && cDay <= ovulationDayPivot + 1;
+
+              return (
+                <TouchableOpacity
+                  key={dateKey}
+                  activeOpacity={0.8}
+                  onPress={() => openDate(d)}
+                  className="items-center"
+                >
+                  <Text
+                    className="text-[10px] font-bold uppercase tracking-wider mb-1.5"
+                    style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                  >
+                    {weekday}
+                  </Text>
+                  <View
+                    className={`h-9 w-9 items-center justify-center rounded-full ${
+                      isToday
+                        ? ""
+                        : isPeriod
+                        ? "border-2 border-dashed"
+                        : isFertile
+                        ? "border border-dotted"
+                        : "border border-transparent"
+                    }`}
+                    style={{
+                      backgroundColor: isToday ? colors.primary : "transparent",
+                      borderColor: isToday
+                        ? "transparent"
+                        : isPeriod
+                        ? colors.rose
+                        : isFertile
+                        ? colors.success
+                        : "transparent",
+                    }}
+                  >
+                    <Text
+                      className="text-xs font-extrabold"
+                      style={{
+                        color: isToday
+                          ? colors.buttonText
+                          : isPeriod
+                          ? colors.rose
+                          : colors.foreground,
+                        fontFamily: fonts.body,
+                      }}
+                    >
+                      {dayNum}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* SCROLLABLE BODY */}
+        <ScrollView
+          ref={mainScrollRef}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 140 }}
+        >
+
+          {/* Circular progress tracker ("todays log in circle") */}
+          <View className="items-center justify-center mt-7">
+            <View style={{ position: "relative", width: 200, height: 200 }}>
+              <Svg width={200} height={200} viewBox="0 0 100 100">
+                <Circle
+                  cx="50"
+                  cy="50"
+                  r="44"
+                  fill="none"
+                  stroke={colors.surfaceStrong}
+                  strokeWidth={4.5}
+                />
+                <Circle
+                  cx="50"
+                  cy="50"
+                  r="44"
+                  fill="none"
+                  stroke={colors.primary}
+                  strokeWidth={4.5}
+                  strokeLinecap="round"
+                  strokeDasharray={`${(cycleDay / activeCycleLength) * 276} 276`}
+                  transform="rotate(-90 50 50)"
+                />
+              </Svg>
+
+              <View
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  justifyContent: "center",
+                  alignItems: "center",
+                  paddingHorizontal: 28,
+                  paddingVertical: 20,
+                }}
+              >
+                <View
+                  className="p-1.5 rounded-lg mb-1.5"
+                  style={{ backgroundColor: colors.primaryLight }}
+                >
+                  <Ionicons name="water" size={16} color={colors.primary} />
+                </View>
+                <Text
+                  numberOfLines={1}
+                  className="font-black uppercase tracking-wider text-center"
+                  style={{
+                    fontSize: 9,
+                    color: colors.mutedText,
+                    fontFamily: fonts.body,
+                    width: "100%",
+                  }}
+                >
+                  {currentPhase === "period"
+                    ? "PERIOD DAY"
+                    : currentPhase === "ovulation"
+                    ? "OVULATION"
+                    : cycleDay >= activePeriodLength + 1 && cycleDay < ovulationDayPivot - 5
+                    ? "OVULATION IN"
+                    : "PERIOD IN"}
+                </Text>
+                <Text
+                  numberOfLines={1}
+                  className="font-black text-center mt-0.5"
+                  style={{
+                    fontSize: 22,
+                    color: colors.foreground,
+                    fontFamily: fonts.heading,
+                    width: "100%",
+                  }}
+                >
+                  {currentPhase === "period"
+                    ? `${cycleDay}`
+                    : currentPhase === "ovulation"
+                    ? "Today"
+                    : cycleDay >= activePeriodLength + 1 && cycleDay < ovulationDayPivot - 5
+                    ? `${Math.max(1, ovulationDayPivot - 5 - cycleDay)} Days`
+                    : `${nextPeriodDaysAway} Days`}
+                </Text>
+                <Text
+                  numberOfLines={2}
+                  className="font-bold text-center mt-1"
+                  style={{
+                    fontSize: 8.5,
+                    lineHeight: 12,
+                    color: currentPhase === "ovulation" || (cycleDay >= ovulationDayPivot - 5 && cycleDay <= ovulationDayPivot)
+                      ? colors.success
+                      : colors.mutedText,
+                    fontFamily: fonts.body,
+                    width: "100%",
+                  }}
+                >
+                  {currentPhase === "ovulation" || (cycleDay >= ovulationDayPivot - 5 && cycleDay <= ovulationDayPivot)
+                    ? "High chance\nto get pregnant"
+                    : "Lower chance\nto get pregnant"}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Three Stats Cards Row */}
+          <View className="px-6 mt-7 flex-row justify-between gap-3">
+            {[
+              { label: "Days logged", val: `${loggedDays}` },
+              { label: "Period length", val: `${activePeriodLength} days` },
+              { label: "Health score", val: `${treeHealth}%` },
+            ].map((stat) => (
+              <View
+                key={stat.label}
+                className="flex-1 rounded-2xl border p-3.5 items-center justify-center"
+                style={{
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                }}
+              >
+                <Text
+                  className="text-base font-black"
+                  style={{ color: colors.foreground, fontFamily: fonts.mono }}
+                >
+                  {stat.val}
+                </Text>
+                <Text
+                  className="text-[9px] font-bold uppercase tracking-wider text-center mt-1"
+                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                >
+                  {stat.label}
+                </Text>
+              </View>
+            ))}
+          </View>
+
+          {/* "+ Log today's entry" Button */}
+          <View className="px-6 mt-5">
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={openToday}
+              className="w-full rounded-2xl py-4 flex-row items-center justify-center gap-2"
+              style={{
+                backgroundColor: colors.primary,
+              }}
+            >
+              <Feather name="plus" size={16} color={colors.buttonText} />
+              <Text
+                className="text-sm font-extrabold"
+                style={{ color: colors.buttonText, fontFamily: fonts.body }}
+              >
+                Log today's entry
+              </Text>
+            </TouchableOpacity>
+          </View>
+
           {/* Elegant Horizontal Legend Row */}
-          <View className="px-6 mt-5 flex-row flex-wrap gap-2">
+          <View className="px-6 mt-6 flex-row flex-wrap gap-2">
             {(Object.keys(phaseStyles) as CyclePhase[]).map((key) => (
               <View
                 key={key}
@@ -511,54 +866,6 @@ export default function Tracker() {
             ))}
           </View>
 
-          <View
-            className="mx-6 mt-5 rounded-3xl border overflow-hidden p-5 shadow-sm"
-            style={{
-              backgroundColor: colors.primaryLight,
-              borderColor: colors.primary,
-            }}
-          >
-            <View className="flex-row items-center justify-between gap-4">
-              <View className="flex-1">
-                <Text
-                  className="text-xs font-bold tracking-widest uppercase"
-                  style={{ color: colors.primary, fontFamily: fonts.body }}
-                >
-                  Cycle Setup
-                </Text>
-                <Text
-                  className="mt-1 text-sm font-extrabold"
-                  style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                >
-                  {cycleSettings
-                    ? `${activeCycleLength}-day cycle • ${activePeriodLength}-day period`
-                    : "Add your cycle baseline"}
-                </Text>
-                <Text
-                  className="mt-1 text-[11px] font-semibold leading-4"
-                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                >
-                  Last period started {lastPeriodStartDate}. Update this to
-                  improve predictions and calendar phases.
-                </Text>
-              </View>
-
-              <TouchableOpacity
-                activeOpacity={0.85}
-                onPress={openCycleSettings}
-                className="rounded-full px-4 py-2.5"
-                style={{ backgroundColor: colors.primary }}
-              >
-                <Text
-                  className="text-xs font-bold"
-                  style={{ color: colors.buttonText, fontFamily: fonts.body }}
-                >
-                  Edit
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
           {/* Calendar Body Area */}
           <View className="mx-4 mt-6">
             <View className="px-2">
@@ -570,69 +877,47 @@ export default function Tracker() {
                   >
                     Calendar
                   </Text>
-                  {/* <Text
-                    className="mt-1 text-xs font-semibold leading-5"
-                    style={{ color: colors.mutedText }}
-                  >
-                    All 12 months are in one scroll. Tap any date to add flow,
-                    symptoms, mood, energy, or notes.
-                  </Text> */}
                 </View>
-                <TouchableOpacity
-                  activeOpacity={0.82}
-                  className="rounded-full border px-4 py-2"
-                  onPress={openToday}
-                  style={{
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  }}
-                >
-                  <Text
-                    className="text-xs font-black"
-                    style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                  >
-                    Today
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
 
-            <ScrollView
-              className="-mx-4 mt-4"
-              contentContainerStyle={{ gap: 8, paddingHorizontal: 20 }}
-              horizontal
-              keyboardShouldPersistTaps="handled"
-              showsHorizontalScrollIndicator={false}
-            >
-              {yearOptions.map((year) => {
-                const isSelected = year === selectedYear;
-
-                return (
+                <View className="flex-row gap-2 items-center">
+                  {/* Year Dropdown Picker Button */}
                   <TouchableOpacity
-                    activeOpacity={0.82}
-                    className="rounded-full border px-4 py-2"
-                    key={year}
-                    onPress={() => setSelectedYear(year)}
+                    activeOpacity={0.7}
+                    onPress={() => setYearPickerVisible(true)}
+                    className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-full border"
                     style={{
-                      backgroundColor: isSelected
-                        ? colors.primary
-                        : colors.surface,
-                      borderColor: isSelected ? colors.primary : colors.border,
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
                     }}
                   >
                     <Text
                       className="text-xs font-black"
-                      style={{
-                        color: isSelected ? colors.buttonText : colors.mutedText,
-                        fontFamily: fonts.body,
-                      }}
+                      style={{ color: colors.foreground, fontFamily: fonts.body }}
                     >
-                      {year}
+                      {selectedYear}
+                    </Text>
+                    <Feather name="chevron-down" size={12} color={colors.mutedText} />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    activeOpacity={0.82}
+                    className="rounded-full border px-3 py-1.5"
+                    onPress={openToday}
+                    style={{
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    }}
+                  >
+                    <Text
+                      className="text-xs font-black"
+                      style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                    >
+                      Today
                     </Text>
                   </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
+                </View>
+              </View>
+            </View>
 
             <View
               className="mt-4 overflow-hidden rounded-[28px] border"
@@ -691,6 +976,13 @@ export default function Tracker() {
                         borderColor:
                           monthIndex === 0 ? "transparent" : colors.border,
                       }}
+                      onLayout={(e) => {
+                        const y = e.nativeEvent.layout.y;
+                        setMonthLayouts((prev) => {
+                          if (prev[monthIndex] === y) return prev;
+                          return { ...prev, [monthIndex]: y };
+                        });
+                      }}
                     >
                       <Text
                         className="mb-4 text-center text-sm font-black"
@@ -736,13 +1028,16 @@ export default function Tracker() {
                             cell.cycleDay <= ovulationDayPivot + 1;
                           const isOvulationPeak =
                             cell.cycleDay === ovulationDayPivot;
-                          const dayTextColor = isPeriodDay
+                          
+                          const dayTextColor = isSelected
                             ? colors.buttonText
-                            : isFertileDay
-                              ? colors.success
-                              : isSelected
-                                ? colors.primary
-                                : colors.foreground;
+                            : isPeriodDay
+                              ? colors.primary
+                              : isFertileDay
+                                ? colors.success
+                                : isToday
+                                  ? colors.primary
+                                  : colors.foreground;
 
                           return (
                             <TouchableOpacity
@@ -755,21 +1050,22 @@ export default function Tracker() {
                               <View
                                 className="items-center justify-center rounded-full border relative"
                                 style={{
-                                  backgroundColor: isPeriodDay
-                                    ? colors.danger
-                                    : isSelected
+                                  backgroundColor: isSelected
+                                    ? colors.primary
+                                    : isPeriodDay
                                       ? colors.primaryLight
                                       : "transparent",
-                                  borderColor: isPeriodDay
-                                    ? colors.danger
-                                    : isSelected || isToday
+                                  borderColor: isSelected
+                                    ? colors.primary
+                                    : isToday
                                       ? colors.primary
-                                      : isOvulationPeak
-                                        ? colors.success
-                                        : "transparent",
+                                      : isPeriodDay
+                                        ? colors.primary
+                                        : isOvulationPeak
+                                          ? colors.success
+                                          : "transparent",
                                   borderStyle:
-                                    !isPeriodDay &&
-                                    (isToday || isOvulationPeak)
+                                    !isSelected && !isPeriodDay && (isToday || isOvulationPeak)
                                       ? "dashed"
                                       : "solid",
                                   borderWidth:
@@ -812,6 +1108,392 @@ export default function Tracker() {
           </View>
         </ScrollView>
       </SafeAreaView>
+
+      {/* Year Picker Dropdown Modal */}
+      <Modal
+        visible={yearPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setYearPickerVisible(false)}
+      >
+        <Pressable
+          className="flex-1 justify-center items-center"
+          style={{ backgroundColor: colors.overlay }}
+          onPress={() => setYearPickerVisible(false)}
+        >
+          <View
+            className="w-[260px] p-4 rounded-3xl border"
+            style={{
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              ...getShadow(colors, isDark),
+            }}
+          >
+            <Text
+              className="text-center font-extrabold mb-3 text-base"
+              style={{ color: colors.foreground, fontFamily: fonts.heading }}
+            >
+              Select Year
+            </Text>
+            {[2024, 2025, 2026, 2027, 2028, 2029, 2030].map((y) => (
+              <TouchableOpacity
+                key={y}
+                onPress={() => {
+                  setSelectedYear(y);
+                  setYearPickerVisible(false);
+                }}
+                className="py-3 px-4 rounded-xl flex-row items-center justify-between"
+                style={{
+                  backgroundColor: y === selectedYear ? colors.primaryLight : "transparent",
+                }}
+              >
+                <Text
+                  className="font-bold text-sm"
+                  style={{
+                    color: y === selectedYear ? colors.primary : colors.foreground,
+                    fontFamily: fonts.body,
+                  }}
+                >
+                  {y}
+                </Text>
+                {y === selectedYear && (
+                  <Feather name="check" size={16} color={colors.primary} />
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* ── Search Overlay Modal ── */}
+      <Modal
+        visible={searchVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSearchVisible(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: colors.overlay }}>
+          {/* Header bar with search input */}
+          <View
+            style={{
+              backgroundColor: colors.surface,
+              paddingTop: 56,
+              paddingBottom: 10,
+              paddingHorizontal: 16,
+              borderBottomWidth: 1,
+              borderBottomColor: colors.border,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
+            <Feather name="search" size={18} color={colors.mutedText} />
+            <TextInput
+              autoFocus
+              placeholder="Search features, symptoms, phases…"
+              placeholderTextColor={colors.mutedText}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              style={{
+                flex: 1,
+                fontSize: 15,
+                fontFamily: fonts.body,
+                color: colors.foreground,
+                padding: 0,
+              }}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery("")}>
+                <Feather name="x-circle" size={18} color={colors.mutedText} />
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity onPress={() => setSearchVisible(false)} style={{ paddingLeft: 4 }}>
+              <Text style={{ color: colors.primary, fontFamily: fonts.body, fontWeight: "700", fontSize: 14 }}>
+                Cancel
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Results list */}
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            style={{ backgroundColor: colors.background }}
+            contentContainerStyle={{ paddingBottom: 40 }}
+          >
+            {(() => {
+              const q = searchQuery.toLowerCase().trim();
+
+              const allItems: { icon: string; title: string; desc: string; action: () => void }[] = [
+                {
+                  icon: "droplet",
+                  title: "Log today's entry",
+                  desc: "Record flow, mood, symptoms and notes",
+                  action: () => { setSearchVisible(false); openToday(); },
+                },
+                {
+                  icon: "calendar",
+                  title: "Period phase",
+                  desc: "Days 1–5 of your cycle · heaviest flow",
+                  action: () => { setSearchVisible(false); openToday(); },
+                },
+                {
+                  icon: "sun",
+                  title: "Follicular phase",
+                  desc: "After period · energy rising, estrogen building",
+                  action: () => { setSearchVisible(false); },
+                },
+                {
+                  icon: "activity",
+                  title: "Ovulation",
+                  desc: "Peak fertility window · highest chance of pregnancy",
+                  action: () => { setSearchVisible(false); },
+                },
+                {
+                  icon: "moon",
+                  title: "Luteal phase",
+                  desc: "Post-ovulation · PMS symptoms may appear",
+                  action: () => { setSearchVisible(false); },
+                },
+                {
+                  icon: "thermometer",
+                  title: "Cramps",
+                  desc: "Log menstrual cramps as a symptom",
+                  action: () => { setSearchVisible(false); openToday(); },
+                },
+                {
+                  icon: "frown",
+                  title: "Mood tracking",
+                  desc: "Log your mood: happy, sad, irritable, calm…",
+                  action: () => { setSearchVisible(false); openToday(); },
+                },
+                {
+                  icon: "heart",
+                  title: "Flow intensity",
+                  desc: "Track light, medium, heavy or spotting flow",
+                  action: () => { setSearchVisible(false); openToday(); },
+                },
+                {
+                  icon: "zap",
+                  title: "Energy level",
+                  desc: "Record daily energy from low to high",
+                  action: () => { setSearchVisible(false); openToday(); },
+                },
+                {
+                  icon: "edit-3",
+                  title: "Add a note",
+                  desc: "Write a private journal entry for today",
+                  action: () => { setSearchVisible(false); openToday(); },
+                },
+                {
+                  icon: "settings",
+                  title: "Cycle settings",
+                  desc: "Edit cycle length, period length, reminders",
+                  action: () => { setSearchVisible(false); openCycleSettings(); },
+                },
+                {
+                  icon: "bar-chart-2",
+                  title: "Cycle trend",
+                  desc: "View cycle length history and averages",
+                  action: () => { setSearchVisible(false); },
+                },
+                {
+                  icon: "alert-circle",
+                  title: "Bloating",
+                  desc: "Log bloating as a symptom",
+                  action: () => { setSearchVisible(false); openToday(); },
+                },
+                {
+                  icon: "cloud",
+                  title: "Headache",
+                  desc: "Log headache as a symptom",
+                  action: () => { setSearchVisible(false); openToday(); },
+                },
+                {
+                  icon: "trending-up",
+                  title: "Next period prediction",
+                  desc: "See when your next period is expected",
+                  action: () => { setSearchVisible(false); },
+                },
+                // App-wide features, so search can jump anywhere in the app,
+                // not just cycle-tracker quick actions.
+                {
+                  icon: "trending-up",
+                  title: "Smart Predictions",
+                  desc: "Cycle forecasts, windows, and trends",
+                  action: () => { setSearchVisible(false); router.push("/(app)/predictions"); },
+                },
+                {
+                  icon: "message-circle",
+                  title: "Gynecologist Consultation",
+                  desc: "Private specialist booking, secure chat, video call",
+                  action: () => { setSearchVisible(false); router.push("/(app)/consultation"); },
+                },
+                {
+                  icon: "alert-triangle",
+                  title: "Health Concerns",
+                  desc: "Irregularities & symptoms",
+                  action: () => { setSearchVisible(false); router.push("/(app)/health-issues"); },
+                },
+                {
+                  icon: "help-circle",
+                  title: "Anonymous Q&A",
+                  desc: "Ask privately, expert-answered",
+                  action: () => { setSearchVisible(false); router.push("/(app)/qa"); },
+                },
+                {
+                  icon: "feather",
+                  title: "Hygiene & Care",
+                  desc: "Product guidance & comfort",
+                  action: () => { setSearchVisible(false); router.push("/(app)/hygiene"); },
+                },
+                {
+                  icon: "heart",
+                  title: "Sexual Wellbeing",
+                  desc: "Consent, intimacy & safety",
+                  action: () => { setSearchVisible(false); router.push("/(app)/sexual-wellbeing"); },
+                },
+                {
+                  icon: "wind",
+                  title: "Forest",
+                  desc: "Grow your focus/habit forest",
+                  action: () => { setSearchVisible(false); router.push("/(app)/forest"); },
+                },
+                {
+                  icon: "book-open",
+                  title: "Blogs",
+                  desc: "Articles on cycle health and care",
+                  action: () => { setSearchVisible(false); router.push("/(app)/blogs"); },
+                },
+                {
+                  icon: "play-circle",
+                  title: "Videos",
+                  desc: "Short videos and reels",
+                  action: () => { setSearchVisible(false); router.push("/(app)/reels"); },
+                },
+                {
+                  icon: "git-merge",
+                  title: "Partner Sync",
+                  desc: "Share cycle info with your partner, chat, video call",
+                  action: () => { setSearchVisible(false); router.push("/(app)/partner"); },
+                },
+                {
+                  icon: "toggle-left",
+                  title: "Habits",
+                  desc: "Daily habit tracking",
+                  action: () => { setSearchVisible(false); router.push("/(app)/habits"); },
+                },
+                {
+                  icon: "star",
+                  title: "Period Buddy",
+                  desc: "Anonymous cycle-matched peer chat & video call",
+                  action: () => { setSearchVisible(false); router.push("/(app)/buddy-nomination"); },
+                },
+                {
+                  icon: "users",
+                  title: "Community",
+                  desc: "Posts, discussions, and support",
+                  action: () => { setSearchVisible(false); router.push("/(app)/(dashboard)/community"); },
+                },
+              ];
+
+              const filtered = q.length === 0
+                ? []
+                : allItems.filter(
+                    (item) =>
+                      item.title.toLowerCase().includes(q) ||
+                      item.desc.toLowerCase().includes(q),
+                  );
+
+              if (q.length === 0) {
+                return (
+                  <View style={{ alignItems: "center", paddingTop: 60 }}>
+                    <Feather name="search" size={36} color={colors.border} />
+                    <Text style={{ color: colors.mutedText, fontFamily: fonts.body, marginTop: 12, fontSize: 14 }}>
+                      Start typing to search features, symptoms, phases…
+                    </Text>
+                  </View>
+                );
+              }
+
+              if (filtered.length === 0) {
+                return (
+                  <View style={{ alignItems: "center", paddingTop: 60 }}>
+                    <Feather name="search" size={36} color={colors.border} />
+                    <Text style={{ color: colors.mutedText, fontFamily: fonts.body, marginTop: 12, fontSize: 14 }}>
+                      No results for "{searchQuery}"
+                    </Text>
+                  </View>
+                );
+              }
+
+              return (
+                <>
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      fontWeight: "700",
+                      color: colors.mutedText,
+                      fontFamily: fonts.body,
+                      paddingHorizontal: 20,
+                      paddingTop: 18,
+                      paddingBottom: 8,
+                      letterSpacing: 0.5,
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    {filtered.length} result{filtered.length === 1 ? "" : "s"}
+                  </Text>
+                  {filtered.map((item, idx) => (
+                    <TouchableOpacity
+                      key={idx}
+                      activeOpacity={0.7}
+                      onPress={item.action}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        paddingHorizontal: 20,
+                        paddingVertical: 13,
+                        borderBottomWidth: 1,
+                        borderBottomColor: colors.border,
+                        backgroundColor: colors.surface,
+                        marginHorizontal: 12,
+                        marginTop: idx === 0 ? 0 : 4,
+                        borderRadius: 14,
+                        marginBottom: idx === filtered.length - 1 ? 0 : -4,
+                        ...(idx === 0 ? { borderTopLeftRadius: 14, borderTopRightRadius: 14 } : {}),
+                        ...(idx === filtered.length - 1 ? { borderBottomLeftRadius: 14, borderBottomRightRadius: 14, marginBottom: 4 } : {}),
+                      }}
+                    >
+                      <View
+                        style={{
+                          width: 36,
+                          height: 36,
+                          borderRadius: 10,
+                          backgroundColor: colors.primaryLight,
+                          alignItems: "center",
+                          justifyContent: "center",
+                          marginRight: 12,
+                        }}
+                      >
+                        <Feather name={item.icon as any} size={16} color={colors.primary} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 13, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>
+                          {item.title}
+                        </Text>
+                        <Text style={{ fontSize: 11, color: colors.mutedText, fontFamily: fonts.body, marginTop: 1 }} numberOfLines={1}>
+                          {item.desc}
+                        </Text>
+                      </View>
+                      <Feather name="chevron-right" size={14} color={colors.border} />
+                    </TouchableOpacity>
+                  ))}
+                </>
+              );
+            })()}
+          </ScrollView>
+        </View>
+      </Modal>
 
       <Modal
         animationType="slide"

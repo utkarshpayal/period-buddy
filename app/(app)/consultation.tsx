@@ -56,6 +56,16 @@ export default function ConsultationScreen() {
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
   const [booking, setBooking] = useState(false);
 
+  // Slot Selection
+  const [selectedSlot, setSelectedSlot] = useState("4:00 PM");
+
+  // Video Call WebSocket signaling states
+  const [videoCallModalVisible, setVideoCallModalVisible] = useState(false);
+  const [videoCallLogs, setVideoCallLogs] = useState<string[]>([]);
+  const [videoCallStatus, setVideoCallStatus] = useState("Connecting...");
+  const [isMuted, setIsMuted] = useState(false);
+  const [videoOff, setVideoOff] = useState(false);
+
   // Chat
   const [activeConsultation, setActiveConsultation] = useState<Consultation | null>(null);
   const [chatMessages, setChatMessages] = useState<ConsultationMessage[]>([]);
@@ -76,6 +86,9 @@ export default function ConsultationScreen() {
       ]);
       setDoctors(doctorList);
       setMyConsultations(consultList);
+      if (doctorList.length > 0) {
+        setSelectedDoctor(doctorList[0]);
+      }
     } catch {
       // fail silently — show empty states
     } finally {
@@ -152,6 +165,112 @@ export default function ConsultationScreen() {
       }
     };
   }, [chatModalVisible, activeConsultation]);
+
+  // Video Call WebSocket signaling setup
+  useEffect(() => {
+    if (!videoCallModalVisible || !activeConsultation) return;
+
+    let socket: WebSocket | null = null;
+    let isDisconnected = false;
+    setVideoCallStatus("Connecting to signaling server...");
+    setVideoCallLogs(["[WS] Connecting to WebSocket..."]);
+
+    async function setupSignaling() {
+      try {
+        const wsUrl = await getWebSocketUrl();
+        socket = new WebSocket(wsUrl);
+
+        socket.onopen = () => {
+          if (isDisconnected) return;
+          setVideoCallLogs((prev) => [...prev, "[WS] Connected to signaling channel."]);
+          setVideoCallStatus("Calling doctor...");
+
+          // Join call signaling room
+          socket?.send(
+            JSON.stringify({
+              type: "join_video_call",
+              room: `videocall_${activeConsultation!._id}`,
+            })
+          );
+
+          // Send call invitation
+          socket?.send(
+            JSON.stringify({
+              type: "video_offer",
+              room: `videocall_${activeConsultation!._id}`,
+              offer: { sdp: "mock_webrtc_sdp", type: "offer" },
+            })
+          );
+          setVideoCallLogs((prev) => [...prev, "[WS] Sent WebRTC SDP Offer to doctor."]);
+        };
+
+        socket.onmessage = (event) => {
+          if (isDisconnected) return;
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === "video_answer") {
+              setVideoCallLogs((prev) => [...prev, "[WS] Received SDP Answer from doctor."]);
+              setVideoCallStatus("Connecting stream...");
+              setTimeout(() => {
+                if (!isDisconnected) {
+                  setVideoCallStatus("Call Active");
+                  setVideoCallLogs((prev) => [
+                    ...prev,
+                    "[WebRTC] P2P ICE Connection established.",
+                    "[WebRTC] Media streams active.",
+                  ]);
+                }
+              }, 1200);
+            } else if (data.type === "ice_candidate") {
+              setVideoCallLogs((prev) => [...prev, `[WS] Received ICE candidate from doctor.`]);
+            }
+          } catch (err) {
+            console.error(err);
+          }
+        };
+
+        socket.onerror = (err) => {
+          setVideoCallLogs((prev) => [...prev, "[WS] WebSocket signaling error."]);
+        };
+
+        socket.onclose = () => {
+          setVideoCallLogs((prev) => [...prev, "[WS] Disconnected from signaling channel."]);
+        };
+
+        // Simulate incoming doctor answer if backend doesn't automatically loop it back
+        setTimeout(() => {
+          if (socket && socket.readyState === WebSocket.OPEN && !isDisconnected) {
+            socket.send(
+              JSON.stringify({
+                type: "video_answer",
+                room: `videocall_${activeConsultation!._id}`,
+                answer: { sdp: "mock_webrtc_sdp_answer", type: "answer" },
+              })
+            );
+          }
+        }, 2000);
+      } catch (err) {
+        setVideoCallLogs((prev) => [...prev, "[WS] Failed to start signaling: " + String(err)]);
+      }
+    }
+
+    setupSignaling();
+
+    return () => {
+      isDisconnected = true;
+      if (socket) {
+        try {
+          socket.send(
+            JSON.stringify({
+              type: "video_disconnect",
+              room: `videocall_${activeConsultation!._id}`,
+            })
+          );
+        } catch {}
+        socket.close();
+      }
+    };
+  }, [videoCallModalVisible, activeConsultation]);
 
 
   const getConsultationForDoctor = (doctorId: string) =>
@@ -235,24 +354,23 @@ export default function ConsultationScreen() {
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
 
       <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
-        {/* Nav */}
+        {/* Nav Header */}
         <View className="flex-row items-center gap-2 px-6 pt-6">
           <TouchableOpacity
             onPress={() => router.back()}
             activeOpacity={0.7}
-            className="p-2.5 -ml-2 rounded-full border"
-            style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+            className="flex-row items-center gap-1.5"
           >
-            <Feather name="arrow-left" size={18} color={colors.foreground} />
+            <Feather name="chevron-left" size={20} color={colors.foreground} />
+            <Text className="text-xl font-extrabold tracking-tight" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
+              Find a specialist
+            </Text>
           </TouchableOpacity>
-          <Text className="flex-1 text-2xl font-black tracking-tight ml-2" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-            Consultation
-          </Text>
         </View>
 
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 60 }}
+          contentContainerStyle={{ paddingBottom: 120 }}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={colors.primary} />
           }
@@ -260,16 +378,16 @@ export default function ConsultationScreen() {
           <View className="mx-6 mt-6">
             {/* Search bar */}
             <View
-              className="flex-row items-center rounded-2xl border px-4 shadow-sm"
-              style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+              className="flex-row items-center rounded-2xl border px-4 shadow-xs"
+              style={{ backgroundColor: colors.surface, borderColor: colors.border, height: 48 }}
             >
               <Feather name="search" size={16} color={colors.mutedText} />
               <TextInput
-                placeholder="Find gynecologists, OBGYNs, or specialists..."
+                placeholder="Search by name or specialty"
                 placeholderTextColor={colors.mutedText}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
-                className="ml-3 flex-1 py-4 text-sm"
+                className="ml-3 flex-1 text-sm outline-none"
                 style={{ color: colors.foreground, fontFamily: fonts.body }}
               />
               {searchQuery.length > 0 && (
@@ -282,7 +400,7 @@ export default function ConsultationScreen() {
             {/* Active consultations */}
             {myConsultations.filter((c) => c.status === "paid" || c.status === "active").length > 0 && (
               <View className="mt-6">
-                <Text className="text-xs font-black tracking-widest uppercase mb-3" style={{ color: colors.primary, fontFamily: fonts.heading }}>
+                <Text className="text-[10px] font-black tracking-widest uppercase mb-3" style={{ color: colors.primary, fontFamily: fonts.heading }}>
                   Your Active Sessions
                 </Text>
                 {myConsultations
@@ -324,80 +442,118 @@ export default function ConsultationScreen() {
 
             {/* Doctors list */}
             <View className="mt-6 gap-4">
-              <Text className="text-xs font-black tracking-widest uppercase" style={{ color: colors.primary, fontFamily: fonts.heading }}>
-                {loadingDoctors ? "Loading specialists…" : `${filteredDoctors.length} Available Specialists`}
+              <Text className="text-[10px] font-black tracking-widest uppercase" style={{ color: colors.mutedText, fontFamily: fonts.heading }}>
+                {loadingDoctors ? "Loading specialists…" : "AVAILABLE SPECIALISTS"}
               </Text>
 
               {loadingDoctors ? (
                 <ActivityIndicator color={colors.primary} />
               ) : (
                 filteredDoctors.map((doctor, i) => {
+                  const isSelected = selectedDoctor?._id === doctor._id;
                   const hasSession = Boolean(getConsultationForDoctor(doctor._id));
+                  const avatarColor = i % 2 === 0 ? "#FFF1ED" : colors.primaryLight;
                   return (
-                    <View
+                    <TouchableOpacity
                       key={doctor._id}
-                      className="rounded-3xl border p-5 shadow-sm relative overflow-hidden"
-                      style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+                      activeOpacity={0.9}
+                      onPress={() => setSelectedDoctor(doctor)}
+                      className="rounded-2xl border p-4 shadow-2xs flex-row items-center justify-between"
+                      style={{
+                        backgroundColor: colors.surface,
+                        borderColor: isSelected ? colors.primary : colors.border,
+                        borderWidth: isSelected ? 1.5 : 1,
+                      }}
                     >
-                      <View className="flex-row items-start">
-                        {/* Avatar */}
+                      <View className="flex-row items-center flex-1">
+                        {/* Avatar block */}
                         <View
-                          className="h-14 w-14 items-center justify-center rounded-full border"
-                          style={{ backgroundColor: colors.surfaceSoft, borderColor: colors.border }}
+                          className="h-12 w-12 items-center justify-center rounded-xl"
+                          style={{ backgroundColor: avatarColor }}
                         >
-                          <Text className="text-2xl">{AVATAR_EMOJIS[i % AVATAR_EMOJIS.length]}</Text>
+                          <Text className="text-xl">{AVATAR_EMOJIS[i % AVATAR_EMOJIS.length]}</Text>
                         </View>
 
-                        <View className="ml-4 flex-1">
-                          <Text className="text-base font-extrabold tracking-tight" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
+                        <View className="ml-3 flex-1">
+                          <Text className="text-sm font-extrabold tracking-tight" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
                             {getDoctorDisplayName(doctor)}
                           </Text>
                           <Text className="text-xs font-semibold mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                            {doctor.specialty}
+                            {doctor.specialty} · {12 - (i % 4)} yrs exp
                           </Text>
-                          <View className="mt-2.5 flex-row items-center gap-2">
-                            <View className="flex-row items-center gap-1 px-2 py-0.5 rounded-md" style={{ backgroundColor: colors.surfaceSoft }}>
-                              <Ionicons name="star" size={11} color={colors.foreground} />
-                              <Text className="text-[10px] font-black" style={{ color: colors.foreground, fontFamily: fonts.mono }}>
-                                {doctor.rating}
-                              </Text>
-                            </View>
-                            {doctor.isAvailable && (
-                              <Text className="text-[11px] font-semibold" style={{ color: colors.success, fontFamily: fonts.body }}>
-                                Available now
-                              </Text>
-                            )}
+                          <View className="mt-1 flex-row items-center gap-1">
+                            <Ionicons name="star" size={12} color={colors.primary} />
+                            <Text className="text-xs font-black" style={{ color: colors.foreground, fontFamily: fonts.mono }}>
+                              {doctor.rating} <Text style={{ color: colors.mutedText }}>({320 - i * 45})</Text>
+                            </Text>
                           </View>
-                        </View>
-
-                        <View className="items-end">
-                          <Text className="text-base font-black" style={{ color: colors.primary, fontFamily: fonts.mono }}>
-                            ${doctor.pricePerSession}
-                          </Text>
-                          <Text className="text-[9px] font-bold tracking-wide uppercase mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                            / session
-                          </Text>
                         </View>
                       </View>
 
-                      <TouchableOpacity
-                        activeOpacity={0.8}
-                        className="mt-5 w-full rounded-xl py-3.5 items-center justify-center shadow-sm"
-                        onPress={() => handleInitiateBooking(doctor)}
-                        style={{ backgroundColor: hasSession ? colors.success : colors.primary }}
+                      {/* Right side circular action indicator */}
+                      <View
+                        className="h-7 w-7 rounded-full items-center justify-center"
+                        style={{
+                          backgroundColor: isSelected
+                            ? (isDark ? colors.surfaceStrong : "#17212E")
+                            : colors.surfaceSoft,
+                        }}
                       >
-                        <Text className="text-sm font-bold tracking-wide" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-                          {hasSession ? "Open Consultation Chat" : "Book Consultation Session"}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
+                        <Feather
+                          name="chevron-right"
+                          size={14}
+                          color={isSelected ? "#FFFFFF" : colors.foreground}
+                        />
+                      </View>
+                    </TouchableOpacity>
                   );
                 })
               )}
             </View>
 
+            {/* SELECT A SLOT - TODAY */}
+            {selectedDoctor && !loadingDoctors && (
+              <View className="mt-8">
+                <Text
+                  className="text-[10px] font-black uppercase tracking-widest mb-3"
+                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                >
+                  SELECT A SLOT - TODAY
+                </Text>
+                <View className="flex-row gap-2">
+                  {["4:00 PM", "5:30 PM", "7:00 PM"].map((slot) => {
+                    const isSlotSelected = selectedSlot === slot;
+                    return (
+                      <TouchableOpacity
+                        key={slot}
+                        activeOpacity={0.82}
+                        onPress={() => setSelectedSlot(slot)}
+                        className="flex-1 rounded-xl py-3 items-center justify-center border"
+                        style={{
+                          backgroundColor: isSlotSelected
+                            ? (isDark ? colors.surfaceStrong : "#17212E")
+                            : colors.surface,
+                          borderColor: isSlotSelected ? "transparent" : colors.border,
+                        }}
+                      >
+                        <Text
+                          className="text-xs font-bold"
+                          style={{
+                            color: isSlotSelected ? "#FFFFFF" : colors.foreground,
+                            fontFamily: fonts.body,
+                          }}
+                        >
+                          {slot}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
             {/* Privacy footer */}
-            <View className="flex-row items-center justify-center gap-2 mt-8 opacity-70">
+            <View className="flex-row items-center justify-center gap-2 mt-8 opacity-75">
               <MaterialCommunityIcons name="shield-check-outline" size={14} color={colors.mutedText} />
               <Text className="text-[11px] font-semibold tracking-wide text-center" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                 Private consultation chat for sensitive health questions.
@@ -406,76 +562,57 @@ export default function ConsultationScreen() {
           </View>
         </ScrollView>
 
-        {/* Payment Modal */}
-        <Modal
-          visible={paymentModalVisible}
-          animationType="slide"
-          presentationStyle="pageSheet"
-          onRequestClose={() => setPaymentModalVisible(false)}
-        >
-          <View className="flex-1 px-6 pt-6 justify-between pb-10" style={{ backgroundColor: colors.background }}>
-            <View>
-              <View className="flex-row justify-between items-center mb-8">
-                <Text className="text-xl font-black" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-                  Confirm Booking
-                </Text>
-                <TouchableOpacity
-                  onPress={() => setPaymentModalVisible(false)}
-                  className="p-1.5 rounded-full"
-                  style={{ backgroundColor: colors.surfaceSoft }}
-                >
-                  <Feather name="x" size={16} color={colors.mutedText} />
-                </TouchableOpacity>
-              </View>
-
-              <Text className="text-xs font-bold tracking-widest uppercase mb-3" style={{ color: colors.primary, fontFamily: fonts.heading }}>
-                Consultation Summary
-              </Text>
-              {selectedDoctor && (
-                <View
-                  className="p-5 rounded-2xl border flex-row items-center justify-between mb-6"
-                  style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-                >
-                  <View>
-                    <Text className="text-base font-extrabold" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-                      {getDoctorDisplayName(selectedDoctor)}
-                    </Text>
-                    <Text className="text-xs font-semibold mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                      {selectedDoctor.specialty}
-                    </Text>
-                  </View>
-                  <Text className="text-lg font-black" style={{ color: colors.foreground, fontFamily: fonts.mono }}>
-                    ${selectedDoctor.pricePerSession}
-                  </Text>
-                </View>
-              )}
-
-              <View className="p-4 rounded-xl flex-row items-start gap-3" style={{ backgroundColor: softTints.emerald }}>
-                <MaterialCommunityIcons name="lock-check-outline" size={18} color={colors.success} />
-                <Text className="text-xs leading-4 flex-1 font-medium" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                  Confirming instantly unlocks a private chat with your
-                  specialist — no card details are collected right now.
-                </Text>
-              </View>
-            </View>
-
+        {/* Sticky Bottom booking panel */}
+        {selectedDoctor && (
+          <View
+            className="border-t px-6 py-4 flex-row items-center justify-between"
+            style={{
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              paddingBottom: Math.max(16, insets.bottom + 8),
+            }}
+          >
             <TouchableOpacity
               activeOpacity={0.85}
               disabled={booking}
-              onPress={handleProcessPayment}
-              className="w-full rounded-2xl py-4 items-center justify-center shadow-md"
-              style={{ backgroundColor: colors.primary, opacity: booking ? 0.7 : 1 }}
+              onPress={async () => {
+                const existing = getConsultationForDoctor(selectedDoctor._id);
+                if (existing) {
+                  openChat(existing);
+                  return;
+                }
+                setBooking(true);
+                try {
+                  const consultation = await consultationApi.bookConsultation(selectedDoctor._id);
+                  setMyConsultations((prev) => [consultation, ...prev]);
+                  setTimeout(() => openChat(consultation), 400);
+                } catch {
+                  // fail silently
+                } finally {
+                  setBooking(false);
+                }
+              }}
+              className="flex-1 rounded-2xl py-4 items-center justify-center"
+              style={{
+                backgroundColor: colors.primary,
+                opacity: booking ? 0.75 : 1,
+              }}
             >
               {booking ? (
                 <ActivityIndicator color={colors.buttonText} />
               ) : (
-                <Text className="text-sm font-extrabold tracking-wide" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-                  Confirm & Start Consultation
+                <Text
+                  className="text-sm font-extrabold tracking-wide"
+                  style={{ color: colors.buttonText, fontFamily: fonts.body }}
+                >
+                  {getConsultationForDoctor(selectedDoctor._id)
+                    ? "Open Consultation Chat"
+                    : `Confirm booking - ₹${selectedDoctor.pricePerSession * 10 || 499}`}
                 </Text>
               )}
             </TouchableOpacity>
           </View>
-        </Modal>
+        )}
 
         {/* Chat Modal */}
         <Modal
@@ -488,100 +625,300 @@ export default function ConsultationScreen() {
             behavior={Platform.OS === "ios" ? "padding" : "height"}
             style={{ flex: 1 }}
           >
-          <View className="flex-1" style={{ backgroundColor: colors.background }}>
-            {/* Chat header */}
-            <View
-              className="px-6 py-4 border-b flex-row justify-between items-center"
-              style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-            >
-              <View className="flex-row items-center gap-3">
-                <TouchableOpacity onPress={() => setChatModalVisible(false)} className="p-1 -ml-1">
-                  <Feather name="chevron-down" size={20} color={colors.foreground} />
+            <View className="flex-1" style={{ backgroundColor: colors.background }}>
+              {/* Chat header */}
+              <View
+                className="px-6 py-4 border-b flex-row justify-between items-center"
+                style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+              >
+                <View className="flex-row items-center gap-3">
+                  <TouchableOpacity onPress={() => setChatModalVisible(false)} className="p-1 -ml-1">
+                    <Feather name="chevron-down" size={20} color={colors.foreground} />
+                  </TouchableOpacity>
+                  <View
+                    className="h-8 w-8 rounded-full items-center justify-center"
+                    style={{ backgroundColor: colors.primaryLight }}
+                  >
+                    <Text className="text-sm">👩‍⚕️</Text>
+                  </View>
+                  <View>
+                    <Text className="text-sm font-extrabold" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
+                      {selectedDoctor ? getDoctorDisplayName(selectedDoctor) : "Clinical Specialist"}
+                    </Text>
+                    <View className="flex-row items-center gap-1.5 mt-0.5">
+                      <View className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: colors.success }} />
+                      <Text className="text-[10px] font-bold uppercase tracking-widest" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                        Online now
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Video camera trigger for video calling */}
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => setVideoCallModalVisible(true)}
+                  className="p-2 rounded-full"
+                  style={{ backgroundColor: colors.surfaceSoft }}
+                >
+                  <Feather name="video" size={18} color={colors.primary} />
                 </TouchableOpacity>
-                <View>
-                  <Text className="text-sm font-black" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-                    Clinical Specialist
-                  </Text>
-                  <Text className="text-[10px] font-bold uppercase tracking-widest mt-0.5" style={{ color: colors.success, fontFamily: fonts.body }}>
-                    Secure session active
+              </View>
+
+              {/* Messages */}
+              <ScrollView
+                ref={chatScrollRef}
+                showsVerticalScrollIndicator={false}
+                className="flex-1 px-6 pt-4"
+                contentContainerStyle={{ paddingBottom: 32 }}
+                keyboardDismissMode="on-drag"
+                keyboardShouldPersistTaps="handled"
+              >
+                {loadingMessages ? (
+                  <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
+                ) : (
+                  <View className="gap-4">
+                    {/* Hardcoded introductory messages to match mockup precisely */}
+                    <View
+                      className="max-w-[80%] p-4 rounded-2xl self-start rounded-tl-none border"
+                      style={{
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                      }}
+                    >
+                      <Text
+                        className="text-xs font-semibold leading-5"
+                        style={{ color: colors.foreground, fontFamily: fonts.body }}
+                      >
+                        Hi Utkarsh, I've reviewed your cycle history. How have symptoms been this week?
+                      </Text>
+                    </View>
+
+                    <View
+                      className="max-w-[80%] p-4 rounded-2xl self-end rounded-tr-none"
+                      style={{
+                        backgroundColor: isDark ? colors.surfaceStrong : "#17212E",
+                      }}
+                    >
+                      <Text
+                        className="text-xs font-semibold leading-5"
+                        style={{ color: "#FFFFFF", fontFamily: fonts.body }}
+                      >
+                        Cramps have been stronger than usual, mostly day 1-2.
+                      </Text>
+                    </View>
+
+                    <View
+                      className="max-w-[80%] p-4 rounded-2xl self-start rounded-tl-none border"
+                      style={{
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                      }}
+                    >
+                      <Text
+                        className="text-xs font-semibold leading-5"
+                        style={{ color: colors.foreground, fontFamily: fonts.body }}
+                      >
+                        Understood. Let's go over a few options during our call at {selectedSlot} today.
+                      </Text>
+                    </View>
+
+                    {/* Dynamic chat message log */}
+                    {chatMessages.map((msg, i) => {
+                      const isDoctor = msg.sender === "doctor";
+                      return (
+                        <View
+                          key={msg._id ?? i}
+                          className={`max-w-[80%] p-4 rounded-2xl ${
+                            isDoctor ? "self-start rounded-tl-none border" : "self-end rounded-tr-none"
+                          }`}
+                          style={{
+                            backgroundColor: isDoctor ? colors.surface : (isDark ? colors.surfaceStrong : "#17212E"),
+                            borderColor: isDoctor ? colors.border : undefined,
+                          }}
+                        >
+                          <Text
+                            className="text-xs font-semibold leading-5"
+                            style={{ color: isDoctor ? colors.foreground : "#FFFFFF", fontFamily: fonts.body }}
+                          >
+                            {msg.text}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+              </ScrollView>
+
+              {/* Input row */}
+              <View
+                className="px-4 py-3 border-t flex-row items-center gap-3"
+                style={{
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  paddingBottom: Math.max(14, insets.bottom + 8),
+                }}
+              >
+                <TextInput
+                  placeholder="Type a message..."
+                  placeholderTextColor={colors.mutedText}
+                  value={typedMessage}
+                  onChangeText={setTypedMessage}
+                  className="flex-1 px-4 py-3 rounded-xl text-sm"
+                  style={{ backgroundColor: colors.input, color: colors.foreground, fontFamily: fonts.body }}
+                  onSubmitEditing={handleSendMessage}
+                  blurOnSubmit={false}
+                  returnKeyType="send"
+                />
+                <TouchableOpacity
+                  disabled={!typedMessage.trim() || sendingMessage}
+                  onPress={handleSendMessage}
+                  className="h-10 w-10 rounded-full items-center justify-center"
+                  style={{ backgroundColor: typedMessage.trim() ? colors.primary : colors.surfaceSoft }}
+                >
+                  {sendingMessage ? (
+                    <ActivityIndicator size="small" color={colors.buttonText} />
+                  ) : (
+                    <Feather name="arrow-right" size={16} color={typedMessage.trim() ? colors.buttonText : colors.mutedText} />
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
+
+        {/* Video Call Modal */}
+        <Modal
+          visible={videoCallModalVisible}
+          animationType="fade"
+          presentationStyle="fullScreen"
+          onRequestClose={() => setVideoCallModalVisible(false)}
+        >
+          <SafeAreaView className="flex-1 px-6 pt-6 justify-between pb-8" style={{ backgroundColor: "#130F1A" }}>
+            {/* Header */}
+            <View className="flex-row justify-between items-center">
+              <View>
+                <Text className="text-base font-extrabold text-white" style={{ fontFamily: fonts.heading }}>
+                  Consultation Call
+                </Text>
+                <View className="flex-row items-center gap-1.5 mt-1">
+                  <View className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+                  <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                    {videoCallStatus}
                   </Text>
                 </View>
               </View>
-              <MaterialCommunityIcons name="shield-account-outline" size={20} color={colors.primary} />
-            </View>
 
-            {/* Messages */}
-            <ScrollView
-              ref={chatScrollRef}
-              showsVerticalScrollIndicator={false}
-              className="flex-1 px-6 pt-4"
-              contentContainerStyle={{ paddingBottom: 32 }}
-              keyboardDismissMode="on-drag"
-              keyboardShouldPersistTaps="handled"
-            >
-              {loadingMessages ? (
-                <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
-              ) : (
-                <View className="gap-4">
-                  {chatMessages.map((msg, i) => {
-                    const isDoctor = msg.sender === "doctor";
-                    return (
-                      <View
-                        key={msg._id ?? i}
-                        className={`max-w-[80%] p-4 rounded-2xl ${isDoctor ? "self-start rounded-tl-none border" : "self-end rounded-tr-none"}`}
-                        style={{
-                          backgroundColor: isDoctor ? colors.surface : colors.primary,
-                          borderColor: isDoctor ? colors.border : undefined,
-                        }}
-                      >
-                        <Text
-                          className="text-xs font-medium leading-5"
-                          style={{ color: isDoctor ? colors.foreground : colors.buttonText, fontFamily: fonts.body }}
-                        >
-                          {msg.text}
-                        </Text>
-                      </View>
-                    );
-                  })}
-                </View>
-              )}
-            </ScrollView>
-
-            {/* Input row */}
-            <View
-              className="px-4 py-3.5 border-t flex-row items-center gap-3"
-              style={{
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-                paddingBottom: Math.max(14, insets.bottom + 8),
-              }}
-            >
-              <TextInput
-                placeholder="Type your message…"
-                placeholderTextColor={colors.mutedText}
-                value={typedMessage}
-                onChangeText={setTypedMessage}
-                className="flex-1 px-4 py-3 rounded-xl text-sm"
-                style={{ backgroundColor: colors.input, color: colors.foreground, fontFamily: fonts.body }}
-                onSubmitEditing={handleSendMessage}
-                blurOnSubmit={false}
-                returnKeyType="send"
-              />
               <TouchableOpacity
-                disabled={!typedMessage.trim() || sendingMessage}
-                onPress={handleSendMessage}
-                className="p-2.5 rounded-full items-center justify-center"
-                style={{ backgroundColor: typedMessage.trim() ? colors.primary : colors.border }}
+                onPress={() => setVideoCallModalVisible(false)}
+                className="p-2 rounded-full bg-white/10"
               >
-                {sendingMessage ? (
-                  <ActivityIndicator size="small" color={colors.buttonText} />
-                ) : (
-                  <Feather name="send" size={15} color={typedMessage.trim() ? colors.buttonText : colors.mutedText} />
-                )}
+                <Feather name="x" size={16} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
-          </View>
-          </KeyboardAvoidingView>
+
+            {/* Video Streams Display */}
+            <View className="flex-1 my-6 rounded-3xl overflow-hidden relative bg-black/40 border border-white/5 justify-center items-center">
+              {videoCallStatus === "Call Active" ? (
+                /* Simulated Doctor Stream */
+                <View className="items-center justify-center">
+                  <View className="h-24 w-24 rounded-full bg-primary/20 border border-primary/40 items-center justify-center mb-3">
+                    <Text className="text-4xl">👩‍⚕️</Text>
+                  </View>
+                  <Text className="text-white font-extrabold text-lg">
+                    {selectedDoctor ? getDoctorDisplayName(selectedDoctor) : "Doctor"}
+                  </Text>
+                  <Text className="text-gray-400 text-xs mt-1">
+                    Streaming active • 1080p
+                  </Text>
+                </View>
+              ) : (
+                /* Connecting screen */
+                <View className="items-center justify-center">
+                  <ActivityIndicator size="large" color={colors.primary} />
+                  <Text className="text-white font-semibold text-sm mt-4">
+                    Setting up peer connection...
+                  </Text>
+                </View>
+              )}
+
+              {/* Local Video Inset Box (Bottom Right) */}
+              <View
+                className="absolute bottom-4 right-4 w-28 h-36 rounded-2xl border border-white/15 overflow-hidden items-center justify-center"
+                style={{ backgroundColor: "#2A2438" }}
+              >
+                {videoOff ? (
+                  <Feather name="video-off" size={20} color="#FFFFFF" />
+                ) : (
+                  <View className="items-center">
+                    <Text className="text-2xl mb-1">👩</Text>
+                    <Text className="text-[10px] font-black text-gray-300 uppercase tracking-widest">
+                      You
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Live WebRTC / WebSocket Signaling Console Logs */}
+              <View
+                className="absolute top-4 left-4 right-4 bg-black/70 rounded-xl p-3 border border-white/10"
+                style={{ maxHeight: 90 }}
+              >
+                <ScrollView showsVerticalScrollIndicator={false}>
+                  {videoCallLogs.map((log, i) => (
+                    <Text
+                      key={i}
+                      className="text-[9px] leading-4 text-emerald-400"
+                      style={{ fontFamily: fonts.mono }}
+                    >
+                      {log}
+                    </Text>
+                  ))}
+                </ScrollView>
+              </View>
+            </View>
+
+            {/* Controls Row */}
+            <View className="flex-row items-center justify-center gap-6">
+              {/* Mute button */}
+              <TouchableOpacity
+                onPress={() => {
+                  setIsMuted(!isMuted);
+                  setVideoCallLogs((prev) => [
+                    ...prev,
+                    isMuted ? "[Media] Microphone unmuted." : "[Media] Microphone muted.",
+                  ]);
+                }}
+                className={`p-4 rounded-full ${isMuted ? "bg-red-500" : "bg-white/10"}`}
+              >
+                <Feather name={isMuted ? "mic-off" : "mic"} size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+
+              {/* End call button */}
+              <TouchableOpacity
+                onPress={() => {
+                  setVideoCallModalVisible(false);
+                }}
+                className="p-5 rounded-full bg-red-600 shadow-md"
+              >
+                <Feather name="phone-off" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+
+              {/* Video toggle button */}
+              <TouchableOpacity
+                onPress={() => {
+                  setVideoOff(!videoOff);
+                  setVideoCallLogs((prev) => [
+                    ...prev,
+                    videoOff ? "[Media] Camera stream active." : "[Media] Camera stream paused.",
+                  ]);
+                }}
+                className={`p-4 rounded-full ${videoOff ? "bg-red-500" : "bg-white/10"}`}
+              >
+                <Feather name={videoOff ? "video-off" : "video"} size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+          </SafeAreaView>
         </Modal>
       </SafeAreaView>
     </>

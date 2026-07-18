@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Link, useRouter } from "expo-router";
+import { Link, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -16,13 +16,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../components/auth-context";
 import { GoogleSignInButton } from "../../components/GoogleSignInButton";
 import { ThemeToggle, useTheme } from "../../components/theme";
-import { loginUser } from "../../lib/auth";
+import { connectPartnerAndResolveRoute, loginUser } from "../../lib/auth";
 import type { AuthUser } from "../../lib/api";
 import { getShadow } from "../../components/ui-tokens";
 
 export default function Login() {
   const router = useRouter();
-  const { signIn } = useAuth();
+  const { partnerCode } = useLocalSearchParams<{ partnerCode?: string }>();
+  const { signIn, updateUser } = useAuth();
   const { colors, isDark, fonts } = useTheme();
   const { width } = useWindowDimensions();
   const [email, setEmail] = useState("");
@@ -42,10 +43,26 @@ export default function Login() {
     );
   }
 
-  function handleGoogleSignInSuccess({ token, user }: { token: string; user: AuthUser }) {
+  // After a successful login (password or Google), finish connecting the
+  // pending partner invite code (if any) and route based on the resolved
+  // partner role instead of always landing on the normal dashboard.
+  async function finishSignIn(user: AuthUser | undefined, fallbackEmail?: string) {
+    const { connectError, partnerRole, destination } =
+      await connectPartnerAndResolveRoute(partnerCode);
+
+    if (connectError) setErrorMessage(connectError);
+
+    updateUser({
+      ...(user ?? (fallbackEmail ? { email: fallbackEmail } : {})),
+      partnerRole,
+    } as AuthUser);
+    router.replace(destination);
+  }
+
+  async function handleGoogleSignInSuccess({ token, user }: { token: string; user: AuthUser }) {
     setErrorMessage("");
     signIn({ token, user });
-    router.replace("/(app)/(dashboard)/home");
+    await finishSignIn(user);
   }
 
   async function handleLogin() {
@@ -72,14 +89,15 @@ export default function Login() {
       const user = response.data ?? response.user;
       const isProfileComplete =
         response.isProfileComplete ?? user?.isProfileComplete;
+      const normalizedEmail = email.trim().toLowerCase();
 
       signIn({
         token: response.token,
         user: user
           ? { ...user, isProfileComplete }
-          : { email: email.trim().toLowerCase(), isProfileComplete },
+          : { email: normalizedEmail, isProfileComplete },
       });
-      router.replace("/(app)/(dashboard)/home");
+      await finishSignIn(user, normalizedEmail);
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "Unable to login right now.",
@@ -415,7 +433,13 @@ export default function Login() {
                   >
                     {isDark ? "New to Lunara? " : "Don't have an account? "}
                   </Text>
-                  <Link href="/(tabs)/signup" asChild>
+                  <Link
+                    href={{
+                      pathname: "/(tabs)/signup",
+                      params: partnerCode ? { partnerCode } : undefined,
+                    }}
+                    asChild
+                  >
                     <TouchableOpacity>
                       <Text
                         style={{
@@ -430,6 +454,28 @@ export default function Login() {
                     </TouchableOpacity>
                   </Link>
                 </View>
+
+                {/* Partner Connect Link */}
+                <Link href="/(tabs)/partner-connect" asChild>
+                  <TouchableOpacity className="mt-4 flex-row justify-center items-center">
+                    <Ionicons
+                      name="heart-outline"
+                      size={13}
+                      color={colors.mutedText}
+                      style={{ marginRight: 5 }}
+                    />
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontWeight: "700",
+                        color: colors.mutedText,
+                        fontFamily: fonts.body,
+                      }}
+                    >
+                      Connecting as a partner? Tap here
+                    </Text>
+                  </TouchableOpacity>
+                </Link>
               </View>
             </View>
           </ScrollView>

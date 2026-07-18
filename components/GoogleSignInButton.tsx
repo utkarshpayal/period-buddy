@@ -13,6 +13,7 @@ export type GoogleSignInButtonProps = {
   label?: string;
   onError: (message: string) => void;
   onSuccess: (result: { token: string; user: AuthUser }) => void;
+  role?: string;
 };
 
 // Env vars filled in per Google Cloud OAuth client — see .env.example on the
@@ -27,6 +28,7 @@ export function GoogleSignInButton({
   label = "Continue with Google",
   onError,
   onSuccess,
+  role,
 }: GoogleSignInButtonProps) {
   const { colors, fonts } = useTheme();
   const [isExchanging, setIsExchanging] = useState(false);
@@ -58,7 +60,7 @@ export function GoogleSignInButton({
     (async () => {
       try {
         setIsExchanging(true);
-        const result = await googleAuth({ idToken });
+        const result = await googleAuth({ idToken, role });
         if (!result.token || !result.data) {
           onError("Signed in with Google, but no session was returned.");
           return;

@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../../components/auth-context";
+import { alert } from "../../../lib/alert";
 import { ThemeToggle, useTheme } from "../../../components/theme";
 import { getSoftTints } from "../../../components/ui-tokens";
 import { authApi, type DashboardSummary } from "../../../lib/api";
@@ -600,7 +601,7 @@ export default function Profile() {
           </Text>
           <TouchableOpacity
             onPress={() =>
-              Alert.alert(
+              alert(
                 "Ticket Logged",
                 "Your support request has been logged.",
               )

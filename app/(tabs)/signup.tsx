@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Link, useRouter } from "expo-router";
+import { Link, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -17,19 +17,21 @@ import { useAuth } from "../../components/auth-context";
 import { GoogleSignInButton } from "../../components/GoogleSignInButton";
 import { OtpModal } from "../../components/OtpModal";
 import { ThemeToggle, useTheme } from "../../components/theme";
-import { signupUser } from "../../lib/auth";
+import { connectPartnerAndResolveRoute, signupUser } from "../../lib/auth";
 import type { AuthUser } from "../../lib/api";
 import { getShadow } from "../../components/ui-tokens";
 
 export default function SignUp() {
   const router = useRouter();
-  const { signIn } = useAuth();
+  const { partnerCode } = useLocalSearchParams<{ partnerCode?: string }>();
+  const { signIn, updateUser } = useAuth();
   const { colors, isDark, fonts } = useTheme();
   const { width } = useWindowDimensions();
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const role: "user" | "partner" = partnerCode ? "partner" : "user";
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isOtpModalVisible, setIsOtpModalVisible] = useState(false);
@@ -66,6 +68,7 @@ export default function SignUp() {
         lastName: lastName.trim(),
         email: email.trim().toLowerCase(),
         password,
+        role,
       });
 
       setIsOtpModalVisible(true);
@@ -80,7 +83,20 @@ export default function SignUp() {
     }
   }
 
-  function handleOtpVerified({
+  // After the account exists (OTP verified or Google signup), finish
+  // connecting the pending partner invite code (if any) and route based on
+  // the resolved partner role instead of always landing on the dashboard.
+  async function finishSignIn(user: AuthUser) {
+    const { connectError, partnerRole, destination } =
+      await connectPartnerAndResolveRoute(partnerCode);
+
+    if (connectError) setErrorMessage(connectError);
+
+    updateUser({ ...user, partnerRole });
+    router.replace(destination);
+  }
+
+  async function handleOtpVerified({
     token,
     user,
   }: {
@@ -90,13 +106,13 @@ export default function SignUp() {
     const signedInUser = user as AuthUser;
     setIsOtpModalVisible(false);
     signIn({ token, user: signedInUser });
-    router.replace("/(app)/(dashboard)/home");
+    await finishSignIn(signedInUser);
   }
 
-  function handleGoogleSignInSuccess({ token, user }: { token: string; user: AuthUser }) {
+  async function handleGoogleSignInSuccess({ token, user }: { token: string; user: AuthUser }) {
     setErrorMessage("");
     signIn({ token, user });
-    router.replace("/(app)/(dashboard)/home");
+    await finishSignIn(user);
   }
 
   return (
@@ -251,6 +267,22 @@ export default function SignUp() {
                     />
                   </View>
                 </View>
+
+                {/* Info banner shown only when arriving with a partner invite code */}
+                {partnerCode ? (
+                  <View
+                    className="mb-4 flex-row items-center gap-2.5 p-3.5 rounded-2xl border"
+                    style={{ backgroundColor: colors.primaryLight, borderColor: colors.border }}
+                  >
+                    <Ionicons name="heart-outline" size={15} color={colors.primary} />
+                    <Text
+                      className="flex-1 text-[11px] font-semibold leading-4"
+                      style={{ color: colors.foreground, fontFamily: fonts.body }}
+                    >
+                      Connecting to your partner's account after sign up.
+                    </Text>
+                  </View>
+                ) : null}
 
                 {/* First name & Last name row */}
                 <View className="flex-row mb-2.5" style={{ gap: 8 }}>
@@ -442,6 +474,7 @@ export default function SignUp() {
                     disabled={isSubmitting}
                     onError={setErrorMessage}
                     onSuccess={handleGoogleSignInSuccess}
+                    role={role}
                   />
                 </View>
 
@@ -474,7 +507,13 @@ export default function SignUp() {
                   >
                     Already have an account?{" "}
                   </Text>
-                  <Link href="/(tabs)/login" asChild>
+                  <Link
+                    href={{
+                      pathname: "/(tabs)/login",
+                      params: partnerCode ? { partnerCode } : undefined,
+                    }}
+                    asChild
+                  >
                     <TouchableOpacity>
                       <Text
                         style={{
