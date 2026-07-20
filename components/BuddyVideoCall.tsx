@@ -7,10 +7,11 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Text, TouchableOpacity, View } from "react-native";
+import { Platform, Text, TouchableOpacity, View } from "react-native";
 import {
   mediaDevices,
   MediaStream,
+  permissions,
   RTCIceCandidate,
   RTCPeerConnection,
   RTCSessionDescription,
@@ -111,7 +112,22 @@ export const BuddyVideoCall = forwardRef<BuddyVideoCallHandle, Props>(
       }
     }, []);
 
+    const ensureMediaPermissions = useCallback(async () => {
+      // Ask explicitly (with a proper OS prompt) rather than letting
+      // getUserMedia surface a bare, harder-to-diagnose failure on denial.
+      if (Platform.OS !== "android" && Platform.OS !== "ios") return;
+      const [cameraGranted, micGranted] = await Promise.all([
+        permissions.request({ name: "camera" }),
+        permissions.request({ name: "microphone" }),
+      ]);
+      if (!cameraGranted || !micGranted) {
+        throw new Error("Camera and microphone permission are required for video calls.");
+      }
+    }, []);
+
     const setupPeerConnection = useCallback(async () => {
+      await ensureMediaPermissions();
+
       const stream = await mediaDevices.getUserMedia({
         audio: true,
         video: { facingMode: "user" },
@@ -143,7 +159,7 @@ export const BuddyVideoCall = forwardRef<BuddyVideoCallHandle, Props>(
 
       pcRef.current = pc;
       return pc;
-    }, [cleanup, send]);
+    }, [cleanup, ensureMediaPermissions, send]);
 
     const endWithReason = useCallback(
       (reason: string, notifyPeer: boolean) => {
