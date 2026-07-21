@@ -20,7 +20,8 @@
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "The Nura uses your camera for video calls with your Period Buddy.",
-        "NSMicrophoneUsageDescription": "The Nura uses your microphone for video calls with your Period Buddy."
+        "NSMicrophoneUsageDescription": "The Nura uses your microphone for video calls with your Period Buddy.",
+        "NSFaceIDUsageDescription": "The Nura uses Face ID to unlock the app and keep your data private."
       }
     },
     "android": {
@@ -32,12 +33,15 @@
       "predictiveBackGestureEnabled": false,
       "package": "com.uvin124.thenura",
       "googleServicesFile": "./assets/google-services.json",
-      "permissions": ["android.permission.CAMERA", "android.permission.RECORD_AUDIO"]
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/logo.png"
+      "favicon": "./assets/images/logo-withoutbg.png"
     },
     "plugins": [
       "expo-router",
@@ -47,7 +51,9 @@
           "android": {
             "enableMinifyInReleaseBuilds": true,
             "enableShrinkResourcesInReleaseBuilds": true,
-            "buildArchs": ["arm64-v8a"]
+            "buildArchs": [
+              "arm64-v8a"
+            ]
           }
         }
       ],
@@ -56,7 +62,9 @@
         {
           "icon": "./assets/images/logo.png",
           "color": "#fff0f6",
-          "sounds": ["./lib/notification.wav"]
+          "sounds": [
+            "./lib/notification.wav"
+          ]
         }
       ],
       [
@@ -77,6 +85,12 @@
           "dark": {
             "backgroundColor": "#000000"
           }
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow The Nura to use Face ID to unlock the app."
         }
       ]
     ],

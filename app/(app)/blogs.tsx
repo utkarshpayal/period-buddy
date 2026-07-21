@@ -5,7 +5,6 @@ import {
   Image,
   Modal,
   ScrollView,
-  Share,
   StatusBar,
   Text,
   TouchableOpacity,
@@ -17,6 +16,7 @@ import { alert } from "../../lib/alert";
 import { useTheme } from "../../components/theme";
 import { getSoftTints } from "../../components/ui-tokens";
 import { blogsApi, type ContentFeedItem } from "../../lib/api";
+import { shareWithAppLink } from "../../lib/share";
 
 // --- BACKEND REST API PAYLOAD CONTRACTS ---
 interface ContentItem {
@@ -163,9 +163,9 @@ export default function Blogs() {
 
   async function handleShareContent(item: ContentItem) {
     try {
-      await Share.share({
-        message: `Check out this verified health resource on Nura: "${item.title}" by ${item.author}.`,
-      });
+      await shareWithAppLink(
+        `Check out this verified health resource on Nura: "${item.title}" by ${item.author}.`,
+      );
       earnTokens(3);
     } catch {
       alert(

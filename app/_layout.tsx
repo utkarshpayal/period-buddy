@@ -1,5 +1,7 @@
 import { Stack } from "expo-router";
 import React, { useEffect } from "react";
+import { AppLockProvider, useAppLock } from "../components/AppLock";
+import { AppLockScreen } from "../components/AppLockScreen";
 import { AuthProvider } from "../components/auth-context";
 import { ThemeProvider, useTheme } from "../components/theme";
 import { useFonts } from "expo-font";
@@ -15,6 +17,7 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 // with the wrong/default theme.
 function AppShell() {
   const { hasHydrated } = useTheme();
+  const { isLocked } = useAppLock();
 
   useEffect(() => {
     if (hasHydrated) {
@@ -26,7 +29,12 @@ function AppShell() {
     return null;
   }
 
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return (
+    <>
+      <Stack screenOptions={{ headerShown: false }} />
+      {isLocked && <AppLockScreen />}
+    </>
+  );
 }
 
 export default function RootLayout() {
@@ -45,7 +53,9 @@ export default function RootLayout() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <AppShell />
+        <AppLockProvider>
+          <AppShell />
+        </AppLockProvider>
       </AuthProvider>
     </ThemeProvider>
   );

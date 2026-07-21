@@ -6,7 +6,7 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import { Share } from "react-native";
+import { shareWithAppLink } from "../lib/share";
 
 export type DayEntry = {
   energy?: "high" | "low" | "medium" | "steady";
@@ -120,7 +120,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   const sharePost = useCallback(async (content: string) => {
     try {
-      await Share.share({ message: content });
+      await shareWithAppLink(content);
     } catch {
       // The caller keeps its current UI state if the native share sheet fails.
     }

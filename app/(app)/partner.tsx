@@ -7,7 +7,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Share,
   StatusBar,
   Switch,
   Text,
@@ -25,6 +24,7 @@ import {
   type PartnerMessage,
   type PartnerProfile,
 } from "../../lib/api";
+import { shareWithAppLink } from "../../lib/share";
 
 export default function Partner() {
   const { colors, isDark, fonts } = useTheme();
@@ -207,9 +207,10 @@ export default function Partner() {
 
   const handleNativeShare = async () => {
     if (!inviteCode) return;
-    await Share.share({
-      message: `Connect with me on Nura as my wellness support buddy. Use our private authentication key: ${inviteCode}`,
-    });
+    await shareWithAppLink(
+      `Connect with me on Nura as my wellness support buddy. Use our private authentication key: ${inviteCode}`,
+      `partner-connect?code=${inviteCode}`,
+    );
   };
 
 

@@ -44,6 +44,13 @@ interface BuddyMessage {
   sentAt?: string;
 }
 
+// How often we announce presence over the buddy room, and how long a buddy
+// can go quiet before we stop treating them as online. The timeout is a
+// multiple of the ping interval so a single dropped/late packet doesn't
+// falsely flip someone to offline.
+const PRESENCE_PING_INTERVAL_MS = 8000;
+const PRESENCE_TIMEOUT_MS = 20000;
+
 const fallbackNominees: PeriodBuddy[] = [
   {
     id: "b_1",
@@ -152,6 +159,8 @@ export default function BuddyNomination() {
   const insets = useSafeAreaInsets();
   const socketRef = useRef<WebSocket | null>(null);
   const videoCallRef = useRef<BuddyVideoCallHandle>(null);
+  const buddyLastSeenRef = useRef<number>(0);
+  const [isBuddyOnline, setIsBuddyOnline] = useState(false);
 
   // Interface Functional Controllers
   const [searchQuery, setSearchQuery] = useState("");
@@ -235,6 +244,13 @@ export default function BuddyNomination() {
 
     let socket: WebSocket | null = null;
     let isDisconnected = false;
+    let presenceHeartbeat: ReturnType<typeof setInterval> | null = null;
+    let presenceWatchdog: ReturnType<typeof setInterval> | null = null;
+
+    buddyLastSeenRef.current = 0;
+    setIsBuddyOnline(false);
+
+    const room = `buddy_${activeNominatedId}`;
 
     async function connectWS() {
       try {
@@ -245,23 +261,47 @@ export default function BuddyNomination() {
         socket.onopen = () => {
           if (isDisconnected) return;
           console.log("WebSocket connected for buddy chat");
-          socket?.send(JSON.stringify({
-            type: "join",
-            room: `buddy_${activeNominatedId}`,
-          }));
+          socket?.send(JSON.stringify({ type: "join", room }));
+          // Announce presence immediately, then keep pinging so the buddy's
+          // client can tell "online" apart from "was online a while ago".
+          socket?.send(JSON.stringify({ type: "presence_ping", room }));
+
+          presenceHeartbeat = setInterval(() => {
+            try {
+              socket?.send(JSON.stringify({ type: "presence_ping", room }));
+            } catch {}
+          }, PRESENCE_PING_INTERVAL_MS);
+
+          presenceWatchdog = setInterval(() => {
+            if (Date.now() - buddyLastSeenRef.current > PRESENCE_TIMEOUT_MS) {
+              setIsBuddyOnline(false);
+            }
+          }, PRESENCE_PING_INTERVAL_MS);
         };
 
         socket.onmessage = (event) => {
           if (isDisconnected) return;
           try {
             const data = JSON.parse(event.data);
-            if (data.room !== `buddy_${activeNominatedId}`) return;
+            if (data.room !== room) return;
 
             if (data.type === "message") {
               if (data.messages && Array.isArray(data.messages)) {
                 setChatLog((prev) => mergeBuddyMessages(prev, data.messages));
                 setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
               }
+            } else if (data.type === "presence_ping") {
+              buddyLastSeenRef.current = Date.now();
+              setIsBuddyOnline(true);
+              try {
+                socket?.send(JSON.stringify({ type: "presence_pong", room }));
+              } catch {}
+            } else if (data.type === "presence_pong") {
+              buddyLastSeenRef.current = Date.now();
+              setIsBuddyOnline(true);
+            } else if (data.type === "presence_leave") {
+              buddyLastSeenRef.current = 0;
+              setIsBuddyOnline(false);
             } else if (data.type && data.type !== "join" && data.type !== "leave") {
               // Video-call signaling (call_request/accept/decline/end, webrtc_*).
               videoCallRef.current?.handleSignal(data);
@@ -287,16 +327,17 @@ export default function BuddyNomination() {
 
     return () => {
       isDisconnected = true;
+      if (presenceHeartbeat) clearInterval(presenceHeartbeat);
+      if (presenceWatchdog) clearInterval(presenceWatchdog);
       if (socket) {
         try {
-          socket.send(JSON.stringify({
-            type: "leave",
-            room: `buddy_${activeNominatedId}`,
-          }));
+          socket.send(JSON.stringify({ type: "presence_leave", room }));
+          socket.send(JSON.stringify({ type: "leave", room }));
         } catch {}
         socket.close();
       }
       socketRef.current = null;
+      setIsBuddyOnline(false);
     };
   }, [isChatConsoleOpen, activeNominatedId]);
 
@@ -507,6 +548,7 @@ export default function BuddyNomination() {
                   style={{
                     backgroundColor: colors.surface,
                     borderColor: colors.border,
+                    height: 50,
                   }}
                 >
                   <Feather name="search" size={16} color={colors.mutedText} />
@@ -516,8 +558,8 @@ export default function BuddyNomination() {
                     value={searchQuery}
                     onChangeText={setSearchQuery}
                     returnKeyType="search"
-                    className="ml-3 flex-1 py-4 text-sm"
-                    style={{ color: colors.foreground, fontFamily: fonts.body }}
+                    className="ml-3 flex-1 text-sm"
+                    style={{ color: colors.foreground, fontFamily: fonts.body, height: "100%", paddingVertical: 0 }}
                   />
                 </View>
 
@@ -708,18 +750,37 @@ export default function BuddyNomination() {
                         >
                           {activeBuddyData.alias}
                         </Text>
-                        <Text className="text-[10px] font-bold uppercase tracking-wide mt-0.5" style={{ color: colors.success, fontFamily: fonts.body }}>
-                          Secure Encrypted Session
-                        </Text>
+                        <View className="flex-row items-center gap-1 mt-0.5">
+                          <View
+                            className="w-1.5 h-1.5 rounded-full"
+                            style={{ backgroundColor: isBuddyOnline ? colors.success : colors.mutedText }}
+                          />
+                          <Text
+                            className="text-[10px] font-bold uppercase tracking-wide"
+                            style={{ color: isBuddyOnline ? colors.success : colors.mutedText, fontFamily: fonts.body }}
+                          >
+                            {isBuddyOnline ? "Online now" : "Offline"}
+                          </Text>
+                        </View>
                       </View>
                     </View>
                     <View className="flex-row items-center gap-2">
                       <TouchableOpacity
-                        onPress={() => videoCallRef.current?.startCall()}
+                        onPress={() => {
+                          if (!isBuddyOnline) {
+                            alert(
+                              `${activeBuddyData.alias} is offline`,
+                              "Video calls need both of you online at the same time. Try again once they're active in the app.",
+                            );
+                            return;
+                          }
+                          videoCallRef.current?.startCall();
+                        }}
+                        activeOpacity={0.8}
                         className="w-8 h-8 rounded-full items-center justify-center"
-                        style={{ backgroundColor: colors.primaryLight }}
+                        style={{ backgroundColor: isBuddyOnline ? colors.primaryLight : colors.surfaceSoft, opacity: isBuddyOnline ? 1 : 0.6 }}
                       >
-                        <Ionicons name="videocam" size={15} color={colors.primary} />
+                        <Ionicons name="videocam" size={15} color={isBuddyOnline ? colors.primary : colors.mutedText} />
                       </TouchableOpacity>
                       <TouchableOpacity
                         onPress={handleLeavePairing}

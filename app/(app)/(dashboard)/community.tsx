@@ -1,10 +1,8 @@
-import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { Feather, Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -21,15 +19,10 @@ import { useAuth } from "../../../components/auth-context";
 import OptionsModal from "../../../components/OptionsModal";
 import { alert } from "../../../lib/alert";
 import { useTheme } from "../../../components/theme";
-import { getSoftTints } from "../../../components/ui-tokens";
 import {
-  blogsApi,
-  buddyApi,
   communityApi,
   getWebSocketUrl,
-  type BuddyMatch,
   type CommunityPost,
-  type ContentFeedItem,
 } from "../../../lib/api";
 
 // --- BACKEND API LAYER SCHEMAS & INTERFACES ---
@@ -52,21 +45,6 @@ interface Post {
   comments: Comment[];
   time: string;
   isOwner: boolean; // true when this post belongs to the logged-in user
-}
-
-interface Blog {
-  id: string;
-  title: string;
-  subtitle: string;
-  readTime: string;
-  thumbnailUrl: string;
-}
-
-interface Reel {
-  id: string;
-  title: string;
-  videoDuration: string;
-  thumbnailUrl: string;
 }
 
 function mapCommunityPost(post: CommunityPost): Post {
@@ -98,25 +76,6 @@ function mapCommunityPost(post: CommunityPost): Post {
   };
 }
 
-function mapFeedBlog(item: ContentFeedItem): Blog {
-  return {
-    id: item.sourceId,
-    title: item.title,
-    subtitle: item.summary,
-    readTime: item.time,
-    thumbnailUrl: item.imageUrl,
-  };
-}
-
-function mapFeedReel(item: ContentFeedItem): Reel {
-  return {
-    id: item.sourceId,
-    title: item.title,
-    videoDuration: item.time,
-    thumbnailUrl: item.imageUrl,
-  };
-}
-
 function formatRelativeTime(value?: string) {
   if (!value) return "Just now";
   const diffMinutes = Math.max(
@@ -131,8 +90,6 @@ function formatRelativeTime(value?: string) {
 
 export default function Community() {
   const { colors, isDark, fonts } = useTheme();
-  const router = useRouter();
-  const softTints = getSoftTints(colors);
   const insets = useSafeAreaInsets();
   const { token, user } = useAuth();
   const [unreadCommentPostIds, setUnreadCommentPostIds] = useState<Set<string>>(new Set());
@@ -287,19 +244,10 @@ export default function Community() {
   }, [token, user?._id]);
 
   // UI States
-  const [activeTab, setActiveTab] = useState<"posts" | "buddy" | "blogs">(
-    "posts",
-  );
   const [posts, setPosts] = useState<Post[]>([]);
   const [likedPostIds, setLikedPostIds] = useState<Set<string>>(new Set());
-  const [activeBuddy, setActiveBuddy] = useState<BuddyMatch | null>(null);
-  const [isLoadingBuddy, setIsLoadingBuddy] = useState(false);
   // isOwner is now tracked on each Post/Comment object from the API — no extra Set needed
-  const [blogsData, setBlogsData] = useState<Blog[]>([]);
-  const [reelsData, setReelsData] = useState<Reel[]>([]);
-  const [isEducationLoading, setIsEducationLoading] = useState(true);
   const [isPostsLoading, setIsPostsLoading] = useState(true);
-  const [educationError, setEducationError] = useState<string | null>(null);
   const [postsError, setPostsError] = useState<string | null>(null);
 
   // Modals Controller States
@@ -344,49 +292,9 @@ export default function Community() {
     }
   }, []);
 
-  const loadEducationFeed = useCallback(async () => {
-    setIsEducationLoading(true);
-    setEducationError(null);
-
-    try {
-      const feedResponse = await blogsApi.getFeed({ limit: 10, type: "all" });
-      const blogItems = feedResponse.items.filter(
-        (item): item is ContentFeedItem & { type: "blog" } =>
-          item.type === "blog",
-      );
-      const reelItems = feedResponse.items.filter(
-        (item): item is ContentFeedItem & { type: "reel" } =>
-          item.type === "reel",
-      );
-
-      setBlogsData(blogItems.map(mapFeedBlog));
-      setReelsData(reelItems.map(mapFeedReel));
-    } catch {
-      setBlogsData([]);
-      setReelsData([]);
-      setEducationError("Couldn't load blogs and reels.");
-    } finally {
-      setIsEducationLoading(false);
-    }
-  }, []);
-
-  const loadActiveBuddy = useCallback(async () => {
-    setIsLoadingBuddy(true);
-    try {
-      const buddy = await buddyApi.getActive();
-      setActiveBuddy(buddy);
-    } catch {
-      setActiveBuddy(null);
-    } finally {
-      setIsLoadingBuddy(false);
-    }
-  }, []);
-
   useEffect(() => {
     loadPosts();
-    loadEducationFeed();
-    loadActiveBuddy();
-  }, [loadEducationFeed, loadPosts, loadActiveBuddy]);
+  }, [loadPosts]);
 
   // --- ACTIONS HANDLERS ---
   function openOptions(post: Post) {
@@ -715,55 +623,12 @@ export default function Community() {
                 className="text-xs font-semibold mt-1"
                 style={{ color: colors.mutedText, fontFamily: fonts.body }}
               >
-                Share experiences, ask questions, and find care resources safely.
+                Share experiences and ask questions anonymously, safely.
               </Text>
             </View>
 
-            {/* Segmented Controls Tabs */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              className="mt-5"
-              contentContainerStyle={{ gap: 8, paddingHorizontal: 24 }}
-            >
-              {[
-                { id: "posts", label: "Posts" },
-                { id: "buddy", label: "Period Buddy" },
-                { id: "blogs", label: "Blogs & Reels" },
-              ].map((tab) => {
-                const isSelected = activeTab === tab.id;
-                return (
-                  <TouchableOpacity
-                    key={tab.id}
-                    onPress={() => setActiveTab(tab.id as any)}
-                    activeOpacity={0.8}
-                    className="rounded-full px-5 py-2.5 border"
-                    style={{
-                      backgroundColor: isSelected
-                        ? colors.primary
-                        : colors.background,
-                      borderColor: isSelected ? colors.primary : colors.border,
-                    }}
-                  >
-                    <Text
-                      className="text-xs font-bold tracking-wide"
-                      style={{
-                        color: isSelected
-                          ? colors.buttonText
-                          : colors.foreground,
-                        fontFamily: fonts.body,
-                      }}
-                    >
-                      {tab.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-
             {/* FEED CONTAINER */}
-            {activeTab === "posts" && (
-              <View className="mt-6 gap-4 px-6">
+            <View className="mt-6 gap-4 px-6">
                 {isPostsLoading && (
                   <View
                     className="rounded-3xl border p-6 items-center"
@@ -1011,407 +876,21 @@ export default function Community() {
                     </Text>
                   </View>
                 )}
-              </View>
-            )}
-
-            {/* BUDDY MATCHING SYSTEM */}
-            {activeTab === "buddy" && (
-              <View className="mt-6 px-6">
-                {isLoadingBuddy ? (
-                  <View
-                    className="rounded-3xl border p-6 items-center"
-                    style={{
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                    }}
-                  >
-                    <ActivityIndicator color={colors.primary} />
-                  </View>
-                ) : activeBuddy ? (
-                  <View
-                    className="rounded-3xl border p-5 shadow-xs relative overflow-hidden"
-                    style={{
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                    }}
-                  >
-                    <View
-                      className="absolute -right-6 -top-6 w-20 h-20 rounded-full opacity-35"
-                      style={{ backgroundColor: softTints.pink }}
-                    />
-
-                    {/* Header with active status badge */}
-                    <View className="flex-row items-center justify-between mb-4">
-                      <View className="flex-row items-center gap-2">
-                        <MaterialCommunityIcons
-                          name="moon-waning-crescent"
-                          size={16}
-                          color={colors.primary}
-                        />
-                        <Text
-                          className="text-xs font-black tracking-widest uppercase"
-                          style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                        >
-                          Nominated Buddy
-                        </Text>
-                      </View>
-                      <View
-                        className="px-2.5 py-1 rounded-full flex-row items-center gap-1.5"
-                        style={{
-                          backgroundColor: isDark ? "rgba(16, 185, 129, 0.15)" : "rgba(16, 185, 129, 0.1)",
-                          borderColor: "rgba(16, 185, 129, 0.2)",
-                          borderWidth: 1,
-                        }}
-                      >
-                        <View className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                        <Text
-                          className="text-[9px] font-black uppercase tracking-wider"
-                          style={{ color: "#10b981", fontFamily: fonts.body }}
-                        >
-                          Connected
-                        </Text>
-                      </View>
-                    </View>
-
-                    {/* Buddy Details */}
-                    <View className="flex-row items-center gap-4 mb-4">
-                      <View
-                        className="h-14 w-14 items-center justify-center rounded-full border"
-                        style={{
-                          backgroundColor: colors.surfaceSoft,
-                          borderColor: colors.border,
-                        }}
-                      >
-                        <Text className="text-2xl">
-                          {activeBuddy.avatarSeed || "✨"}
-                        </Text>
-                      </View>
-                      <View className="flex-1">
-                        <Text
-                          className="text-base font-extrabold"
-                          style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                        >
-                          {activeBuddy.alias}
-                        </Text>
-                        <View className="flex-row items-center gap-1.5 mt-0.5">
-                          <View className="w-1.5 h-1.5 rounded-full bg-pink-500" />
-                          <Text
-                            className="text-xs font-bold"
-                            style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                          >
-                            {activeBuddy.cyclePhase}
-                          </Text>
-                        </View>
-                      </View>
-
-                      {/* Compatibility Overlap */}
-                      <View className="items-center">
-                        <View
-                          className="h-11 w-11 items-center justify-center rounded-full"
-                          style={{ backgroundColor: softTints.emerald }}
-                        >
-                          <Text className="text-xs font-black text-emerald-500" style={{ fontFamily: fonts.mono }}>
-                            {activeBuddy.compatibility}%
-                          </Text>
-                        </View>
-                        <Text className="mt-1 text-[9px] font-bold uppercase tracking-wider text-neutral-400" style={{ fontFamily: fonts.body }}>
-                          Overlap
-                        </Text>
-                      </View>
-                    </View>
-
-                    {/* Similarities Chips */}
-                    {activeBuddy.similarities && activeBuddy.similarities.length > 0 && (
-                      <View className="flex-row flex-wrap gap-1.5 mb-5">
-                        {activeBuddy.similarities.map((chip, cIdx) => (
-                          <View
-                            key={cIdx}
-                            className="px-2.5 py-1 rounded-md"
-                            style={{
-                              backgroundColor: colors.surfaceSoft,
-                              borderWidth: 1,
-                              borderColor: colors.border,
-                            }}
-                          >
-                            <Text
-                              className="text-[9px] font-bold"
-                              style={{ color: colors.foreground, fontFamily: fonts.body }}
-                            >
-                              #{chip}
-                            </Text>
-                          </View>
-                        ))}
-                      </View>
-                    )}
-
-                    {/* Chat Action Button */}
-                    <TouchableOpacity
-                      activeOpacity={0.85}
-                      className="w-full rounded-xl py-3.5 flex-row items-center justify-center gap-2 border shadow-3xs"
-                      onPress={() =>
-                        router.push("/(app)/buddy-nomination" as any)
-                      }
-                      style={{
-                        backgroundColor: colors.primary,
-                        borderColor: colors.primary,
-                      }}
-                    >
-                      <Ionicons name="chatbubble-ellipses" size={16} color={colors.buttonText} />
-                      <Text
-                        className="text-sm font-bold"
-                        style={{ color: colors.buttonText, fontFamily: fonts.body }}
-                      >
-                        Chat with Buddy
-                      </Text>
-                    </TouchableOpacity>
-
-                    {/* Find another buddy secondary option */}
-                    <TouchableOpacity
-                      activeOpacity={0.8}
-                      className="mt-3 w-full py-2 items-center justify-center"
-                      onPress={() =>
-                        router.push("/(app)/buddy-nomination" as any)
-                      }
-                    >
-                      <Text
-                        className="text-xs font-bold"
-                        style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                      >
-                        Manage Buddy Connection
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <View
-                    className="rounded-3xl border p-6 items-center shadow-xs"
-                    style={{
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                    }}
-                  >
-                    <View
-                      className="p-4 rounded-2xl mb-4"
-                      style={{ backgroundColor: softTints.pink }}
-                    >
-                      <MaterialCommunityIcons
-                        name="star-face"
-                        size={36}
-                        color={colors.primary}
-                      />
-                    </View>
-                    <Text
-                      className="text-lg font-extrabold"
-                      style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                    >
-                      Nominate Period Buddy
-                    </Text>
-                    <Text
-                      className="mt-2 text-xs text-center px-4 leading-4"
-                      style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                    >
-                      Find a private buddy with a similar cycle phase and care
-                      routine.
-                    </Text>
-                    <TouchableOpacity
-                      activeOpacity={0.85}
-                      className="mt-6 w-full rounded-xl py-3.5 items-center justify-center"
-                      onPress={() =>
-                        router.push("/(app)/buddy-nomination" as any)
-                      }
-                      style={{ backgroundColor: colors.primary }}
-                    >
-                      <Text
-                        className="text-sm font-bold"
-                        style={{ color: colors.buttonText, fontFamily: fonts.body }}
-                      >
-                        Nominate Now
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
-            )}
-
-            {/* EDUCATION MODULE (BLOGS) */}
-            {activeTab === "blogs" && (
-              <View className="mt-6 px-6 gap-5">
-                {isEducationLoading && (
-                  <View
-                    className="rounded-3xl border p-6 items-center"
-                    style={{
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                    }}
-                  >
-                    <ActivityIndicator color={colors.primary} />
-                    <Text
-                      className="mt-3 text-xs font-bold"
-                      style={{ color: colors.mutedText }}
-                    >
-                      Loading blogs and reels...
-                    </Text>
-                  </View>
-                )}
-                {!isEducationLoading && educationError && (
-                  <View
-                    className="rounded-3xl border p-6 items-center"
-                    style={{
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                    }}
-                  >
-                    <Ionicons
-                      name="cloud-offline-outline"
-                      size={24}
-                      color={colors.primary}
-                    />
-                    <Text
-                      className="mt-4 text-sm font-extrabold text-center"
-                      style={{ color: colors.foreground }}
-                    >
-                      Could not load learning feed
-                    </Text>
-                    <Text
-                      className="mt-1 text-xs text-center leading-4"
-                      style={{ color: colors.mutedText }}
-                    >
-                      Check your connection and try again.
-                    </Text>
-                    <TouchableOpacity
-                      activeOpacity={0.85}
-                      className="mt-4 rounded-full px-4 py-2"
-                      onPress={loadEducationFeed}
-                      style={{ backgroundColor: colors.primary }}
-                    >
-                      <Text
-                        className="text-xs font-bold"
-                        style={{ color: colors.buttonText }}
-                      >
-                        Retry
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-                {!isEducationLoading &&
-                  !educationError &&
-                  blogsData.map((blog) => (
-                    <TouchableOpacity
-                      key={blog.id}
-                      className="overflow-hidden rounded-3xl border flex-row h-28"
-                      style={{
-                        backgroundColor: colors.surface,
-                        borderColor: colors.border,
-                      }}
-                    >
-                      <Image
-                        source={{ uri: blog.thumbnailUrl }}
-                        className="w-28 h-full bg-neutral-200"
-                      />
-                      <View className="flex-1 p-3 justify-center">
-                        <Text
-                          className="font-extrabold text-sm"
-                          style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                        >
-                          {blog.title}
-                        </Text>
-                        <Text
-                          className="text-[11px] mt-1"
-                          style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                          numberOfLines={2}
-                        >
-                          {blog.subtitle}
-                        </Text>
-                      </View>
-                    </TouchableOpacity>
-                  ))}
-                {!isEducationLoading &&
-                  !educationError &&
-                  reelsData.map((reel) => (
-                    <TouchableOpacity
-                      key={reel.id}
-                      className="overflow-hidden rounded-3xl border flex-row h-28"
-                      style={{
-                        backgroundColor: colors.surface,
-                        borderColor: colors.border,
-                      }}
-                    >
-                      <View className="w-28 h-full relative">
-                        <Image
-                          source={{ uri: reel.thumbnailUrl }}
-                          className="w-full h-full bg-neutral-200"
-                        />
-                        <View className="absolute inset-0 items-center justify-center bg-black/20">
-                          <Ionicons
-                            name="play-circle"
-                            size={26}
-                            color="white"
-                          />
-                        </View>
-                      </View>
-                      <View className="flex-1 p-3 justify-center">
-                        <Text
-                          className="font-extrabold text-sm"
-                          style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                        >
-                          {reel.title}
-                        </Text>
-                        <Text
-                          className="text-[11px] mt-1"
-                          style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                        >
-                          {reel.videoDuration}
-                        </Text>
-                      </View>
-                    </TouchableOpacity>
-                  ))}
-                {!isEducationLoading &&
-                  !educationError &&
-                  blogsData.length === 0 &&
-                  reelsData.length === 0 && (
-                    <View
-                      className="rounded-3xl border p-6 items-center"
-                      style={{
-                        backgroundColor: colors.surface,
-                        borderColor: colors.border,
-                      }}
-                    >
-                      <Ionicons
-                        name="book-outline"
-                        size={24}
-                        color={colors.primary}
-                      />
-                      <Text
-                        className="mt-4 text-sm font-extrabold text-center"
-                        style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                      >
-                        No learning content yet
-                      </Text>
-                      <Text
-                        className="mt-1 text-xs text-center leading-4"
-                        style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                      >
-                        Published blogs and reels will appear here.
-                      </Text>
-                    </View>
-                  )}
-              </View>
-            )}
+            </View>
           </ScrollView>
 
           {/* FLOATING ACTION TRIGGER BAR (THREADS-STYLE FLOAT FAB) */}
-          {activeTab === "posts" && (
-            <TouchableOpacity
-              activeOpacity={0.9}
-              onPress={() => setCreatePostVisible(true)}
-              className="absolute bottom-28 right-6 w-14 h-14 rounded-full items-center justify-center shadow-lg border"
-              style={{
-                backgroundColor: colors.primary,
-                borderColor: colors.background,
-              }}
-            >
-              <Feather name="edit-3" size={22} color={colors.buttonText} />
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={() => setCreatePostVisible(true)}
+            className="absolute bottom-28 right-6 w-14 h-14 rounded-full items-center justify-center shadow-lg border"
+            style={{
+              backgroundColor: colors.primary,
+              borderColor: colors.background,
+            }}
+          >
+            <Feather name="edit-3" size={22} color={colors.buttonText} />
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
 

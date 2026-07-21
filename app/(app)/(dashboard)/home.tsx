@@ -190,20 +190,22 @@ export default function Home() {
       <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
         {/* FIXED HEADER - stays in place while body scrolls */}
         <View
-          className="px-6 pt-4 pb-4 flex-row justify-between items-center"
+          className="px-6 pt-3 pb-2.5 flex-row justify-between items-center"
           style={{ backgroundColor: colors.background }}
         >
           <View className="flex-1 mr-4">
             <Text
               className="font-black tracking-tight"
-              style={{ fontSize: 20, color: colors.foreground, fontFamily: fonts.heading }}
+              style={{ fontSize: 17, color: colors.foreground, fontFamily: fonts.heading }}
+              numberOfLines={1}
             >
               {isDark ? "Good evening, " : "Good morning, "}
               {user?.firstName || "Utkarsh"} 👋
             </Text>
             <Text
               className="mt-0.5"
-              style={{ fontSize: 12, color: colors.mutedText, fontFamily: fonts.body }}
+              style={{ fontSize: 11.5, color: colors.mutedText, fontFamily: fonts.body }}
+              numberOfLines={1}
             >
               Day {cycleDay} · {phaseLabel} phase ·{" "}
               {predictions?.nextPeriodDaysAway !== undefined
@@ -248,9 +250,10 @@ export default function Home() {
           {/* TODAY'S PHASE CARD */}
           <View className="mx-6 mb-3.5 mt-2">
             <View
-              className="p-5"
+              className="p-5 border"
               style={{
-                backgroundColor: isDark ? colors.surface : colors.foreground,
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
                 borderRadius: 24,
                 ...getShadow(colors, isDark),
               }}
@@ -261,7 +264,7 @@ export default function Home() {
                     style={{
                       fontSize: 10,
                       fontWeight: "800",
-                      color: isDark ? colors.mutedText : "#94A3B8",
+                      color: colors.primary,
                       letterSpacing: 0.6,
                       fontFamily: fonts.body,
                       textTransform: "uppercase",
@@ -274,7 +277,7 @@ export default function Home() {
                     style={{
                       fontSize: 20,
                       fontWeight: "800",
-                      color: isDark ? colors.foreground : colors.buttonText,
+                      color: colors.foreground,
                       fontFamily: fonts.heading,
                     }}
                   >
@@ -282,7 +285,7 @@ export default function Home() {
                   </Text>
                   <Text
                     className="mt-1"
-                    style={{ fontSize: 11, color: isDark ? colors.mutedText : "rgba(255,255,255,0.65)", fontFamily: fonts.body }}
+                    style={{ fontSize: 11, color: colors.mutedText, fontFamily: fonts.body }}
                   >
                     Expected period: {expectedEndDate !== "soon" ? new Date(expectedEndDate).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "soon"} · Fertile window: {fertileWindow}
                   </Text>
@@ -290,24 +293,13 @@ export default function Home() {
                 <View
                   style={{
                     width: 38, height: 38, borderRadius: 11,
-                    backgroundColor: isDark ? colors.primaryLight : "rgba(255,255,255,0.15)",
+                    backgroundColor: colors.primaryLight,
                     alignItems: "center", justifyContent: "center",
                   }}
                 >
-                  <Ionicons name="water" size={17} color={isDark ? colors.primary : "#FFFFFF"} />
+                  <Ionicons name="water" size={17} color={colors.primary} />
                 </View>
               </View>
-              <TouchableOpacity
-                activeOpacity={0.85}
-                onPress={() => router.push("/(app)/(dashboard)/tracker" as any)}
-                className="mt-4 flex-row rounded-xl py-3 items-center justify-center"
-                style={{ backgroundColor: isDark ? colors.primary : "rgba(255,255,255,0.18)", gap: 8 }}
-              >
-                <Ionicons name="add" size={16} color={isDark ? colors.buttonText : "#FFFFFF"} />
-                <Text className="font-bold text-sm" style={{ color: isDark ? colors.buttonText : "#FFFFFF", fontFamily: fonts.body }}>
-                  Log today's entry
-                </Text>
-              </TouchableOpacity>
             </View>
           </View>
 
@@ -405,7 +397,6 @@ export default function Home() {
 
             <View style={{ gap: 9 }}>
               {[
-                { title: "Period Tracker", desc: "Log flow, mood, symptoms, and notes", icon: "water", route: "/(app)/(dashboard)/tracker" },
                 { title: "Smart Predictions", desc: "Cycle forecasts, windows, and trends", icon: "trending-up-outline", route: "/(app)/predictions" },
                 { title: "Gynecologist Consultation", desc: "Private specialist booking, secure chat", icon: "chatbubbles-outline", route: "/(app)/consultation" },
               ].map((careItem, i) => (
@@ -467,22 +458,34 @@ export default function Home() {
 
             <View className="flex-row flex-wrap" style={{ gap: 8 }}>
               {[
-                { title: "Forest", icon: "leaf-outline", route: "/(app)/forest", color: colors.success },
-                { title: "Blogs", icon: "book-open-outline", route: "/(app)/blogs", color: colors.info },
-                { title: "Videos", icon: "play-circle-outline", route: "/(app)/reels", color: colors.primary },
-                { title: "Partner sync", icon: "git-merge-outline", route: "/(app)/partner", color: colors.accent },
-                { title: "Habits", icon: "toggle-outline", route: "/(app)/habits", color: colors.success },
-                { title: "Nominate Buddy", icon: "star-outline", route: "/(app)/buddy-nomination", color: colors.accent },
+                { title: "Forest", icon: "leaf-outline", route: "/(app)/forest", color: colors.success, bg: colors.successLight },
+                { title: "Blogs", icon: "book-outline", route: "/(app)/blogs", color: colors.info, bg: colors.infoLight },
+                { title: "Videos", icon: "play-circle-outline", route: "/(app)/reels", color: colors.primary, bg: colors.primaryLight },
+                { title: "Partner sync", icon: "git-merge-outline", route: "/(app)/partner", color: colors.accent, bg: colors.accentLight },
+                { title: "Habits", icon: "checkmark-done-outline", route: "/(app)/habits", color: colors.success, bg: colors.successLight },
+                { title: "Nominate Buddy", icon: "star-outline", route: "/(app)/buddy-nomination", color: colors.accent, bg: colors.accentLight },
               ].map((exp, idx) => (
                 <TouchableOpacity
                   key={idx}
                   onPress={() => router.push(exp.route as any)}
                   activeOpacity={0.8}
                   className="border items-center justify-center"
-                  style={{ width: "31%", backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 8 }}
+                  style={{ width: "31%", backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 16, paddingVertical: 14, paddingHorizontal: 8 }}
                 >
-                  <Ionicons name={exp.icon as any} size={18} color={exp.color} />
-                  <Text style={{ fontSize: 10, fontWeight: "700", color: colors.foreground, marginTop: 6, fontFamily: fonts.body }} numberOfLines={1}>
+                  <View
+                    style={{
+                      width: 34,
+                      height: 34,
+                      borderRadius: 11,
+                      backgroundColor: exp.bg,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      marginBottom: 8,
+                    }}
+                  >
+                    <Ionicons name={exp.icon as any} size={17} color={exp.color} />
+                  </View>
+                  <Text style={{ fontSize: 10.5, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }} numberOfLines={1}>
                     {exp.title}
                   </Text>
                 </TouchableOpacity>

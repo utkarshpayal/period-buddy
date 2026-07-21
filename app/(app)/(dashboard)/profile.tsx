@@ -254,38 +254,6 @@ export default function Profile() {
 
           {/* MENUS ACCORDION LIST ACTIONS INTEGRATION */}
           <View className="mx-6 mt-8 gap-3.5">
-            {/* Action 1: My Progress (Route Hook) */}
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => router.push("/(app)/(dashboard)/home")}
-              className="flex-row items-center p-4 rounded-2xl border shadow-3xs"
-              style={{
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-              }}
-            >
-              <View
-                className="p-2.5 rounded-xl mr-4"
-                style={{ backgroundColor: softTints.pink }}
-              >
-                <Ionicons
-                  name="stats-chart-outline"
-                  size={18}
-                  color={colors.primary}
-                />
-              </View>
-              <Text
-                className="flex-1 text-sm font-bold"
-                style={{ color: colors.foreground, fontFamily: fonts.body }}
-              >
-                My Progress & Wellness Forest
-              </Text>
-              <Feather
-                name="chevron-right"
-                size={16}
-                color={colors.mutedText}
-              />
-            </TouchableOpacity>
 
             {/* Action 2: Achievements (Modal Trigger) */}
             <TouchableOpacity
@@ -419,6 +387,39 @@ export default function Profile() {
                 </View>
               )}
             </View>
+
+            {/* Action 3b: App Lock (Route) */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => router.push("/app-lock")}
+              className="flex-row items-center p-4 rounded-2xl border shadow-3xs"
+              style={{
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+              }}
+            >
+              <View
+                className="p-2.5 rounded-xl mr-4"
+                style={{ backgroundColor: softTints.pink }}
+              >
+                <Ionicons
+                  name="finger-print-outline"
+                  size={18}
+                  color={colors.primary}
+                />
+              </View>
+              <Text
+                className="flex-1 text-sm font-bold"
+                style={{ color: colors.foreground, fontFamily: fonts.body }}
+              >
+                App Lock
+              </Text>
+              <Feather
+                name="chevron-right"
+                size={16}
+                color={colors.mutedText}
+              />
+            </TouchableOpacity>
 
             {/* Action 4: Help & Support (Modal Trigger) */}
             <TouchableOpacity

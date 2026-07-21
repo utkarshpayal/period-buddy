@@ -1,5 +1,5 @@
 import { Ionicons, Feather } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -20,10 +20,11 @@ import { getShadow } from "../../components/ui-tokens";
 
 export default function PartnerConnect() {
   const router = useRouter();
+  const { code: prefilledCode } = useLocalSearchParams<{ code?: string }>();
   const { token, user, updateUser } = useAuth();
   const { colors, isDark, fonts } = useTheme();
   const { width } = useWindowDimensions();
-  const [inviteCode, setInviteCode] = useState("");
+  const [inviteCode, setInviteCode] = useState(prefilledCode?.toUpperCase() ?? "");
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [codeFocused, setCodeFocused] = useState(false);

@@ -126,6 +126,137 @@ function formatSettingsDate(value?: string) {
   return getDateKey(parsedDate);
 }
 
+// Rounded, borderless card used to group the Cycle Settings sheet into
+// clearly separated sections (Cycle Information, Last Period, etc).
+function SettingsSectionCard({
+  children,
+  title,
+}: {
+  children: React.ReactNode;
+  title: string;
+}) {
+  const { colors, fonts } = useTheme();
+
+  return (
+    <View
+      className="rounded-3xl p-4"
+      style={{ backgroundColor: colors.input }}
+    >
+      <Text
+        className="mb-3 text-xs font-black uppercase tracking-wide"
+        style={{ color: colors.primary, fontFamily: fonts.body }}
+      >
+        {title}
+      </Text>
+      {children}
+    </View>
+  );
+}
+
+// Pill-shaped +/- stepper shared by Cycle length, Period length, and the
+// "remind me before" day count.
+function PillStepper({
+  max,
+  min,
+  onChange,
+  size = "md",
+  suffix,
+  value,
+}: {
+  max: number;
+  min: number;
+  onChange: (next: string) => void;
+  size?: "md" | "sm";
+  suffix: string;
+  value: string;
+}) {
+  const { colors, fonts } = useTheme();
+  const isSmall = size === "sm";
+  const buttonSize = isSmall ? 32 : 36;
+
+  function adjust(delta: -1 | 1) {
+    const current = Number.parseInt(value, 10);
+    const next = Math.min(max, Math.max(min, (Number.isNaN(current) ? min : current) + delta));
+    onChange(String(next));
+  }
+
+  return (
+    <View
+      className="flex-row items-center rounded-full overflow-hidden"
+      style={{ backgroundColor: colors.surface }}
+    >
+      <TouchableOpacity
+        activeOpacity={0.8}
+        className="items-center justify-center"
+        onPress={() => adjust(-1)}
+        style={{ height: buttonSize, width: buttonSize }}
+      >
+        <Feather name="minus" size={isSmall ? 13 : 14} color={colors.foreground} />
+      </TouchableOpacity>
+      <View
+        className="items-center justify-center"
+        style={{ height: buttonSize, minWidth: isSmall ? 66 : 74, paddingHorizontal: isSmall ? 8 : 12 }}
+      >
+        <Text
+          className={isSmall ? "text-xs font-black" : "text-sm font-black"}
+          style={{ color: colors.foreground, fontFamily: fonts.mono }}
+        >
+          {value} {suffix}
+        </Text>
+      </View>
+      <TouchableOpacity
+        activeOpacity={0.8}
+        className="items-center justify-center"
+        onPress={() => adjust(1)}
+        style={{ height: buttonSize, width: buttonSize }}
+      >
+        <Feather name="plus" size={isSmall ? 13 : 14} color={colors.foreground} />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+// Row with a label/description on the left and a Switch on the right, used
+// for every toggle in the Notifications card.
+function SettingsToggleRow({
+  description,
+  label,
+  onValueChange,
+  value,
+}: {
+  description: string;
+  label: string;
+  onValueChange: (next: boolean) => void;
+  value: boolean;
+}) {
+  const { colors, fonts } = useTheme();
+
+  return (
+    <View className="flex-row items-center justify-between gap-4">
+      <View className="flex-1">
+        <Text
+          className="text-xs font-bold"
+          style={{ color: colors.foreground, fontFamily: fonts.body }}
+        >
+          {label}
+        </Text>
+        <Text
+          className="mt-0.5 text-[11px] font-semibold leading-4"
+          style={{ color: colors.mutedText, fontFamily: fonts.body }}
+        >
+          {description}
+        </Text>
+      </View>
+      <Switch
+        onValueChange={onValueChange}
+        thumbColor={value ? colors.buttonText : colors.mutedText}
+        trackColor={{ false: colors.border, true: colors.primary }}
+        value={value}
+      />
+    </View>
+  );
+}
+
 export default function Tracker() {
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
@@ -438,18 +569,6 @@ export default function Tracker() {
   function openCycleSettings() {
     setSettingsError("");
     setSettingsVisible(true);
-  }
-
-  function adjustNumberInput(
-    value: string,
-    setter: (nextValue: string) => void,
-    delta: -1 | 1,
-    min: number,
-    max: number,
-  ) {
-    const current = Number.parseInt(value, 10);
-    const next = Math.min(max, Math.max(min, (Number.isNaN(current) ? min : current) + delta));
-    setter(String(next));
   }
 
   async function handleSaveCycleSettings() {
@@ -1564,8 +1683,62 @@ export default function Tracker() {
                 </TouchableOpacity>
               </View>
 
-              <View className="mt-6 gap-4">
-                <View>
+              <View className="mt-6" style={{ gap: 18 }}>
+                {/* Cycle Information */}
+                <SettingsSectionCard title="Cycle Information">
+                  <View style={{ gap: 16 }}>
+                    <View className="flex-row items-center justify-between gap-3">
+                      <View className="flex-1">
+                        <Text
+                          className="text-xs font-bold"
+                          style={{ color: colors.foreground, fontFamily: fonts.body }}
+                        >
+                          Cycle length
+                        </Text>
+                        <Text
+                          className="mt-0.5 text-[11px] font-semibold leading-4"
+                          style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                        >
+                          Most cycles are usually between 24 and 35 days.
+                        </Text>
+                      </View>
+                      <PillStepper
+                        max={45}
+                        min={20}
+                        onChange={setCycleLengthInput}
+                        suffix="days"
+                        value={cycleLengthInput}
+                      />
+                    </View>
+
+                    <View className="flex-row items-center justify-between gap-3">
+                      <View className="flex-1">
+                        <Text
+                          className="text-xs font-bold"
+                          style={{ color: colors.foreground, fontFamily: fonts.body }}
+                        >
+                          Period length
+                        </Text>
+                        <Text
+                          className="mt-0.5 text-[11px] font-semibold leading-4"
+                          style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                        >
+                          This marks period phase days on your calendar.
+                        </Text>
+                      </View>
+                      <PillStepper
+                        max={10}
+                        min={1}
+                        onChange={setPeriodLengthInput}
+                        suffix="days"
+                        value={periodLengthInput}
+                      />
+                    </View>
+                  </View>
+                </SettingsSectionCard>
+
+                {/* Last Period */}
+                <SettingsSectionCard title="Last Period">
                   <Text
                     className="mb-2 text-xs font-bold"
                     style={{ color: colors.foreground, fontFamily: fonts.body }}
@@ -1573,11 +1746,8 @@ export default function Tracker() {
                     Last period start date
                   </Text>
                   <View
-                    className="flex-row items-center rounded-2xl border px-4 py-3.5"
-                    style={{
-                      backgroundColor: colors.input,
-                      borderColor: colors.border,
-                    }}
+                    className="flex-row items-center rounded-2xl px-4 py-3.5"
+                    style={{ backgroundColor: colors.surface }}
                   >
                     <MaterialCommunityIcons
                       name="calendar-start"
@@ -1604,313 +1774,102 @@ export default function Tracker() {
                   >
                     Example: 2026-07-01
                   </Text>
-                </View>
+                </SettingsSectionCard>
 
-                {[
-                  {
-                    helper: "Most cycles are usually between 24 and 35 days.",
-                    label: "Cycle length",
-                    max: 45,
-                    min: 20,
-                    setValue: setCycleLengthInput,
-                    suffix: "days",
-                    value: cycleLengthInput,
-                  },
-                  {
-                    helper: "This marks period phase days on your calendar.",
-                    label: "Period length",
-                    max: 10,
-                    min: 1,
-                    setValue: setPeriodLengthInput,
-                    suffix: "days",
-                    value: periodLengthInput,
-                  },
-                ].map((item) => (
-                  <View
-                    key={item.label}
-                    className="rounded-2xl border p-4"
-                    style={{
-                      backgroundColor: colors.input,
-                      borderColor: colors.border,
-                    }}
-                  >
-                    <View className="flex-row items-center justify-between gap-3">
-                      <View className="flex-1">
+                {/* Tracking Goal */}
+                <SettingsSectionCard title="Tracking Goal">
+                  <View className="flex-row flex-wrap gap-2">
+                    {[
+                      { id: "track_period", label: "Track Period" },
+                      { id: "avoid_pregnancy", label: "Avoid Pregnancy" },
+                      { id: "achieve_pregnancy", label: "Achieve Pregnancy" },
+                      { id: "manage_symptoms", label: "Manage Symptoms" },
+                      { id: "general_health", label: "General Health" },
+                    ].map((goal) => {
+                      const isSelected = trackingGoal === goal.id;
+                      return (
+                        <TouchableOpacity
+                          key={goal.id}
+                          activeOpacity={0.8}
+                          onPress={() => setTrackingGoal(goal.id as any)}
+                          className="rounded-full px-3.5 py-2"
+                          style={{
+                            backgroundColor: isSelected ? colors.primary : colors.surface,
+                          }}
+                        >
+                          <Text
+                            className="text-[11px] font-black"
+                            style={{ color: isSelected ? colors.buttonText : colors.foreground, fontFamily: fonts.body }}
+                          >
+                            {goal.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </SettingsSectionCard>
+
+                {/* Notifications */}
+                <SettingsSectionCard title="Notifications">
+                  <View style={{ gap: 16 }}>
+                    <SettingsToggleRow
+                      description="Show reminders before your expected next period."
+                      label="Period reminders"
+                      onValueChange={setRemindersEnabled}
+                      value={remindersEnabled}
+                    />
+
+                    {remindersEnabled ? (
+                      <View
+                        className="flex-row items-center justify-between rounded-2xl px-4 py-3"
+                        style={{ backgroundColor: colors.surface }}
+                      >
                         <Text
                           className="text-xs font-bold"
                           style={{ color: colors.foreground, fontFamily: fonts.body }}
                         >
-                          {item.label}
+                          Remind me before
                         </Text>
-                        <Text
-                          className="mt-1 text-[11px] font-semibold leading-4"
-                          style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                        >
-                          {item.helper}
-                        </Text>
+                        <PillStepper
+                          max={14}
+                          min={0}
+                          onChange={setReminderDaysBeforeInput}
+                          size="sm"
+                          suffix="days"
+                          value={reminderDaysBeforeInput}
+                        />
                       </View>
+                    ) : null}
 
-                      <View className="flex-row items-center rounded-full border overflow-hidden">
-                        <TouchableOpacity
-                          activeOpacity={0.8}
-                          className="h-9 w-9 items-center justify-center"
-                          onPress={() =>
-                            adjustNumberInput(
-                              item.value,
-                              item.setValue,
-                              -1,
-                              item.min,
-                              item.max,
-                            )
-                          }
-                          style={{ backgroundColor: colors.surface }}
-                        >
-                          <Feather
-                            name="minus"
-                            size={14}
-                            color={colors.foreground}
-                          />
-                        </TouchableOpacity>
-                        <View
-                          className="h-9 min-w-[74px] items-center justify-center border-x px-3"
-                          style={{
-                            backgroundColor: colors.surface,
-                            borderColor: colors.border,
-                          }}
-                        >
-                          <Text
-                            className="text-sm font-black"
-                            style={{ color: colors.foreground, fontFamily: fonts.mono }}
-                          >
-                            {item.value} {item.suffix}
-                          </Text>
-                        </View>
-                        <TouchableOpacity
-                          activeOpacity={0.8}
-                          className="h-9 w-9 items-center justify-center"
-                          onPress={() =>
-                            adjustNumberInput(
-                              item.value,
-                              item.setValue,
-                              1,
-                              item.min,
-                              item.max,
-                            )
-                          }
-                          style={{ backgroundColor: colors.surface }}
-                        >
-                          <Feather
-                            name="plus"
-                            size={14}
-                            color={colors.foreground}
-                          />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  </View>
-                ))}
-
-                <View
-                  className="rounded-2xl border p-4"
-                  style={{
-                    backgroundColor: colors.input,
-                    borderColor: colors.border,
-                  }}
-                >
-                  <View className="flex-row items-center justify-between gap-4">
-                    <View className="flex-1">
-                      <Text
-                        className="text-xs font-bold"
-                        style={{ color: colors.foreground, fontFamily: fonts.body }}
-                      >
-                        Period reminders
-                      </Text>
-                      <Text
-                        className="mt-1 text-[11px] font-semibold leading-4"
-                        style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                      >
-                        Show reminders before your expected next period.
-                      </Text>
-                    </View>
-                    <Switch
-                      onValueChange={setRemindersEnabled}
-                      thumbColor={
-                        remindersEnabled ? colors.buttonText : colors.mutedText
-                      }
-                      trackColor={{
-                        false: colors.border,
-                        true: colors.primary,
-                      }}
-                      value={remindersEnabled}
-                    />
-                  </View>
-
-                  {remindersEnabled ? (
-                    <View className="mt-4 flex-row items-center justify-between rounded-2xl border px-4 py-3">
-                      <Text
-                        className="text-xs font-bold"
-                        style={{ color: colors.foreground, fontFamily: fonts.body }}
-                      >
-                        Remind me before
-                      </Text>
-                      <View className="flex-row items-center rounded-full border overflow-hidden">
-                        <TouchableOpacity
-                          activeOpacity={0.8}
-                          className="h-8 w-8 items-center justify-center"
-                          onPress={() =>
-                            adjustNumberInput(
-                              reminderDaysBeforeInput,
-                              setReminderDaysBeforeInput,
-                              -1,
-                              0,
-                              14,
-                            )
-                          }
-                          style={{ backgroundColor: colors.surface }}
-                        >
-                          <Feather
-                            name="minus"
-                            size={13}
-                            color={colors.foreground}
-                          />
-                        </TouchableOpacity>
-                        <View
-                          className="h-8 min-w-[66px] items-center justify-center border-x px-2"
-                          style={{
-                            backgroundColor: colors.surface,
-                            borderColor: colors.border,
-                          }}
-                        >
-                          <Text
-                            className="text-xs font-black"
-                            style={{ color: colors.foreground, fontFamily: fonts.mono }}
-                          >
-                            {reminderDaysBeforeInput} days
-                          </Text>
-                        </View>
-                        <TouchableOpacity
-                          activeOpacity={0.8}
-                          className="h-8 w-8 items-center justify-center"
-                          onPress={() =>
-                            adjustNumberInput(
-                              reminderDaysBeforeInput,
-                              setReminderDaysBeforeInput,
-                              1,
-                              0,
-                              14,
-                            )
-                          }
-                          style={{ backgroundColor: colors.surface }}
-                        >
-                          <Feather
-                            name="plus"
-                            size={13}
-                            color={colors.foreground}
-                          />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  ) : null}
-
-                  {/* Ovulation & Fertility Reminders */}
-                  <View className="mt-4 flex-row items-center justify-between rounded-2xl border px-4 py-3" style={{ backgroundColor: colors.input, borderColor: colors.border }}>
-                    <View className="flex-1">
-                      <Text className="text-xs font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
-                        Ovulation reminders
-                      </Text>
-                      <Text className="mt-1 text-[11px] font-semibold leading-4" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                        Receive notifications for ovulation day.
-                      </Text>
-                    </View>
-                    <Switch
+                    <SettingsToggleRow
+                      description="Receive notifications for ovulation day."
+                      label="Ovulation reminders"
                       onValueChange={setOvulationReminder}
-                      thumbColor={ovulationReminder ? colors.buttonText : colors.mutedText}
-                      trackColor={{ false: colors.border, true: colors.primary }}
                       value={ovulationReminder}
                     />
-                  </View>
 
-                  <View className="mt-4 flex-row items-center justify-between rounded-2xl border px-4 py-3" style={{ backgroundColor: colors.input, borderColor: colors.border }}>
-                    <View className="flex-1">
-                      <Text className="text-xs font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
-                        Fertility window reminders
-                      </Text>
-                      <Text className="mt-1 text-[11px] font-semibold leading-4" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                        Get notified when your fertile window starts.
-                      </Text>
-                    </View>
-                    <Switch
+                    <SettingsToggleRow
+                      description="Get notified when your fertile window starts."
+                      label="Fertility window reminders"
                       onValueChange={setFertilityReminder}
-                      thumbColor={fertilityReminder ? colors.buttonText : colors.mutedText}
-                      trackColor={{ false: colors.border, true: colors.primary }}
                       value={fertilityReminder}
                     />
-                  </View>
 
-                  {/* Pregnancy Mode */}
-                  <View className="mt-4 flex-row items-center justify-between rounded-2xl border px-4 py-3" style={{ backgroundColor: colors.input, borderColor: colors.border }}>
-                    <View className="flex-1">
-                      <Text className="text-xs font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
-                        Pregnancy Mode
-                      </Text>
-                      <Text className="mt-1 text-[11px] font-semibold leading-4" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                        Pause cycle predictions and track pregnancy.
-                      </Text>
-                    </View>
-                    <Switch
+                    {/* Pregnancy Mode — kept here, below Fertility reminders */}
+                    <SettingsToggleRow
+                      description="Pause cycle predictions and track pregnancy."
+                      label="Pregnancy Mode"
                       onValueChange={setPregnancyMode}
-                      thumbColor={pregnancyMode ? colors.buttonText : colors.mutedText}
-                      trackColor={{ false: colors.border, true: colors.primary }}
                       value={pregnancyMode}
                     />
                   </View>
-
-                  {/* Tracking Goals */}
-                  <View className="mt-4 rounded-2xl border p-4" style={{ backgroundColor: colors.input, borderColor: colors.border }}>
-                    <Text className="text-xs font-bold mb-3" style={{ color: colors.foreground, fontFamily: fonts.body }}>
-                      Choose your tracking goal
-                    </Text>
-                    <View className="flex-row flex-wrap gap-2">
-                      {[
-                        { id: "track_period", label: "Track Period" },
-                        { id: "avoid_pregnancy", label: "Avoid Pregnancy" },
-                        { id: "achieve_pregnancy", label: "Achieve Pregnancy" },
-                        { id: "manage_symptoms", label: "Manage Symptoms" },
-                        { id: "general_health", label: "General Health" },
-                      ].map((goal) => {
-                        const isSelected = trackingGoal === goal.id;
-                        return (
-                          <TouchableOpacity
-                            key={goal.id}
-                            activeOpacity={0.8}
-                            onPress={() => setTrackingGoal(goal.id as any)}
-                            className="rounded-full border px-3.5 py-1.5"
-                            style={{
-                              backgroundColor: isSelected ? colors.primary : colors.surface,
-                              borderColor: isSelected ? colors.primary : colors.border,
-                            }}
-                          >
-                            <Text
-                              className="text-[11px] font-black"
-                              style={{ color: isSelected ? colors.buttonText : colors.foreground, fontFamily: fonts.body }}
-                            >
-                              {goal.label}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  </View>
-                </View>
+                </SettingsSectionCard>
               </View>
 
               {settingsError ? (
                 <View
-                  className="mt-5 rounded-2xl border px-4 py-3"
-                  style={{
-                    backgroundColor: colors.dangerLight,
-                    borderColor: colors.danger,
-                  }}
+                  className="mt-5 rounded-2xl px-4 py-3"
+                  style={{ backgroundColor: colors.dangerLight }}
                 >
                   <Text
                     className="text-center text-xs font-bold"
