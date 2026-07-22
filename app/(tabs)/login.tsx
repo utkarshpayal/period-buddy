@@ -27,6 +27,7 @@ import { GoogleSignInButton } from "../../components/GoogleSignInButton";
 import { useTheme } from "../../components/theme";
 import { connectPartnerAndResolveRoute, loginUser } from "../../lib/auth";
 import type { AuthUser } from "../../lib/api";
+import { alert } from "../../lib/alert";
 import { getScreenGradient, getShadow } from "../../components/ui-tokens";
 
 export default function Login() {
@@ -69,7 +70,12 @@ export default function Login() {
     const { connectError, partnerRole, destination } =
       await connectPartnerAndResolveRoute(partnerCode);
 
-    if (connectError) setErrorMessage(connectError);
+    // A modal alert survives this screen unmounting on the router.replace()
+    // below — an inline banner (setErrorMessage) would just flash and
+    // disappear, leaving no trace of why the partner connection failed.
+    if (connectError) {
+      alert("Couldn't connect as a partner", connectError);
+    }
 
     updateUser({
       ...(user ?? (fallbackEmail ? { email: fallbackEmail } : {})),
@@ -80,7 +86,7 @@ export default function Login() {
 
   async function handleGoogleSignInSuccess({ token, user }: { token: string; user: AuthUser }) {
     setErrorMessage("");
-    signIn({ token, user });
+    await signIn({ token, user });
     await finishSignIn(user);
   }
 
@@ -110,7 +116,7 @@ export default function Login() {
         response.isProfileComplete ?? user?.isProfileComplete;
       const normalizedEmail = email.trim().toLowerCase();
 
-      signIn({
+      await signIn({
         token: response.token,
         user: user
           ? { ...user, isProfileComplete }

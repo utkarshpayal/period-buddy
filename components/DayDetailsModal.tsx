@@ -6,6 +6,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -93,6 +94,7 @@ export default function DayDetailsModal({
   const [tempText, setTempText] = useState("");
   const [stressLevel, setStressLevel] = useState<number | undefined>();
   const [medText, setMedText] = useState("");
+  const [isIntimate, setIsIntimate] = useState(false);
 
   useEffect(() => {
     if (!visible) return;
@@ -108,6 +110,7 @@ export default function DayDetailsModal({
     setTempText(entry?.temperature ? String(entry.temperature) : "");
     setStressLevel(entry?.stressLevel);
     setMedText(entry?.medication ? entry.medication.join(", ") : "");
+    setIsIntimate(entry?.isIntimate ?? false);
   }, [visible, details, entry]);
 
   function handleSave() {
@@ -123,6 +126,7 @@ export default function DayDetailsModal({
         energy: selectedEnergy,
         flow: selectedFlow,
         mood: selectedMood,
+        isIntimate,
         note: noteText.trim(),
         symptoms: selectedSymptoms,
         sleepHours,
@@ -564,6 +568,41 @@ export default function DayDetailsModal({
                 fontFamily: fonts.body,
               }}
             />
+
+            <SectionTitle title="Intimate day" />
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginTop: 10,
+                padding: 12,
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: colors.border,
+                backgroundColor: colors.input,
+              }}
+            >
+              <Text
+                style={{
+                  flex: 1,
+                  color: colors.mutedText,
+                  fontSize: 11.5,
+                  lineHeight: 16,
+                  marginRight: 12,
+                  fontFamily: fonts.body,
+                }}
+              >
+                Tag today as intimate. Only this tag (not your other notes) is
+                ever shown to a partner, and only if you've turned on
+                Intimacy Notes sharing.
+              </Text>
+              <Switch
+                value={isIntimate}
+                onValueChange={setIsIntimate}
+                trackColor={{ true: colors.primary }}
+              />
+            </View>
 
             <SectionTitle title="Notes" />
             <TextInput

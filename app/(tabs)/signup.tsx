@@ -29,6 +29,7 @@ import { OtpModal } from "../../components/OtpModal";
 import { useTheme } from "../../components/theme";
 import { connectPartnerAndResolveRoute, signupUser } from "../../lib/auth";
 import type { AuthUser } from "../../lib/api";
+import { alert } from "../../lib/alert";
 import { getScreenGradient, getShadow } from "../../components/ui-tokens";
 
 export default function SignUp() {
@@ -109,7 +110,12 @@ export default function SignUp() {
     const { connectError, partnerRole, destination } =
       await connectPartnerAndResolveRoute(partnerCode);
 
-    if (connectError) setErrorMessage(connectError);
+    // A modal alert survives this screen unmounting on the router.replace()
+    // below — an inline banner (setErrorMessage) would just flash and
+    // disappear, leaving no trace of why the partner connection failed.
+    if (connectError) {
+      alert("Couldn't connect as a partner", connectError);
+    }
 
     updateUser({ ...user, partnerRole });
     router.replace(destination);
@@ -124,13 +130,13 @@ export default function SignUp() {
   }) {
     const signedInUser = user as AuthUser;
     setIsOtpModalVisible(false);
-    signIn({ token, user: signedInUser });
+    await signIn({ token, user: signedInUser });
     await finishSignIn(signedInUser);
   }
 
   async function handleGoogleSignInSuccess({ token, user }: { token: string; user: AuthUser }) {
     setErrorMessage("");
-    signIn({ token, user });
+    await signIn({ token, user });
     await finishSignIn(user);
   }
 

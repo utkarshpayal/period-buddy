@@ -114,6 +114,7 @@ export type DayEntry = {
   dateKey: string;
   energy?: "high" | "low" | "medium" | "steady";
   flow?: "heavy" | "light" | "medium" | "none" | "spotting";
+  isIntimate?: boolean;
   medication?: string[];
   mood?:
     | "anxious"
@@ -338,6 +339,7 @@ export type PartnerSharedData = {
 export type BuddyMatch = {
   _id?: string;
   activeLimit?: number;
+  /** Real display name for a genuine matched user, or a demo alias when backfilled from fallback content. */
   alias: string;
   avatarSeed: string;
   compatibility: number;
@@ -347,6 +349,8 @@ export type BuddyMatch = {
   lastMessage?: string;
   lastMessageAt?: string;
   matchKey?: string;
+  /** Unique per pairing, shared by both sides; scopes the buddy_<roomKey> WebSocket room to this specific pairing so it can't collide with a past or future one. */
+  roomKey?: string;
   buddyUserId?: string;
   nominatedAt?: string;
   similarities: string[];
@@ -442,16 +446,21 @@ export type Blog = {
 
 export type ContentFeedItem = {
   author: string;
+  category?: BlogCategory;
   id: string;
   imageUrl: string;
+  likeCount?: number;
   publishedAt?: string;
+  readTimeMinutes?: number;
   slug?: string;
   sourceId: string;
   summary: string;
+  tags?: string[];
   time: string;
   title: string;
   type: "blog" | "reel";
   verified: boolean;
+  viewCount?: number;
 };
 
 export type ReelPollOption = {
@@ -1109,9 +1118,11 @@ export const blogsApi = {
     ),
 
   getFeed: (params?: {
+    category?: BlogCategory;
     limit?: number;
     page?: number;
     search?: string;
+    tag?: string;
     type?: "all" | "blog" | "reel";
   }) =>
     apiRequest<{ items: ContentFeedItem[]; pagination: Pagination }>(

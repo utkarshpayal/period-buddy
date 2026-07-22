@@ -10,7 +10,7 @@ type AuthSession = {
 
 type AuthContextValue = {
   isAuthenticated: boolean;
-  signIn: (session: AuthSession) => void;
+  signIn: (session: AuthSession) => Promise<void>;
   signOut: () => Promise<void>;
   token: string | null;
   user: AuthUser | null;
@@ -66,9 +66,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<AuthContextValue>(
     () => ({
       isAuthenticated: Boolean(session?.token),
-      signIn: (s) => {
+      // Awaited by callers before firing off any follow-up authenticated
+      // request (e.g. resolving partner role right after login) — otherwise
+      // getToken() can read AsyncStorage before this write lands and send
+      // that request with no Authorization header at all.
+      signIn: async (s) => {
         setSession(s);
-        AsyncStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(s)).catch(() => {});
+        await AsyncStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(s)).catch(() => {});
       },
       signOut,
       token: session?.token ?? null,

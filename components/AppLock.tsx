@@ -1,5 +1,4 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as Crypto from "expo-crypto";
 import * as LocalAuthentication from "expo-local-authentication";
 import React, {
   createContext,
@@ -13,57 +12,40 @@ import React, {
 import { AppState as RNAppState, type AppStateStatus } from "react-native";
 import { useAuth } from "./auth-context";
 
-export type LockMethod = "biometric" | "pattern";
-
 type StoredAppLockSettings = {
   enabled: boolean;
-  method: LockMethod | null;
-  patternHash: string | null;
 };
 
 const STORAGE_KEY = "period-buddy.app-lock";
-const DEFAULT_SETTINGS: StoredAppLockSettings = {
-  enabled: false,
-  method: null,
-  patternHash: null,
-};
+const DEFAULT_SETTINGS: StoredAppLockSettings = { enabled: false };
+
+type AuthResult = { success: boolean; error?: string };
 
 type AppLockContextValue = {
   hasHydrated: boolean;
   settings: StoredAppLockSettings;
   isLocked: boolean;
-  biometricAvailable: boolean;
-  biometricLabel: string;
-  refreshBiometricAvailability: () => Promise<boolean>;
-  hashPattern: (sequence: number[]) => Promise<string>;
-  /** Runs a live OS biometric check — does NOT persist anything on its own.
-   * Biometric is only ever saved together with a pattern fallback (see
-   * `saveLock`), the same way phone OSes always back Face/Touch ID with a
-   * passcode — so a failed/unavailable scanner is never a full lockout. */
-  verifyBiometric: () => Promise<{ success: boolean; error?: string }>;
-  saveLock: (method: LockMethod, patternHash: string) => Promise<void>;
+  /** Human label for whatever the device's own lock screen uses — e.g.
+   * "Face ID", "Fingerprint", or a generic "device lock" fallback. Purely
+   * for display; the actual credential check is entirely owned by the OS. */
+  deviceLockLabel: string;
+  /** Runs the OS system-lock prompt (biometric with passcode/PIN/pattern
+   * fallback) and, on success, turns App Lock on. */
+  enableLock: () => Promise<AuthResult>;
   disableLock: () => Promise<void>;
-  unlockWithBiometric: () => Promise<{ success: boolean; error?: string }>;
-  unlockWithPattern: (patternHash: string) => boolean;
+  /** Runs the OS system-lock prompt to unlock the app. */
+  unlock: () => Promise<AuthResult>;
   lockNow: () => void;
 };
 
 const AppLockContext = createContext<AppLockContextValue | undefined>(undefined);
-
-export async function hashPatternSequence(sequence: number[]): Promise<string> {
-  return Crypto.digestStringAsync(
-    Crypto.CryptoDigestAlgorithm.SHA256,
-    sequence.join("-"),
-  );
-}
 
 export function AppLockProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
   const [hasHydrated, setHasHydrated] = useState(false);
   const [settings, setSettings] = useState<StoredAppLockSettings>(DEFAULT_SETTINGS);
   const [isLocked, setIsLocked] = useState(false);
-  const [biometricAvailable, setBiometricAvailable] = useState(false);
-  const [biometricLabel, setBiometricLabel] = useState("Biometric");
+  const [deviceLockLabel, setDeviceLockLabel] = useState("device lock");
   const appStateRef = useRef<AppStateStatus>(RNAppState.currentState);
 
   useEffect(() => {
@@ -83,34 +65,24 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next)).catch(() => {});
   }, []);
 
-  const refreshBiometricAvailability = useCallback(async () => {
-    try {
-      const [hasHardware, isEnrolled, types] = await Promise.all([
-        LocalAuthentication.hasHardwareAsync(),
-        LocalAuthentication.isEnrolledAsync(),
-        LocalAuthentication.supportedAuthenticationTypesAsync(),
-      ]);
-      const available = hasHardware && isEnrolled;
-      setBiometricAvailable(available);
-      if (types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) {
-        setBiometricLabel("Face ID");
-      } else if (types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) {
-        setBiometricLabel("Fingerprint");
-      } else if (types.includes(LocalAuthentication.AuthenticationType.IRIS)) {
-        setBiometricLabel("Iris scan");
-      } else {
-        setBiometricLabel("Biometric");
-      }
-      return available;
-    } catch {
-      setBiometricAvailable(false);
-      return false;
-    }
-  }, []);
-
+  // Detection is only used to pick a nicer label for the UI — the actual
+  // authenticateAsync call below falls back to the device passcode/PIN/
+  // pattern on its own, so we never need to gate on this being available.
   useEffect(() => {
-    refreshBiometricAvailability();
-  }, [refreshBiometricAvailability]);
+    LocalAuthentication.supportedAuthenticationTypesAsync()
+      .then((types) => {
+        if (types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) {
+          setDeviceLockLabel("Face ID");
+        } else if (types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) {
+          setDeviceLockLabel("fingerprint");
+        } else if (types.includes(LocalAuthentication.AuthenticationType.IRIS)) {
+          setDeviceLockLabel("iris scan");
+        } else {
+          setDeviceLockLabel("device lock");
+        }
+      })
+      .catch(() => setDeviceLockLabel("device lock"));
+  }, []);
 
   // Start locked once we know the user has app lock enabled — re-lock is
   // handled below on every background -> foreground transition too.
@@ -132,69 +104,45 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.remove();
   }, [settings.enabled, isAuthenticated]);
 
-  const hashPattern = useCallback((sequence: number[]) => hashPatternSequence(sequence), []);
-
-  const verifyBiometric = useCallback(async () => {
+  // Delegates entirely to the OS: `disableDeviceFallback: false` lets it use
+  // whatever the phone's own lock screen offers (fingerprint, Face ID, PIN,
+  // pattern, or passcode) instead of a custom in-app credential.
+  const authenticate = useCallback(async (promptMessage: string): Promise<AuthResult> => {
     try {
-      const available = await refreshBiometricAvailability();
-      if (!available) {
-        return {
-          success: false,
-          error:
-            "No fingerprint or face unlock is set up on this device yet. Set one up in your device settings first.",
-        };
-      }
       const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: "Confirm it's you to turn on App Lock",
+        promptMessage,
+        disableDeviceFallback: false,
+        cancelLabel: "Cancel",
       });
-      if (!result.success) {
-        return { success: false, error: "Couldn't verify — App Lock was not turned on." };
-      }
-      return { success: true };
+      if (result.success) return { success: true };
+      return {
+        success: false,
+        error: "error" in result ? String(result.error) : "Authentication failed",
+      };
     } catch {
-      return { success: false, error: "Biometric unlock isn't available here." };
+      return { success: false, error: "Your device lock isn't available here." };
     }
-  }, [refreshBiometricAvailability]);
+  }, []);
 
-  const saveLock = useCallback(
-    async (method: LockMethod, patternHash: string) => {
-      await persist({ enabled: true, method, patternHash });
+  const enableLock = useCallback(async () => {
+    const result = await authenticate("Confirm it's you to turn on App Lock");
+    if (result.success) {
+      await persist({ enabled: true });
       setIsLocked(false);
-    },
-    [persist],
-  );
+    }
+    return result;
+  }, [authenticate, persist]);
 
   const disableLock = useCallback(async () => {
-    // Wipe the method/pattern hash too, not just the enabled flag, so
-    // turning App Lock back on always starts from a clean setup instead of
-    // silently reactivating whatever was configured before.
     await persist(DEFAULT_SETTINGS);
     setIsLocked(false);
   }, [persist]);
 
-  const unlockWithBiometric = useCallback(async () => {
-    try {
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: "Unlock The Nura",
-      });
-      if (result.success) {
-        setIsLocked(false);
-        return { success: true };
-      }
-      return { success: false, error: "error" in result ? String(result.error) : "Authentication failed" };
-    } catch {
-      return { success: false, error: "Biometric unlock isn't available here." };
-    }
-  }, []);
-
-  const unlockWithPattern = useCallback(
-    (patternHash: string) => {
-      const matches = Boolean(settings.patternHash) && patternHash === settings.patternHash;
-      if (matches) setIsLocked(false);
-      return matches;
-    },
-    [settings.patternHash],
-  );
+  const unlock = useCallback(async () => {
+    const result = await authenticate("Unlock The Nura");
+    if (result.success) setIsLocked(false);
+    return result;
+  }, [authenticate]);
 
   const lockNow = useCallback(() => {
     if (settings.enabled) setIsLocked(true);
@@ -205,33 +153,13 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
       hasHydrated,
       settings,
       isLocked: isLocked && settings.enabled && isAuthenticated,
-      biometricAvailable,
-      biometricLabel,
-      refreshBiometricAvailability,
-      hashPattern,
-      verifyBiometric,
-      saveLock,
+      deviceLockLabel,
+      enableLock,
       disableLock,
-      unlockWithBiometric,
-      unlockWithPattern,
+      unlock,
       lockNow,
     }),
-    [
-      hasHydrated,
-      settings,
-      isLocked,
-      isAuthenticated,
-      biometricAvailable,
-      biometricLabel,
-      refreshBiometricAvailability,
-      hashPattern,
-      verifyBiometric,
-      saveLock,
-      disableLock,
-      unlockWithBiometric,
-      unlockWithPattern,
-      lockNow,
-    ],
+    [hasHydrated, settings, isLocked, isAuthenticated, deviceLockLabel, enableLock, disableLock, unlock, lockNow],
   );
 
   return <AppLockContext.Provider value={value}>{children}</AppLockContext.Provider>;

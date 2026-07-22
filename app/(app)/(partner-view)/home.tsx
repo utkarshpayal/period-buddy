@@ -36,6 +36,28 @@ const PHASE_LABEL: Record<string, string> = {
   period: "On her period",
 };
 
+const KNOWLEDGE_LINKS = [
+  { title: "Blogs", desc: "Articles on cycle health", icon: "book-outline", route: "/(app)/blogs" },
+  { title: "Videos", desc: "Short, expert-made reels", icon: "play-circle-outline", route: "/(app)/reels" },
+  { title: "Health Concerns", desc: "Irregularities & symptoms", icon: "alert-circle-outline", route: "/(app)/health-issues" },
+  { title: "Anonymous Q&A", desc: "Ask privately, expert-answered", icon: "help-circle-outline", route: "/(app)/qa" },
+  { title: "Hygiene & Care", desc: "Product guidance & comfort", icon: "leaf-outline", route: "/(app)/hygiene" },
+  { title: "Sexual Wellbeing", desc: "Consent, intimacy & safety", icon: "heart-outline", route: "/(app)/sexual-wellbeing" },
+] as const;
+
+function formatDateKey(dateKey?: string) {
+  if (!dateKey) return "—";
+  const date = new Date(`${dateKey}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return dateKey;
+
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const yesterdayKey = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  if (dateKey === todayKey) return "Today";
+  if (dateKey === yesterdayKey) return "Yesterday";
+
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 export default function PartnerViewHome() {
   const { colors, isDark, fonts } = useTheme();
   const { user, signOut, updateUser } = useAuth();
@@ -446,143 +468,6 @@ export default function PartnerViewHome() {
                   <Ionicons name="chevron-forward" size={16} color={colors.mutedText} />
                 </TouchableOpacity>
 
-                {/* Caring Guide - leads with how to help, ahead of raw data */}
-                {hasCare && (
-                  <View
-                    className="rounded-3xl border p-5 mb-4"
-                    style={{
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                      ...getShadow(colors, isDark),
-                    }}
-                  >
-                    <View className="flex-row items-center gap-1.5 mb-3">
-                      <Ionicons name="rose-outline" size={15} color={colors.primary} />
-                      <Text
-                        className="text-[10px] font-black uppercase tracking-widest"
-                        style={{ color: colors.primary, fontFamily: fonts.body }}
-                      >
-                        Partner Caring Guide
-                      </Text>
-                    </View>
-
-                    {data?.careSuggestions?.suggestions && data.careSuggestions.suggestions.length > 0 && (
-                      <View className="mb-4">
-                        <Text
-                          className="text-xs font-bold mb-2.5"
-                          style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                        >
-                          Caring Suggestions
-                        </Text>
-                        <View style={{ gap: 8 }}>
-                          {data.careSuggestions.suggestions.map((suggestion, idx) => (
-                            <View
-                              key={idx}
-                              className="p-3.5 rounded-2xl border"
-                              style={{
-                                backgroundColor: colors.surfaceSoft,
-                                borderColor: colors.border,
-                              }}
-                            >
-                              <View className="flex-row items-center justify-between mb-1.5">
-                                <View
-                                  className="px-2 py-0.5 rounded-full"
-                                  style={{
-                                    backgroundColor: colors.primaryLight,
-                                  }}
-                                >
-                                  <Text
-                                    className="text-[9px] font-bold uppercase tracking-wider"
-                                    style={{ color: colors.primary }}
-                                  >
-                                    {suggestion.category}
-                                  </Text>
-                                </View>
-                              </View>
-                              <Text
-                                className="text-xs font-black mb-1"
-                                style={{ color: colors.foreground, fontFamily: fonts.body }}
-                              >
-                                {suggestion.title}
-                              </Text>
-                              <Text
-                                className="text-[11.5px] leading-5 font-medium"
-                                style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                              >
-                                {suggestion.message}
-                              </Text>
-                            </View>
-                          ))}
-                        </View>
-                      </View>
-                    )}
-
-                    {/* Do's & Don'ts */}
-                    {((data?.careSuggestions?.dos && data.careSuggestions.dos.length > 0) ||
-                      (data?.careSuggestions?.donts && data.careSuggestions.donts.length > 0)) && (
-                      <View className="border-t pt-4" style={{ borderColor: colors.border, gap: 16 }}>
-                        {data.careSuggestions.dos && data.careSuggestions.dos.length > 0 && (
-                          <View>
-                            <Text
-                              className="text-xs font-bold mb-2 flex-row items-center gap-1"
-                              style={{ color: colors.success, fontFamily: fonts.heading }}
-                            >
-                              👍 Do's for support
-                            </Text>
-                            <View style={{ gap: 6 }}>
-                              {data.careSuggestions.dos.map((item, idx) => (
-                                <View key={idx} className="flex-row items-start gap-2">
-                                  <Ionicons
-                                    name="checkmark-circle-outline"
-                                    size={14}
-                                    color={colors.success}
-                                    style={{ marginTop: 1 }}
-                                  />
-                                  <Text
-                                    className="flex-1 text-[11.5px] leading-5 font-semibold"
-                                    style={{ color: colors.foreground, fontFamily: fonts.body }}
-                                  >
-                                    {item}
-                                  </Text>
-                                </View>
-                              ))}
-                            </View>
-                          </View>
-                        )}
-
-                        {data.careSuggestions.donts && data.careSuggestions.donts.length > 0 && (
-                          <View>
-                            <Text
-                              className="text-xs font-bold mb-2 flex-row items-center gap-1"
-                              style={{ color: colors.danger, fontFamily: fonts.heading }}
-                            >
-                              ⚠️ Don'ts to keep in mind
-                            </Text>
-                            <View style={{ gap: 6 }}>
-                              {data.careSuggestions.donts.map((item, idx) => (
-                                <View key={idx} className="flex-row items-start gap-2">
-                                  <Ionicons
-                                    name="close-circle-outline"
-                                    size={14}
-                                    color={colors.danger}
-                                    style={{ marginTop: 1 }}
-                                  />
-                                  <Text
-                                    className="flex-1 text-[11.5px] leading-5 font-semibold"
-                                    style={{ color: colors.foreground, fontFamily: fonts.body }}
-                                  >
-                                    {item}
-                                  </Text>
-                                </View>
-                              ))}
-                            </View>
-                          </View>
-                        )}
-                      </View>
-                    )}
-                  </View>
-                )}
-
                 {/* Cycle status card */}
                 {hasCycle && (
                   <View
@@ -759,7 +644,7 @@ export default function PartnerViewHome() {
                               className="text-xs font-bold"
                               style={{ color: colors.foreground, fontFamily: fonts.body }}
                             >
-                              {log.dateKey}
+                              {formatDateKey(log.dateKey)}
                             </Text>
                             <Text
                               className="text-[11px] font-semibold"
@@ -808,14 +693,17 @@ export default function PartnerViewHome() {
                       ...getShadow(colors, isDark),
                     }}
                   >
-                    <View className="flex-row items-center gap-1.5 mb-3">
-                      <Ionicons name="heart-outline" size={15} color={colors.primary} />
-                      <Text
-                        className="text-[10px] font-black uppercase tracking-widest"
-                        style={{ color: colors.primary, fontFamily: fonts.body }}
-                      >
-                        Intimacy History
-                      </Text>
+                    <View className="flex-row items-center justify-between mb-3">
+                      <View className="flex-row items-center gap-1.5">
+                        <Ionicons name="heart-outline" size={15} color={colors.primary} />
+                        <Text
+                          className="text-[10px] font-black uppercase tracking-widest"
+                          style={{ color: colors.primary, fontFamily: fonts.body }}
+                        >
+                          Intimacy Notes
+                        </Text>
+                      </View>
+                      <Ionicons name="lock-closed-outline" size={12} color={colors.mutedText} />
                     </View>
                     <View style={{ gap: 8 }}>
                       {data?.intimacyLogs?.map((log, idx) => (
@@ -831,17 +719,154 @@ export default function PartnerViewHome() {
                             className="text-[11.5px] font-black mb-1"
                             style={{ color: colors.foreground, fontFamily: fonts.body }}
                           >
-                            {log.dateKey}
+                            {formatDateKey(log.dateKey)}
                           </Text>
                           <Text
                             className="text-xs font-semibold leading-5"
                             style={{ color: colors.mutedText, fontFamily: fonts.body }}
                           >
-                            {log.note || "No custom note added."}
+                            {log.note || "Tagged as an intimate day — no note added."}
                           </Text>
                         </View>
                       ))}
                     </View>
+                  </View>
+                )}
+
+                {/* Caring Guide - practical suggestions, placed after the raw data it's based on */}
+                {hasCare && (
+                  <View
+                    className="rounded-3xl border p-5 mb-4"
+                    style={{
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                      ...getShadow(colors, isDark),
+                    }}
+                  >
+                    <View className="flex-row items-center gap-1.5 mb-3">
+                      <Ionicons name="rose-outline" size={15} color={colors.primary} />
+                      <Text
+                        className="text-[10px] font-black uppercase tracking-widest"
+                        style={{ color: colors.primary, fontFamily: fonts.body }}
+                      >
+                        Partner Caring Guide
+                      </Text>
+                    </View>
+
+                    {data?.careSuggestions?.suggestions && data.careSuggestions.suggestions.length > 0 && (
+                      <View className="mb-4">
+                        <Text
+                          className="text-xs font-bold mb-2.5"
+                          style={{ color: colors.foreground, fontFamily: fonts.heading }}
+                        >
+                          Caring Suggestions
+                        </Text>
+                        <View style={{ gap: 8 }}>
+                          {data.careSuggestions.suggestions.map((suggestion, idx) => (
+                            <View
+                              key={idx}
+                              className="p-3.5 rounded-2xl border"
+                              style={{
+                                backgroundColor: colors.surfaceSoft,
+                                borderColor: colors.border,
+                              }}
+                            >
+                              <View className="flex-row items-center justify-between mb-1.5">
+                                <View
+                                  className="px-2 py-0.5 rounded-full"
+                                  style={{
+                                    backgroundColor: colors.primaryLight,
+                                  }}
+                                >
+                                  <Text
+                                    className="text-[9px] font-bold uppercase tracking-wider"
+                                    style={{ color: colors.primary }}
+                                  >
+                                    {suggestion.category}
+                                  </Text>
+                                </View>
+                              </View>
+                              <Text
+                                className="text-xs font-black mb-1"
+                                style={{ color: colors.foreground, fontFamily: fonts.body }}
+                              >
+                                {suggestion.title}
+                              </Text>
+                              <Text
+                                className="text-[11.5px] leading-5 font-medium"
+                                style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                              >
+                                {suggestion.message}
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                      </View>
+                    )}
+
+                    {/* Do's & Don'ts */}
+                    {((data?.careSuggestions?.dos && data.careSuggestions.dos.length > 0) ||
+                      (data?.careSuggestions?.donts && data.careSuggestions.donts.length > 0)) && (
+                      <View className="border-t pt-4" style={{ borderColor: colors.border, gap: 16 }}>
+                        {data.careSuggestions.dos && data.careSuggestions.dos.length > 0 && (
+                          <View>
+                            <Text
+                              className="text-xs font-bold mb-2 flex-row items-center gap-1"
+                              style={{ color: colors.success, fontFamily: fonts.heading }}
+                            >
+                              👍 Do's for support
+                            </Text>
+                            <View style={{ gap: 6 }}>
+                              {data.careSuggestions.dos.map((item, idx) => (
+                                <View key={idx} className="flex-row items-start gap-2">
+                                  <Ionicons
+                                    name="checkmark-circle-outline"
+                                    size={14}
+                                    color={colors.success}
+                                    style={{ marginTop: 1 }}
+                                  />
+                                  <Text
+                                    className="flex-1 text-[11.5px] leading-5 font-semibold"
+                                    style={{ color: colors.foreground, fontFamily: fonts.body }}
+                                  >
+                                    {item}
+                                  </Text>
+                                </View>
+                              ))}
+                            </View>
+                          </View>
+                        )}
+
+                        {data.careSuggestions.donts && data.careSuggestions.donts.length > 0 && (
+                          <View>
+                            <Text
+                              className="text-xs font-bold mb-2 flex-row items-center gap-1"
+                              style={{ color: colors.danger, fontFamily: fonts.heading }}
+                            >
+                              ⚠️ Don'ts to keep in mind
+                            </Text>
+                            <View style={{ gap: 6 }}>
+                              {data.careSuggestions.donts.map((item, idx) => (
+                                <View key={idx} className="flex-row items-start gap-2">
+                                  <Ionicons
+                                    name="close-circle-outline"
+                                    size={14}
+                                    color={colors.danger}
+                                    style={{ marginTop: 1 }}
+                                  />
+                                  <Text
+                                    className="flex-1 text-[11.5px] leading-5 font-semibold"
+                                    style={{ color: colors.foreground, fontFamily: fonts.body }}
+                                  >
+                                    {item}
+                                  </Text>
+                                </View>
+                              ))}
+                            </View>
+                          </View>
+                        )}
+                      </View>
+                    )}
                   </View>
                 )}
 
@@ -866,6 +891,65 @@ export default function PartnerViewHome() {
                     </Text>
                   </View>
                 )}
+
+                {/* Knowledge & Resources - same educational content the owner gets, so a partner can learn without needing their own tracking account */}
+                <View
+                  className="rounded-3xl border p-5 mb-4"
+                  style={{
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                    ...getShadow(colors, isDark),
+                  }}
+                >
+                  <Text
+                    className="text-[10px] font-black uppercase tracking-widest mb-3"
+                    style={{ color: colors.primary, fontFamily: fonts.body }}
+                  >
+                    Knowledge & resources
+                  </Text>
+                  <View className="flex-row flex-wrap justify-between" style={{ gap: 10 }}>
+                    {KNOWLEDGE_LINKS.map((link) => (
+                      <TouchableOpacity
+                        key={link.title}
+                        activeOpacity={0.7}
+                        onPress={() => router.push(link.route as any)}
+                        className="border"
+                        style={{
+                          width: "48%",
+                          backgroundColor: colors.surfaceSoft,
+                          borderColor: colors.border,
+                          borderRadius: 16,
+                          padding: 12,
+                        }}
+                      >
+                        <View
+                          style={{
+                            alignSelf: "flex-start",
+                            padding: 8,
+                            borderRadius: 10,
+                            backgroundColor: colors.primaryLight,
+                            marginBottom: 10,
+                          }}
+                        >
+                          <Ionicons name={link.icon as any} size={16} color={colors.primary} />
+                        </View>
+                        <Text
+                          className="text-xs font-black"
+                          style={{ color: colors.foreground, fontFamily: fonts.body }}
+                        >
+                          {link.title}
+                        </Text>
+                        <Text
+                          className="text-[10px] mt-0.5 font-semibold"
+                          style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                          numberOfLines={1}
+                        >
+                          {link.desc}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
               </>
             )}
           </ScrollView>

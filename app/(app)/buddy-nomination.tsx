@@ -27,7 +27,11 @@ import {
 // --- STRUCTURAL BACKEND REGISTRY CONTRACTS ---
 interface PeriodBuddy {
   id: string;
-  alias: string; // Anonymous names to support extreme user privacy controls
+  name: string;
+  // Only set once this candidate has actually been nominated into a persisted
+  // BuddyMatch (undefined for unnominated discovery-list previews). Chat/call
+  // signaling is scoped to this key, not `id`, so it can't collide across pairings.
+  roomKey?: string;
   avatarSeed: string;
   cyclePhase: string;
   cycleOverlapDays: number;
@@ -54,8 +58,8 @@ const PRESENCE_TIMEOUT_MS = 20000;
 const fallbackNominees: PeriodBuddy[] = [
   {
     id: "b_1",
-    alias: "Mystic Peony",
-    avatarSeed: "MP",
+    name: "Priya Malhotra",
+    avatarSeed: "PM",
     cyclePhase: "Ovulation Phase",
     cycleOverlapDays: 26,
     lastUpdate: "Updated today",
@@ -64,8 +68,8 @@ const fallbackNominees: PeriodBuddy[] = [
   },
   {
     id: "b_2",
-    alias: "Cosmic Fern",
-    avatarSeed: "CF",
+    name: "Ananya Kapoor",
+    avatarSeed: "AK",
     cyclePhase: "Luteal Phase",
     cycleOverlapDays: 22,
     lastUpdate: "Updated today",
@@ -74,8 +78,8 @@ const fallbackNominees: PeriodBuddy[] = [
   },
   {
     id: "b_3",
-    alias: "Aura Amber",
-    avatarSeed: "AA",
+    name: "Riya Sharma",
+    avatarSeed: "RS",
     cyclePhase: "Follicular Phase",
     cycleOverlapDays: 19,
     lastUpdate: "Updated 2 days ago",
@@ -89,7 +93,8 @@ const fallbackNominees: PeriodBuddy[] = [
 function mapBuddy(match: ApiBuddyMatch): PeriodBuddy {
   return {
     id: match.matchKey ?? match.buddyUserId ?? match.id ?? match._id ?? match.alias,
-    alias: match.alias,
+    name: match.alias,
+    roomKey: match.roomKey,
     avatarSeed: match.avatarSeed,
     cyclePhase: match.cyclePhase,
     cycleOverlapDays: match.cycleOverlapDays,
@@ -204,11 +209,13 @@ export default function BuddyNomination() {
           const mappedActive = mapBuddy(activeBuddy);
           setActiveNominatedId(mappedActive.id);
 
-          // Ensure the active buddy is in the nominees list
+          // The active match is authoritative (it has roomKey; a same-id discovery-list
+          // preview from getBuddyMatches never does), so overwrite any preview entry
+          // instead of only adding one when it's missing.
           const exists = finalNominees.some((b) => b.id === mappedActive.id);
-          if (!exists) {
-            finalNominees = [mappedActive, ...finalNominees];
-          }
+          finalNominees = exists
+            ? finalNominees.map((b) => (b.id === mappedActive.id ? mappedActive : b))
+            : [mappedActive, ...finalNominees];
           setIsChatConsoleOpen(true);
         }
 
@@ -238,9 +245,14 @@ export default function BuddyNomination() {
     };
   }, []);
 
+  const activeBuddyData = nominees.find((b) => b.id === activeNominatedId);
+  // Unique per pairing (see roomKey on the backend BuddyMatch model) so this room can
+  // never be reused by a later, unrelated pairing the way a userId-derived name could.
+  const activeRoomKey = activeBuddyData?.roomKey;
+
   // WebSocket live synchronization
   useEffect(() => {
-    if (!isChatConsoleOpen || !activeNominatedId) return;
+    if (!isChatConsoleOpen || !activeNominatedId || !activeRoomKey) return;
 
     let socket: WebSocket | null = null;
     let isDisconnected = false;
@@ -250,7 +262,7 @@ export default function BuddyNomination() {
     buddyLastSeenRef.current = 0;
     setIsBuddyOnline(false);
 
-    const room = `buddy_${activeNominatedId}`;
+    const room = `buddy_${activeRoomKey}`;
 
     async function connectWS() {
       try {
@@ -283,14 +295,30 @@ export default function BuddyNomination() {
           if (isDisconnected) return;
           try {
             const data = JSON.parse(event.data);
-            if (data.room !== room) return;
 
+            // Chat messages and the buddy_ended notice both arrive on this user's
+            // personal room (`user_<ownId>`, auto-joined for every authenticated
+            // connection), not the buddy_<roomKey> signaling room below — they're
+            // delivered per-recipient rather than broadcast symmetrically to both sides.
             if (data.type === "message") {
               if (data.messages && Array.isArray(data.messages)) {
                 setChatLog((prev) => mergeBuddyMessages(prev, data.messages));
                 setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
               }
-            } else if (data.type === "presence_ping") {
+              return;
+            }
+
+            if (data.type === "buddy_ended") {
+              setIsChatConsoleOpen(false);
+              setActiveNominatedId(null);
+              setChatLog([]);
+              alert("Buddy pairing ended", "Your Period Buddy left this pairing.");
+              return;
+            }
+
+            if (data.room !== room) return;
+
+            if (data.type === "presence_ping") {
               buddyLastSeenRef.current = Date.now();
               setIsBuddyOnline(true);
               try {
@@ -339,12 +367,12 @@ export default function BuddyNomination() {
       socketRef.current = null;
       setIsBuddyOnline(false);
     };
-  }, [isChatConsoleOpen, activeNominatedId]);
+  }, [isChatConsoleOpen, activeNominatedId, activeRoomKey]);
 
 
   const sortedNominees = React.useMemo(() => {
     const filtered = nominees.filter((buddy) =>
-      [buddy.alias, buddy.cyclePhase]
+      [buddy.name, buddy.cyclePhase]
         .join(" ")
         .toLowerCase()
         .includes(searchQuery.trim().toLowerCase()),
@@ -358,8 +386,6 @@ export default function BuddyNomination() {
     });
   }, [nominees, activeNominatedId, searchQuery]);
 
-  const activeBuddyData = nominees.find((b) => b.id === activeNominatedId);
-
   const softTints = getSoftTints(colors);
 
   // --- BUSINESS OPERATION MECHANICS ---
@@ -367,7 +393,7 @@ export default function BuddyNomination() {
     if (activeNominatedId) {
       alert(
         "Nomination Limit Reached",
-        "You can keep one active anonymous Period Buddy for each cycle window.",
+        "You can keep one active Period Buddy for each cycle window.",
       );
       return;
     }
@@ -382,6 +408,14 @@ export default function BuddyNomination() {
       if (matchObj) {
         const activeId = matchObj.matchKey ?? matchObj.buddyUserId ?? matchObj.id ?? matchObj._id ?? id;
         setActiveNominatedId(activeId);
+        // The discovery-list preview for this candidate has no roomKey (only a
+        // persisted BuddyMatch does) — merge in the real match data now that it exists.
+        const mapped = mapBuddy(matchObj);
+        setNominees((prev) => {
+          const exists = prev.some((b) => b.id === activeId);
+          if (!exists) return [mapped, ...prev];
+          return prev.map((b) => (b.id === activeId ? { ...b, ...mapped } : b));
+        });
       }
       if (result.tokensAwarded) earnTokens(result.tokensAwarded);
     } catch (err) {
@@ -389,7 +423,7 @@ export default function BuddyNomination() {
       // Keep the local buddy active for offline development.
     }
 
-    alert("Buddy nominated", "Your anonymous buddy space is ready.");
+    alert("Buddy nominated", "Your Period Buddy space is ready.");
   }
 
   async function handleSendBuddyMessage() {
@@ -424,7 +458,7 @@ export default function BuddyNomination() {
   function handleLeavePairing() {
     alert(
       "Leave this buddy pairing?",
-      "This ends your anonymous space with this buddy for good. Use this if a call or chat made you uncomfortable.",
+      "This ends your space with this buddy for good. Use this if a call or chat made you uncomfortable.",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -532,9 +566,9 @@ export default function BuddyNomination() {
                   className="text-xs leading-4"
                   style={{ color: colors.mutedText, fontFamily: fonts.body }}
                 >
-                  Sync timelines anonymously with another profile holding
-                  similar cycle milestones. Compare patterns and chat with
-                  privacy in mind.
+                  Sync timelines with another member who has similar cycle
+                  milestones. Compare patterns and chat with privacy in
+                  mind.
                 </Text>
               </View>
             )}
@@ -612,7 +646,7 @@ export default function BuddyNomination() {
                                   className="text-sm font-black tracking-tight"
                                   style={{ color: colors.foreground, fontFamily: fonts.heading }}
                                 >
-                                  {buddy.alias}
+                                  {buddy.name}
                                 </Text>
                                 {isSelectedBuddy && (
                                   <View
@@ -748,7 +782,7 @@ export default function BuddyNomination() {
                           className="text-xs font-black"
                           style={{ color: colors.foreground, fontFamily: fonts.heading }}
                         >
-                          {activeBuddyData.alias}
+                          {activeBuddyData.name}
                         </Text>
                         <View className="flex-row items-center gap-1 mt-0.5">
                           <View
@@ -769,7 +803,7 @@ export default function BuddyNomination() {
                         onPress={() => {
                           if (!isBuddyOnline) {
                             alert(
-                              `${activeBuddyData.alias} is offline`,
+                              `${activeBuddyData.name} is offline`,
                               "Video calls need both of you online at the same time. Try again once they're active in the app.",
                             );
                             return;
@@ -857,7 +891,7 @@ export default function BuddyNomination() {
             }}
           >
             <TextInput
-              placeholder="Type an anonymous message..."
+              placeholder="Type a message..."
               placeholderTextColor={colors.mutedText}
               value={typedMessage}
               onChangeText={setTypedMessage}
@@ -868,7 +902,7 @@ export default function BuddyNomination() {
                 fontFamily: fonts.body,
               }}
               onSubmitEditing={handleSendBuddyMessage}
-              blurOnSubmit={false}
+              submitBehavior="submit"
               returnKeyType="send"
             />
             <TouchableOpacity
@@ -894,11 +928,11 @@ export default function BuddyNomination() {
         </KeyboardAvoidingView>
       </SafeAreaView>
 
-      {isChatConsoleOpen && activeBuddyData && (
+      {isChatConsoleOpen && activeBuddyData && activeRoomKey && (
         <BuddyVideoCall
           ref={videoCallRef}
-          buddyAlias={activeBuddyData.alias}
-          roomId={`buddy_${activeNominatedId}`}
+          buddyAlias={activeBuddyData.name}
+          roomId={`buddy_${activeRoomKey}`}
           socketRef={socketRef}
         />
       )}

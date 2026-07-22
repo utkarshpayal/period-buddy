@@ -46,7 +46,7 @@ export default function Home() {
     const isProfileComplete =
       response.isProfileComplete ?? updatedUser?.isProfileComplete ?? true;
 
-    signIn({
+    await signIn({
       token,
       user: {
         ...user,

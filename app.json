@@ -4,7 +4,7 @@
     "slug": "period-budddy",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/logo.png",
+    "icon": "./assets/images/logo-adaptive.png",
     "splash": {
       "image": "./assets/images/logo.png",
       "resizeMode": "contain",
@@ -27,7 +27,7 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#fff0f6",
-        "foregroundImage": "./assets/images/logo.png"
+        "foregroundImage": "./assets/images/logo-adaptive.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -92,7 +92,8 @@
         {
           "faceIDPermission": "Allow The Nura to use Face ID to unlock the app."
         }
-      ]
+      ],
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true,

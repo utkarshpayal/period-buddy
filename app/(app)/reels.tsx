@@ -1,12 +1,16 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { useEvent } from "expo";
 import { useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import { useVideoPlayer, VideoView } from "expo-video";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Image,
   Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Platform,
+  Pressable,
   ScrollView,
   StatusBar,
   Text,
@@ -18,10 +22,11 @@ import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
-import { WebView } from "react-native-webview";
+import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { useAppState } from "../../components/AppState";
 import { alert } from "../../lib/alert";
 import { useTheme } from "../../components/theme";
+import { getShadow } from "../../components/ui-tokens";
 import { reelsApi, type Reel as ApiReel } from "../../lib/api";
 import { LinearGradient } from "expo-linear-gradient";
 
@@ -127,8 +132,333 @@ function mapApiReel(reel: ApiReel): HealthReel {
   };
 }
 
+// Shared reel chrome — the center play glyph (shown while paused) and the
+// mute toggle — so a direct-MP4 reel and a YouTube reel feel identical to
+// the user, regardless of where the video actually lives.
+function ReelPlayerChrome({
+  isMuted,
+  isPlaying,
+  onToggleMuted,
+}: {
+  isMuted: boolean;
+  isPlaying: boolean;
+  onToggleMuted: () => void;
+}) {
+  return (
+    <>
+      {!isPlaying && (
+        <View
+          pointerEvents="none"
+          className="absolute inset-0 items-center justify-center"
+        >
+          <View className="h-16 w-16 items-center justify-center rounded-full border border-white/50 bg-black/35">
+            <Ionicons name="play" size={30} color="white" />
+          </View>
+        </View>
+      )}
+
+      <TouchableOpacity
+        activeOpacity={0.78}
+        onPress={(event) => {
+          event.stopPropagation();
+          onToggleMuted();
+        }}
+        className="absolute right-4 top-16 h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-black/35"
+      >
+        <Ionicons
+          name={isMuted ? "volume-mute" : "volume-high"}
+          size={16}
+          color="white"
+        />
+      </TouchableOpacity>
+    </>
+  );
+}
+
+// Plays a direct MP4 source (e.g. your own S3/server upload) with real
+// audio and tap-to-pause. Mounted only for the currently active reel, so it
+// starts fresh (and stops) as the user scrolls — no cross-fade of two
+// videos playing at once.
+function DirectVideoPlayer({
+  isMuted,
+  onToggleMuted,
+  uri,
+}: {
+  isMuted: boolean;
+  onToggleMuted: () => void;
+  uri: string;
+}) {
+  const player = useVideoPlayer(uri, (instance) => {
+    instance.loop = true;
+    instance.muted = isMuted;
+    instance.play();
+  });
+
+  useEffect(() => {
+    player.muted = isMuted;
+  }, [player, isMuted]);
+
+  const { isPlaying } = useEvent(player, "playingChange", {
+    isPlaying: player.playing,
+  });
+
+  return (
+    <Pressable
+      onPress={() => (isPlaying ? player.pause() : player.play())}
+      style={{ bottom: 0, left: 0, position: "absolute", right: 0, top: 0 }}
+    >
+      <VideoView
+        player={player}
+        style={{ height: "100%", width: "100%" }}
+        contentFit="cover"
+        nativeControls={false}
+        pointerEvents="none"
+      />
+
+      <ReelPlayerChrome
+        isMuted={isMuted}
+        isPlaying={isPlaying}
+        onToggleMuted={onToggleMuted}
+      />
+    </Pressable>
+  );
+}
+
+declare global {
+  interface Window {
+    YT?: {
+      Player: new (elementId: string, options: Record<string, unknown>) => YouTubeIframeApiPlayer;
+    };
+    onYouTubeIframeAPIReady?: () => void;
+  }
+}
+
+type YouTubeIframeApiPlayer = {
+  destroy: () => void;
+  mute: () => void;
+  pauseVideo: () => void;
+  playVideo: () => void;
+  unMute: () => void;
+};
+
+let youtubeApiLoadPromise: Promise<void> | null = null;
+
+// Loads the YouTube IFrame API script exactly once per web session and
+// resolves once `window.YT.Player` is ready to use.
+function loadYouTubeIframeApi(): Promise<void> {
+  if (youtubeApiLoadPromise) return youtubeApiLoadPromise;
+
+  youtubeApiLoadPromise = new Promise((resolve) => {
+    if (window.YT?.Player) {
+      resolve();
+      return;
+    }
+
+    const previousCallback = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      previousCallback?.();
+      resolve();
+    };
+
+    if (!document.getElementById("youtube-iframe-api")) {
+      const tag = document.createElement("script");
+      tag.id = "youtube-iframe-api";
+      tag.src = "https://www.youtube.com/iframe_api";
+      document.body.appendChild(tag);
+    }
+  });
+
+  return youtubeApiLoadPromise;
+}
+
+// HTML for the native (WebView) YouTube player. Uses the real IFrame Player
+// API — not a static `?mute=1` src — so play/pause and mute/unmute are
+// instant `postMessage`-free JS calls instead of reloading the embed.
+function generateYouTubePlayerHTML(videoId: string, initialMuted: boolean) {
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+        <style>
+          body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: #000000; overflow: hidden; }
+          #player { width: 100%; height: 100%; }
+          iframe { width: 100% !important; height: 100% !important; }
+        </style>
+      </head>
+      <body>
+        <div id="player"></div>
+        <script src="https://www.youtube.com/iframe_api"></script>
+        <script>
+          var player;
+          function onYouTubeIframeAPIReady() {
+            player = new YT.Player('player', {
+              videoId: '${videoId}',
+              playerVars: {
+                autoplay: 1,
+                controls: 0,
+                loop: 1,
+                playlist: '${videoId}',
+                playsinline: 1,
+                modestbranding: 1,
+                rel: 0,
+                mute: ${initialMuted ? 1 : 0}
+              },
+              events: {
+                onReady: function (event) { event.target.playVideo(); },
+                onStateChange: function (event) {
+                  window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'stateChange', state: event.data }));
+                }
+              }
+            });
+            window.__ytPlayer = player;
+          }
+        </script>
+      </body>
+    </html>
+  `;
+}
+
+// Plays a YouTube-hosted reel (a creator can paste a YouTube link into the
+// same field used for direct uploads) with the same tap-to-pause and real
+// mute control as DirectVideoPlayer, via the official IFrame Player API —
+// on native through a WebView + postMessage bridge, on web by attaching
+// YT.Player straight to a DOM node.
+function YouTubePlayer({
+  isMuted,
+  onToggleMuted,
+  videoId,
+}: {
+  isMuted: boolean;
+  onToggleMuted: () => void;
+  videoId: string;
+}) {
+  const [isPlaying, setIsPlaying] = useState(true);
+  const webViewRef = useRef<WebView>(null);
+  const webPlayerRef = useRef<YouTubeIframeApiPlayer | null>(null);
+  const elementId = useMemo(
+    () => `yt-reel-${videoId}-${Math.random().toString(36).slice(2)}`,
+    [videoId],
+  );
+
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    let cancelled = false;
+
+    loadYouTubeIframeApi().then(() => {
+      if (cancelled || !window.YT) return;
+      webPlayerRef.current = new window.YT.Player(elementId, {
+        videoId,
+        playerVars: {
+          autoplay: 1,
+          controls: 0,
+          loop: 1,
+          playlist: videoId,
+          playsinline: 1,
+          modestbranding: 1,
+          rel: 0,
+          mute: isMuted ? 1 : 0,
+        },
+        events: {
+          onReady: (event: { target: YouTubeIframeApiPlayer }) => event.target.playVideo(),
+          onStateChange: (event: { data: number }) => setIsPlaying(event.data === 1),
+        },
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      webPlayerRef.current?.destroy?.();
+      webPlayerRef.current = null;
+    };
+    // Only (re)create the player when the video itself changes — mute is
+    // handled by the effect below so toggling it doesn't restart playback.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [elementId, videoId]);
+
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    if (isMuted) webPlayerRef.current?.mute();
+    else webPlayerRef.current?.unMute();
+  }, [isMuted]);
+
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    const script = isMuted
+      ? "window.__ytPlayer && window.__ytPlayer.mute(); true;"
+      : "window.__ytPlayer && window.__ytPlayer.unMute(); true;";
+    webViewRef.current?.injectJavaScript(script);
+  }, [isMuted]);
+
+  function togglePlay() {
+    if (Platform.OS === "web") {
+      const player = webPlayerRef.current;
+      if (!player) return;
+      if (isPlaying) player.pauseVideo();
+      else player.playVideo();
+      setIsPlaying((current) => !current);
+      return;
+    }
+
+    const script = isPlaying
+      ? "window.__ytPlayer && window.__ytPlayer.pauseVideo(); true;"
+      : "window.__ytPlayer && window.__ytPlayer.playVideo(); true;";
+    webViewRef.current?.injectJavaScript(script);
+    setIsPlaying((current) => !current);
+  }
+
+  function handleWebViewMessage(event: WebViewMessageEvent) {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      if (data.type === "stateChange") setIsPlaying(data.state === 1);
+    } catch {
+      // Ignore malformed bridge messages.
+    }
+  }
+
+  return (
+    <Pressable
+      onPress={togglePlay}
+      style={{ bottom: 0, left: 0, position: "absolute", right: 0, top: 0 }}
+    >
+      {Platform.OS === "web" ? (
+        <div id={elementId} style={{ width: "100%", height: "100%", pointerEvents: "none" }} />
+      ) : (
+        <WebView
+          ref={webViewRef}
+          allowsInlineMediaPlayback
+          domStorageEnabled
+          javaScriptEnabled
+          mediaPlaybackRequiresUserAction={false}
+          originWhitelist={["*"]}
+          allowsFullscreenVideo
+          androidLayerType="hardware"
+          onMessage={handleWebViewMessage}
+          source={{ html: generateYouTubePlayerHTML(videoId, isMuted) }}
+          style={{
+            backgroundColor: "black",
+            bottom: 0,
+            left: 0,
+            position: "absolute",
+            right: 0,
+            top: 0,
+          }}
+          pointerEvents="none"
+        />
+      )}
+
+      <ReelPlayerChrome
+        isMuted={isMuted}
+        isPlaying={isPlaying}
+        onToggleMuted={onToggleMuted}
+      />
+    </Pressable>
+  );
+}
+
 export default function Reels() {
-  const { colors, fonts } = useTheme();
+  const { colors, fonts, isDark } = useTheme();
   const router = useRouter();
   const { earnTokens } = useAppState();
   const { height, width } = useWindowDimensions();
@@ -139,25 +469,48 @@ export default function Reels() {
   );
 
   const [activePlayId, setActivePlayId] = useState<string | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
   const [followingCreatorIds, setFollowingCreatorIds] = useState<Set<string>>(
     new Set(),
   );
   const [selectedCreator, setSelectedCreator] = useState<HealthReel | null>(
     null,
   );
+  const [pollReelId, setPollReelId] = useState<string | null>(null);
 
   const [reels, setReels] = useState<HealthReel[]>(fallbackReels);
+  const [usingFallback, setUsingFallback] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [categoryPickerVisible, setCategoryPickerVisible] = useState(false);
+  const [availableCategories, setAvailableCategories] = useState<string[]>([]);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  const REELS_PAGE_SIZE = 10;
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadReels() {
       try {
-        const response = await reelsApi.getReels({ limit: 20 });
-        if (isMounted && response.reels.length > 0) {
+        const response = await reelsApi.getReels({
+          limit: REELS_PAGE_SIZE,
+          page: 1,
+          category: selectedCategory === "all" ? undefined : selectedCategory,
+        });
+        if (!isMounted) return;
+
+        if (response.reels.length > 0) {
           const mappedReels = response.reels.map(mapApiReel);
           setReels(mappedReels);
-          setActivePlayId((current) => current ?? mappedReels[0]?.id ?? null);
+          setUsingFallback(false);
+          setPage(1);
+          setHasMore(response.pagination.page < response.pagination.pages);
+          // Goes through handlePlay (not a plain setActivePlayId) so the
+          // very first reel's view actually gets recorded, same as every
+          // reel reached by scrolling.
+          if (mappedReels[0]) void handlePlay(mappedReels[0].id);
           setFollowingCreatorIds(
             new Set(
               response.reels
@@ -165,10 +518,21 @@ export default function Reels() {
                 .map((reel) => reel.creatorId),
             ),
           );
+          if (selectedCategory === "all") {
+            setAvailableCategories(
+              Array.from(new Set(response.reels.map((reel) => reel.category))),
+            );
+          }
+        } else {
+          setReels([]);
+          setUsingFallback(false);
+          setHasMore(false);
         }
       } catch {
         if (isMounted) {
           setReels(fallbackReels);
+          setUsingFallback(true);
+          setHasMore(false);
           setActivePlayId((current) => current ?? fallbackReels[0]?.id ?? null);
         }
       }
@@ -179,7 +543,27 @@ export default function Reels() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [selectedCategory]);
+
+  async function handleLoadMoreReels() {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const nextPage = page + 1;
+      const response = await reelsApi.getReels({
+        limit: REELS_PAGE_SIZE,
+        page: nextPage,
+        category: selectedCategory === "all" ? undefined : selectedCategory,
+      });
+      setReels((prev) => [...prev, ...response.reels.map(mapApiReel)]);
+      setPage(nextPage);
+      setHasMore(response.pagination.page < response.pagination.pages);
+    } catch {
+      setHasMore(false);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   useEffect(() => {
     if (!activePlayId && reels[0]) {
@@ -260,6 +644,11 @@ export default function Reels() {
   }
 
   async function handlePlay(reelId: string) {
+    // Already the active reel — skip, so a drag-then-momentum scroll (which
+    // can fire both onScrollEndDrag and onMomentumScrollEnd for the same
+    // settle) doesn't record the view twice or restart the video.
+    if (reelId === activePlayId) return;
+
     setActivePlayId(reelId);
     try {
       const result = await reelsApi.recordView(reelId);
@@ -273,7 +662,12 @@ export default function Reels() {
     }
   }
 
-  function handleReelMomentumEnd(
+  // Fires on both onScrollEndDrag and onMomentumScrollEnd — a short/slow
+  // flick on a pagingEnabled ScrollView can settle on the next page without
+  // ever producing momentum, in which case onMomentumScrollEnd never fires
+  // and the previous reel would otherwise keep playing (with audio) behind
+  // the new one.
+  function handleReelScrollSettle(
     event: NativeSyntheticEvent<NativeScrollEvent>,
   ) {
     const nextIndex = Math.round(
@@ -283,6 +677,10 @@ export default function Reels() {
 
     if (nextReel) {
       void handlePlay(nextReel.id);
+    }
+
+    if (!usingFallback && hasMore && nextIndex >= reels.length - 2) {
+      void handleLoadMoreReels();
     }
   }
 
@@ -303,50 +701,10 @@ export default function Reels() {
     return (match && match[2].length === 11) ? match[2] : null;
   }
 
-  // Generates appropriate HTML based on video type
-  function generateVideoPlayerHTML(videoUrl: string) {
-    const ytId = getYouTubeId(videoUrl);
-    if (ytId) {
-      return `
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-            <style>
-              body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: #000000; overflow: hidden; }
-              iframe { width: 100%; height: 100%; border: 0; }
-            </style>
-          </head>
-          <body>
-            <iframe 
-              src="https://www.youtube.com/embed/${ytId}?autoplay=1&loop=1&playlist=${ytId}&mute=1&playsinline=1&controls=0&modestbranding=1&rel=0" 
-              frameborder="0" 
-              allow="autoplay; encrypted-media; picture-in-picture" 
-              allowfullscreen>
-            </iframe>
-          </body>
-        </html>
-      `;
-    }
-
-    return `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-          <style>
-            body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: #000000; overflow: hidden; }
-            video { width: 100%; height: 100%; object-fit: cover; }
-          </style>
-        </head>
-        <body>
-          <video src="${videoUrl}" autoplay loop muted playsinline></video>
-        </body>
-      </html>
-    `;
-  }
+  const pollReel = reels.find((reel) => reel.id === pollReelId) ?? null;
+  const pollTotalVotes = pollReel
+    ? pollReel.pollOptions.reduce((sum, option) => sum + option.votes, 0)
+    : 0;
 
   return (
     <>
@@ -362,7 +720,8 @@ export default function Reels() {
         <ScrollView
           decelerationRate="fast"
           disableIntervalMomentum
-          onMomentumScrollEnd={handleReelMomentumEnd}
+          onMomentumScrollEnd={handleReelScrollSettle}
+          onScrollEndDrag={handleReelScrollSettle}
           pagingEnabled
           showsVerticalScrollIndicator={false}
           snapToAlignment="start"
@@ -371,10 +730,6 @@ export default function Reels() {
           {reels.map((item, index) => {
             const isPlaying = activePlayId === item.id;
             const isFollowing = followingCreatorIds.has(item.creatorId);
-            const totalVotes = item.pollOptions.reduce(
-              (acc, curr) => acc + curr.votes,
-              0,
-            );
 
             return (
               <View
@@ -387,72 +742,22 @@ export default function Reels() {
                 }}
               >
                 {isPlaying ? (
-                  Platform.OS === "web" ? (
-                    (() => {
-                      const ytId = getYouTubeId(item.directMp4Url);
-                      if (ytId) {
-                        return (
-                          <iframe
-                            src={`https://www.youtube.com/embed/${ytId}?autoplay=1&loop=1&playlist=${ytId}&mute=1&playsinline=1&controls=0&modestbranding=1&rel=0`}
-                            style={{
-                              border: 0,
-                              width: "100%",
-                              height: "100%",
-                              position: "absolute",
-                              top: 0,
-                              left: 0,
-                              right: 0,
-                              bottom: 0,
-                              backgroundColor: "black",
-                            }}
-                            allow="autoplay; encrypted-media; picture-in-picture"
-                            allowFullScreen
-                          />
-                        );
-                      }
-                      return (
-                        <video
-                          src={item.directMp4Url}
-                          autoPlay
-                          loop
-                          muted
-                          playsInline
-                          style={{
-                            width: "100%",
-                            height: "100%",
-                            objectFit: "cover",
-                            position: "absolute",
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            backgroundColor: "black",
-                          }}
-                        />
-                      );
-                    })()
-                  ) : (
-                    <WebView
-                      allowsInlineMediaPlayback
-                      domStorageEnabled
-                      javaScriptEnabled
-                      mediaPlaybackRequiresUserAction={false}
-                      originWhitelist={["*"]}
-                      allowsFullscreenVideo
-                      androidLayerType="hardware"
-                      source={{
-                        html: generateVideoPlayerHTML(item.directMp4Url),
-                      }}
-                      style={{
-                        backgroundColor: "black",
-                        bottom: 0,
-                        left: 0,
-                        position: "absolute",
-                        right: 0,
-                        top: 0,
-                      }}
-                    />
-                  )
+                  (() => {
+                    const ytId = getYouTubeId(item.directMp4Url);
+                    return ytId ? (
+                      <YouTubePlayer
+                        videoId={ytId}
+                        isMuted={isMuted}
+                        onToggleMuted={() => setIsMuted((current) => !current)}
+                      />
+                    ) : (
+                      <DirectVideoPlayer
+                        uri={item.directMp4Url}
+                        isMuted={isMuted}
+                        onToggleMuted={() => setIsMuted((current) => !current)}
+                      />
+                    );
+                  })()
                 ) : (
                   <TouchableOpacity
                     activeOpacity={0.92}
@@ -511,11 +816,16 @@ export default function Reels() {
                       {index + 1} of {reels.length}
                     </Text>
                   </View>
-                  <View className="rounded-full bg-white/15 px-3 py-1.5">
+                  <TouchableOpacity
+                    activeOpacity={0.78}
+                    onPress={() => setCategoryPickerVisible(true)}
+                    className="flex-row items-center gap-1 rounded-full bg-white/15 px-3 py-1.5"
+                  >
                     <Text className="text-[10px] font-black uppercase text-white" style={{ fontFamily: fonts.body }}>
-                      For You
+                      {selectedCategory === "all" ? "For You" : selectedCategory}
                     </Text>
-                  </View>
+                    <Feather name="chevron-down" size={11} color="white" />
+                  </TouchableOpacity>
                 </View>
 
                 <View className="absolute bottom-28 right-4 items-center gap-4">
@@ -567,6 +877,31 @@ export default function Reels() {
                       {item.views.toLocaleString()}
                     </Text>
                   </View>
+
+                  <TouchableOpacity
+                    activeOpacity={0.82}
+                    className="items-center"
+                    onPress={() => setPollReelId(item.id)}
+                  >
+                    <View className="h-11 w-11 items-center justify-center rounded-full bg-white/18">
+                      <MaterialCommunityIcons
+                        name="vote-outline"
+                        size={20}
+                        color="white"
+                      />
+                      {item.votedOptionId ? (
+                        <View
+                          className="absolute -right-0.5 -top-0.5 h-3.5 w-3.5 items-center justify-center rounded-full"
+                          style={{ backgroundColor: colors.success }}
+                        >
+                          <MaterialCommunityIcons name="check" size={9} color="white" />
+                        </View>
+                      ) : null}
+                    </View>
+                    <Text className="mt-1 text-[10px] font-black text-white" style={{ fontFamily: fonts.body }}>
+                      Poll
+                    </Text>
+                  </TouchableOpacity>
                 </View>
 
                 <View className="absolute bottom-5 left-5 right-24">
@@ -612,82 +947,17 @@ export default function Reels() {
                       Board-certified cycle education
                     </Text>
                   </View>
-
-                  <View className="mt-4 rounded-2xl border border-white/15 bg-black/42 p-3">
-                    <View className="mb-2 flex-row items-center gap-1.5">
-                      <MaterialCommunityIcons
-                        name="vote-outline"
-                        size={14}
-                        color="white"
-                      />
-                      <Text className="text-[10px] font-black uppercase text-white/75" style={{ fontFamily: fonts.body }}>
-                        Next topic poll
-                      </Text>
-                    </View>
-                    <Text
-                      className="mb-2 text-xs font-bold text-white"
-                      numberOfLines={2}
-                      style={{ fontFamily: fonts.heading }}
-                    >
-                      {item.pollQuestion}
-                    </Text>
-                    <View className="gap-2">
-                      {item.pollOptions.map((option) => {
-                        const percentValue =
-                          totalVotes > 0
-                            ? Math.round((option.votes / totalVotes) * 100)
-                            : 0;
-                        const isThisChoiceVoted =
-                          item.votedOptionId === option.id;
-
-                        return (
-                          <TouchableOpacity
-                            activeOpacity={0.82}
-                            className="overflow-hidden rounded-xl border border-white/15 bg-white/10 px-3 py-2"
-                            disabled={!!item.votedOptionId}
-                            key={option.id}
-                            onPress={() =>
-                              handleTriggerVote(item.id, option.id)
-                            }
-                          >
-                            {!!item.votedOptionId ? (
-                              <View
-                                className="absolute bottom-0 left-0 top-0 bg-white/18"
-                                style={{ width: `${percentValue}%` }}
-                              />
-                            ) : null}
-                            <View className="flex-row items-center justify-between gap-3">
-                              <Text
-                                className="flex-1 text-[11px] font-bold text-white"
-                                numberOfLines={2}
-                                style={{ fontFamily: fonts.body }}
-                              >
-                                {option.topic}
-                              </Text>
-                              {!!item.votedOptionId ? (
-                                <Text
-                                  className="text-[11px] font-black"
-                                  style={{
-                                    color: isThisChoiceVoted
-                                      ? colors.rose
-                                      : "rgba(255,255,255,0.7)",
-                                    fontFamily: fonts.mono,
-                                  }}
-                                >
-                                  {percentValue}%
-                                </Text>
-                              ) : null}
-                            </View>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  </View>
                 </View>
               </View>
             );
           })}
         </ScrollView>
+
+        {loadingMore && (
+          <View className="absolute bottom-6 self-center rounded-full bg-black/50 px-4 py-2">
+            <ActivityIndicator color="white" />
+          </View>
+        )}
       </SafeAreaView>
 
       <Modal
@@ -917,6 +1187,181 @@ export default function Reels() {
             </ScrollView>
           </SafeAreaView>
         ) : null}
+      </Modal>
+
+      {/* --- CATEGORY FILTER DROPDOWN SELECT MODAL --- */}
+      <Modal
+        visible={categoryPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCategoryPickerVisible(false)}
+      >
+        <Pressable
+          className="flex-1 justify-center items-center px-8"
+          style={{ backgroundColor: "rgba(0,0,0,0.6)" }}
+          onPress={() => setCategoryPickerVisible(false)}
+        >
+          <View
+            className="w-full max-w-[280px] p-4 rounded-3xl border"
+            style={{
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              ...getShadow(colors, isDark),
+            }}
+          >
+            <Text
+              className="text-center font-extrabold mb-3 text-base"
+              style={{ color: colors.foreground, fontFamily: fonts.heading }}
+            >
+              Filter by Category
+            </Text>
+            {["all", ...availableCategories].map((cat) => {
+              const isSelected = selectedCategory === cat;
+              return (
+                <TouchableOpacity
+                  key={cat}
+                  onPress={() => {
+                    setSelectedCategory(cat);
+                    setCategoryPickerVisible(false);
+                  }}
+                  className="py-3 px-4 rounded-xl flex-row items-center justify-between"
+                  style={{
+                    backgroundColor: isSelected ? colors.primaryLight : "transparent",
+                  }}
+                >
+                  <Text
+                    className="font-bold text-sm"
+                    style={{
+                      color: isSelected ? colors.primary : colors.foreground,
+                      fontFamily: fonts.body,
+                    }}
+                  >
+                    {cat === "all" ? "For You (All Categories)" : cat}
+                  </Text>
+                  {isSelected && (
+                    <Feather name="check" size={16} color={colors.primary} />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* --- POLL MODAL - kept off the video by default so the reel stays the focus --- */}
+      <Modal
+        visible={!!pollReel}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPollReelId(null)}
+      >
+        <Pressable
+          className="flex-1 justify-end"
+          style={{ backgroundColor: "rgba(0,0,0,0.6)" }}
+          onPress={() => setPollReelId(null)}
+        >
+          <Pressable
+            className="rounded-t-3xl border-t p-5"
+            style={{
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+              paddingBottom: insets.bottom + 20,
+            }}
+            onPress={(event) => event.stopPropagation()}
+          >
+            <View className="mb-4 flex-row items-center justify-between">
+              <View className="flex-row items-center gap-1.5">
+                <MaterialCommunityIcons
+                  name="vote-outline"
+                  size={16}
+                  color={colors.primary}
+                />
+                <Text
+                  className="text-[10px] font-black uppercase tracking-widest"
+                  style={{ color: colors.primary, fontFamily: fonts.body }}
+                >
+                  Next topic poll
+                </Text>
+              </View>
+              <TouchableOpacity
+                accessibilityLabel="Close poll"
+                className="h-7 w-7 items-center justify-center rounded-full"
+                onPress={() => setPollReelId(null)}
+                style={{ backgroundColor: colors.surfaceSoft }}
+              >
+                <Feather name="x" size={16} color={colors.foreground} />
+              </TouchableOpacity>
+            </View>
+
+            {pollReel ? (
+              <>
+                <Text
+                  className="mb-4 text-base font-black"
+                  style={{ color: colors.foreground, fontFamily: fonts.heading }}
+                >
+                  {pollReel.pollQuestion}
+                </Text>
+
+                <View style={{ gap: 8 }}>
+                  {pollReel.pollOptions.map((option) => {
+                    const percentValue =
+                      pollTotalVotes > 0
+                        ? Math.round((option.votes / pollTotalVotes) * 100)
+                        : 0;
+                    const isThisChoiceVoted = pollReel.votedOptionId === option.id;
+
+                    return (
+                      <TouchableOpacity
+                        activeOpacity={0.82}
+                        className="overflow-hidden rounded-2xl border px-4 py-3"
+                        disabled={!!pollReel.votedOptionId}
+                        key={option.id}
+                        onPress={() => handleTriggerVote(pollReel.id, option.id)}
+                        style={{ borderColor: colors.border, backgroundColor: colors.input }}
+                      >
+                        {!!pollReel.votedOptionId ? (
+                          <View
+                            className="absolute bottom-0 left-0 top-0"
+                            style={{ width: `${percentValue}%`, backgroundColor: colors.primaryLight }}
+                          />
+                        ) : null}
+                        <View className="flex-row items-center justify-between gap-3">
+                          <Text
+                            className="flex-1 text-xs font-bold"
+                            numberOfLines={2}
+                            style={{ color: colors.foreground, fontFamily: fonts.body }}
+                          >
+                            {option.topic}
+                          </Text>
+                          {!!pollReel.votedOptionId ? (
+                            <Text
+                              className="text-xs font-black"
+                              style={{
+                                color: isThisChoiceVoted ? colors.primary : colors.mutedText,
+                                fontFamily: fonts.mono,
+                              }}
+                            >
+                              {percentValue}%
+                            </Text>
+                          ) : null}
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                {pollReel.votedOptionId ? (
+                  <Text
+                    className="mt-3 text-center text-[10px] font-bold"
+                    style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                  >
+                    Thanks for voting — {pollTotalVotes.toLocaleString()} total votes
+                  </Text>
+                ) : null}
+              </>
+            ) : null}
+          </Pressable>
+        </Pressable>
       </Modal>
     </>
   );

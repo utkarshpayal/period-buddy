@@ -21,6 +21,7 @@ export type DayEntry = {
     | "neutral"
     | "sad"
     | "tired";
+  isIntimate?: boolean;
   note: string;
   symptoms: string[];
   updatedAt: string;

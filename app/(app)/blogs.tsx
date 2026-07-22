@@ -2,20 +2,23 @@ import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Image,
   Modal,
+  Pressable,
   ScrollView,
   StatusBar,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import Markdown from "react-native-markdown-display";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppState } from "../../components/AppState";
 import { alert } from "../../lib/alert";
 import { useTheme } from "../../components/theme";
-import { getSoftTints } from "../../components/ui-tokens";
-import { blogsApi, type ContentFeedItem } from "../../lib/api";
+import { getShadow, getSoftTints } from "../../components/ui-tokens";
+import { blogsApi, type Blog, type BlogCategory, type ContentFeedItem } from "../../lib/api";
 import { shareWithAppLink } from "../../lib/share";
 
 // --- BACKEND REST API PAYLOAD CONTRACTS ---
@@ -28,7 +31,27 @@ interface ContentItem {
   imageUrl: string;
   verified: boolean;
   summary: string;
+  slug?: string;
+  category?: BlogCategory;
+  tags?: string[];
+  viewCount?: number;
+  likeCount?: number;
 }
+
+const CATEGORY_LABELS: Record<BlogCategory, string> = {
+  general: "General",
+  health: "Health",
+  lifestyle: "Lifestyle",
+  beauty: "Beauty",
+};
+
+const CATEGORY_OPTIONS: { id: "all" | BlogCategory; label: string }[] = [
+  { id: "all", label: "All Categories" },
+  ...(Object.keys(CATEGORY_LABELS) as BlogCategory[]).map((id) => ({
+    id,
+    label: CATEGORY_LABELS[id],
+  })),
+];
 
 const fallbackContent: ContentItem[] = [
   {
@@ -91,7 +114,18 @@ function mapFeedItem(item: ContentFeedItem): ContentItem {
     imageUrl: item.imageUrl,
     verified: item.verified,
     summary: item.summary,
+    slug: item.slug,
+    category: item.category,
+    tags: item.tags,
+    viewCount: item.viewCount,
+    likeCount: item.likeCount,
   };
+}
+
+function formatCount(count?: number): string {
+  if (!count) return "0";
+  if (count >= 1000) return `${(count / 1000).toFixed(1)}k`;
+  return String(count);
 }
 
 export default function Blogs() {
@@ -103,14 +137,26 @@ export default function Blogs() {
   const [selectedType, setSelectedType] = useState<"all" | "blog" | "reel">(
     "all",
   );
+  const [selectedCategory, setSelectedCategory] = useState<
+    "all" | BlogCategory
+  >("all");
+  const [categoryPickerVisible, setCategoryPickerVisible] = useState(false);
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
   const [content, setContent] = useState<ContentItem[]>(fallbackContent);
+  const [usingFallback, setUsingFallback] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   // Immersive Preview Modal Layer States
   const [selectedItem, setSelectedItem] = useState<ContentItem | null>(null);
   const [previewVisible, setPreviewVisible] = useState(false);
+  const [fullBlog, setFullBlog] = useState<Blog | null>(null);
+  const [articleLoading, setArticleLoading] = useState(false);
 
   const softTints = getSoftTints(colors);
+
+  const PAGE_SIZE = 10;
 
   useEffect(() => {
     let isMounted = true;
@@ -118,14 +164,28 @@ export default function Blogs() {
     async function loadFeed() {
       try {
         const response = await blogsApi.getFeed({
-          limit: 20,
+          limit: PAGE_SIZE,
+          page: 1,
           type: selectedType,
+          category:
+            selectedCategory === "all" ? undefined : selectedCategory,
         });
-        if (isMounted && response.items.length > 0) {
+        if (!isMounted) return;
+        if (response.items.length > 0) {
           setContent(response.items.map(mapFeedItem));
+          setUsingFallback(false);
+          setPage(1);
+          setHasMore(response.pagination.page < response.pagination.pages);
+        } else {
+          setContent([]);
+          setUsingFallback(false);
+          setHasMore(false);
         }
       } catch {
-        if (isMounted) setContent(fallbackContent);
+        if (!isMounted) return;
+        setContent(fallbackContent);
+        setUsingFallback(true);
+        setHasMore(false);
       }
     }
 
@@ -134,7 +194,28 @@ export default function Blogs() {
     return () => {
       isMounted = false;
     };
-  }, [selectedType]);
+  }, [selectedType, selectedCategory]);
+
+  async function handleLoadMore() {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const nextPage = page + 1;
+      const response = await blogsApi.getFeed({
+        limit: PAGE_SIZE,
+        page: nextPage,
+        type: selectedType,
+        category: selectedCategory === "all" ? undefined : selectedCategory,
+      });
+      setContent((prev) => [...prev, ...response.items.map(mapFeedItem)]);
+      setPage(nextPage);
+      setHasMore(response.pagination.page < response.pagination.pages);
+    } catch {
+      setHasMore(false);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   const filteredContent =
     selectedType === "all"
@@ -155,10 +236,23 @@ export default function Blogs() {
     });
   }
 
-  function handleTriggerPreview(item: ContentItem) {
+  async function handleTriggerPreview(item: ContentItem) {
     setSelectedItem(item);
     setPreviewVisible(true);
+    setFullBlog(null);
     earnTokens(1);
+
+    if (item.type !== "blog" || !item.slug) return;
+
+    setArticleLoading(true);
+    try {
+      const blog = await blogsApi.getBlogBySlug(item.slug);
+      setFullBlog(blog);
+    } catch {
+      setFullBlog(null);
+    } finally {
+      setArticleLoading(false);
+    }
   }
 
   async function handleShareContent(item: ContentItem) {
@@ -245,6 +339,44 @@ export default function Blogs() {
               );
             })}
           </View>
+
+          {/* Category Filter Dropdown Selection */}
+          {selectedType !== "reel" && (
+            <View className="mt-3 px-6">
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => setCategoryPickerVisible(true)}
+                className="self-start flex-row items-center gap-1.5 px-4 py-2 rounded-full border"
+                style={{
+                  backgroundColor:
+                    selectedCategory === "all" ? colors.surface : softTints.pink,
+                  borderColor:
+                    selectedCategory === "all" ? colors.border : colors.primary,
+                }}
+              >
+                <Text
+                  className="text-xs font-bold"
+                  style={{
+                    color:
+                      selectedCategory === "all"
+                        ? colors.foreground
+                        : colors.primary,
+                    fontFamily: fonts.body,
+                  }}
+                >
+                  {
+                    CATEGORY_OPTIONS.find((c) => c.id === selectedCategory)
+                      ?.label
+                  }
+                </Text>
+                <Feather
+                  name="chevron-down"
+                  size={13}
+                  color={selectedCategory === "all" ? colors.mutedText : colors.primary}
+                />
+              </TouchableOpacity>
+            </View>
+          )}
 
           {/* DYNAMIC MEDIA CONTENT TIMELINE CARDS WRAPPER */}
           <View className="mt-6 gap-4 px-6">
@@ -339,22 +471,68 @@ export default function Blogs() {
                             />
                           )}
                         </View>
+
+                        {/* Category + Tags Segregation Row */}
+                        {(item.category || (item.tags && item.tags.length > 0)) && (
+                          <View className="flex-row items-center gap-1 mt-1 flex-wrap">
+                            {item.category && (
+                              <View
+                                className="px-1.5 py-0.5 rounded"
+                                style={{ backgroundColor: softTints.pink }}
+                              >
+                                <Text
+                                  className="text-[9px] font-bold uppercase"
+                                  style={{ color: colors.primary, fontFamily: fonts.body }}
+                                >
+                                  {CATEGORY_LABELS[item.category]}
+                                </Text>
+                              </View>
+                            )}
+                            {item.tags?.slice(0, 2).map((tag) => (
+                              <Text
+                                key={tag}
+                                className="text-[9px] font-semibold"
+                                style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                                numberOfLines={1}
+                              >
+                                #{tag}
+                              </Text>
+                            ))}
+                          </View>
+                        )}
                       </View>
 
                       {/* Card Lower Parameters Bar Action Section */}
                       <View className="flex-row items-center justify-between pt-2 border-t border-neutral-50 dark:border-neutral-900/60">
-                        <View className="flex-row items-center gap-1">
-                          <Feather
-                            name="clock"
-                            size={11}
-                            color={colors.mutedText}
-                          />
-                          <Text
-                            className="text-[10px] font-bold tracking-wide"
-                            style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                          >
-                            {item.time}
-                          </Text>
+                        <View className="flex-row items-center gap-2.5">
+                          <View className="flex-row items-center gap-1">
+                            <Feather
+                              name="clock"
+                              size={11}
+                              color={colors.mutedText}
+                            />
+                            <Text
+                              className="text-[10px] font-bold tracking-wide"
+                              style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                            >
+                              {item.time}
+                            </Text>
+                          </View>
+                          {item.type === "blog" && (
+                            <View className="flex-row items-center gap-1">
+                              <Feather
+                                name="eye"
+                                size={11}
+                                color={colors.mutedText}
+                              />
+                              <Text
+                                className="text-[10px] font-bold tracking-wide"
+                                style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                              >
+                                {formatCount(item.viewCount)}
+                              </Text>
+                            </View>
+                          )}
                         </View>
 
                         {/* Immersive Sheet Reader Trigger CTA Button */}
@@ -382,8 +560,102 @@ export default function Blogs() {
                 </TouchableOpacity>
               );
             })}
+
+            {filteredContent.length === 0 && (
+              <View className="items-center py-10">
+                <Text
+                  className="text-sm font-medium"
+                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                >
+                  No insights found for this filter yet.
+                </Text>
+              </View>
+            )}
+
+            {!usingFallback && hasMore && filteredContent.length > 0 && (
+              <TouchableOpacity
+                onPress={handleLoadMore}
+                disabled={loadingMore}
+                activeOpacity={0.8}
+                className="items-center justify-center py-3 rounded-2xl border mt-1"
+                style={{
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                }}
+              >
+                {loadingMore ? (
+                  <ActivityIndicator color={colors.primary} />
+                ) : (
+                  <Text
+                    className="text-xs font-bold"
+                    style={{ color: colors.primary, fontFamily: fonts.body }}
+                  >
+                    Load More
+                  </Text>
+                )}
+              </TouchableOpacity>
+            )}
           </View>
         </ScrollView>
+
+        {/* --- CATEGORY FILTER DROPDOWN SELECT MODAL --- */}
+        <Modal
+          visible={categoryPickerVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setCategoryPickerVisible(false)}
+        >
+          <Pressable
+            className="flex-1 justify-center items-center px-8"
+            style={{ backgroundColor: colors.overlay }}
+            onPress={() => setCategoryPickerVisible(false)}
+          >
+            <View
+              className="w-full max-w-[280px] p-4 rounded-3xl border"
+              style={{
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+                ...getShadow(colors, isDark),
+              }}
+            >
+              <Text
+                className="text-center font-extrabold mb-3 text-base"
+                style={{ color: colors.foreground, fontFamily: fonts.heading }}
+              >
+                Filter by Category
+              </Text>
+              {CATEGORY_OPTIONS.map((cat) => {
+                const isSelected = selectedCategory === cat.id;
+                return (
+                  <TouchableOpacity
+                    key={cat.id}
+                    onPress={() => {
+                      setSelectedCategory(cat.id);
+                      setCategoryPickerVisible(false);
+                    }}
+                    className="py-3 px-4 rounded-xl flex-row items-center justify-between"
+                    style={{
+                      backgroundColor: isSelected ? softTints.pink : "transparent",
+                    }}
+                  >
+                    <Text
+                      className="font-bold text-sm"
+                      style={{
+                        color: isSelected ? colors.primary : colors.foreground,
+                        fontFamily: fonts.body,
+                      }}
+                    >
+                      {cat.label}
+                    </Text>
+                    {isSelected && (
+                      <Feather name="check" size={16} color={colors.primary} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </Pressable>
+        </Modal>
 
         {/* --- DYNAMIC THREADS-STYLE INTERNAL DOCUMENT PREVIEW OVERLAY SHEET MODAL --- */}
         <Modal
@@ -450,18 +722,121 @@ export default function Blogs() {
 
                 {/* Main Core Typography reading content area wrapper segments */}
                 <View className="p-6">
+                  {/* Category, tags and engagement stats segregation row */}
+                  {(fullBlog || selectedItem.category || selectedItem.tags) && (
+                    <View className="flex-row items-center flex-wrap gap-1.5 mb-3">
+                      {(fullBlog?.category ?? selectedItem.category) && (
+                        <View
+                          className="px-2 py-0.5 rounded-md"
+                          style={{ backgroundColor: softTints.pink }}
+                        >
+                          <Text
+                            className="text-[10px] font-bold uppercase"
+                            style={{ color: colors.primary, fontFamily: fonts.body }}
+                          >
+                            {
+                              CATEGORY_LABELS[
+                                (fullBlog?.category ?? selectedItem.category)!
+                              ]
+                            }
+                          </Text>
+                        </View>
+                      )}
+                      {(fullBlog?.tags ?? selectedItem.tags ?? []).map((tag) => (
+                        <Text
+                          key={tag}
+                          className="text-[10px] font-semibold"
+                          style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                        >
+                          #{tag}
+                        </Text>
+                      ))}
+                    </View>
+                  )}
+
+                  {selectedItem.type === "blog" && (
+                    <View className="flex-row items-center gap-4 mb-4 pb-4 border-b border-neutral-100 dark:border-neutral-900">
+                      <View className="flex-row items-center gap-1">
+                        <Feather name="eye" size={12} color={colors.mutedText} />
+                        <Text
+                          className="text-[11px] font-bold"
+                          style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                        >
+                          {formatCount(fullBlog?.viewCount ?? selectedItem.viewCount)} views
+                        </Text>
+                      </View>
+                      <View className="flex-row items-center gap-1">
+                        <Ionicons name="heart" size={12} color={colors.mutedText} />
+                        <Text
+                          className="text-[11px] font-bold"
+                          style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                        >
+                          {formatCount(fullBlog?.likeCount ?? selectedItem.likeCount)} likes
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+
                   <Text
                     className="text-xs font-bold tracking-widest uppercase mb-3"
                     style={{ color: colors.primary, fontFamily: fonts.heading }}
                   >
-                    Verified Health Summary
+                    {fullBlog?.content ? "Full Article" : "Verified Health Summary"}
                   </Text>
-                  <Text
-                    className="text-sm font-medium leading-6 mb-8"
-                    style={{ color: colors.foreground, fontFamily: fonts.body }}
-                  >
-                    {selectedItem.summary}
-                  </Text>
+
+                  {articleLoading ? (
+                    <View className="items-center py-8">
+                      <ActivityIndicator color={colors.primary} />
+                    </View>
+                  ) : fullBlog?.content ? (
+                    <View className="mb-8">
+                      <Markdown
+                        style={{
+                          body: {
+                            color: colors.foreground,
+                            fontFamily: fonts.body,
+                            fontSize: 14,
+                            lineHeight: 22,
+                          },
+                          heading1: {
+                            color: colors.foreground,
+                            fontFamily: fonts.heading,
+                            fontSize: 20,
+                            marginTop: 4,
+                            marginBottom: 8,
+                          },
+                          heading2: {
+                            color: colors.foreground,
+                            fontFamily: fonts.heading,
+                            fontSize: 16,
+                            marginTop: 16,
+                            marginBottom: 6,
+                          },
+                          heading3: {
+                            color: colors.foreground,
+                            fontFamily: fonts.heading,
+                            fontSize: 14,
+                            marginTop: 12,
+                            marginBottom: 6,
+                          },
+                          strong: { fontFamily: fonts.heading },
+                          bullet_list: { marginBottom: 8 },
+                          ordered_list: { marginBottom: 8 },
+                          list_item: { marginBottom: 4 },
+                          paragraph: { marginTop: 0, marginBottom: 10 },
+                        }}
+                      >
+                        {fullBlog.content}
+                      </Markdown>
+                    </View>
+                  ) : (
+                    <Text
+                      className="text-sm font-medium leading-6 mb-8"
+                      style={{ color: colors.foreground, fontFamily: fonts.body }}
+                    >
+                      {selectedItem.summary}
+                    </Text>
+                  )}
 
                   {/* Actions utility taskbars footer system inside document sheet overlay */}
                   <View className="flex-row gap-3 border-t border-neutral-100 dark:border-neutral-900 pt-5">

@@ -473,6 +473,7 @@ export default function Tracker() {
       energy: log.energy,
       flow: log.flow,
       mood: log.mood,
+      isIntimate: log.isIntimate ?? false,
       note: log.note ?? "",
       symptoms: log.symptoms ?? [],
       updatedAt: log.date ?? new Date().toISOString(),
@@ -1018,7 +1019,7 @@ export default function Tracker() {
                     <Feather name="chevron-down" size={12} color={colors.mutedText} />
                   </TouchableOpacity>
 
-                  <TouchableOpacity
+                  {/* <TouchableOpacity
                     activeOpacity={0.82}
                     className="rounded-full border px-3 py-1.5"
                     onPress={openToday}
@@ -1033,7 +1034,7 @@ export default function Tracker() {
                     >
                       Today
                     </Text>
-                  </TouchableOpacity>
+                  </TouchableOpacity> */}
                 </View>
               </View>
             </View>
@@ -1949,6 +1950,7 @@ export default function Tracker() {
               energy: previousEntry?.energy,
               flow: previousEntry?.flow,
               mood: previousEntry?.mood,
+              isIntimate: previousEntry?.isIntimate ?? false,
               note: previousEntry?.note ?? "",
               symptoms: Array.from(
                 new Set([...(previousEntry?.symptoms ?? []), symptom]),

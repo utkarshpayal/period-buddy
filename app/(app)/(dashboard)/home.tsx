@@ -202,7 +202,7 @@ export default function Home() {
               {isDark ? "Good evening, " : "Good morning, "}
               {user?.firstName || "Utkarsh"} 👋
             </Text>
-            <Text
+            {/* <Text
               className="mt-0.5"
               style={{ fontSize: 11.5, color: colors.mutedText, fontFamily: fonts.body }}
               numberOfLines={1}
@@ -212,7 +212,7 @@ export default function Home() {
                 ? predictions.nextPeriodDaysAway
                 : Math.max(1, 28 - cycleDay)}{" "}
               days to period
-            </Text>
+            </Text> */}
           </View>
 
           <View className="flex-row items-center gap-2">

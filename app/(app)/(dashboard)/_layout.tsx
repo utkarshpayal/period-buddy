@@ -135,7 +135,7 @@ export default function DashboardLayout() {
       const updatedUser = response.data ?? response.user;
       const isProfileComplete =
         response.isProfileComplete ?? updatedUser?.isProfileComplete ?? true;
-      signIn({
+      await signIn({
         token,
         user: {
           ...user,

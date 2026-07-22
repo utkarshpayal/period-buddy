@@ -2,6 +2,7 @@
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
+  Linking,
   ScrollView,
   StatusBar,
   Text,
@@ -22,6 +23,9 @@ interface HygieneItem {
   description: string;
   category: "products" | "daily" | "activities" | "prevention";
   tips: string[];
+  estimatedReadTime?: number;
+  videoUrl?: string;
+  audioUrl?: string;
 }
 
 function mapHygieneResource(resource: WellbeingResource, index: number): HygieneItem {
@@ -36,6 +40,9 @@ function mapHygieneResource(resource: WellbeingResource, index: number): Hygiene
       resource.extendedGuide.length > 0
         ? resource.extendedGuide
         : [resource.summary],
+    estimatedReadTime: resource.estimatedReadTime,
+    videoUrl: resource.videoUrl,
+    audioUrl: resource.audioUrl,
   };
 }
 
@@ -317,8 +324,57 @@ export default function Hygiene() {
                     >
                       {currentActiveData.description}
                     </Text>
+                    {!!currentActiveData.estimatedReadTime && (
+                      <View className="flex-row items-center gap-1 mt-2">
+                        <Feather name="clock" size={11} color={colors.mutedText} />
+                        <Text
+                          className="text-[10px] font-bold"
+                          style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                        >
+                          {currentActiveData.estimatedReadTime} min read
+                        </Text>
+                      </View>
+                    )}
                   </View>
                 </View>
+
+                {/* Video / Audio Companion Media Row */}
+                {(currentActiveData.videoUrl || currentActiveData.audioUrl) && (
+                  <View className="flex-row gap-3">
+                    {!!currentActiveData.videoUrl && (
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={() => Linking.openURL(currentActiveData.videoUrl!)}
+                        className="flex-1 flex-row items-center justify-center gap-2 py-3 rounded-xl border"
+                        style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+                      >
+                        <Ionicons name="play-circle-outline" size={16} color={colors.primary} />
+                        <Text
+                          className="text-xs font-bold"
+                          style={{ color: colors.primary, fontFamily: fonts.body }}
+                        >
+                          Watch Video
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                    {!!currentActiveData.audioUrl && (
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={() => Linking.openURL(currentActiveData.audioUrl!)}
+                        className="flex-1 flex-row items-center justify-center gap-2 py-3 rounded-xl border"
+                        style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+                      >
+                        <Ionicons name="headset-outline" size={16} color={colors.primary} />
+                        <Text
+                          className="text-xs font-bold"
+                          style={{ color: colors.primary, fontFamily: fonts.body }}
+                        >
+                          Listen
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )}
 
                 {/* Sub-Section Title Container */}
                 <Text

@@ -1,3 +1,4 @@
+import * as AuthSession from "expo-auth-session";
 import * as Google from "expo-auth-session/providers/google";
 import * as WebBrowser from "expo-web-browser";
 import React, { useEffect, useState } from "react";
@@ -35,11 +36,20 @@ export function GoogleSignInButton({
 
   const isConfigured = Boolean(WEB_CLIENT_ID || IOS_CLIENT_ID || ANDROID_CLIENT_ID || EXPO_CLIENT_ID);
 
-  const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
+  // On mobile expo-auth-session actually runs a code + PKCE flow (despite the
+  // "IdToken" hook name) and auto-exchanges the code for a token internally —
+  // but that internal exchange has no .catch, so if it fails (wrong client
+  // type in Google Cloud, redirect mismatch, etc.) the promise rejection is
+  // swallowed and the response just never resolves: the browser closes and
+  // nothing happens, with no error shown. We do the exchange ourselves below
+  // instead of relying on that, so failures actually reach onError.
+  const [request, , promptAsync] = Google.useAuthRequest({
     androidClientId: ANDROID_CLIENT_ID,
     clientId: Platform.OS === "web" ? WEB_CLIENT_ID : (EXPO_CLIENT_ID || WEB_CLIENT_ID),
     iosClientId: IOS_CLIENT_ID,
     webClientId: WEB_CLIENT_ID,
+    responseType: Platform.OS === "web" ? AuthSession.ResponseType.IdToken : AuthSession.ResponseType.Code,
+    shouldAutoExchangeCode: false,
   });
 
   useEffect(() => {
@@ -48,34 +58,51 @@ export function GoogleSignInButton({
     }
   }, [request]);
 
-  useEffect(() => {
-    if (response?.type !== "success") return;
+  const handlePress = async () => {
+    try {
+      const result = await promptAsync();
 
-    const idToken = response.params?.id_token;
-    if (!idToken) {
-      onError("Google did not return an ID token. Please try again.");
-      return;
-    }
-
-    (async () => {
-      try {
-        setIsExchanging(true);
-        const result = await googleAuth({ idToken, role });
-        if (!result.token || !result.data) {
-          onError("Signed in with Google, but no session was returned.");
-          return;
-        }
-        onSuccess({ token: result.token, user: result.data });
-      } catch (error) {
-        onError(
-          error instanceof Error ? error.message : "Unable to complete Google sign-in.",
-        );
-      } finally {
-        setIsExchanging(false);
+      if (result.type === "dismiss" || result.type === "cancel") return;
+      if (result.type !== "success") {
+        onError("Google sign-in didn't complete. Please try again.");
+        return;
       }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [response]);
+
+      setIsExchanging(true);
+
+      let idToken: string | undefined = result.params?.id_token;
+      if (!idToken && result.params?.code) {
+        const tokenResult = await AuthSession.exchangeCodeAsync(
+          {
+            clientId: request!.clientId,
+            code: result.params.code,
+            redirectUri: request!.redirectUri,
+            extraParams: { code_verifier: request!.codeVerifier || "" },
+          },
+          Google.discovery,
+        );
+        idToken = tokenResult.idToken ?? undefined;
+      }
+
+      if (!idToken) {
+        onError("Google did not return an ID token. Please try again.");
+        return;
+      }
+
+      const authResult = await googleAuth({ idToken, role });
+      if (!authResult.token || !authResult.data) {
+        onError("Signed in with Google, but no session was returned.");
+        return;
+      }
+      onSuccess({ token: authResult.token, user: authResult.data });
+    } catch (error) {
+      onError(
+        error instanceof Error ? error.message : "Unable to complete Google sign-in.",
+      );
+    } finally {
+      setIsExchanging(false);
+    }
+  };
 
   if (!isConfigured) return null;
 
@@ -85,7 +112,7 @@ export function GoogleSignInButton({
     <TouchableOpacity
       activeOpacity={0.85}
       disabled={isBusy}
-      onPress={() => promptAsync()}
+      onPress={handlePress}
       className="flex-row items-center justify-center rounded-full border py-3.5"
       style={{
         backgroundColor: colors.surface,
