@@ -1281,6 +1281,17 @@ export const wellbeingApi = {
   getResourceById: (id: string) =>
     apiRequest<WellbeingResource>(`/api/wellbeing/${id}`),
 
+  /**
+   * Reports how long the reader actually had the resource open, so the
+   * backend can refine its read-time average instead of relying on a static
+   * admin estimate.
+   */
+  trackView: (id: string, durationSeconds: number) =>
+    apiRequest<{ counted: boolean; estimatedReadTime?: number }>(
+      `/api/wellbeing/${id}/track-view`,
+      { body: JSON.stringify({ durationSeconds }), method: "POST" },
+    ),
+
   getGameDecks: (deck?: "positions" | "spark") =>
     apiRequest<WellbeingGameDeck>(`/api/wellbeing/games${toQuery({ deck })}`),
 

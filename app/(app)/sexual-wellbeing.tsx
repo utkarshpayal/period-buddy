@@ -1,6 +1,6 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Linking,
@@ -127,6 +127,7 @@ export default function SexualWellbeing() {
   const [selectedCategory, setSelectedCategory] =
     useState<ResourceCategory | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const openedAtRef = useRef<number | null>(null);
 
   const categories: ResourceCategory[] = [
     {
@@ -288,6 +289,17 @@ export default function SexualWellbeing() {
     setSelectedCategory(category);
     setModalVisible(true);
     earnTokens(3);
+    openedAtRef.current = Date.now();
+  }
+
+  function handleCloseArticleModal() {
+    const openedAt = openedAtRef.current;
+    openedAtRef.current = null;
+    if (selectedCategory && openedAt) {
+      const durationSeconds = Math.round((Date.now() - openedAt) / 1000);
+      wellbeingApi.trackView(selectedCategory.id, durationSeconds).catch(() => {});
+    }
+    setModalVisible(false);
   }
 
   return (
@@ -669,7 +681,7 @@ export default function SexualWellbeing() {
           visible={modalVisible}
           animationType="slide"
           presentationStyle="pageSheet"
-          onRequestClose={() => setModalVisible(false)}
+          onRequestClose={handleCloseArticleModal}
         >
           {selectedCategory && (
             <View
@@ -697,7 +709,7 @@ export default function SexualWellbeing() {
                   </Text>
                 </View>
                 <TouchableOpacity
-                  onPress={() => setModalVisible(false)}
+                  onPress={handleCloseArticleModal}
                   className="p-1.5 rounded-full"
                   style={{ backgroundColor: colors.surfaceSoft }}
                 >

@@ -187,6 +187,20 @@ export default function Hygiene() {
     (item) => item.category === activeTab,
   );
 
+  // Reports how long the reader actually had this tab's tip open, so the
+  // backend can refine its read-time average instead of relying on a static
+  // admin estimate. The cleanup (fired on tab change or unmount) reports the
+  // duration for the tip that was active when the effect was set up.
+  useEffect(() => {
+    if (!currentActiveData) return;
+    const id = currentActiveData.id;
+    const openedAt = Date.now();
+    return () => {
+      const durationSeconds = Math.round((Date.now() - openedAt) / 1000);
+      wellbeingApi.trackView(id, durationSeconds).catch(() => {});
+    };
+  }, [currentActiveData?.id]);
+
   // Helper renderer engine for conditional multi-package icons support
   const renderItemIcon = (item: HygieneItem) => {
     if (item.iconType === "material") {
