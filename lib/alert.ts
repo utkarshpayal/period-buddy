@@ -1,4 +1,4 @@
-import { Alert, Platform } from "react-native";
+import { showAlert } from "./modal-host";
 
 type AlertButton = {
   text?: string;
@@ -7,38 +7,18 @@ type AlertButton = {
 };
 
 /**
- * react-native-web's Alert.alert is a literal no-op (`static alert() {}`), so
- * every confirm dialog and info toast in this app silently did nothing when
- * running on web. This shim matches Alert.alert's call signature so existing
- * call sites only need `Alert.alert(...)` swapped for `alert(...)`, and falls
- * back to window.alert/confirm on web. Only 1-button (info) and 2-button
- * (cancel + destructive/confirm) shapes are used anywhere in this app.
+ * App-wide replacement for Alert.alert. Renders a themed modal (via
+ * AppModalHost, mounted once in app/_layout.tsx) instead of the native
+ * dialog, so every call site gets consistent styling on iOS, Android, and
+ * web — react-native-web's Alert.alert is a no-op, so this used to silently
+ * do nothing on web before this shim existed.
  */
 export function alert(title: string, message?: string, buttons?: AlertButton[]) {
-  if (Platform.OS !== "web") {
-    Alert.alert(title, message, buttons);
-    return;
-  }
+  const normalized = buttons?.map((button) => ({
+    text: button.text ?? "OK",
+    onPress: button.onPress,
+    style: button.style,
+  }));
 
-  const fullMessage = message ? `${title}\n\n${message}` : title;
-
-  if (!buttons || buttons.length === 0) {
-    window.alert(fullMessage);
-    return;
-  }
-
-  if (buttons.length === 1) {
-    window.alert(fullMessage);
-    buttons[0].onPress?.();
-    return;
-  }
-
-  const cancelButton = buttons.find((b) => b.style === "cancel");
-  const confirmButton = buttons.find((b) => b !== cancelButton) ?? buttons[buttons.length - 1];
-
-  if (window.confirm(fullMessage)) {
-    confirmButton.onPress?.();
-  } else {
-    cancelButton?.onPress?.();
-  }
+  showAlert(title, message, normalized);
 }

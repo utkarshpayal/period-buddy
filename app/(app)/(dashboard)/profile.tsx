@@ -2,10 +2,8 @@ import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
-  Alert,
   Image,
   Modal,
-  Platform,
   ScrollView,
   StatusBar,
   Switch,
@@ -139,21 +137,7 @@ export default function Profile() {
   }
 
   function handleLogout() {
-    if (Platform.OS === "web") {
-      const confirmed =
-        typeof globalThis.confirm === "function"
-          ? globalThis.confirm(
-              "Log out? You can sign back in any time. Your saved care history stays with your account.",
-            )
-          : true;
-
-      if (confirmed) {
-        performLogout();
-      }
-      return;
-    }
-
-    Alert.alert(
+    alert(
       "Log out?",
       "You can sign back in any time. Your saved care history stays with your account.",
       [

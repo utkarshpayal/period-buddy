@@ -23,6 +23,7 @@ import { useAuth } from "../../components/auth-context";
 import { useTheme } from "../../components/theme";
 import { getSoftTints } from "../../components/ui-tokens";
 import { alert } from "../../lib/alert";
+import { showPermissionModal } from "../../lib/modal-host";
 import { documentApi, type DocType, type LanguageCode, type MedicalDocument } from "../../lib/api";
 import { generateAndShareHealthReport } from "../../lib/healthReport";
 import { SUPPORTED_LANGUAGES as LANGUAGE_OPTIONS } from "../../lib/languages";
@@ -135,7 +136,11 @@ export default function DocumentsScreen() {
   async function handlePickCamera() {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
-      alert("Camera access needed", "Allow camera access to photograph a document.");
+      showPermissionModal({
+        title: "Camera access needed",
+        message: "Allow camera access to photograph a document.",
+        icon: "camera-outline",
+      });
       return;
     }
     const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
@@ -150,7 +155,11 @@ export default function DocumentsScreen() {
   async function handlePickGallery() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      alert("Photo access needed", "Allow photo library access to choose a document image.");
+      showPermissionModal({
+        title: "Photo access needed",
+        message: "Allow photo library access to choose a document image.",
+        icon: "images-outline",
+      });
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8 });

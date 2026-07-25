@@ -3,6 +3,7 @@ import React, { useEffect } from "react";
 import { AppLockProvider, useAppLock } from "../components/AppLock";
 import { AppLockScreen } from "../components/AppLockScreen";
 import { AuthProvider } from "../components/auth-context";
+import { AppModalHost } from "../components/modals/AppModalHost";
 import { ThemeProvider, useTheme } from "../components/theme";
 import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
@@ -33,6 +34,7 @@ function AppShell() {
     <>
       <Stack screenOptions={{ headerShown: false }} />
       {isLocked && <AppLockScreen />}
+      <AppModalHost />
     </>
   );
 }

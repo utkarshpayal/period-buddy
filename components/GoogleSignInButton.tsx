@@ -76,6 +76,26 @@ export function GoogleSignInButton({
       const result = await promptAsync();
 
       if (result.type === "dismiss" || result.type === "cancel") return;
+
+      if (result.type === "error") {
+        console.log("DEBUG: Google Auth error =", result.error?.code, result.error?.message, result.params);
+
+        // Google's OAuth server returns error=access_denied both when the
+        // user taps "Cancel"/"Deny" on the consent screen AND when the app
+        // itself isn't authorized (unverified consent screen with no test
+        // users added, or the Android/iOS client's SHA-1/bundle ID doesn't
+        // match what's registered in Google Cloud Console). We can't tell
+        // those apart client-side, so point at both.
+        if (result.error?.code === "access_denied") {
+          onError(
+            "Google denied this sign-in. If you tapped \"Cancel\" or \"Deny\", try again and allow access. Otherwise this app's Google sign-in isn't authorized yet for your account — contact support.",
+          );
+        } else {
+          onError(result.error?.message || "Google sign-in failed. Please try again.");
+        }
+        return;
+      }
+
       if (result.type !== "success") {
         onError("Google sign-in didn't complete. Please try again.");
         return;

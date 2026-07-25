@@ -3,7 +3,6 @@ import { useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -537,11 +536,21 @@ export default function Community() {
     closeOptions();
   }
 
-  // Called directly from OptionsModal — no Alert needed, the tap IS the confirmation
-  async function handleDeletePost() {
+  function handleDeletePost() {
     if (!activePost) return;
     const postId = activePost.id;
     closeOptions();
+    alert(
+      "Delete this post?",
+      "This permanently removes the post from the community feed.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: () => confirmDeletePost(postId) },
+      ],
+    );
+  }
+
+  async function confirmDeletePost(postId: string) {
     setPosts((current) => current.filter((p) => p.id !== postId));
     try {
       await communityApi.deletePost(postId);
@@ -577,11 +586,7 @@ export default function Community() {
       try {
         await communityApi.deleteComment(postId, commentId);
       } catch {
-        if (Platform.OS === "web") {
-          window.alert("Could not delete comment. Please try again.");
-        } else {
-          Alert.alert("Error", "Could not delete comment. Please try again.");
-        }
+        alert("Error", "Could not delete comment. Please try again.");
         try {
           const postsResponse = await communityApi.getPosts({ limit: 20 });
           const mapped = postsResponse.posts.map(mapCommunityPost);
@@ -595,15 +600,7 @@ export default function Community() {
       }
     };
 
-    if (Platform.OS === "web") {
-      const confirmed = window.confirm("Remove this comment permanently?");
-      if (confirmed) {
-        await performDelete();
-      }
-      return;
-    }
-
-    Alert.alert(
+    alert(
       "Delete Comment",
       "Remove this comment permanently?",
       [

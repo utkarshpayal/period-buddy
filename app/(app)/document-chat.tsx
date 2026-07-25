@@ -27,6 +27,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useTheme } from "../../components/theme";
 import { getSoftTints } from "../../components/ui-tokens";
 import { alert } from "../../lib/alert";
+import { showPermissionModal } from "../../lib/modal-host";
 import { documentApi, speechApi, type DocumentChatMessage, type Language, type LanguageCode } from "../../lib/api";
 import { resolveAudioUri } from "../../lib/audio";
 import { SUPPORTED_LANGUAGES } from "../../lib/languages";
@@ -108,7 +109,11 @@ export default function DocumentChatScreen() {
 
     const { granted } = await requestRecordingPermissionsAsync();
     if (!granted) {
-      alert("Microphone access needed", "Enable microphone access in Settings to use voice input.");
+      showPermissionModal({
+        title: "Microphone access needed",
+        message: "Enable microphone access in Settings to use voice input.",
+        icon: "mic-outline",
+      });
       return;
     }
     await recorder.prepareToRecordAsync();
