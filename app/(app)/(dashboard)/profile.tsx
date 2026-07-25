@@ -42,9 +42,26 @@ export default function Profile() {
   const [privacyModalVisible, setPrivacyModalVisible] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  // Settings Functional Flags
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [anonymousMode, setAnonymousMode] = useState(false);
+  // Settings Functional Flags — seeded from the backend, kept in sync with
+  // `user` below, and persisted on every toggle (see handleTogglePreference).
+  const [notificationsEnabled, setNotificationsEnabled] = useState(
+    user?.notificationsEnabled ?? true,
+  );
+  const [anonymousMode, setAnonymousMode] = useState(
+    user?.anonymousCommunityMode ?? true,
+  );
+  const [savingPreference, setSavingPreference] = useState<
+    "anonymousCommunityMode" | "notificationsEnabled" | null
+  >(null);
+
+  React.useEffect(() => {
+    if (user?.notificationsEnabled !== undefined) {
+      setNotificationsEnabled(user.notificationsEnabled);
+    }
+    if (user?.anonymousCommunityMode !== undefined) {
+      setAnonymousMode(user.anonymousCommunityMode);
+    }
+  }, [user?.notificationsEnabled, user?.anonymousCommunityMode]);
 
   React.useEffect(() => {
     let isMounted = true;
@@ -62,6 +79,29 @@ export default function Profile() {
       isMounted = false;
     };
   }, [updateUser]);
+
+  async function handleTogglePreference(
+    key: "anonymousCommunityMode" | "notificationsEnabled",
+    nextValue: boolean,
+  ) {
+    const setLocal = key === "notificationsEnabled" ? setNotificationsEnabled : setAnonymousMode;
+    const previousValue = key === "notificationsEnabled" ? notificationsEnabled : anonymousMode;
+
+    setLocal(nextValue);
+    setSavingPreference(key);
+    try {
+      const updatedUser = await authApi.updateProfile({ [key]: nextValue });
+      updateUser(updatedUser);
+    } catch (error) {
+      setLocal(previousValue);
+      alert(
+        "Couldn't save preference",
+        error instanceof Error ? error.message : "Please try again.",
+      );
+    } finally {
+      setSavingPreference(null);
+    }
+  }
 
   // "Days Tracked" should reflect real cycle logs from the backend, not the
   // device-local AppState mock (which only tracks notes typed into this
@@ -358,7 +398,8 @@ export default function Profile() {
                     </View>
                     <Switch
                       value={notificationsEnabled}
-                      onValueChange={setNotificationsEnabled}
+                      disabled={savingPreference === "notificationsEnabled"}
+                      onValueChange={(next) => handleTogglePreference("notificationsEnabled", next)}
                       trackColor={{ true: colors.primary }}
                     />
                   </View>
@@ -380,13 +421,47 @@ export default function Profile() {
                     </View>
                     <Switch
                       value={anonymousMode}
-                      onValueChange={setAnonymousMode}
+                      disabled={savingPreference === "anonymousCommunityMode"}
+                      onValueChange={(next) => handleTogglePreference("anonymousCommunityMode", next)}
                       trackColor={{ true: colors.primary }}
                     />
                   </View>
                 </View>
               )}
             </View>
+
+            {/* Action 3a: Documents (Route) */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => router.push("/documents")}
+              className="flex-row items-center p-4 rounded-2xl border shadow-3xs"
+              style={{
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+              }}
+            >
+              <View
+                className="p-2.5 rounded-xl mr-4"
+                style={{ backgroundColor: softTints.pink }}
+              >
+                <Ionicons
+                  name="document-text-outline"
+                  size={18}
+                  color={colors.primary}
+                />
+              </View>
+              <Text
+                className="flex-1 text-sm font-bold"
+                style={{ color: colors.foreground, fontFamily: fonts.body }}
+              >
+                Documents
+              </Text>
+              <Feather
+                name="chevron-right"
+                size={16}
+                color={colors.mutedText}
+              />
+            </TouchableOpacity>
 
             {/* Action 3b: App Lock (Route) */}
             <TouchableOpacity

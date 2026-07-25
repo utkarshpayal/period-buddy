@@ -24,7 +24,10 @@ import { useTheme } from "./theme";
  * Signaling rides the same WebSocket room the parent screen already joins
  * for chat (`buddy_<id>`) — the parent forwards every non-chat message here
  * via `handleSignal`, and this component sends through the same socket via
- * `socketRef`. No camera/mic is requested until the callee explicitly accepts.
+ * `socketRef`. Camera/mic permission is requested up front — before the
+ * caller rings (`startCall`) and before the callee's stream is opened
+ * (`acceptCall`) — but the camera/mic itself only turns on once both sides
+ * have agreed to the call.
  *
  * No TURN server is available (no backend infra for one), so calls behind
  * restrictive/symmetric NAT may fail to connect — STUN only.
@@ -178,12 +181,20 @@ export const BuddyVideoCall = forwardRef<BuddyVideoCallHandle, Props>(
       return () => clearTimeout(timer);
     }, [phase]);
 
-    const startCall = useCallback(() => {
+    const startCall = useCallback(async () => {
       if (phase !== "idle") return;
+      try {
+        await ensureMediaPermissions();
+      } catch (err) {
+        console.warn("Failed to start buddy call:", err);
+        setEndedReason("Camera/mic permission required");
+        setPhase("ended");
+        return;
+      }
       isCallerRef.current = true;
       setPhase("outgoing");
       send("call_request");
-    }, [phase, send]);
+    }, [ensureMediaPermissions, phase, send]);
 
     const acceptCall = useCallback(async () => {
       setPhase("connecting");

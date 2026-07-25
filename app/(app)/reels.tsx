@@ -478,7 +478,8 @@ export default function Reels() {
   );
   const [pollReelId, setPollReelId] = useState<string | null>(null);
 
-  const [reels, setReels] = useState<HealthReel[]>(fallbackReels);
+  const [reels, setReels] = useState<HealthReel[]>([]);
+  const [loadingReels, setLoadingReels] = useState(true);
   const [usingFallback, setUsingFallback] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [categoryPickerVisible, setCategoryPickerVisible] = useState(false);
@@ -493,6 +494,7 @@ export default function Reels() {
     let isMounted = true;
 
     async function loadReels() {
+      setLoadingReels(true);
       try {
         const response = await reelsApi.getReels({
           limit: REELS_PAGE_SIZE,
@@ -535,6 +537,8 @@ export default function Reels() {
           setHasMore(false);
           setActivePlayId((current) => current ?? fallbackReels[0]?.id ?? null);
         }
+      } finally {
+        if (isMounted) setLoadingReels(false);
       }
     }
 
@@ -717,6 +721,11 @@ export default function Reels() {
         className="flex-1"
         style={{ backgroundColor: "#050505" }}
       >
+        {loadingReels && reels.length === 0 ? (
+          <View className="flex-1 items-center justify-center">
+            <ActivityIndicator color="white" size="large" />
+          </View>
+        ) : (
         <ScrollView
           decelerationRate="fast"
           disableIntervalMomentum
@@ -952,6 +961,7 @@ export default function Reels() {
             );
           })}
         </ScrollView>
+        )}
 
         {loadingMore && (
           <View className="absolute bottom-6 self-center rounded-full bg-black/50 px-4 py-2">

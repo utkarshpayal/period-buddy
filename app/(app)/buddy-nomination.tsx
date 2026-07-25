@@ -2,6 +2,7 @@ import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -175,7 +176,8 @@ export default function BuddyNomination() {
   const [isChatConsoleOpen, setIsChatConsoleOpen] = useState(false);
   const [typedMessage, setTypedMessage] = useState("");
 
-  const [nominees, setNominees] = useState<PeriodBuddy[]>(fallbackNominees);
+  const [nominees, setNominees] = useState<PeriodBuddy[]>([]);
+  const [loadingNominees, setLoadingNominees] = useState(true);
 
   // Private live dialogue log data array container
   const [chatLog, setChatLog] = useState<BuddyMessage[]>([
@@ -235,6 +237,8 @@ export default function BuddyNomination() {
         if (isMounted) {
           setNominees(fallbackNominees);
         }
+      } finally {
+        if (isMounted) setLoadingNominees(false);
       }
     }
 
@@ -605,6 +609,11 @@ export default function BuddyNomination() {
                 </Text>
 
                 {/* MATCH STACK FEED TIMELINE LOOP */}
+                {loadingNominees && nominees.length === 0 ? (
+                  <View className="items-center py-16">
+                    <ActivityIndicator color={colors.primary} />
+                  </View>
+                ) : (
                 <View className="gap-4">
                   {sortedNominees.map((buddy) => {
                     const isSelectedBuddy = activeNominatedId === buddy.id;
@@ -760,6 +769,7 @@ export default function BuddyNomination() {
                     );
                   })}
                 </View>
+                )}
               </View>
             ) : (
               /* ACTIVE ANONYMOUS PEER TALK LIVE STREAM MODULE VIEW CONSOLE */

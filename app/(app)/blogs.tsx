@@ -1,6 +1,11 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import {
+  type AudioPlayer,
+  createAudioPlayer,
+} from "expo-audio";
+import { LinearGradient } from "expo-linear-gradient";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -13,12 +18,22 @@ import {
   View,
 } from "react-native";
 import Markdown from "react-native-markdown-display";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppState } from "../../components/AppState";
 import { alert } from "../../lib/alert";
 import { useTheme } from "../../components/theme";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
-import { blogsApi, type Blog, type BlogCategory, type ContentFeedItem } from "../../lib/api";
+import {
+  blogsApi,
+  speechApi,
+  type Blog,
+  type BlogCategory,
+  type ContentFeedItem,
+  type Language,
+  type LanguageCode,
+} from "../../lib/api";
+import { resolveAudioUri } from "../../lib/audio";
+import { SUPPORTED_LANGUAGES } from "../../lib/languages";
 import { shareWithAppLink } from "../../lib/share";
 
 // --- BACKEND REST API PAYLOAD CONTRACTS ---
@@ -128,9 +143,29 @@ function formatCount(count?: number): string {
   return String(count);
 }
 
+function mapBlogToContentItem(blog: Blog): ContentItem {
+  return {
+    id: blog._id,
+    title: blog.title,
+    author: blog.author || "Period Buddy Team",
+    type: "blog",
+    time: `${blog.readTimeMinutes || 0} min read`,
+    imageUrl: blog.coverImageUrl || "",
+    verified: true,
+    summary: blog.excerpt || "",
+    slug: blog.slug,
+    category: blog.category,
+    tags: blog.tags,
+    viewCount: blog.viewCount,
+    likeCount: blog.likeCount,
+  };
+}
+
 export default function Blogs() {
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
+  const { slug: deepLinkedSlug } = useLocalSearchParams<{ slug?: string }>();
+  const insets = useSafeAreaInsets();
   const { earnTokens } = useAppState();
 
   // Functional Interface States
@@ -142,17 +177,34 @@ export default function Blogs() {
   >("all");
   const [categoryPickerVisible, setCategoryPickerVisible] = useState(false);
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
-  const [content, setContent] = useState<ContentItem[]>(fallbackContent);
+  const [content, setContent] = useState<ContentItem[]>([]);
+  const [loadingFeed, setLoadingFeed] = useState(true);
   const [usingFallback, setUsingFallback] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+
+  // "See all bookmarks" view
+  const [showBookmarksOnly, setShowBookmarksOnly] = useState(false);
+  const [bookmarkedContent, setBookmarkedContent] = useState<ContentItem[]>([]);
+  const [loadingBookmarks, setLoadingBookmarks] = useState(false);
 
   // Immersive Preview Modal Layer States
   const [selectedItem, setSelectedItem] = useState<ContentItem | null>(null);
   const [previewVisible, setPreviewVisible] = useState(false);
   const [fullBlog, setFullBlog] = useState<Blog | null>(null);
   const [articleLoading, setArticleLoading] = useState(false);
+  const openedAtRef = useRef<number | null>(null);
+
+  // Translate + listen (text-to-speech) states
+  const [language, setLanguage] = useState<LanguageCode>("en-IN");
+  const [languages, setLanguages] = useState<Language[]>(SUPPORTED_LANGUAGES);
+  const [languagePickerVisible, setLanguagePickerVisible] = useState(false);
+  const [translating, setTranslating] = useState(false);
+  const [translated, setTranslated] = useState<{ content: string; title: string } | null>(null);
+  const [isSynthesizing, setIsSynthesizing] = useState(false);
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const playerRef = useRef<AudioPlayer | null>(null);
 
   const softTints = getSoftTints(colors);
 
@@ -162,6 +214,7 @@ export default function Blogs() {
     let isMounted = true;
 
     async function loadFeed() {
+      setLoadingFeed(true);
       try {
         const response = await blogsApi.getFeed({
           limit: PAGE_SIZE,
@@ -186,6 +239,8 @@ export default function Blogs() {
         setContent(fallbackContent);
         setUsingFallback(true);
         setHasMore(false);
+      } finally {
+        if (isMounted) setLoadingFeed(false);
       }
     }
 
@@ -195,6 +250,47 @@ export default function Blogs() {
       isMounted = false;
     };
   }, [selectedType, selectedCategory]);
+
+  useEffect(() => {
+    let isMounted = true;
+    blogsApi
+      .getBookmarks()
+      .then((result) => {
+        if (isMounted) setBookmarkedIds(new Set(result.blogs.map((b) => b._id)));
+      })
+      .catch(() => {});
+    speechApi
+      .getLanguages()
+      .then((result) => {
+        if (isMounted && result.languages?.length) setLanguages(result.languages);
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+      playerRef.current?.release();
+    };
+  }, []);
+
+  // Opens straight to the shared article when the app was launched via a
+  // "blogs?slug=..." deep link (see lib/share.ts / handleShareContent below).
+  useEffect(() => {
+    if (!deepLinkedSlug) return;
+    let isMounted = true;
+
+    blogsApi
+      .getBlogBySlug(deepLinkedSlug)
+      .then((blog) => {
+        if (isMounted) handleTriggerPreview(mapBlogToContentItem(blog));
+      })
+      .catch(() => {
+        if (isMounted) alert("Couldn't open that article", "It may have been removed.");
+      });
+
+    return () => {
+      isMounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only meant to fire once for the initial deep link, not re-run when handleTriggerPreview is redefined each render
+  }, [deepLinkedSlug]);
 
   async function handleLoadMore() {
     if (loadingMore || !hasMore) return;
@@ -217,30 +313,71 @@ export default function Blogs() {
     }
   }
 
-  const filteredContent =
-    selectedType === "all"
+  async function handleToggleBookmarksView() {
+    const next = !showBookmarksOnly;
+    setShowBookmarksOnly(next);
+    if (!next || bookmarkedContent.length > 0) return;
+
+    setLoadingBookmarks(true);
+    try {
+      const result = await blogsApi.getBookmarks();
+      setBookmarkedContent(result.blogs.map(mapBlogToContentItem));
+    } catch {
+      alert("Couldn't load bookmarks", "Please try again.");
+    } finally {
+      setLoadingBookmarks(false);
+    }
+  }
+
+  const filteredContent = showBookmarksOnly
+    ? bookmarkedContent
+    : selectedType === "all"
       ? content
       : content.filter((c) => c.type === selectedType);
 
   // --- ACTIONS CONTROLLERS INTERACTIVITY LAYER ---
-  function handleToggleBookmark(id: string) {
+  async function handleToggleBookmark(id: string) {
+    const wasBookmarked = bookmarkedIds.has(id);
+
+    // Optimistic update — rolled back below if the request fails.
     setBookmarkedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-        earnTokens(2);
-      }
+      if (wasBookmarked) next.delete(id);
+      else next.add(id);
       return next;
     });
+    if (!wasBookmarked) earnTokens(2);
+
+    try {
+      const result = await blogsApi.toggleBookmark(id);
+      setBookmarkedIds((prev) => {
+        const next = new Set(prev);
+        if (result.bookmarked) next.add(id);
+        else next.delete(id);
+        return next;
+      });
+      if (showBookmarksOnly && !result.bookmarked) {
+        setBookmarkedContent((prev) => prev.filter((item) => item.id !== id));
+      }
+    } catch {
+      setBookmarkedIds((prev) => {
+        const next = new Set(prev);
+        if (wasBookmarked) next.add(id);
+        else next.delete(id);
+        return next;
+      });
+      alert("Couldn't save bookmark", "Please try again.");
+    }
   }
 
   async function handleTriggerPreview(item: ContentItem) {
     setSelectedItem(item);
     setPreviewVisible(true);
     setFullBlog(null);
+    setTranslated(null);
+    setLanguage("en-IN");
     earnTokens(1);
+    openedAtRef.current = Date.now();
 
     if (item.type !== "blog" || !item.slug) return;
 
@@ -255,10 +392,77 @@ export default function Blogs() {
     }
   }
 
+  function handleClosePreview() {
+    playerRef.current?.pause();
+    setIsPlayingAudio(false);
+
+    const item = selectedItem;
+    const openedAt = openedAtRef.current;
+    openedAtRef.current = null;
+    if (item?.type === "blog" && openedAt) {
+      const durationSeconds = Math.round((Date.now() - openedAt) / 1000);
+      blogsApi.trackView(item.id, durationSeconds).catch(() => {});
+    }
+
+    setPreviewVisible(false);
+  }
+
+  async function handleTranslate() {
+    if (!selectedItem?.slug || translating) return;
+
+    if (language === "en-IN") {
+      setTranslated(null);
+      return;
+    }
+
+    setTranslating(true);
+    try {
+      const result = await blogsApi.translateBlog(selectedItem.slug, language);
+      setTranslated({ content: result.content, title: result.title });
+    } catch (error) {
+      alert("Couldn't translate", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setTranslating(false);
+    }
+  }
+
+  async function handleListen() {
+    if (isPlayingAudio) {
+      playerRef.current?.pause();
+      setIsPlayingAudio(false);
+      return;
+    }
+
+    const text = translated?.content || fullBlog?.content || selectedItem?.summary;
+    if (!text) return;
+
+    playerRef.current?.pause();
+    playerRef.current?.release();
+    playerRef.current = null;
+
+    setIsSynthesizing(true);
+    try {
+      const { audioBase64, audioCodec } = await speechApi.synthesize({ languageCode: language, text });
+      const uri = await resolveAudioUri(audioBase64, audioCodec);
+      const player = createAudioPlayer({ uri });
+      playerRef.current = player;
+      player.addListener("playbackStatusUpdate", (status) => {
+        if (status.didJustFinish) setIsPlayingAudio(false);
+      });
+      player.play();
+      setIsPlayingAudio(true);
+    } catch (error) {
+      alert("Couldn't play audio", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setIsSynthesizing(false);
+    }
+  }
+
   async function handleShareContent(item: ContentItem) {
     try {
       await shareWithAppLink(
         `Check out this verified health resource on Nura: "${item.title}" by ${item.author}.`,
+        item.type === "blog" && item.slug ? `blogs?slug=${item.slug}` : undefined,
       );
       earnTokens(3);
     } catch {
@@ -297,8 +501,23 @@ export default function Blogs() {
             className="flex-1 text-2xl font-black tracking-tight ml-2"
             style={{ color: colors.foreground, fontFamily: fonts.heading }}
           >
-            Insights Feed
+            {showBookmarksOnly ? "Bookmarked" : "Insights Feed"}
           </Text>
+          <TouchableOpacity
+            onPress={handleToggleBookmarksView}
+            activeOpacity={0.7}
+            className="p-2.5 rounded-full border"
+            style={{
+              backgroundColor: showBookmarksOnly ? softTints.pink : colors.surface,
+              borderColor: showBookmarksOnly ? colors.primary : colors.border,
+            }}
+          >
+            <Ionicons
+              name={showBookmarksOnly ? "bookmark" : "bookmark-outline"}
+              size={18}
+              color={showBookmarksOnly ? colors.primary : colors.foreground}
+            />
+          </TouchableOpacity>
         </View>
 
         <ScrollView
@@ -306,6 +525,8 @@ export default function Blogs() {
           contentContainerStyle={{ paddingBottom: 60 }}
         >
           {/* Segmented Controller Chips Selection */}
+          {!showBookmarksOnly && (
+          <>
           <View className="mt-5 flex-row gap-2 px-6">
             {[
               { id: "all", label: "All Insights" },
@@ -377,8 +598,15 @@ export default function Blogs() {
               </TouchableOpacity>
             </View>
           )}
+          </>
+          )}
 
           {/* DYNAMIC MEDIA CONTENT TIMELINE CARDS WRAPPER */}
+          {(loadingFeed && !showBookmarksOnly && content.length === 0) || (loadingBookmarks && showBookmarksOnly) ? (
+            <View className="items-center py-16">
+              <ActivityIndicator color={colors.primary} />
+            </View>
+          ) : (
           <View className="mt-6 gap-4 px-6">
             {filteredContent.map((item) => {
               const isBookmarked = bookmarkedIds.has(item.id);
@@ -567,12 +795,14 @@ export default function Blogs() {
                   className="text-sm font-medium"
                   style={{ color: colors.mutedText, fontFamily: fonts.body }}
                 >
-                  No insights found for this filter yet.
+                  {showBookmarksOnly
+                    ? "No bookmarked content yet — tap the bookmark icon on any article to save it here."
+                    : "No insights found for this filter yet."}
                 </Text>
               </View>
             )}
 
-            {!usingFallback && hasMore && filteredContent.length > 0 && (
+            {!showBookmarksOnly && !usingFallback && hasMore && filteredContent.length > 0 && (
               <TouchableOpacity
                 onPress={handleLoadMore}
                 disabled={loadingMore}
@@ -596,6 +826,7 @@ export default function Blogs() {
               </TouchableOpacity>
             )}
           </View>
+          )}
         </ScrollView>
 
         {/* --- CATEGORY FILTER DROPDOWN SELECT MODAL --- */}
@@ -662,7 +893,7 @@ export default function Blogs() {
           visible={previewVisible}
           animationType="slide"
           presentationStyle="pageSheet"
-          onRequestClose={() => setPreviewVisible(false)}
+          onRequestClose={handleClosePreview}
         >
           {selectedItem && (
             <View
@@ -692,7 +923,7 @@ export default function Blogs() {
                   )}
                 </View>
                 <TouchableOpacity
-                  onPress={() => setPreviewVisible(false)}
+                  onPress={handleClosePreview}
                   className="p-1.5 bg-neutral-100 dark:bg-neutral-800 rounded-full"
                 >
                   <Feather name="x" size={16} color={!isDark ? "white" : "black"} />
@@ -707,7 +938,15 @@ export default function Blogs() {
                     className="w-full h-full"
                     resizeMode="cover"
                   />
-                  <View className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+                  {/* Tailwind's bg-gradient-to-t class has no effect in React
+                      Native — nothing was ever darkening this image, so a
+                      white heading over a light photo had zero contrast.
+                      This is a real gradient. */}
+                  <LinearGradient
+                    colors={["transparent", "rgba(0,0,0,0.25)", "rgba(0,0,0,0.85)"]}
+                    locations={[0, 0.45, 1]}
+                    style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+                  />
 
                   {/* Title text overlay embedded on asset hero container templates */}
                   <View className="absolute bottom-5 left-6 right-6">
@@ -777,18 +1016,75 @@ export default function Blogs() {
                     </View>
                   )}
 
-                  <Text
-                    className="text-xs font-bold tracking-widest uppercase mb-3"
-                    style={{ color: colors.primary, fontFamily: fonts.heading }}
-                  >
-                    {fullBlog?.content ? "Full Article" : "Verified Health Summary"}
-                  </Text>
+                  <View className="flex-row items-center justify-between mb-3">
+                    <Text
+                      className="text-xs font-bold tracking-widest uppercase"
+                      style={{ color: colors.primary, fontFamily: fonts.heading }}
+                    >
+                      {fullBlog?.content ? "Full Article" : "Verified Health Summary"}
+                    </Text>
+
+                    {selectedItem.type === "blog" && (
+                      <View className="flex-row items-center gap-1.5">
+                        <TouchableOpacity
+                          onPress={() => setLanguagePickerVisible(true)}
+                          activeOpacity={0.7}
+                          className="flex-row items-center gap-1 px-2.5 py-1.5 rounded-full border"
+                          style={{ backgroundColor: softTints.pink, borderColor: colors.border }}
+                        >
+                          <Feather name="globe" size={12} color={colors.primary} />
+                          <Text className="text-[9px] font-black" style={{ color: colors.primary, fontFamily: fonts.body }}>
+                            {languages.find((l) => l.code === language)?.label ?? "English"}
+                          </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          onPress={handleListen}
+                          disabled={isSynthesizing}
+                          activeOpacity={0.7}
+                          className="p-1.5 rounded-full border"
+                          style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+                        >
+                          {isSynthesizing ? (
+                            <ActivityIndicator size="small" color={colors.primary} />
+                          ) : (
+                            <Feather
+                              name={isPlayingAudio ? "pause-circle" : "volume-2"}
+                              size={14}
+                              color={colors.primary}
+                            />
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+
+                  {selectedItem.type === "blog" && language !== "en-IN" && (
+                    <TouchableOpacity
+                      onPress={handleTranslate}
+                      disabled={translating}
+                      activeOpacity={0.7}
+                      className="flex-row items-center justify-center gap-2 mb-4 py-2.5 rounded-xl border"
+                      style={{ backgroundColor: colors.input, borderColor: colors.border }}
+                    >
+                      {translating ? (
+                        <ActivityIndicator size="small" color={colors.primary} />
+                      ) : (
+                        <Feather name="repeat" size={13} color={colors.primary} />
+                      )}
+                      <Text className="text-xs font-bold" style={{ color: colors.primary, fontFamily: fonts.body }}>
+                        {translated
+                          ? `Translated to ${languages.find((l) => l.code === language)?.label ?? language}`
+                          : `Translate to ${languages.find((l) => l.code === language)?.label ?? language}`}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
 
                   {articleLoading ? (
                     <View className="items-center py-8">
                       <ActivityIndicator color={colors.primary} />
                     </View>
-                  ) : fullBlog?.content ? (
+                  ) : translated?.content || fullBlog?.content ? (
                     <View className="mb-8">
                       <Markdown
                         style={{
@@ -826,7 +1122,7 @@ export default function Blogs() {
                           paragraph: { marginTop: 0, marginBottom: 10 },
                         }}
                       >
-                        {fullBlog.content}
+                        {translated?.content ?? fullBlog?.content}
                       </Markdown>
                     </View>
                   ) : (
@@ -892,6 +1188,46 @@ export default function Blogs() {
               </ScrollView>
             </View>
           )}
+        </Modal>
+
+        {/* --- LANGUAGE PICKER FOR TRANSLATE + LISTEN --- */}
+        <Modal transparent animationType="fade" visible={languagePickerVisible} onRequestClose={() => setLanguagePickerVisible(false)}>
+          <View className="flex-1 justify-end">
+            <Pressable
+              onPress={() => setLanguagePickerVisible(false)}
+              style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.overlay }}
+            />
+            <View
+              className="rounded-t-3xl border p-4"
+              style={{ backgroundColor: colors.surface, borderColor: colors.border, paddingBottom: Math.max(16, insets.bottom + 10) }}
+            >
+              <View className="items-center mb-3">
+                <View className="rounded-full" style={{ backgroundColor: colors.border, height: 4, width: 42 }} />
+              </View>
+              <Text className="text-sm font-black mb-3" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
+                Translate & listen language
+              </Text>
+              <ScrollView style={{ maxHeight: 340 }} showsVerticalScrollIndicator={false}>
+                {languages.map((item) => (
+                  <TouchableOpacity
+                    key={item.code}
+                    onPress={() => {
+                      setLanguage(item.code);
+                      setLanguagePickerVisible(false);
+                      if (item.code === "en-IN") setTranslated(null);
+                    }}
+                    activeOpacity={0.7}
+                    className="flex-row items-center justify-between py-3 px-1"
+                  >
+                    <Text className="text-xs font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
+                      {item.label}
+                    </Text>
+                    {item.code === language ? <Feather name="check" size={16} color={colors.primary} /> : null}
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          </View>
         </Modal>
       </SafeAreaView>
     </>

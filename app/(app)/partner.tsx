@@ -47,6 +47,7 @@ export default function Partner() {
     shareSymptoms: false,
     shareIntimacyLog: false,
     shareAlerts: true,
+    shareReports: false,
   });
 
   // Chat
@@ -66,6 +67,7 @@ export default function Partner() {
           shareSymptoms: p.permissions.shareSymptoms ?? false,
           shareIntimacyLog: p.permissions.shareIntimacyLog ?? false,
           shareAlerts: p.permissions.shareAlerts ?? true,
+          shareReports: p.permissions.shareReports ?? false,
         });
       }
       if (p.inviteCode) setInviteCode(p.inviteCode);
@@ -526,6 +528,7 @@ export default function Partner() {
                     { key: "shareSymptoms" as const, title: "Symptoms", desc: "They'll see mood, energy, and flow in plain words. Detailed numbers (sleep, water, stress, weight, temperature) stay tucked away unless they tap for more.", value: perms.shareSymptoms },
                     { key: "shareIntimacyLog" as const, title: "Intimacy Notes", desc: "Off by default. Only turn this on if you're both comfortable — it's very personal, so take a moment to think it over.", value: perms.shareIntimacyLog },
                     { key: "shareAlerts" as const, title: "Care Alerts", desc: "Gentle heads-up messages before your period or PMS days — a nudge, not raw data.", value: perms.shareAlerts },
+                    { key: "shareReports" as const, title: "Health Reports", desc: "Off by default. Lets your AI-generated care suggestions draw on your uploaded lab reports and prescriptions, not just daily logs.", value: perms.shareReports },
                   ].map((item, i, arr) => (
                     <View key={item.key}>
                       <View className="flex-row justify-between items-center">

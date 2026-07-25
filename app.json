@@ -93,7 +93,8 @@
           "faceIDPermission": "Allow The Nura to use Face ID to unlock the app."
         }
       ],
-      "expo-video"
+      "expo-video",
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true,

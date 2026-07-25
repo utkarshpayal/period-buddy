@@ -53,6 +53,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await AsyncStorage.removeItem(AUTH_SESSION_KEY).catch(() => {});
   }, []);
 
+  // Awaited by callers before firing off any follow-up authenticated request
+  // (e.g. resolving partner role right after login) — otherwise getToken()
+  // can read AsyncStorage before this write lands and send that request with
+  // no Authorization header at all.
+  const signIn = useCallback(async (s: AuthSession) => {
+    setSession(s);
+    await AsyncStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(s)).catch(() => {});
+  }, []);
+
+  // Stable identity (via the functional setSession form, no `session` dep
+  // needed) is load-bearing: screens call this from a `useEffect` keyed on
+  // `updateUser` itself, and a reference that changed every call previously
+  // caused an infinite effect → updateUser → re-render → new reference loop.
+  const updateUser = useCallback((u: AuthUser) => {
+    setSession((current) => {
+      if (!current) return null;
+      const next = { ...current, user: u };
+      AsyncStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+  }, []);
+
   // Any API call that comes back 401 (expired/invalid token, deactivated
   // account) clears the local session instead of failing silently, so the
   // dashboard's auth guard can redirect back to login.
@@ -66,27 +88,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<AuthContextValue>(
     () => ({
       isAuthenticated: Boolean(session?.token),
-      // Awaited by callers before firing off any follow-up authenticated
-      // request (e.g. resolving partner role right after login) — otherwise
-      // getToken() can read AsyncStorage before this write lands and send
-      // that request with no Authorization header at all.
-      signIn: async (s) => {
-        setSession(s);
-        await AsyncStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(s)).catch(() => {});
-      },
+      signIn,
       signOut,
       token: session?.token ?? null,
       user: session?.user ?? null,
-      updateUser: (u) => {
-        setSession((current) => {
-          if (!current) return null;
-          const next = { ...current, user: u };
-          AsyncStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(next)).catch(() => {});
-          return next;
-        });
-      },
+      updateUser,
     }),
-    [session, signOut],
+    [session, signIn, signOut, updateUser],
   );
 
   // Don't render children until we know auth state (avoids flash)

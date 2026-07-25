@@ -2,6 +2,7 @@ import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Linking,
   Modal,
   ScrollView,
@@ -186,8 +187,9 @@ export default function SexualWellbeing() {
     },
   ];
   const [apiCategories, setApiCategories] = useState<ResourceCategory[]>([]);
-  const [sparkCards, setSparkCards] = useState(fallbackSparkCards);
-  const [positionCards, setPositionCards] = useState(fallbackPositionCards);
+  const [sparkCards, setSparkCards] = useState<typeof fallbackSparkCards>([]);
+  const [positionCards, setPositionCards] = useState<typeof fallbackPositionCards>([]);
+  const [loadingWellbeing, setLoadingWellbeing] = useState(true);
 
   const softTints = getSoftTints(colors);
   const visibleCategories =
@@ -228,6 +230,8 @@ export default function SexualWellbeing() {
           setSparkCards(fallbackSparkCards);
           setPositionCards(fallbackPositionCards);
         }
+      } finally {
+        if (isMounted) setLoadingWellbeing(false);
       }
     }
 
@@ -362,14 +366,21 @@ export default function SexualWellbeing() {
                     explore comfort, boundaries, and communication together.
                   </Text>
 
+                  {loadingWellbeing ? (
+                    <View className="mt-5">
+                      <ActivityIndicator color={colors.primary} />
+                    </View>
+                  ) : (
                   <View className="flex-row gap-3 w-full mt-5">
                     <TouchableOpacity
                       activeOpacity={0.8}
+                      disabled={sparkCards.length === 0}
                       onPress={() => setActiveGameMode("spark")}
                       className="flex-1 rounded-xl py-3 items-center justify-center border"
                       style={{
                         backgroundColor: softTints.pink,
                         borderColor: colors.border,
+                        opacity: sparkCards.length === 0 ? 0.5 : 1,
                       }}
                     >
                       <Text
@@ -382,11 +393,13 @@ export default function SexualWellbeing() {
 
                     <TouchableOpacity
                       activeOpacity={0.8}
+                      disabled={positionCards.length === 0}
                       onPress={() => setActiveGameMode("positions")}
                       className="flex-1 rounded-xl py-3 items-center justify-center border"
                       style={{
                         backgroundColor: softTints.lavender,
                         borderColor: colors.border,
+                        opacity: positionCards.length === 0 ? 0.5 : 1,
                       }}
                     >
                       <Text
@@ -397,6 +410,7 @@ export default function SexualWellbeing() {
                       </Text>
                     </TouchableOpacity>
                   </View>
+                  )}
                 </View>
               )}
 

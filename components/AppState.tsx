@@ -41,7 +41,7 @@ type AppStateType = {
   toggleSavedPost: (id: string) => void;
   reportedPosts: Set<string>;
   reportPost: (id: string) => void;
-  sharePost: (content: string) => Promise<void>;
+  sharePost: (content: string, deeplink?: string) => Promise<void>;
   dayNotes: Record<string, string>;
   addDayNote: (dayKey: string, note: string) => void;
   dayEntries: Record<string, DayEntry>;
@@ -119,9 +119,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const sharePost = useCallback(async (content: string) => {
+  const sharePost = useCallback(async (content: string, deeplink?: string) => {
     try {
-      await shareWithAppLink(content);
+      await shareWithAppLink(content, deeplink);
     } catch {
       // The caller keeps its current UI state if the native share sheet fails.
     }

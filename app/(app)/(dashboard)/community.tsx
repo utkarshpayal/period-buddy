@@ -1,4 +1,5 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
+import { useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -92,6 +93,7 @@ export default function Community() {
   const { colors, isDark, fonts } = useTheme();
   const insets = useSafeAreaInsets();
   const { token, user } = useAuth();
+  const { postId: deepLinkedPostId } = useLocalSearchParams<{ postId?: string }>();
   const [unreadCommentPostIds, setUnreadCommentPostIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -296,6 +298,26 @@ export default function Community() {
     loadPosts();
   }, [loadPosts]);
 
+  // Opens straight to the shared post when the app was launched via a
+  // "community?postId=..." deep link (see shareCommunityPost below).
+  useEffect(() => {
+    if (!deepLinkedPostId) return;
+    let isMounted = true;
+
+    communityApi
+      .getPostById(deepLinkedPostId)
+      .then((post) => {
+        if (isMounted) openCommentsSheet(mapCommunityPost(post));
+      })
+      .catch(() => {
+        if (isMounted) alert("Couldn't open that post", "It may have been removed.");
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [deepLinkedPostId]);
+
   // --- ACTIONS HANDLERS ---
   function openOptions(post: Post) {
     setActivePost(post);
@@ -486,7 +508,7 @@ export default function Community() {
   }
 
   async function shareCommunityPost(post: Post) {
-    await sharePost(`${post.author}: ${post.content}`);
+    await sharePost(`${post.author}: ${post.content}`, `community?postId=${post.id}`);
     earnTokens(2);
   }
 

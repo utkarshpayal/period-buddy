@@ -16,6 +16,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { RazorpayCheckoutModal, type RazorpayResult } from "../../components/RazorpayCheckoutModal";
 import { useTheme } from "../../components/theme";
 import { getSoftTints } from "../../components/ui-tokens";
 import {
@@ -23,6 +24,7 @@ import {
   getWebSocketUrl,
   type Consultation,
   type ConsultationMessage,
+  type ConsultationOrder,
   type Doctor,
 } from "../../lib/api";
 
@@ -53,8 +55,8 @@ export default function ConsultationScreen() {
 
   // Booking
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
-  const [paymentModalVisible, setPaymentModalVisible] = useState(false);
   const [booking, setBooking] = useState(false);
+  const [checkoutOrder, setCheckoutOrder] = useState<ConsultationOrder | null>(null);
 
   // Slot Selection
   const [selectedSlot, setSelectedSlot] = useState("4:00 PM");
@@ -279,27 +281,51 @@ export default function ConsultationScreen() {
       return id === doctorId && (c.status === "paid" || c.status === "active");
     });
 
-  const handleInitiateBooking = (doctor: Doctor) => {
+  const handleBookAndPay = async (doctor: Doctor) => {
     const existing = getConsultationForDoctor(doctor._id);
     if (existing) {
       openChat(existing);
       return;
     }
-    setSelectedDoctor(doctor);
-    setPaymentModalVisible(true);
-  };
-
-  const handleProcessPayment = async () => {
-    if (!selectedDoctor) return;
     setBooking(true);
     try {
-      const consultation = await consultationApi.bookConsultation(selectedDoctor._id);
+      const order = await consultationApi.createOrder(doctor._id);
+      if (order.consultation) {
+        // Backend found an already-paid/active session for this doctor
+        // (e.g. a race with another device) — open it instead of charging.
+        setMyConsultations((prev) => [order.consultation!, ...prev]);
+        setBooking(false);
+        setTimeout(() => openChat(order.consultation!), 400);
+        return;
+      }
+      setCheckoutOrder(order);
+      // setBooking(false) happens once the checkout modal resolves.
+    } catch {
+      setBooking(false);
+    }
+  };
+
+  const handleCheckoutResult = async (result: RazorpayResult) => {
+    const order = checkoutOrder;
+    setCheckoutOrder(null);
+
+    if (!order || result.type !== "success") {
+      setBooking(false);
+      return;
+    }
+
+    try {
+      const consultation = await consultationApi.verifyPayment({
+        consultationId: order.consultationId!,
+        razorpay_order_id: result.razorpay_order_id,
+        razorpay_payment_id: result.razorpay_payment_id,
+        razorpay_signature: result.razorpay_signature,
+      });
       setMyConsultations((prev) => [consultation, ...prev]);
-      setPaymentModalVisible(false);
-      setSelectedDoctor(null);
       setTimeout(() => openChat(consultation), 400);
     } catch {
-      // Keep modal open with error handling
+      // Payment succeeded on Razorpay's side but our verification failed —
+      // don't silently grant a session; the user can retry booking.
     } finally {
       setBooking(false);
     }
@@ -575,23 +601,7 @@ export default function ConsultationScreen() {
             <TouchableOpacity
               activeOpacity={0.85}
               disabled={booking}
-              onPress={async () => {
-                const existing = getConsultationForDoctor(selectedDoctor._id);
-                if (existing) {
-                  openChat(existing);
-                  return;
-                }
-                setBooking(true);
-                try {
-                  const consultation = await consultationApi.bookConsultation(selectedDoctor._id);
-                  setMyConsultations((prev) => [consultation, ...prev]);
-                  setTimeout(() => openChat(consultation), 400);
-                } catch {
-                  // fail silently
-                } finally {
-                  setBooking(false);
-                }
-              }}
+              onPress={() => handleBookAndPay(selectedDoctor)}
               className="flex-1 rounded-2xl py-4 items-center justify-center"
               style={{
                 backgroundColor: colors.primary,
@@ -920,6 +930,20 @@ export default function ConsultationScreen() {
             </View>
           </SafeAreaView>
         </Modal>
+
+        {/* Razorpay Checkout */}
+        {checkoutOrder && (
+          <RazorpayCheckoutModal
+            visible
+            keyId={checkoutOrder.keyId!}
+            orderId={checkoutOrder.orderId!}
+            amount={checkoutOrder.amount!}
+            currency={checkoutOrder.currency!}
+            name="Period Buddy"
+            description={selectedDoctor ? `Consultation with ${getDoctorDisplayName(selectedDoctor)}` : "Consultation"}
+            onResult={handleCheckoutResult}
+          />
+        )}
       </SafeAreaView>
     </>
   );

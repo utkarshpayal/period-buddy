@@ -2,6 +2,7 @@ import { Feather, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Image,
   Modal,
   Pressable,
@@ -163,7 +164,8 @@ export default function HealthIssues() {
   const insets = useSafeAreaInsets();
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
-  const [issues, setIssues] = useState<HealthIssue[]>(fallbackIssues);
+  const [issues, setIssues] = useState<HealthIssue[]>([]);
+  const [loadingIssues, setLoadingIssues] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [categoryPickerVisible, setCategoryPickerVisible] = useState(false);
 
@@ -178,6 +180,8 @@ export default function HealthIssues() {
         }
       } catch {
         if (isMounted) setIssues(fallbackIssues);
+      } finally {
+        if (isMounted) setLoadingIssues(false);
       }
     }
 
@@ -285,6 +289,11 @@ export default function HealthIssues() {
             </TouchableOpacity>
 
             {/* HIGH-FIDELITY ASYMMETRIC CLEAN LIST CARD ROWS */}
+            {loadingIssues && issues.length === 0 ? (
+              <View className="items-center py-16">
+                <ActivityIndicator color={colors.primary} />
+              </View>
+            ) : (
             <View className="gap-3.5">
               {filteredIssues.map((issue, index) => {
                 // Compute matching index tints dynamically for uniform distribution
@@ -354,6 +363,7 @@ export default function HealthIssues() {
                 </View>
               )}
             </View>
+            )}
           </View>
         </ScrollView>
 

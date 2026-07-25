@@ -62,6 +62,7 @@ export type Pagination = {
 
 export type AuthUser = {
   _id?: string;
+  anonymousCommunityMode?: boolean;
   createdAt?: string;
   country?: string;
   dateOfBirth?: string;
@@ -76,6 +77,7 @@ export type AuthUser = {
   lastLogin?: string;
   lastStreakDate?: string;
   lastName?: string;
+  notificationsEnabled?: boolean;
   notificationToken?: string;
   /** Client-side only: whether this account is a connected partner "viewer" or the data "owner". Not returned by the auth API — resolved separately from GET /api/partner and cached on the session. */
   partnerRole?: "owner" | "viewer" | null;
@@ -282,6 +284,19 @@ export type PartnerPermissions = {
   shareCyclePhase: boolean;
   shareIntimacyLog: boolean;
   shareSymptoms: boolean;
+  shareReports: boolean;
+};
+
+export type ConsultationOrder = {
+  // Present when a paid/active session already exists for this doctor — the
+  // backend short-circuits order creation rather than double-charging, and
+  // the caller should open this consultation directly instead of paying.
+  consultation?: Consultation;
+  consultationId?: string;
+  orderId?: string;
+  amount?: number;
+  currency?: string;
+  keyId?: string;
 };
 
 export type PartnerProfile = {
@@ -558,9 +573,10 @@ export type AskQuestionResponse = {
   answer: string;
   disclaimer?: string;
   matchedQuestion?: QuestionAnswer;
+  personalized?: boolean;
   question: string;
   suggestedQuestions?: string[];
-  source: "ai" | "knowledge_base" | string;
+  source: "ai" | "ai_personalized" | "knowledge_base" | string;
   tokensAwarded?: number;
 };
 
@@ -918,9 +934,20 @@ export const consultationApi = {
       `/api/consultation/doctors${toQuery({ search })}`,
     ),
 
-  bookConsultation: (doctorId: string) =>
-    apiRequest<Consultation>("/api/consultation/book", {
+  createOrder: (doctorId: string) =>
+    apiRequest<ConsultationOrder>("/api/consultation/order", {
       body: JSON.stringify({ doctorId }),
+      method: "POST",
+    }),
+
+  verifyPayment: (payload: {
+    consultationId: string;
+    razorpay_order_id: string;
+    razorpay_payment_id: string;
+    razorpay_signature: string;
+  }) =>
+    apiRequest<Consultation>("/api/consultation/verify", {
+      body: JSON.stringify(payload),
       method: "POST",
     }),
 
@@ -1136,6 +1163,30 @@ export const blogsApi = {
       method: "PATCH",
     }),
 
+  translateBlog: (slug: string, language: LanguageCode) =>
+    apiRequest<{ content: string; language: LanguageCode; title: string }>(
+      `/api/blogs/${slug}/translate`,
+      { body: JSON.stringify({ language }), method: "POST" },
+    ),
+
+  toggleBookmark: (id: string) =>
+    apiRequest<{ bookmarked: boolean }>(`/api/blogs/${id}/bookmark`, {
+      method: "POST",
+    }),
+
+  getBookmarks: () => apiRequest<{ blogs: Blog[] }>("/api/blogs/bookmarks"),
+
+  /**
+   * Reports how long the reader actually had the article open, so the
+   * backend can count a genuine view (and refine its read-time average)
+   * instead of incrementing on every fetch regardless of dwell time.
+   */
+  trackView: (id: string, durationSeconds: number) =>
+    apiRequest<{ counted: boolean; readTimeMinutes?: number; viewCount?: number }>(
+      `/api/blogs/${id}/track-view`,
+      { body: JSON.stringify({ durationSeconds }), method: "POST" },
+    ),
+
   createBlog: (payload: Partial<Blog>) =>
     apiRequest<Blog>("/api/blogs", {
       body: JSON.stringify(payload),
@@ -1266,9 +1317,9 @@ export const questionAnswerApi = {
       skipAuth: true,
     }),
 
-  ask: (question: string) =>
+  ask: (question: string, language?: LanguageCode) =>
     apiRequest<AskQuestionResponse>("/api/questions/ask", {
-      body: JSON.stringify({ question }),
+      body: JSON.stringify({ question, language }),
       method: "POST",
     }),
 
@@ -1341,7 +1392,214 @@ export const uploadApi = {
   },
 };
 
+export type DocType = "bill" | "lab_report" | "other" | "prescription" | "scan";
+
+export type MedicalDocument = {
+  _id: string;
+  createdAt: string;
+  docType: DocType;
+  documentDate: string;
+  extractionStatus?: "done" | "failed" | "limited" | "pending";
+  fileKey: string;
+  fileSize?: number;
+  fileUrl: string;
+  mimeType: string;
+  originalFileName?: string;
+  title: string;
+  updatedAt: string;
+  userId: string;
+};
+
+export type DocumentChatMessage = {
+  _id: string;
+  createdAt: string;
+  role: "assistant" | "user";
+  text: string;
+  userId: string;
+};
+
+export const documentApi = {
+  /**
+   * Uploads a medical document (PDF or image) straight to /api/documents,
+   * which stores the file in S3, runs text extraction, and creates the
+   * record in one round trip.
+   */
+  upload: async (params: {
+    docType: DocType;
+    documentDate: string;
+    fileName: string;
+    localUri: string;
+    mimeType: string;
+    title: string;
+  }) => {
+    const token = await getToken();
+    if (!token) throw new Error("You must be signed in to upload a document.");
+
+    const formData = new FormData();
+    formData.append("title", params.title);
+    formData.append("docType", params.docType);
+    formData.append("documentDate", params.documentDate);
+
+    if (Platform.OS === "web") {
+      const blob = await (await fetch(params.localUri)).blob();
+      formData.append("file", blob, params.fileName);
+    } else {
+      formData.append("file", {
+        uri: params.localUri,
+        name: params.fileName,
+        type: params.mimeType,
+      } as unknown as Blob);
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/documents`, {
+      body: formData,
+      headers: { Authorization: `Bearer ${token}` },
+      method: "POST",
+    });
+
+    const text = await response.text();
+    const data = text ? JSON.parse(text) : {};
+
+    if (!response.ok) {
+      throw new Error(getErrorMessage(data, response.status));
+    }
+
+    return data.data.document as MedicalDocument;
+  },
+
+  list: (params?: { docType?: DocType; limit?: number; page?: number; sort?: "asc" | "desc" }) =>
+    apiRequest<{ documents: MedicalDocument[]; pagination: Pagination }>(
+      `/api/documents${toQuery(params)}`,
+    ),
+
+  remove: (id: string) =>
+    apiRequest<void>(`/api/documents/${id}`, { method: "DELETE" }),
+
+  summarize: (payload: { endDate: string; language?: LanguageCode; startDate: string }) =>
+    apiRequest<{
+      documentCount: number;
+      documents: { docType: DocType; documentDate: string; id: string; title: string }[];
+      summary: string;
+    }>("/api/documents/summarize", {
+      body: JSON.stringify(payload),
+      method: "POST",
+    }),
+
+  getChatHistory: () =>
+    apiRequest<{ messages: DocumentChatMessage[] }>("/api/documents/chat"),
+
+  sendChatMessage: (message: string, language?: LanguageCode) =>
+    apiRequest<{ assistantMessage: DocumentChatMessage; userMessage: DocumentChatMessage }>(
+      "/api/documents/chat",
+      {
+        body: JSON.stringify({ message, language }),
+        method: "POST",
+      },
+    ),
+};
+
+export type LanguageCode =
+  | "en-IN"
+  | "hi-IN"
+  | "bn-IN"
+  | "gu-IN"
+  | "kn-IN"
+  | "ml-IN"
+  | "mr-IN"
+  | "od-IN"
+  | "pa-IN"
+  | "ta-IN"
+  | "te-IN";
+
+export type Language = { code: LanguageCode; label: string };
+
+export const speechApi = {
+  getLanguages: () => apiRequest<{ languages: Language[] }>("/api/speech/languages"),
+
+  /**
+   * Uploads a short recorded voice clip and returns its transcript, so the
+   * caller can drop the text straight into a chat input.
+   */
+  transcribe: async (localUri: string, languageCode?: LanguageCode) => {
+    const token = await getToken();
+    if (!token) throw new Error("You must be signed in to use voice input.");
+
+    const fileName = localUri.split("/").pop()?.split("?")[0] || "recording.m4a";
+    const formData = new FormData();
+    if (languageCode) formData.append("languageCode", languageCode);
+
+    if (Platform.OS === "web") {
+      const blob = await (await fetch(localUri)).blob();
+      formData.append("file", blob, fileName);
+    } else {
+      formData.append("file", {
+        uri: localUri,
+        name: fileName,
+        type: "audio/m4a",
+      } as unknown as Blob);
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/speech/transcribe`, {
+      body: formData,
+      headers: { Authorization: `Bearer ${token}` },
+      method: "POST",
+    });
+
+    const text = await response.text();
+    const data = text ? JSON.parse(text) : {};
+
+    if (!response.ok) {
+      throw new Error(getErrorMessage(data, response.status));
+    }
+
+    return data.data as { languageCode: string | null; languageProbability: number | null; transcript: string };
+  },
+
+  /** Converts text to speech, returning base64-encoded audio ready to play. */
+  synthesize: (payload: { languageCode?: LanguageCode; pace?: number; text: string }) =>
+    apiRequest<{ audioBase64: string; audioCodec: string }>("/api/speech/synthesize", {
+      body: JSON.stringify(payload),
+      method: "POST",
+    }),
+};
+
 export const profileApi = {
   getProfile: authApi.getProfile,
   updateProfile: authApi.updateProfile,
+};
+
+export type ReportCountItem = { label: string; value: number };
+export type ReportTrendPoint = { dateKey: string; value: number };
+
+export type HealthReportCycleStats = {
+  averages: { sleepHours: number | null; stressLevel: number | null; waterIntake: number | null };
+  daysLogged: number;
+  flowCounts: ReportCountItem[];
+  moodCounts: ReportCountItem[];
+  periodDays: number;
+  symptomCounts: ReportCountItem[];
+  trends: {
+    sleepHours: ReportTrendPoint[];
+    stressLevel: ReportTrendPoint[];
+    waterIntake: ReportTrendPoint[];
+  };
+};
+
+export type HealthReportResponse = {
+  analysis: string | null;
+  cycle: HealthReportCycleStats;
+  documentCount: number;
+  documents: { docType: DocType; documentDate: string; id: string; title: string }[];
+};
+
+export const reportApi = {
+  /**
+   * Aggregated cycle-log stats + document breakdown + an AI analysis of both,
+   * computed server-side in one round trip for the downloadable PDF report.
+   */
+  getHealthReport: (payload: { endDate: string; language?: LanguageCode; startDate: string }) =>
+    apiRequest<HealthReportResponse>("/api/reports/health-report", {
+      body: JSON.stringify(payload),
+      method: "POST",
+    }),
 };
