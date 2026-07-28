@@ -547,6 +547,9 @@ export default function Reels() {
     return () => {
       isMounted = false;
     };
+    // handlePlay isn't memoized; including it would rerun this load effect
+    // on every render instead of only when selectedCategory changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCategory]);
 
   async function handleLoadMoreReels() {

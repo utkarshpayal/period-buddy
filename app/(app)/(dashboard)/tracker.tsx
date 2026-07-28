@@ -293,7 +293,7 @@ export default function Tracker() {
   const { user, updateUser } = useAuth();
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
   const [predictions, setPredictions] = useState<Predictions | null>(null);
-  const [isDashboardLoading, setIsDashboardLoading] = useState(true);
+  const [, setIsDashboardLoading] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
@@ -321,7 +321,7 @@ export default function Tracker() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [updateUser]);
 
   const loggedDays = Math.max(dashboard?.trackedDays ?? 0, 0);
   const cycleDay = Math.max(
@@ -362,11 +362,6 @@ export default function Tracker() {
         { length: 12 },
         (_, index) => new Date(selectedYear, index, 1),
       ),
-    [selectedYear],
-  );
-
-  const yearOptions = useMemo(
-    () => [selectedYear - 1, selectedYear, selectedYear + 1],
     [selectedYear],
   );
 
@@ -956,7 +951,7 @@ export default function Tracker() {
                 className="text-sm font-extrabold"
                 style={{ color: colors.buttonText, fontFamily: fonts.body }}
               >
-                Log today's entry
+                Log today&apos;s entry
               </Text>
             </TouchableOpacity>
           </View>
@@ -1540,7 +1535,7 @@ export default function Tracker() {
                   <View style={{ alignItems: "center", paddingTop: 60 }}>
                     <Feather name="search" size={36} color={colors.border} />
                     <Text style={{ color: colors.mutedText, fontFamily: fonts.body, marginTop: 12, fontSize: 14 }}>
-                      No results for "{searchQuery}"
+                      No results for &quot;{searchQuery}&quot;
                     </Text>
                   </View>
                 );

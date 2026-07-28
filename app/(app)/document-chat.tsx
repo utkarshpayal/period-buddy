@@ -292,7 +292,7 @@ export default function DocumentChatScreen() {
             >
               <Feather name="mic" size={11} color={colors.primary} style={{ marginTop: 1.5 }} />
               <Text className="text-[10px] font-bold flex-1 flex-shrink" style={{ color: colors.primary, fontFamily: fonts.body }}>
-                Voice mode on — tap the mic, speak, and I'll reply out loud in {selectedLanguage.label}.
+                Voice mode on — tap the mic, speak, and I&apos;ll reply out loud in {selectedLanguage.label}.
               </Text>
             </View>
           ) : null}

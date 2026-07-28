@@ -190,6 +190,10 @@ export default function Partner() {
         socket.close();
       }
     };
+    // Deliberately narrow: only reconnect on identity/connection changes,
+    // not every `profile` mutation (e.g. incoming messages) which would
+    // otherwise tear down and reopen the socket on each update.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, profile?._id, profile?.isConnected]);
 
 
@@ -515,7 +519,7 @@ export default function Partner() {
                 >
                   <Ionicons name="shield-checkmark-outline" size={15} color={colors.lavender} style={{ marginTop: 1 }} />
                   <Text className="flex-1 text-[11px] font-semibold leading-4" style={{ color: colors.foreground, fontFamily: fonts.body }}>
-                    You're in control — change these anytime, and disconnecting removes access immediately.
+                    You&apos;re in control — change these anytime, and disconnecting removes access immediately.
                   </Text>
                 </View>
 

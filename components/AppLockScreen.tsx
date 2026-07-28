@@ -100,7 +100,7 @@ export function AppLockScreen() {
             className="text-center text-[11px] font-bold underline"
             style={{ color: colors.mutedText, fontFamily: fonts.body }}
           >
-            Can't unlock? Sign out instead
+            Can&apos;t unlock? Sign out instead
           </Text>
         </TouchableOpacity>
       </SafeAreaView>

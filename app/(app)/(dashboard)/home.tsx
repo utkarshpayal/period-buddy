@@ -108,7 +108,6 @@ export default function Home() {
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
   const [isDashboardLoading, setIsDashboardLoading] = useState(true);
   const [predictions, setPredictions] = useState<Predictions | null>(null);
-  const [trendCollapsed, setTrendCollapsed] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
@@ -142,7 +141,7 @@ export default function Home() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [updateUser]);
 
   // These must reflect the signed-in account's real data only — never a
   // locally-cached demo/fallback number, which would silently show a

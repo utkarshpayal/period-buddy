@@ -320,7 +320,7 @@ export const BuddyVideoCall = forwardRef<BuddyVideoCallHandle, Props>(
             ) : (
               <View className="items-center">
                 <Text style={{ color: "#fff", fontFamily: fonts.body }} className="text-sm font-semibold">
-                  Waiting for {buddyAlias}'s video…
+                  Waiting for {buddyAlias}&apos;s video…
                 </Text>
               </View>
             )}

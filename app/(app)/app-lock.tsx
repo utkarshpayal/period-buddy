@@ -95,7 +95,7 @@ export default function AppLockSettings() {
               className="text-xs leading-4"
               style={{ color: colors.mutedText, fontFamily: fonts.body }}
             >
-              Protect your cycle data and private chats using your phone's own lock screen —
+              Protect your cycle data and private chats using your phone&apos;s own lock screen —
               whatever you already use to unlock your device (fingerprint, face unlock, PIN, or
               pattern). When on, The Nura locks itself every time it comes back to the foreground.
             </Text>
@@ -127,7 +127,7 @@ export default function AppLockSettings() {
                       className="text-[10px] mt-0.5"
                       style={{ color: colors.mutedText, fontFamily: fonts.body }}
                     >
-                      Uses your device's {deviceLockLabel} — no separate pattern to set up
+                      Uses your device&apos;s {deviceLockLabel} — no separate pattern to set up
                     </Text>
                   </View>
                   <Feather name="chevron-right" size={16} color={colors.mutedText} />

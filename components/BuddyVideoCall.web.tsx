@@ -263,7 +263,6 @@ export const BuddyVideoCall = forwardRef<BuddyVideoCallHandle, Props>(
       >
         {phase === "active" ? (
           <>
-            {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
             <video
               ref={remoteVideoRef}
               autoPlay
@@ -278,7 +277,6 @@ export const BuddyVideoCall = forwardRef<BuddyVideoCallHandle, Props>(
             />
 
             {!isCameraOff && (
-              // eslint-disable-next-line jsx-a11y/media-has-caption
               <video
                 ref={localVideoRef}
                 autoPlay
@@ -385,7 +383,6 @@ export const BuddyVideoCall = forwardRef<BuddyVideoCallHandle, Props>(
           </View>
         ) : phase === "connecting" ? (
           <View className="items-center px-8">
-            {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
             <video
               ref={localVideoRef}
               autoPlay

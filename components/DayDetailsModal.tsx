@@ -594,7 +594,7 @@ export default function DayDetailsModal({
                 }}
               >
                 Tag today as intimate. Only this tag (not your other notes) is
-                ever shown to a partner, and only if you've turned on
+                ever shown to a partner, and only if you&apos;ve turned on
                 Intimacy Notes sharing.
               </Text>
               <Switch

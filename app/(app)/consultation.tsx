@@ -231,7 +231,7 @@ export default function ConsultationScreen() {
           }
         };
 
-        socket.onerror = (err) => {
+        socket.onerror = () => {
           setVideoCallLogs((prev) => [...prev, "[WS] WebSocket signaling error."]);
         };
 
@@ -477,7 +477,6 @@ export default function ConsultationScreen() {
               ) : (
                 filteredDoctors.map((doctor, i) => {
                   const isSelected = selectedDoctor?._id === doctor._id;
-                  const hasSession = Boolean(getConsultationForDoctor(doctor._id));
                   const avatarColor = i % 2 === 0 ? "#FFF1ED" : colors.primaryLight;
                   return (
                     <TouchableOpacity
@@ -700,7 +699,7 @@ export default function ConsultationScreen() {
                         className="text-xs font-semibold leading-5"
                         style={{ color: colors.foreground, fontFamily: fonts.body }}
                       >
-                        Hi Utkarsh, I've reviewed your cycle history. How have symptoms been this week?
+                        Hi Utkarsh, I&apos;ve reviewed your cycle history. How have symptoms been this week?
                       </Text>
                     </View>
 
@@ -729,7 +728,7 @@ export default function ConsultationScreen() {
                         className="text-xs font-semibold leading-5"
                         style={{ color: colors.foreground, fontFamily: fonts.body }}
                       >
-                        Understood. Let's go over a few options during our call at {selectedSlot} today.
+                        Understood. Let&apos;s go over a few options during our call at {selectedSlot} today.
                       </Text>
                     </View>
 

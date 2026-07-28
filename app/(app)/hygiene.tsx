@@ -199,6 +199,10 @@ export default function Hygiene() {
       const durationSeconds = Math.round((Date.now() - openedAt) / 1000);
       wellbeingApi.trackView(id, durationSeconds).catch(() => {});
     };
+    // Deliberately keyed on id only — this reports dwell time for the tip
+    // that was active when the effect ran, not on every object identity
+    // change from re-renders of activeResources.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentActiveData?.id]);
 
   // Helper renderer engine for conditional multi-package icons support

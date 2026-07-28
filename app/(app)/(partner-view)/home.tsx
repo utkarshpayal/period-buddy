@@ -203,6 +203,10 @@ export default function PartnerViewHome() {
         socket.close();
       }
     };
+    // Deliberately narrow: only reconnect on identity/connection changes,
+    // not every `profile` mutation (e.g. incoming messages) which would
+    // otherwise tear down and reopen the socket on each update.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?._id, profile?.isConnected, load]);
 
   async function handleSendMessage() {
@@ -814,7 +818,7 @@ export default function PartnerViewHome() {
                               className="text-xs font-bold mb-2 flex-row items-center gap-1"
                               style={{ color: colors.success, fontFamily: fonts.heading }}
                             >
-                              👍 Do's for support
+                              👍 Do&apos;s for support
                             </Text>
                             <View style={{ gap: 6 }}>
                               {data.careSuggestions.dos.map((item, idx) => (
@@ -843,7 +847,7 @@ export default function PartnerViewHome() {
                               className="text-xs font-bold mb-2 flex-row items-center gap-1"
                               style={{ color: colors.danger, fontFamily: fonts.heading }}
                             >
-                              ⚠️ Don'ts to keep in mind
+                              ⚠️ Don&apos;ts to keep in mind
                             </Text>
                             <View style={{ gap: 6 }}>
                               {data.careSuggestions.donts.map((item, idx) => (
@@ -885,8 +889,8 @@ export default function PartnerViewHome() {
                       className="text-center text-xs font-semibold leading-5"
                       style={{ color: colors.mutedText, fontFamily: fonts.body }}
                     >
-                      {partnerName !== "your partner" ? partnerName : "Your partner"} hasn't
-                      turned on sharing yet. Nothing's wrong — they can enable it anytime
+                      {partnerName !== "your partner" ? partnerName : "Your partner"} hasn&apos;t
+                      turned on sharing yet. Nothing&apos;s wrong — they can enable it anytime
                       from their Partner Sync settings.
                     </Text>
                   </View>
