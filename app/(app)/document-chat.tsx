@@ -54,6 +54,7 @@ export default function DocumentChatScreen() {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
   const [synthesizingMessageId, setSynthesizingMessageId] = useState<string | null>(null);
+  const [voiceMode, setVoiceMode] = useState(false);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(recorder);
   const playerRef = useRef<AudioPlayer | null>(null);
@@ -94,8 +95,13 @@ export default function DocumentChatScreen() {
       setIsTranscribing(true);
       try {
         const result = await speechApi.transcribe(uri, language);
-        if (result.transcript.trim()) {
-          setTypedMessage((prev) => (prev.trim() ? `${prev.trim()} ${result.transcript.trim()}` : result.transcript.trim()));
+        const transcript = result.transcript.trim();
+        if (transcript) {
+          if (voiceMode) {
+            handleSend(transcript);
+          } else {
+            setTypedMessage((prev) => (prev.trim() ? `${prev.trim()} ${transcript}` : transcript));
+          }
         } else {
           alert("Didn't catch that", "Try recording again somewhere quieter.");
         }
@@ -155,8 +161,8 @@ export default function DocumentChatScreen() {
     setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
   }
 
-  async function handleSend() {
-    const text = typedMessage.trim();
+  async function handleSend(overrideText?: string) {
+    const text = (overrideText ?? typedMessage).trim();
     if (!text || isReplying) return;
 
     setTypedMessage("");
@@ -176,6 +182,9 @@ export default function DocumentChatScreen() {
         result.userMessage,
         result.assistantMessage,
       ]);
+      if (voiceMode) {
+        handleListen(result.assistantMessage);
+      }
     } catch (error) {
       setMessages((prev) => prev.filter((m) => m._id !== optimisticId));
       setTypedMessage(text);
@@ -196,10 +205,10 @@ export default function DocumentChatScreen() {
           keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
         >
           <View
-            className="px-6 py-4 border-b flex-row justify-between items-center"
+            className="px-5 py-4 border-b flex-row justify-between items-center gap-2"
             style={{ borderColor: colors.border, backgroundColor: colors.surface }}
           >
-            <View className="flex-row items-center gap-3">
+            <View className="flex-row items-center gap-3 flex-1 min-w-0">
               <TouchableOpacity onPress={() => router.back()} activeOpacity={0.7} className="p-2 -ml-2 rounded-full">
                 <Feather name="arrow-left" size={20} color={colors.foreground} />
               </TouchableOpacity>
@@ -217,28 +226,76 @@ export default function DocumentChatScreen() {
                 />
               </View>
 
-              <View>
-                <Text className="text-sm font-black tracking-tight" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
+              <View className="flex-1 min-w-0">
+                <Text
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                  className="text-sm font-black tracking-tight"
+                  style={{ color: colors.foreground, fontFamily: fonts.heading }}
+                >
                   Document Assistant
                 </Text>
-                <Text className="text-[10px] font-bold tracking-wider uppercase mt-0.5" style={{ color: colors.success, fontFamily: fonts.body }}>
+                <Text
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                  className="text-[10px] font-bold tracking-wider uppercase mt-0.5"
+                  style={{ color: colors.success, fontFamily: fonts.body }}
+                >
                   Reads your uploaded records
                 </Text>
               </View>
             </View>
 
-            <TouchableOpacity
-              onPress={() => setLanguagePickerVisible(true)}
-              activeOpacity={0.7}
-              className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-full border"
-              style={{ backgroundColor: softTints.pink, borderColor: colors.border }}
-            >
-              <Feather name="globe" size={13} color={colors.primary} />
-              <Text className="text-[10px] font-black tracking-wide" style={{ color: colors.primary, fontFamily: fonts.body }}>
-                {selectedLanguage.label}
-              </Text>
-            </TouchableOpacity>
+            <View className="flex-row items-center gap-1.5 flex-shrink-0">
+              <TouchableOpacity
+                onPress={() => setVoiceMode((prev) => !prev)}
+                activeOpacity={0.7}
+                className="flex-row items-center gap-1 px-2.5 py-1.5 rounded-full border"
+                style={{
+                  backgroundColor: voiceMode ? colors.primary : softTints.pink,
+                  borderColor: colors.border,
+                }}
+              >
+                <Feather name="headphones" size={13} color={voiceMode ? colors.buttonText : colors.primary} />
+                <Text
+                  numberOfLines={1}
+                  className="text-[10px] font-black tracking-wide"
+                  style={{ color: voiceMode ? colors.buttonText : colors.primary, fontFamily: fonts.body }}
+                >
+                  Voice
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => setLanguagePickerVisible(true)}
+                activeOpacity={0.7}
+                className="flex-row items-center gap-1 px-2.5 py-1.5 rounded-full border"
+                style={{ backgroundColor: softTints.pink, borderColor: colors.border, maxWidth: 92 }}
+              >
+                <Feather name="globe" size={13} color={colors.primary} />
+                <Text
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                  className="text-[10px] font-black tracking-wide flex-shrink"
+                  style={{ color: colors.primary, fontFamily: fonts.body }}
+                >
+                  {selectedLanguage.label}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
+
+          {voiceMode ? (
+            <View
+              className="px-5 py-2 flex-row items-start gap-1.5"
+              style={{ backgroundColor: softTints.pink }}
+            >
+              <Feather name="mic" size={11} color={colors.primary} style={{ marginTop: 1.5 }} />
+              <Text className="text-[10px] font-bold flex-1 flex-shrink" style={{ color: colors.primary, fontFamily: fonts.body }}>
+                Voice mode on — tap the mic, speak, and I'll reply out loud in {selectedLanguage.label}.
+              </Text>
+            </View>
+          ) : null}
 
           <ScrollView
             ref={scrollViewRef}
@@ -360,7 +417,7 @@ export default function DocumentChatScreen() {
               placeholderTextColor={colors.mutedText}
               value={typedMessage}
               onChangeText={setTypedMessage}
-              onSubmitEditing={handleSend}
+              onSubmitEditing={() => handleSend()}
               maxLength={1000}
               returnKeyType="send"
               blurOnSubmit={false}
@@ -387,7 +444,7 @@ export default function DocumentChatScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               disabled={!typedMessage.trim() || isReplying}
-              onPress={handleSend}
+              onPress={() => handleSend()}
               activeOpacity={0.8}
               className="rounded-full overflow-hidden"
             >

@@ -71,6 +71,7 @@ export default function QA() {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
   const [synthesizingMessageId, setSynthesizingMessageId] = useState<string | null>(null);
+  const [voiceMode, setVoiceMode] = useState(false);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(recorder);
   const playerRef = useRef<AudioPlayer | null>(null);
@@ -100,8 +101,13 @@ export default function QA() {
       setIsTranscribing(true);
       try {
         const result = await speechApi.transcribe(uri, language);
-        if (result.transcript.trim()) {
-          setTypedQuestion((prev) => (prev.trim() ? `${prev.trim()} ${result.transcript.trim()}` : result.transcript.trim()));
+        const transcript = result.transcript.trim();
+        if (transcript) {
+          if (voiceMode) {
+            handleTriggerConversation(transcript);
+          } else {
+            setTypedQuestion((prev) => (prev.trim() ? `${prev.trim()} ${transcript}` : transcript));
+          }
         } else {
           alert("Didn't catch that", "Try recording again somewhere quieter.");
         }
@@ -226,8 +232,8 @@ export default function QA() {
     });
   }
 
-  function handleTriggerConversation() {
-    const submittedQuestion = typedQuestion.trim();
+  function handleTriggerConversation(overrideText?: string) {
+    const submittedQuestion = (overrideText ?? typedQuestion).trim();
     const cleanQuery = submittedQuestion.toLowerCase();
     if (!cleanQuery || isCompanionTyping) return;
 
@@ -313,6 +319,9 @@ export default function QA() {
 
       setChatLog((prev) => [...prev, companionReplyPayload]);
       setIsCompanionTyping(false);
+      if (voiceMode) {
+        handleListen(companionReplyPayload);
+      }
 
       setTimeout(
         () => scrollViewRef.current?.scrollToEnd({ animated: true }),
@@ -339,13 +348,13 @@ export default function QA() {
         >
         {/* Custom Companion Chat Header Section */}
         <View
-          className="px-6 py-4 border-b flex-row justify-between items-center"
+          className="px-5 py-4 border-b flex-row justify-between items-center gap-2"
           style={{
             borderColor: colors.border,
             backgroundColor: colors.surface,
           }}
         >
-          <View className="flex-row items-center gap-3">
+          <View className="flex-row items-center gap-3 flex-1 min-w-0">
             <TouchableOpacity
               onPress={() => router.back()}
               activeOpacity={0.7}
@@ -371,31 +380,73 @@ export default function QA() {
               />
             </View>
 
-            <View>
+            <View className="flex-1 min-w-0">
               <Text
+                numberOfLines={1}
+                ellipsizeMode="tail"
                 className="text-sm font-black tracking-tight"
                 style={{ color: colors.foreground, fontFamily: fonts.heading }}
               >
                 Nura Companion
               </Text>
-              <Text className="text-[10px] font-bold tracking-wider uppercase mt-0.5" style={{ color: colors.success, fontFamily: fonts.body }}>
+              <Text
+                numberOfLines={1}
+                ellipsizeMode="tail"
+                className="text-[10px] font-bold tracking-wider uppercase mt-0.5"
+                style={{ color: colors.success, fontFamily: fonts.body }}
+              >
                 Private guidance online
               </Text>
             </View>
           </View>
 
-          <TouchableOpacity
-            onPress={() => setLanguagePickerVisible(true)}
-            activeOpacity={0.7}
-            className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-full border"
-            style={{ backgroundColor: softTints.pink, borderColor: colors.border }}
-          >
-            <Feather name="globe" size={13} color={colors.primary} />
-            <Text className="text-[10px] font-black tracking-wide" style={{ color: colors.primary, fontFamily: fonts.body }}>
-              {selectedLanguage.label}
-            </Text>
-          </TouchableOpacity>
+          <View className="flex-row items-center gap-1.5 flex-shrink-0">
+            <TouchableOpacity
+              onPress={() => setVoiceMode((prev) => !prev)}
+              activeOpacity={0.7}
+              className="flex-row items-center gap-1 px-2.5 py-1.5 rounded-full border"
+              style={{
+                backgroundColor: voiceMode ? colors.primary : softTints.pink,
+                borderColor: colors.border,
+              }}
+            >
+              <Feather name="headphones" size={13} color={voiceMode ? colors.buttonText : colors.primary} />
+              <Text
+                numberOfLines={1}
+                className="text-[10px] font-black tracking-wide"
+                style={{ color: voiceMode ? colors.buttonText : colors.primary, fontFamily: fonts.body }}
+              >
+                Voice
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setLanguagePickerVisible(true)}
+              activeOpacity={0.7}
+              className="flex-row items-center gap-1 px-2.5 py-1.5 rounded-full border"
+              style={{ backgroundColor: softTints.pink, borderColor: colors.border, maxWidth: 92 }}
+            >
+              <Feather name="globe" size={13} color={colors.primary} />
+              <Text
+                numberOfLines={1}
+                ellipsizeMode="tail"
+                className="text-[10px] font-black tracking-wide flex-shrink"
+                style={{ color: colors.primary, fontFamily: fonts.body }}
+              >
+                {selectedLanguage.label}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
+
+        {voiceMode ? (
+          <View className="px-5 py-2 flex-row items-start gap-1.5" style={{ backgroundColor: softTints.pink }}>
+            <Feather name="mic" size={11} color={colors.primary} style={{ marginTop: 1.5 }} />
+            <Text className="text-[10px] font-bold flex-1 flex-shrink" style={{ color: colors.primary, fontFamily: fonts.body }}>
+              Voice mode on — tap the mic, speak, and I'll reply out loud in {selectedLanguage.label}.
+            </Text>
+          </View>
+        ) : null}
 
         {/* SCROLLABLE LIVE CHAT MESSAGE STREAM WINDOW CONTAINER */}
         <ScrollView
@@ -583,7 +634,7 @@ export default function QA() {
             placeholderTextColor={colors.mutedText}
             value={typedQuestion}
             onChangeText={setTypedQuestion}
-            onSubmitEditing={handleTriggerConversation}
+            onSubmitEditing={() => handleTriggerConversation()}
             maxLength={500}
             returnKeyType="send"
             blurOnSubmit={false}
@@ -614,7 +665,7 @@ export default function QA() {
           </TouchableOpacity>
           <TouchableOpacity
             disabled={!typedQuestion.trim() || isCompanionTyping}
-            onPress={handleTriggerConversation}
+            onPress={() => handleTriggerConversation()}
             activeOpacity={0.8}
             className="rounded-full overflow-hidden"
           >
