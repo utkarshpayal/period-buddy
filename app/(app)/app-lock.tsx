@@ -1,16 +1,15 @@
-import { Feather, Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import React, { useState } from "react";
 import { ScrollView, StatusBar, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppLock } from "../../components/AppLock";
 import { alert } from "../../lib/alert";
+import { ScreenHeader } from "../../components/ScreenHeader";
 import { useTheme } from "../../components/theme";
-import { getSoftTints } from "../../components/ui-tokens";
+import { getShadow, getSoftTints } from "../../components/ui-tokens";
 
 export default function AppLockSettings() {
   const { colors, isDark, fonts } = useTheme();
-  const router = useRouter();
   const softTints = getSoftTints(colors);
   const { settings, deviceLockLabel, enableLock, disableLock } = useAppLock();
 
@@ -48,28 +47,29 @@ export default function AppLockSettings() {
     <>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
       <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
-        <View className="flex-row items-center gap-2 px-6 pt-6">
-          <TouchableOpacity
-            onPress={() => router.back()}
-            activeOpacity={0.7}
-            className="p-2.5 -ml-2 rounded-full border"
-            style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-          >
-            <Feather name="arrow-left" size={18} color={colors.foreground} />
-          </TouchableOpacity>
-          <Text
-            className="flex-1 text-2xl font-black tracking-tight ml-2"
-            style={{ color: colors.foreground, fontFamily: fonts.heading }}
-          >
-            App Lock
-          </Text>
-        </View>
+        <ScreenHeader title="App Lock" />
 
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 60 }}
           className="flex-1"
         >
+          <View className="items-center mt-6">
+            <View
+              className="w-16 h-16 rounded-full items-center justify-center"
+              style={{
+                backgroundColor: isEnabled ? softTints.emerald : colors.primaryLight,
+                ...getShadow(colors, isDark),
+              }}
+            >
+              <Ionicons
+                name={isEnabled ? "shield-checkmark" : "shield-outline"}
+                size={28}
+                color={isEnabled ? colors.success : colors.primary}
+              />
+            </View>
+          </View>
+
           <View className="mx-6 mt-6 gap-5">
             <View
               className="flex-row items-center p-4 rounded-2xl border gap-3"
@@ -130,7 +130,7 @@ export default function AppLockSettings() {
                       Uses your device&apos;s {deviceLockLabel} — no separate pattern to set up
                     </Text>
                   </View>
-                  <Feather name="chevron-right" size={16} color={colors.mutedText} />
+                  <Ionicons name="chevron-forward" size={16} color={colors.mutedText} />
                 </TouchableOpacity>
               )}
 

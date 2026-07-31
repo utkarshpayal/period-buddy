@@ -21,7 +21,7 @@ import { WebView } from "react-native-webview";
 import { CalendarModal } from "../../components/CalendarModal";
 import { useAuth } from "../../components/auth-context";
 import { useTheme } from "../../components/theme";
-import { getSoftTints } from "../../components/ui-tokens";
+import { getShadow, getSoftTints } from "../../components/ui-tokens";
 import { alert } from "../../lib/alert";
 import { showPermissionModal } from "../../lib/modal-host";
 import { documentApi, type DocType, type LanguageCode, type MedicalDocument } from "../../lib/api";
@@ -344,26 +344,18 @@ export default function DocumentsScreen() {
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
       <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
         {/* Header */}
-        <View
-          className="px-6 py-4 border-b flex-row items-center justify-between"
-          style={{ borderColor: colors.border, backgroundColor: colors.surface }}
-        >
-          <View className="flex-row items-center gap-3">
-            <TouchableOpacity onPress={() => router.back()} activeOpacity={0.7} className="p-2 -ml-2 rounded-full">
-              <Feather name="arrow-left" size={20} color={colors.foreground} />
-            </TouchableOpacity>
-            <Text className="text-lg font-black tracking-tight" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-              Documents
-            </Text>
-          </View>
+        <View className="flex-row items-center gap-2 px-6 pt-6">
           <TouchableOpacity
-            onPress={() => setUploadVisible(true)}
-            activeOpacity={0.85}
-            className="w-9 h-9 rounded-full items-center justify-center"
-            style={{ backgroundColor: colors.primary }}
+            onPress={() => router.back()}
+            activeOpacity={0.7}
+            className="p-2.5 -ml-2 rounded-full border"
+            style={{ backgroundColor: colors.surface, borderColor: colors.border, ...getShadow(colors, isDark) }}
           >
-            <Feather name="plus" size={18} color={colors.buttonText} />
+            <Feather name="arrow-left" size={18} color={colors.foreground} />
           </TouchableOpacity>
+          <Text className="flex-1 text-2xl font-black tracking-tight ml-2" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
+            Documents
+          </Text>
         </View>
 
         <ScrollView
@@ -372,37 +364,64 @@ export default function DocumentsScreen() {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
         >
           {/* Quick actions */}
-          <View className="flex-row gap-3 px-6 pt-5">
+          <View className="flex-row gap-2.5 px-6 pt-5">
             <TouchableOpacity
-              activeOpacity={0.8}
+              activeOpacity={0.85}
               onPress={() => setSummarizeVisible(true)}
-              className="flex-1 flex-row items-center justify-center gap-2 rounded-2xl border p-3.5"
+              className="flex-1 flex-row items-center justify-center gap-1.5 rounded-2xl border py-2.5"
               style={{ backgroundColor: colors.surface, borderColor: colors.border }}
             >
-              <MaterialCommunityIcons name="text-box-search-outline" size={16} color={colors.primary} />
-              <Text className="text-xs font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
+              <View
+                className="w-6 h-6 rounded-lg items-center justify-center"
+                style={{ backgroundColor: softTints.purple }}
+              >
+                <MaterialCommunityIcons name="text-box-search-outline" size={13} color={colors.accent} />
+              </View>
+              <Text
+                className="text-[11px] font-bold"
+                style={{ color: colors.foreground, fontFamily: fonts.body }}
+                numberOfLines={1}
+              >
                 Summarize
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              activeOpacity={0.8}
+              activeOpacity={0.85}
               onPress={() => router.push("/document-chat")}
-              className="flex-1 flex-row items-center justify-center gap-2 rounded-2xl border p-3.5"
+              className="flex-1 flex-row items-center justify-center gap-1.5 rounded-2xl border py-2.5"
               style={{ backgroundColor: colors.surface, borderColor: colors.border }}
             >
-              <Ionicons name="sparkles-outline" size={16} color={colors.primary} />
-              <Text className="text-xs font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
+              <View
+                className="w-6 h-6 rounded-lg items-center justify-center"
+                style={{ backgroundColor: softTints.pink }}
+              >
+                <Ionicons name="sparkles-outline" size={13} color={colors.primary} />
+              </View>
+              <Text
+                className="text-[11px] font-bold"
+                style={{ color: colors.foreground, fontFamily: fonts.body }}
+                numberOfLines={1}
+              >
                 Ask AI
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
-              activeOpacity={0.8}
+              activeOpacity={0.85}
               onPress={() => setReportVisible(true)}
-              className="flex-1 flex-row items-center justify-center gap-2 rounded-2xl border p-3.5"
+              className="flex-1 flex-row items-center justify-center gap-1.5 rounded-2xl border py-2.5"
               style={{ backgroundColor: colors.surface, borderColor: colors.border }}
             >
-              <Feather name="download" size={16} color={colors.primary} />
-              <Text className="text-xs font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
+              <View
+                className="w-6 h-6 rounded-lg items-center justify-center"
+                style={{ backgroundColor: softTints.mint }}
+              >
+                <Feather name="download" size={13} color={colors.secondary} />
+              </View>
+              <Text
+                className="text-[11px] font-bold"
+                style={{ color: colors.foreground, fontFamily: fonts.body }}
+                numberOfLines={1}
+              >
                 PDF Report
               </Text>
             </TouchableOpacity>
@@ -489,6 +508,16 @@ export default function DocumentsScreen() {
             )}
           </View>
         </ScrollView>
+
+        {/* Floating add button */}
+        <TouchableOpacity
+          onPress={() => setUploadVisible(true)}
+          activeOpacity={0.85}
+          className="absolute right-6 bottom-8 w-14 h-14 rounded-full items-center justify-center"
+          style={{ backgroundColor: colors.primary, ...getShadow(colors, isDark) }}
+        >
+          <Feather name="plus" size={22} color={colors.buttonText} />
+        </TouchableOpacity>
       </SafeAreaView>
 
       {/* Upload modal */}

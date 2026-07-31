@@ -2,7 +2,6 @@ import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
-  Image,
   Modal,
   ScrollView,
   StatusBar,
@@ -15,22 +14,21 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../../components/auth-context";
 import { alert } from "../../../lib/alert";
 import { ThemeToggle, useTheme } from "../../../components/theme";
-import { getSoftTints } from "../../../components/ui-tokens";
+import { getShadow, getSoftTints } from "../../../components/ui-tokens";
 import { authApi, type DashboardSummary } from "../../../lib/api";
+import Avatar from "../../../components/Avatar";
+import StatCard from "../../../components/StatCard";
+import { useUserStats } from "../../../hooks/useUserStats";
 
 export default function Profile() {
   const { colors, isDark, fonts } = useTheme();
   const { signOut, user, updateUser } = useAuth();
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
+  const { streakCount, walletBalance } = useUserStats();
   const router = useRouter();
   const displayName =
     [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Nura user";
   const displayEmail = user?.email || "Private account";
-  const initials =
-    [user?.firstName?.[0], user?.lastName?.[0]]
-      .filter(Boolean)
-      .join("")
-      .toUpperCase() || "N";
 
   // Navigation Panel Interactivity Controller States
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
@@ -173,27 +171,23 @@ export default function Profile() {
         >
           {/* USER AVATAR BRAND IDENTITY SECTION */}
           <View className="items-center px-6 pt-8">
-            <View
-              className="h-28 w-28 items-center justify-center rounded-full border-4 shadow-sm relative overflow-hidden"
-              style={{
-                backgroundColor: softTints.pink,
-                borderColor: colors.primary,
-              }}
-            >
-              {user?.profilePicture ? (
-                <Image
-                  source={{ uri: user.profilePicture }}
-                  className="h-full w-full"
-                  resizeMode="cover"
-                />
-              ) : (
-                <Text
-                  className="text-3xl font-black"
-                  style={{ color: colors.primary, fontFamily: fonts.heading }}
-                >
-                  {initials}
-                </Text>
-              )}
+            <View className="relative">
+              <Avatar
+                uri={user?.profilePicture}
+                name={displayName}
+                size={112}
+                backgroundColor={softTints.pink}
+                borderColor={colors.primary}
+                borderWidth={4}
+                textColor={colors.primary}
+                fontFamily={fonts.heading}
+                style={{
+                  shadowColor: "#000",
+                  shadowOpacity: 0.05,
+                  shadowRadius: 4,
+                  shadowOffset: { width: 0, height: 2 },
+                }}
+              />
 
               <View
                 className="absolute bottom-1 right-1 w-6 h-6 rounded-full items-center justify-center"
@@ -223,71 +217,57 @@ export default function Profile() {
               {
                 label: "Days Tracked",
                 value: dashboard?.trackedDays ?? 0,
-                icon: "calendar-outline",
+                icon: "calendar-outline" as const,
                 color: colors.primary,
                 bg: softTints.pink,
               },
               {
                 label: "Care Points",
-                value: typeof user?.walletBalance === "number" ? user.walletBalance : (user?.tokenEarned || 0),
-                icon: "star",
-                color: colors.primary,
-                bg: softTints.pink,
+                value: walletBalance,
+                icon: "star" as const,
+                color: colors.accent,
+                bg: softTints.purple,
               },
               {
                 label: "Day Streak",
-                value: user?.streakCount ?? 1,
-                icon: "flame",
-                color: colors.primary,
-                bg: softTints.pink,
+                value: streakCount,
+                icon: "flame" as const,
+                color: colors.warning,
+                bg: softTints.amber,
               },
             ].map((metric, i) => (
-              <View
+              <StatCard
                 key={i}
-                className="flex-1 items-center rounded-2xl border p-4 shadow-2xs"
-                style={{
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                }}
-              >
-                <View
-                  className="p-2.5 rounded-xl"
-                  style={{ backgroundColor: metric.bg }}
-                >
-                  <Ionicons
-                    name={metric.icon as any}
-                    size={18}
-                    color={metric.color}
-                  />
-                </View>
-                <Text
-                  className="mt-3 text-base font-black tracking-tight"
-                  style={{ color: colors.foreground, fontFamily: fonts.mono }}
-                >
-                  {metric.value}
-                </Text>
-                <Text
-                  className="text-[10px] font-bold text-center mt-0.5"
-                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                >
-                  {metric.label}
-                </Text>
-              </View>
+                variant="tile-stack"
+                icon={metric.icon}
+                iconColor={metric.color}
+                iconBg={metric.bg}
+                value={metric.value}
+                label={metric.label}
+                valueColor={colors.foreground}
+                labelColor={colors.mutedText}
+                valueFontFamily={fonts.mono}
+                labelFontFamily={fonts.body}
+                backgroundColor={colors.surface}
+                containerStyle={getShadow(colors, isDark)}
+              />
             ))}
           </View>
 
-          {/* MENUS ACCORDION LIST ACTIONS INTEGRATION */}
-          <View className="mx-6 mt-8 gap-3.5">
-
-            {/* Action 2: Achievements (Modal Trigger) */}
+          {/* MENUS LIST — one cohesive rounded surface card, flush rows w/ dividers */}
+          <View
+            className="mx-6 mt-8 rounded-3xl border overflow-hidden"
+            style={[
+              { backgroundColor: colors.surface, borderColor: colors.border },
+              getShadow(colors, isDark),
+            ]}
+          >
+            {/* Row: Achievements (Modal Trigger) */}
             <TouchableOpacity
               activeOpacity={0.7}
               onPress={() => setAchievementsModalVisible(true)}
-              className="flex-row items-center p-4 rounded-2xl border shadow-3xs"
-              style={{
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-              }}
+              className="flex-row items-center px-4 py-4 border-b"
+              style={{ borderColor: colors.border }}
             >
               <View
                 className="p-2.5 rounded-xl mr-4"
@@ -312,8 +292,8 @@ export default function Profile() {
               />
             </TouchableOpacity>
 
-            {/* Action 3: Embedded Dropdown Settings Area */}
-            <View>
+            {/* Row: Embedded Dropdown Settings Area */}
+            <View className="border-b" style={{ borderColor: colors.border }}>
               <TouchableOpacity
                 activeOpacity={0.7}
                 onPress={() =>
@@ -321,14 +301,7 @@ export default function Profile() {
                     activeMenuId === "settings" ? null : "settings",
                   )
                 }
-                className="flex-row items-center p-4 rounded-2xl border shadow-3xs"
-                style={{
-                  backgroundColor: colors.surface,
-                  borderColor:
-                    activeMenuId === "settings"
-                      ? colors.secondary
-                      : colors.border,
-                }}
+                className="flex-row items-center px-4 py-4"
               >
                 <View
                   className="p-2.5 rounded-xl mr-4"
@@ -353,17 +326,18 @@ export default function Profile() {
                       : "chevron-right"
                   }
                   size={16}
-                  color={colors.mutedText}
+                  color={
+                    activeMenuId === "settings"
+                      ? colors.secondary
+                      : colors.mutedText
+                  }
                 />
               </TouchableOpacity>
 
               {activeMenuId === "settings" && (
                 <View
-                  className="mt-2 rounded-2xl border p-4 gap-4"
-                  style={{
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  }}
+                  className="mx-4 mb-4 rounded-2xl p-4 gap-4"
+                  style={{ backgroundColor: colors.background }}
                 >
                   <View className="flex-row justify-between items-center">
                     <View>
@@ -387,7 +361,7 @@ export default function Profile() {
                       trackColor={{ true: colors.primary }}
                     />
                   </View>
-                  <View className="h-[1px] w-full bg-neutral-100 dark:bg-neutral-800" />
+                  <View className="h-[1px] w-full" style={{ backgroundColor: colors.border }} />
                   <View className="flex-row justify-between items-center">
                     <View>
                       <Text
@@ -414,15 +388,12 @@ export default function Profile() {
               )}
             </View>
 
-            {/* Action 3a: Documents (Route) */}
+            {/* Row: Documents (Route) */}
             <TouchableOpacity
               activeOpacity={0.7}
               onPress={() => router.push("/documents")}
-              className="flex-row items-center p-4 rounded-2xl border shadow-3xs"
-              style={{
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-              }}
+              className="flex-row items-center px-4 py-4 border-b"
+              style={{ borderColor: colors.border }}
             >
               <View
                 className="p-2.5 rounded-xl mr-4"
@@ -447,15 +418,12 @@ export default function Profile() {
               />
             </TouchableOpacity>
 
-            {/* Action 3b: App Lock (Route) */}
+            {/* Row: App Lock (Route) */}
             <TouchableOpacity
               activeOpacity={0.7}
               onPress={() => router.push("/app-lock")}
-              className="flex-row items-center p-4 rounded-2xl border shadow-3xs"
-              style={{
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-              }}
+              className="flex-row items-center px-4 py-4 border-b"
+              style={{ borderColor: colors.border }}
             >
               <View
                 className="p-2.5 rounded-xl mr-4"
@@ -480,15 +448,12 @@ export default function Profile() {
               />
             </TouchableOpacity>
 
-            {/* Action 4: Help & Support (Modal Trigger) */}
+            {/* Row: Help & Support (Modal Trigger) */}
             <TouchableOpacity
               activeOpacity={0.7}
               onPress={() => setSupportModalVisible(true)}
-              className="flex-row items-center p-4 rounded-2xl border shadow-3xs"
-              style={{
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-              }}
+              className="flex-row items-center px-4 py-4 border-b"
+              style={{ borderColor: colors.border }}
             >
               <View
                 className="p-2.5 rounded-xl mr-4"
@@ -513,15 +478,11 @@ export default function Profile() {
               />
             </TouchableOpacity>
 
-            {/* Action 5: Privacy Policy (Modal Trigger) */}
+            {/* Row: Privacy Policy (Modal Trigger) */}
             <TouchableOpacity
               activeOpacity={0.7}
               onPress={() => setPrivacyModalVisible(true)}
-              className="flex-row items-center p-4 rounded-2xl border shadow-3xs"
-              style={{
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-              }}
+              className="flex-row items-center px-4 py-4"
             >
               <View
                 className="p-2.5 rounded-xl mr-4"
@@ -547,22 +508,19 @@ export default function Profile() {
             </TouchableOpacity>
           </View>
 
-          {/* EXIT ACTION PANEL BUTTON */}
+          {/* EXIT ACTION */}
           <TouchableOpacity
             onPress={handleLogout}
-            activeOpacity={0.85}
-            className="mx-6 mt-10 flex-row items-center justify-center rounded-full border py-4"
-            style={{
-              backgroundColor: colors.surface,
-              borderColor: colors.primary,
-            }}
+            activeOpacity={0.7}
+            disabled={isLoggingOut}
+            className="mx-6 mt-8 flex-row items-center justify-center py-3"
           >
-            <Feather name="log-out" size={16} color={colors.primary} />
+            <Feather name="log-out" size={15} color={colors.danger} />
             <Text
               className="ml-2 text-sm font-bold tracking-wide"
-              style={{ color: colors.primary, fontFamily: fonts.body }}
+              style={{ color: colors.danger, fontFamily: fonts.body }}
             >
-              {isLoggingOut ? "Logging Out..." : "Log Out Securely"}
+              {isLoggingOut ? "Logging Out..." : "Log out"}
             </Text>
           </TouchableOpacity>
         </ScrollView>

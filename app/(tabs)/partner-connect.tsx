@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
 import React, { useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -17,6 +18,12 @@ import { useAuth } from "../../components/auth-context";
 import { useTheme } from "../../components/theme";
 import { connectPartnerAndResolveRoute } from "../../lib/auth";
 import { getShadow } from "../../components/ui-tokens";
+
+const BENEFITS = [
+  "Share your cycle phase, gently",
+  "Daily nudges on how to help",
+  "Read-only — you control what's shared",
+];
 
 export default function PartnerConnect() {
   const router = useRouter();
@@ -86,81 +93,98 @@ export default function PartnerConnect() {
             contentContainerStyle={{
               alignItems: "center",
               flexGrow: 1,
-              justifyContent: "center",
               paddingBottom: 40,
-              paddingHorizontal: 16,
-              paddingTop: 20,
             }}
             keyboardDismissMode="on-drag"
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            {/* Header / Back row */}
-            <View className="mb-6 self-start" style={{ width: cardWidth }}>
-              <TouchableOpacity
-                onPress={() => router.back()}
-                activeOpacity={0.7}
-                className="flex-row items-center gap-1.5"
+            {/* Hero gradient band */}
+            <View className="w-full" style={{ height: 220 }}>
+              <LinearGradient
+                colors={[colors.lavenderLight, colors.primaryLight, colors.secondary]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={{ flex: 1, alignItems: "center", justifyContent: "center" }}
               >
-                <Feather name="chevron-left" size={20} color={colors.foreground} />
-                <Text
-                  className="text-xl font-extrabold tracking-tight"
-                  style={{ color: colors.foreground, fontFamily: fonts.heading }}
+                <TouchableOpacity
+                  onPress={() => router.back()}
+                  activeOpacity={0.7}
+                  className="absolute left-4 items-center justify-center rounded-full"
+                  style={{
+                    top: 8,
+                    width: 38,
+                    height: 38,
+                    backgroundColor: colors.surface,
+                    ...getShadow(colors, isDark),
+                  }}
                 >
-                  Partner Connection
-                </Text>
-              </TouchableOpacity>
+                  <Feather name="chevron-left" size={20} color={colors.foreground} />
+                </TouchableOpacity>
+
+                <View
+                  className="items-center justify-center rounded-full border"
+                  style={{
+                    width: 78,
+                    height: 78,
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                    ...getShadow(colors, isDark),
+                  }}
+                >
+                  <Feather name="heart" size={30} color={colors.primary} />
+                </View>
+              </LinearGradient>
             </View>
 
-            {/* Content card */}
             <View
-              className="border overflow-hidden p-6"
-              style={{
-                width: cardWidth,
-                borderRadius: 24,
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-                ...getShadow(colors, isDark),
-              }}
+              style={{ width: cardWidth, paddingTop: 24, paddingHorizontal: 16 }}
             >
-              <View className="items-center mb-6">
-                <View
-                  className="mb-4 items-center justify-center"
-                  style={{
-                    width: 54,
-                    height: 54,
-                    borderRadius: 18,
-                    backgroundColor: colors.primaryLight,
-                  }}
-                >
-                  <Feather name="heart" size={22} color={colors.primary} />
-                </View>
+              <Text
+                className="text-center font-black tracking-tight"
+                style={{
+                  fontSize: 24,
+                  color: colors.foreground,
+                  fontFamily: fonts.heading,
+                  marginBottom: 8,
+                }}
+              >
+                Bring your partner closer
+              </Text>
 
-                <Text
-                  className="text-center font-extrabold tracking-tight"
-                  style={{
-                    fontSize: 22,
-                    color: colors.foreground,
-                    fontFamily: fonts.heading,
-                    marginBottom: 8,
-                  }}
-                >
-                  Connect with Partner
-                </Text>
+              <Text
+                className="text-center text-xs leading-5 self-center"
+                style={{
+                  color: colors.mutedText,
+                  maxWidth: 280,
+                  fontFamily: fonts.body,
+                  marginBottom: 20,
+                }}
+              >
+                Link a partner so they can support you through every phase.
+                {!isAuthenticated
+                  ? " You'll need to log in or create an account first."
+                  : " You will have view-only access."}
+              </Text>
 
-                <Text
-                  className="text-center text-xs leading-5"
-                  style={{
-                    color: colors.mutedText,
-                    maxWidth: 280,
-                    fontFamily: fonts.body,
-                  }}
-                >
-                  Enter the invite code shared with you to see their shared cycle logs.
-                  {!isAuthenticated
-                    ? " You'll need to log in or create an account first."
-                    : " You will have view-only access."}
-                </Text>
+              {/* Benefit checklist */}
+              <View className="mb-7" style={{ gap: 12 }}>
+                {BENEFITS.map((benefit) => (
+                  <View key={benefit} className="flex-row items-center" style={{ gap: 10 }}>
+                    <View
+                      className="items-center justify-center rounded-full"
+                      style={{ width: 22, height: 22, backgroundColor: colors.accentLight }}
+                    >
+                      <Feather name="check" size={13} color={colors.accent} />
+                    </View>
+                    <Text
+                      className="flex-1 text-xs font-semibold"
+                      style={{ color: colors.foreground, fontFamily: fonts.body }}
+                    >
+                      {benefit}
+                    </Text>
+                  </View>
+                ))}
               </View>
 
               {/* Input & Action */}
@@ -171,9 +195,9 @@ export default function PartnerConnect() {
                     backgroundColor: colors.input,
                     borderColor: codeFocused ? colors.primary : colors.border,
                     borderWidth: codeFocused ? 1.5 : 1,
-                    borderRadius: 16,
-                    paddingHorizontal: 16,
-                    height: 48,
+                    borderRadius: 26,
+                    paddingHorizontal: 18,
+                    height: 52,
                   }}
                 >
                   <Feather
@@ -208,11 +232,13 @@ export default function PartnerConnect() {
                   activeOpacity={0.85}
                   disabled={isSubmitting}
                   onPress={handleConnect}
-                  className="mb-2 justify-center items-center rounded-2xl"
+                  className="mb-2 justify-center items-center"
                   style={{
-                    height: 48,
+                    height: 52,
+                    borderRadius: 999,
                     backgroundColor: colors.primary,
                     opacity: isSubmitting ? 0.75 : 1,
+                    ...getShadow(colors, isDark),
                   }}
                 >
                   <Text

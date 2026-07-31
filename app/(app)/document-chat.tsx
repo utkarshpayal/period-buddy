@@ -1,12 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import {
-  type AudioPlayer,
-  RecordingPresets,
-  createAudioPlayer,
-  requestRecordingPermissionsAsync,
-  useAudioRecorder,
-  useAudioRecorderState,
-} from "expo-audio";
+import { type AudioPlayer, createAudioPlayer } from "expo-audio";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -26,8 +19,9 @@ import Markdown from "react-native-markdown-display";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../../components/theme";
 import { getSoftTints } from "../../components/ui-tokens";
+import { VoiceModeOverlay, type VoiceStatus } from "../../components/VoiceModeOverlay";
+import { useVoiceInput } from "../../hooks/useVoiceInput";
 import { alert } from "../../lib/alert";
-import { showPermissionModal } from "../../lib/modal-host";
 import { documentApi, speechApi, type DocumentChatMessage, type Language, type LanguageCode } from "../../lib/api";
 import { resolveAudioUri } from "../../lib/audio";
 import { SUPPORTED_LANGUAGES } from "../../lib/languages";
@@ -51,15 +45,44 @@ export default function DocumentChatScreen() {
   const [language, setLanguage] = useState<LanguageCode>("en-IN");
   const [languages, setLanguages] = useState<Language[]>(SUPPORTED_LANGUAGES);
   const [languagePickerVisible, setLanguagePickerVisible] = useState(false);
-  const [isTranscribing, setIsTranscribing] = useState(false);
   const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
   const [synthesizingMessageId, setSynthesizingMessageId] = useState<string | null>(null);
   const [voiceMode, setVoiceMode] = useState(false);
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
-  const recorderState = useAudioRecorderState(recorder);
   const playerRef = useRef<AudioPlayer | null>(null);
 
+  const { handleMicPress, isRecording, isTranscribing, level } = useVoiceInput({
+    language,
+    voiceMode,
+    onTranscript: (transcript) => {
+      if (voiceMode) {
+        handleSend(transcript);
+      } else {
+        setTypedMessage((prev) => (prev.trim() ? `${prev.trim()} ${transcript}` : transcript));
+      }
+    },
+  });
+
   const selectedLanguage = languages.find((l) => l.code === language) ?? SUPPORTED_LANGUAGES[0];
+  const isSpeakingReply = voiceMode && playingMessageId !== null;
+
+  // Google Assistant style loop: whenever voice mode is idle, auto-arm the mic again.
+  useEffect(() => {
+    if (!voiceMode || isRecording || isTranscribing || isReplying || isSpeakingReply) return;
+    const timer = setTimeout(() => {
+      handleMicPress();
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [voiceMode, isRecording, isTranscribing, isReplying, isSpeakingReply, handleMicPress]);
+
+  const voiceStatus: VoiceStatus = isTranscribing
+    ? "processing"
+    : isRecording
+      ? "listening"
+      : isReplying
+        ? "thinking"
+        : isSpeakingReply
+          ? "speaking"
+          : "idle";
 
   useEffect(() => {
     let isMounted = true;
@@ -85,46 +108,6 @@ export default function DocumentChatScreen() {
       playerRef.current?.release();
     };
   }, []);
-
-  async function handleMicPress() {
-    if (recorderState.isRecording) {
-      await recorder.stop();
-      const uri = recorder.uri;
-      if (!uri) return;
-
-      setIsTranscribing(true);
-      try {
-        const result = await speechApi.transcribe(uri, language);
-        const transcript = result.transcript.trim();
-        if (transcript) {
-          if (voiceMode) {
-            handleSend(transcript);
-          } else {
-            setTypedMessage((prev) => (prev.trim() ? `${prev.trim()} ${transcript}` : transcript));
-          }
-        } else {
-          alert("Didn't catch that", "Try recording again somewhere quieter.");
-        }
-      } catch (error) {
-        alert("Voice input failed", error instanceof Error ? error.message : "Please try again.");
-      } finally {
-        setIsTranscribing(false);
-      }
-      return;
-    }
-
-    const { granted } = await requestRecordingPermissionsAsync();
-    if (!granted) {
-      showPermissionModal({
-        title: "Microphone access needed",
-        message: "Enable microphone access in Settings to use voice input.",
-        icon: "mic-outline",
-      });
-      return;
-    }
-    await recorder.prepareToRecordAsync();
-    recorder.record();
-  }
 
   async function handleListen(message: DocumentChatMessage) {
     if (playingMessageId === message._id) {
@@ -204,27 +187,16 @@ export default function DocumentChatScreen() {
           className="flex-1"
           keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
         >
-          <View
-            className="px-5 py-4 border-b flex-row justify-between items-center gap-2"
-            style={{ borderColor: colors.border, backgroundColor: colors.surface }}
-          >
+          <View className="px-5 pt-6 pb-3 flex-row justify-between items-center gap-2">
             <View className="flex-row items-center gap-3 flex-1 min-w-0">
-              <TouchableOpacity onPress={() => router.back()} activeOpacity={0.7} className="p-2 -ml-2 rounded-full">
-                <Feather name="arrow-left" size={20} color={colors.foreground} />
+              <TouchableOpacity
+                onPress={() => router.back()}
+                activeOpacity={0.7}
+                className="p-2.5 -ml-1 rounded-full border"
+                style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+              >
+                <Feather name="arrow-left" size={18} color={colors.foreground} />
               </TouchableOpacity>
-
-              <View className="relative">
-                <View
-                  className="w-10 h-10 rounded-full items-center justify-center border"
-                  style={{ backgroundColor: softTints.pink, borderColor: colors.border }}
-                >
-                  <Text className="text-xl">📄</Text>
-                </View>
-                <View
-                  className="absolute bottom-0 right-0 w-3 h-3 rounded-full"
-                  style={{ backgroundColor: colors.success, borderWidth: 2, borderColor: colors.surface }}
-                />
-              </View>
 
               <View className="flex-1 min-w-0">
                 <Text
@@ -239,9 +211,9 @@ export default function DocumentChatScreen() {
                   numberOfLines={1}
                   ellipsizeMode="tail"
                   className="text-[10px] font-bold tracking-wider uppercase mt-0.5"
-                  style={{ color: colors.success, fontFamily: fonts.body }}
+                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
                 >
-                  Reads your uploaded records
+                  Ask Buddy about this report
                 </Text>
               </View>
             </View>
@@ -292,7 +264,8 @@ export default function DocumentChatScreen() {
             >
               <Feather name="mic" size={11} color={colors.primary} style={{ marginTop: 1.5 }} />
               <Text className="text-[10px] font-bold flex-1 flex-shrink" style={{ color: colors.primary, fontFamily: fonts.body }}>
-                Voice mode on — tap the mic, speak, and I&apos;ll reply out loud in {selectedLanguage.label}.
+                Voice mode on — tap the mic, speak, and I&apos;ll reply out loud in {selectedLanguage.label}. Pause
+              for 3 seconds and I&apos;ll send it automatically.
               </Text>
             </View>
           ) : null}
@@ -312,7 +285,7 @@ export default function DocumentChatScreen() {
                   className="max-w-[90%] p-4 rounded-2xl self-start rounded-tl-none border"
                   style={{ backgroundColor: colors.surface, borderColor: colors.border }}
                 >
-                  <Text className="text-xs font-medium leading-5" style={{ color: colors.foreground, fontFamily: fonts.body }}>
+                  <Text className="text-[15px] font-medium leading-6" style={{ color: colors.foreground, fontFamily: fonts.body }}>
                     Hi! Upload a report, prescription, or bill from the Documents screen, then ask me anything about
                     it — dates, values, medications, or what a term means.
                   </Text>
@@ -325,15 +298,22 @@ export default function DocumentChatScreen() {
                   <View key={message._id}>
                     {isAssistant ? (
                       <View
-                        className="max-w-[85%] p-4 rounded-2xl self-start rounded-tl-none border"
-                        style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+                        className="max-w-[85%] p-4 self-start border"
+                        style={{
+                          backgroundColor: colors.surface,
+                          borderColor: colors.border,
+                          borderTopLeftRadius: 4,
+                          borderTopRightRadius: 16,
+                          borderBottomLeftRadius: 16,
+                          borderBottomRightRadius: 16,
+                        }}
                       >
                         <Markdown
                           style={{
-                            body: { color: colors.foreground, fontFamily: fonts.body, fontSize: 12, lineHeight: 19, margin: 0 },
-                            heading1: { color: colors.foreground, fontFamily: fonts.heading, fontSize: 15, marginBottom: 4 },
-                            heading2: { color: colors.foreground, fontFamily: fonts.heading, fontSize: 13, marginTop: 8, marginBottom: 3 },
-                            heading3: { color: colors.foreground, fontFamily: fonts.heading, fontSize: 12, marginTop: 6, marginBottom: 3 },
+                            body: { color: colors.foreground, fontFamily: fonts.body, fontSize: 15, lineHeight: 23, margin: 0 },
+                            heading1: { color: colors.foreground, fontFamily: fonts.heading, fontSize: 17, marginBottom: 4 },
+                            heading2: { color: colors.foreground, fontFamily: fonts.heading, fontSize: 16, marginTop: 8, marginBottom: 3 },
+                            heading3: { color: colors.foreground, fontFamily: fonts.heading, fontSize: 15, marginTop: 6, marginBottom: 3 },
                             strong: { fontFamily: fonts.heading },
                             bullet_list: { marginBottom: 4 },
                             ordered_list: { marginBottom: 4 },
@@ -359,12 +339,12 @@ export default function DocumentChatScreen() {
                                 color={colors.primary}
                               />
                             )}
-                            <Text className="text-[8px] font-bold uppercase tracking-wide" style={{ color: colors.primary, fontFamily: fonts.body }}>
+                            <Text className="text-[10px] font-bold uppercase tracking-wide" style={{ color: colors.primary, fontFamily: fonts.body }}>
                               {playingMessageId === message._id ? "Playing" : "Listen"}
                             </Text>
                           </TouchableOpacity>
                           <Text
-                            className="text-[8px] font-bold opacity-60"
+                            className="text-[10px] font-bold opacity-70"
                             style={{ color: colors.mutedText, fontFamily: fonts.body }}
                           >
                             {formatTime(message.createdAt)}
@@ -373,14 +353,20 @@ export default function DocumentChatScreen() {
                       </View>
                     ) : (
                       <View
-                        className="max-w-[85%] self-end rounded-2xl rounded-tr-none overflow-hidden shadow-md p-4"
-                        style={{ backgroundColor: colors.primary }}
+                        className="max-w-[85%] self-end overflow-hidden shadow-md p-4"
+                        style={{
+                          backgroundColor: colors.primary,
+                          borderTopLeftRadius: 16,
+                          borderTopRightRadius: 16,
+                          borderBottomLeftRadius: 16,
+                          borderBottomRightRadius: 4,
+                        }}
                       >
-                        <Text className="text-xs font-medium leading-5" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
+                        <Text className="text-[15px] font-medium leading-6" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
                           {message.text}
                         </Text>
                         <Text
-                          className="text-[8px] font-bold text-right mt-1.5 opacity-60"
+                          className="text-[10px] font-bold text-right mt-1.5 opacity-70"
                           style={{ color: colors.buttonText, fontFamily: fonts.body }}
                         >
                           {formatTime(message.createdAt)}
@@ -413,7 +399,7 @@ export default function DocumentChatScreen() {
             }}
           >
             <TextInput
-              placeholder={recorderState.isRecording ? "Listening..." : "Ask about your documents..."}
+              placeholder={isRecording ? "Listening..." : "Ask about your documents..."}
               placeholderTextColor={colors.mutedText}
               value={typedMessage}
               onChangeText={setTypedMessage}
@@ -421,7 +407,7 @@ export default function DocumentChatScreen() {
               maxLength={1000}
               returnKeyType="send"
               blurOnSubmit={false}
-              editable={!recorderState.isRecording && !isTranscribing}
+              editable={!isRecording && !isTranscribing}
               className="flex-1 px-4 py-3 rounded-xl text-sm"
               style={{ color: colors.foreground, backgroundColor: colors.input, fontFamily: fonts.body }}
             />
@@ -433,12 +419,12 @@ export default function DocumentChatScreen() {
             >
               <View
                 className="p-2.5 items-center justify-center"
-                style={{ backgroundColor: recorderState.isRecording ? colors.danger : colors.border }}
+                style={{ backgroundColor: isRecording ? colors.danger : colors.border }}
               >
                 {isTranscribing ? (
                   <ActivityIndicator size="small" color={colors.mutedText} />
                 ) : (
-                  <Feather name="mic" size={15} color={recorderState.isRecording ? "#fff" : colors.mutedText} />
+                  <Feather name="mic" size={15} color={isRecording ? "#fff" : colors.mutedText} />
                 )}
               </View>
             </TouchableOpacity>
@@ -499,6 +485,18 @@ export default function DocumentChatScreen() {
           </View>
         </Modal>
       </SafeAreaView>
+
+      {voiceMode ? (
+        <VoiceModeOverlay
+          colors={colors}
+          fonts={fonts}
+          languageLabel={selectedLanguage.label}
+          level={level}
+          onClose={() => setVoiceMode(false)}
+          onMicPress={handleMicPress}
+          status={voiceStatus}
+        />
+      ) : null}
     </>
   );
 }

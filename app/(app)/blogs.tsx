@@ -607,7 +607,7 @@ export default function Blogs() {
               <ActivityIndicator color={colors.primary} />
             </View>
           ) : (
-          <View className="mt-6 gap-4 px-6">
+          <View className="mt-6 flex-row flex-wrap justify-between px-6" style={{ rowGap: 14 }}>
             {filteredContent.map((item) => {
               const isBookmarked = bookmarkedIds.has(item.id);
               const isVideo = item.type === "reel";
@@ -616,174 +616,89 @@ export default function Blogs() {
                 <TouchableOpacity
                   key={item.id}
                   activeOpacity={0.9}
-                  onPress={() => handleTriggerPreview(item)} // FIXED: Ab pure card container touch par hi modal sheet slide up ho jayegi
-                  className="overflow-hidden rounded-3xl border shadow-2xl"
+                  onPress={() => handleTriggerPreview(item)}
+                  className="overflow-hidden rounded-2xl border shadow-2xl"
                   style={{
+                    width: "48%",
                     backgroundColor: colors.surface,
                     borderColor: colors.border,
                   }}
                 >
-                  <View className="flex-row h-36">
-                    {/* ASYMMETRIC IMAGE PANEL WITH NATIVE MEDIA HOOK OVERLAYS */}
-                    <View className="w-36 h-full relative bg-neutral-100 dark:bg-neutral-800">
-                      <Image
-                        source={{ uri: item.imageUrl }}
-                        className="w-full h-full"
-                        resizeMode="cover"
-                      />
+                  {/* MEDIA TILE — image on top with badge overlays, matches
+                      the mockup's bento-style content grid card. */}
+                  <View className="w-full h-36 relative bg-neutral-100 dark:bg-neutral-800">
+                    <Image
+                      source={{ uri: item.imageUrl }}
+                      className="w-full h-full"
+                      resizeMode="cover"
+                    />
 
-                      {isVideo && (
-                        /* Centered overlay blur layout for video identifier markers */
-                        <View className="absolute inset-0 items-center justify-center bg-black/10">
-                          <View className="w-8 h-8 rounded-full bg-white/30 items-center justify-center border border-white/40 shadow-sm">
-                            <Ionicons
-                              name="play"
-                              size={14}
-                              color="white"
-                              className="ml-0.5"
-                            />
-                          </View>
+                    {isVideo && (
+                      <View className="absolute inset-0 items-center justify-center bg-black/10">
+                        <View className="w-9 h-9 rounded-full bg-white/85 items-center justify-center shadow-sm">
+                          <Ionicons name="play" size={14} color={colors.primary} className="ml-0.5" />
                         </View>
+                      </View>
+                    )}
+
+                    {isVideo && (
+                      <View className="absolute bottom-2 right-2 flex-row items-center gap-1 px-1.5 py-0.5 rounded-md bg-black/55">
+                        <Feather name="eye" size={9} color="white" />
+                        <Text className="text-[9px] font-black text-white" style={{ fontFamily: fonts.body }}>
+                          {formatCount(item.viewCount)}
+                        </Text>
+                      </View>
+                    )}
+
+                    <TouchableOpacity
+                      onPress={() => handleToggleBookmark(item.id)}
+                      className="absolute top-2 right-2 w-6 h-6 rounded-full items-center justify-center bg-black/35"
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <Ionicons
+                        name={isBookmarked ? "bookmark" : "bookmark-outline"}
+                        size={13}
+                        color="white"
+                      />
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* CONTENT BLOCK — title, then type · duration/read-time
+                      meta line, matching the mockup's card footer. */}
+                  <View className="p-2.5">
+                    <Text
+                      className="text-[11.5px] font-black leading-4"
+                      numberOfLines={2}
+                      style={{ color: colors.foreground, fontFamily: fonts.heading }}
+                    >
+                      {item.title}
+                    </Text>
+                    <View className="flex-row items-center gap-1 mt-1.5">
+                      <Text
+                        className="text-[10px] font-bold"
+                        style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                      >
+                        {isVideo ? "Reel" : "Blog"} · {item.time}
+                      </Text>
+                      {item.verified && (
+                        <MaterialCommunityIcons name="shield-check" size={11} color={colors.success} />
                       )}
                     </View>
-
-                    {/* CONTEXT DATA DETAIL COLUMN */}
-                    <View className="flex-1 p-4 justify-between">
-                      <View>
-                        <View className="flex-row items-start justify-between gap-1.5">
-                          <Text
-                            className="flex-1 text-sm font-black tracking-tight leading-4.5"
-                            numberOfLines={2}
-                            style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                          >
-                            {item.title}
-                          </Text>
-
-                          {/* Bookmark Save Interaction Floating Anchor */}
-                          <TouchableOpacity
-                            onPress={() => handleToggleBookmark(item.id)}
-                            className="-mt-1 -mr-1 p-1"
-                            hitSlop={{
-                              top: 10,
-                              bottom: 10,
-                              left: 10,
-                              right: 10,
-                            }} // Prevents accidental full card clicks when targeting bookmark icon
-                          >
-                            <Ionicons
-                              name={
-                                isBookmarked ? "bookmark" : "bookmark-outline"
-                              }
-                              size={16}
-                              color={
-                                isBookmarked ? colors.primary : colors.mutedText
-                              }
-                            />
-                          </TouchableOpacity>
-                        </View>
-
-                        {/* Author Credentials and Professional Check Tag Badge */}
-                        <View className="flex-row items-center gap-1.5 mt-1.5 flex-wrap">
-                          <Text
-                            className="text-[11px] font-semibold"
-                            style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                            numberOfLines={1}
-                          >
-                            {item.author}
-                          </Text>
-                          {item.verified && (
-                            <MaterialCommunityIcons
-                              name="shield-check"
-                              size={12}
-                              color={colors.success}
-                            />
-                          )}
-                        </View>
-
-                        {/* Category + Tags Segregation Row */}
-                        {(item.category || (item.tags && item.tags.length > 0)) && (
-                          <View className="flex-row items-center gap-1 mt-1 flex-wrap">
-                            {item.category && (
-                              <View
-                                className="px-1.5 py-0.5 rounded"
-                                style={{ backgroundColor: softTints.pink }}
-                              >
-                                <Text
-                                  className="text-[9px] font-bold uppercase"
-                                  style={{ color: colors.primary, fontFamily: fonts.body }}
-                                >
-                                  {CATEGORY_LABELS[item.category]}
-                                </Text>
-                              </View>
-                            )}
-                            {item.tags?.slice(0, 2).map((tag) => (
-                              <Text
-                                key={tag}
-                                className="text-[9px] font-semibold"
-                                style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                                numberOfLines={1}
-                              >
-                                #{tag}
-                              </Text>
-                            ))}
-                          </View>
-                        )}
-                      </View>
-
-                      {/* Card Lower Parameters Bar Action Section */}
-                      <View className="flex-row items-center justify-between pt-2 border-t border-neutral-50 dark:border-neutral-900/60">
-                        <View className="flex-row items-center gap-2.5">
-                          <View className="flex-row items-center gap-1">
-                            <Feather
-                              name="clock"
-                              size={11}
-                              color={colors.mutedText}
-                            />
-                            <Text
-                              className="text-[10px] font-bold tracking-wide"
-                              style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                            >
-                              {item.time}
-                            </Text>
-                          </View>
-                          {item.type === "blog" && (
-                            <View className="flex-row items-center gap-1">
-                              <Feather
-                                name="eye"
-                                size={11}
-                                color={colors.mutedText}
-                              />
-                              <Text
-                                className="text-[10px] font-bold tracking-wide"
-                                style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                              >
-                                {formatCount(item.viewCount)}
-                              </Text>
-                            </View>
-                          )}
-                        </View>
-
-                        {/* Immersive Sheet Reader Trigger CTA Button */}
+                    {item.category && (
+                      <View className="flex-row mt-1.5">
                         <View
-                          className="px-4 py-1.5 rounded-xl shadow-3xs"
-                          style={{
-                            backgroundColor: isVideo
-                              ? softTints.purple
-                              : softTints.pink,
-                          }}
+                          className="px-1.5 py-0.5 rounded"
+                          style={{ backgroundColor: isVideo ? softTints.purple : softTints.pink }}
                         >
                           <Text
-                            className="text-[11px] font-black"
-                            style={{
-                              color: isVideo ? colors.accent : colors.primary,
-                              fontFamily: fonts.body,
-                            }}
+                            className="text-[8.5px] font-bold uppercase"
+                            style={{ color: isVideo ? colors.accent : colors.primary, fontFamily: fonts.body }}
                           >
-                            {isVideo ? "Watch" : "Read"}
+                            {CATEGORY_LABELS[item.category]}
                           </Text>
                         </View>
                       </View>
-                    </View>
+                    )}
                   </View>
                 </TouchableOpacity>
               );

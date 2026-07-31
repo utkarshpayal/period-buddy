@@ -16,6 +16,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ForestScene, type ForestPhase } from "../../components/ForestScene";
 import { useTheme } from "../../components/theme";
+import { getShadow } from "../../components/ui-tokens";
 import { cycleApi, forestApi, type ForestStatus } from "../../lib/api";
 
 function toForestPhase(currentPhase: string | undefined, averageHealth: number): ForestPhase {
@@ -187,34 +188,71 @@ export default function Forest() {
         style={{ backgroundColor: colors.background }}
       >
         <ScrollView contentContainerClassName="pb-10">
-          {/* Header */}
-          <View className="flex-row items-center gap-4 px-6 pt-6">
+          {/* Header — circular back button + title, matches mockup frame "19 · FOREST" */}
+          <View className="flex-row items-center gap-3 px-[22px] pt-6">
             <TouchableOpacity
               onPress={() => router.back()}
               accessibilityLabel="Back"
-              style={{ padding: 8, margin: -8 }}
+              activeOpacity={0.7}
+              className="w-9 h-9 items-center justify-center rounded-full"
+              style={{ backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
             >
               <Ionicons
                 name="chevron-back"
-                size={24}
+                size={20}
                 color={colors.foreground}
               />
             </TouchableOpacity>
             <Text
-              className="flex-1 text-2xl font-bold"
+              className="flex-1 text-xl font-bold"
               style={{ color: colors.foreground, fontFamily: fonts.heading }}
             >
-              Your Wellness Forest
+              Your Forest
             </Text>
           </View>
 
-          {/* VIRTUAL FOREST CANOPY DISPLAY */}
+          {/* Stat tiles — trees planted / day streak, side by side */}
+          <View className="flex-row gap-3 px-[22px] pt-[14px]">
+            <View
+              className="flex-1 items-center rounded-2xl p-3"
+              style={{ backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
+            >
+              <Text
+                className="text-lg font-bold"
+                style={{ color: colors.foreground, fontFamily: fonts.heading }}
+              >
+                {healthyTreeCount}
+              </Text>
+              <Text
+                className="text-[10px] font-bold uppercase mt-0.5"
+                style={{ color: colors.mutedText, fontFamily: fonts.body }}
+              >
+                trees planted
+              </Text>
+            </View>
+            <View
+              className="flex-1 items-center rounded-2xl p-3"
+              style={{ backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
+            >
+              <Text
+                className="text-lg font-bold"
+                style={{ color: colors.foreground, fontFamily: fonts.heading }}
+              >
+                {forestStatus?.careActions ?? 0}
+              </Text>
+              <Text
+                className="text-[10px] font-bold uppercase mt-0.5"
+                style={{ color: colors.mutedText, fontFamily: fonts.body }}
+              >
+                day streak
+              </Text>
+            </View>
+          </View>
+
+          {/* Forest scene card — soft surface card wrapping the scenery */}
           <View
-            className="mx-6 mt-6 rounded-3xl border-2 overflow-hidden shadow-lg"
-            style={{
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-            }}
+            className="mx-[22px] mt-6 rounded-[22px] overflow-hidden"
+            style={{ backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
           >
             {/* Visual Ecosystem Container — ported from the Marketing
                 website's forest simulator (Home.jsx) so the app and site
@@ -287,7 +325,7 @@ export default function Forest() {
 
             {/* Stats Dashboard Under Canopy */}
             <View
-              className="p-5 border-t border-dashed"
+              className="px-5 py-4 border-t border-dashed"
               style={{ borderColor: colors.border }}
             >
               <View className="flex-row justify-between items-center">
@@ -324,29 +362,42 @@ export default function Forest() {
                   </Text>
                 </View>
               </View>
-
-              {/* Interactive Care Action Bar */}
-              <TouchableOpacity
-                className="mt-4 w-full py-3 rounded-xl flex-row items-center justify-center gap-2 active:opacity-90"
-                style={{
-                  backgroundColor: isNourished ? colors.border : colors.info,
-                }}
-                disabled={isNourished || forestStatus?.todayCareLogged}
-                onPress={handleLogCare}
-              >
-                <Ionicons
-                  name={isNourished || forestStatus?.todayCareLogged ? "checkmark-circle" : "water"}
-                  size={18}
-                  color="white"
-                />
-                <Text className="text-white font-bold text-sm" style={{ fontFamily: fonts.body }}>
-                  {isNourished || forestStatus?.todayCareLogged
-                    ? "Nourished Today"
-                    : "Log Care for Forest"}
-                </Text>
-              </TouchableOpacity>
             </View>
           </View>
+
+          {/* Caption */}
+          <Text
+            className="mt-4 px-8 text-center text-xs font-semibold leading-5"
+            style={{ color: colors.mutedText, fontFamily: fonts.body }}
+          >
+            Every logged day plants a new sapling. Keep your streak alive to
+            grow your forest.
+          </Text>
+
+          {/* Primary CTA — pinned pill button, preserves existing handleLogCare action/label */}
+          <TouchableOpacity
+            className="mx-[22px] mt-5 w-auto py-4 rounded-2xl flex-row items-center justify-center gap-2 active:opacity-90"
+            style={{
+              backgroundColor: isNourished ? colors.border : colors.primary,
+              ...getShadow(colors, isDark),
+            }}
+            disabled={isNourished || forestStatus?.todayCareLogged}
+            onPress={handleLogCare}
+          >
+            <Ionicons
+              name={isNourished || forestStatus?.todayCareLogged ? "checkmark-circle" : "water"}
+              size={18}
+              color={colors.buttonText}
+            />
+            <Text
+              className="font-bold text-sm"
+              style={{ color: colors.buttonText, fontFamily: fonts.body }}
+            >
+              {isNourished || forestStatus?.todayCareLogged
+                ? "Nourished Today"
+                : "Water today's tree"}
+            </Text>
+          </TouchableOpacity>
 
           {/* History Log Section */}
           <View className="mx-6 mt-6">

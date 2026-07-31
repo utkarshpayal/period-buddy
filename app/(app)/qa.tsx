@@ -1,12 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import {
-  type AudioPlayer,
-  RecordingPresets,
-  createAudioPlayer,
-  requestRecordingPermissionsAsync,
-  useAudioRecorder,
-  useAudioRecorderState,
-} from "expo-audio";
+import { type AudioPlayer, createAudioPlayer } from "expo-audio";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -25,9 +18,10 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppState } from "../../components/AppState";
 import { useTheme } from "../../components/theme";
-import { getSoftTints } from "../../components/ui-tokens";
+import { getShadow, getSoftTints } from "../../components/ui-tokens";
+import { VoiceModeOverlay, type VoiceStatus } from "../../components/VoiceModeOverlay";
+import { useVoiceInput } from "../../hooks/useVoiceInput";
 import { alert } from "../../lib/alert";
-import { showPermissionModal } from "../../lib/modal-host";
 import { questionAnswerApi, speechApi, type Language, type LanguageCode } from "../../lib/api";
 import { resolveAudioUri } from "../../lib/audio";
 import { SUPPORTED_LANGUAGES } from "../../lib/languages";
@@ -60,6 +54,7 @@ export default function QA() {
   const scrollViewRef = useRef<ScrollView>(null);
   const insets = useSafeAreaInsets();
   const softTints = getSoftTints(colors);
+  const shadow = getShadow(colors, isDark);
 
   // Functional Input and Loading States
   const [typedQuestion, setTypedQuestion] = useState("");
@@ -68,15 +63,44 @@ export default function QA() {
   const [language, setLanguage] = useState<LanguageCode>("en-IN");
   const [languages, setLanguages] = useState<Language[]>(SUPPORTED_LANGUAGES);
   const [languagePickerVisible, setLanguagePickerVisible] = useState(false);
-  const [isTranscribing, setIsTranscribing] = useState(false);
   const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
   const [synthesizingMessageId, setSynthesizingMessageId] = useState<string | null>(null);
   const [voiceMode, setVoiceMode] = useState(false);
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
-  const recorderState = useAudioRecorderState(recorder);
   const playerRef = useRef<AudioPlayer | null>(null);
 
+  const { handleMicPress, isRecording, isTranscribing, level } = useVoiceInput({
+    language,
+    voiceMode,
+    onTranscript: (transcript) => {
+      if (voiceMode) {
+        handleTriggerConversation(transcript);
+      } else {
+        setTypedQuestion((prev) => (prev.trim() ? `${prev.trim()} ${transcript}` : transcript));
+      }
+    },
+  });
+
   const selectedLanguage = languages.find((l) => l.code === language) ?? SUPPORTED_LANGUAGES[0];
+  const isSpeakingReply = voiceMode && playingMessageId !== null;
+
+  // Google Assistant style loop: whenever voice mode is idle, auto-arm the mic again.
+  useEffect(() => {
+    if (!voiceMode || isRecording || isTranscribing || isCompanionTyping || isSpeakingReply) return;
+    const timer = setTimeout(() => {
+      handleMicPress();
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [voiceMode, isRecording, isTranscribing, isCompanionTyping, isSpeakingReply, handleMicPress]);
+
+  const voiceStatus: VoiceStatus = isTranscribing
+    ? "processing"
+    : isRecording
+      ? "listening"
+      : isCompanionTyping
+        ? "thinking"
+        : isSpeakingReply
+          ? "speaking"
+          : "idle";
 
   useEffect(() => {
     let isMounted = true;
@@ -91,46 +115,6 @@ export default function QA() {
       playerRef.current?.release();
     };
   }, []);
-
-  async function handleMicPress() {
-    if (recorderState.isRecording) {
-      await recorder.stop();
-      const uri = recorder.uri;
-      if (!uri) return;
-
-      setIsTranscribing(true);
-      try {
-        const result = await speechApi.transcribe(uri, language);
-        const transcript = result.transcript.trim();
-        if (transcript) {
-          if (voiceMode) {
-            handleTriggerConversation(transcript);
-          } else {
-            setTypedQuestion((prev) => (prev.trim() ? `${prev.trim()} ${transcript}` : transcript));
-          }
-        } else {
-          alert("Didn't catch that", "Try recording again somewhere quieter.");
-        }
-      } catch (error) {
-        alert("Voice input failed", error instanceof Error ? error.message : "Please try again.");
-      } finally {
-        setIsTranscribing(false);
-      }
-      return;
-    }
-
-    const { granted } = await requestRecordingPermissionsAsync();
-    if (!granted) {
-      showPermissionModal({
-        title: "Microphone access needed",
-        message: "Enable microphone access in Settings to use voice input.",
-        icon: "mic-outline",
-      });
-      return;
-    }
-    await recorder.prepareToRecordAsync();
-    recorder.record();
-  }
 
   async function handleListen(message: ChatMessage) {
     if (playingMessageId === message.id) {
@@ -170,7 +154,7 @@ export default function QA() {
       id: "init_1",
       sender: "companion",
       suggestedQuestions: defaultSuggestedQuestions,
-      text: "Hi, I am Nura Companion. Ask anything about periods, discharge, cramps, hygiene, intimacy, partner questions, or body changes. I can share general education, and I will point you toward care when symptoms sound urgent.",
+      text: "Hi, I am Nura AI. Ask anything about periods, discharge, cramps, hygiene, intimacy, partner questions, or body changes. I can share general education, and I will point you toward care when symptoms sound urgent.",
       time: "9:41 AM",
     },
   ]);
@@ -348,29 +332,27 @@ export default function QA() {
         >
         {/* Custom Companion Chat Header Section */}
         <View
-          className="px-5 py-4 border-b flex-row justify-between items-center gap-2"
-          style={{
-            borderColor: colors.border,
-            backgroundColor: colors.surface,
-          }}
+          className="mx-4 mt-4 mb-1 px-4 py-3.5 rounded-3xl flex-row justify-between items-center gap-2"
+          style={[
+            { backgroundColor: colors.surface },
+            shadow,
+          ]}
         >
           <View className="flex-row items-center gap-3 flex-1 min-w-0">
             <TouchableOpacity
               onPress={() => router.back()}
               activeOpacity={0.7}
-              className="p-2 -ml-2 rounded-full"
+              className="p-2.5 rounded-full border"
+              style={{ backgroundColor: colors.input, borderColor: colors.border }}
             >
-              <Feather name="arrow-left" size={20} color={colors.foreground} />
+              <Feather name="arrow-left" size={18} color={colors.foreground} />
             </TouchableOpacity>
 
             {/* Robot/Companion Identity Sphere Indicator */}
             <View className="relative">
               <View
-                className="w-10 h-10 rounded-full items-center justify-center border"
-                style={{
-                  backgroundColor: softTints.pink,
-                  borderColor: colors.border,
-                }}
+                className="w-11 h-11 rounded-full items-center justify-center"
+                style={{ backgroundColor: softTints.pink }}
               >
                 <Text className="text-xl">✨</Text>
               </View>
@@ -384,10 +366,10 @@ export default function QA() {
               <Text
                 numberOfLines={1}
                 ellipsizeMode="tail"
-                className="text-sm font-black tracking-tight"
+                className="text-base font-black tracking-tight"
                 style={{ color: colors.foreground, fontFamily: fonts.heading }}
               >
-                Nura Companion
+                Nura AI
               </Text>
               <Text
                 numberOfLines={1}
@@ -404,11 +386,8 @@ export default function QA() {
             <TouchableOpacity
               onPress={() => setVoiceMode((prev) => !prev)}
               activeOpacity={0.7}
-              className="flex-row items-center gap-1 px-2.5 py-1.5 rounded-full border"
-              style={{
-                backgroundColor: voiceMode ? colors.primary : softTints.pink,
-                borderColor: colors.border,
-              }}
+              className="flex-row items-center gap-1 px-2.5 py-2 rounded-full"
+              style={{ backgroundColor: voiceMode ? colors.primary : softTints.pink }}
             >
               <Feather name="headphones" size={13} color={voiceMode ? colors.buttonText : colors.primary} />
               <Text
@@ -423,8 +402,8 @@ export default function QA() {
             <TouchableOpacity
               onPress={() => setLanguagePickerVisible(true)}
               activeOpacity={0.7}
-              className="flex-row items-center gap-1 px-2.5 py-1.5 rounded-full border"
-              style={{ backgroundColor: softTints.pink, borderColor: colors.border, maxWidth: 92 }}
+              className="flex-row items-center gap-1 px-2.5 py-2 rounded-full"
+              style={{ backgroundColor: softTints.pink, maxWidth: 92 }}
             >
               <Feather name="globe" size={13} color={colors.primary} />
               <Text
@@ -440,10 +419,14 @@ export default function QA() {
         </View>
 
         {voiceMode ? (
-          <View className="px-5 py-2 flex-row items-start gap-1.5" style={{ backgroundColor: softTints.pink }}>
-            <Feather name="mic" size={11} color={colors.primary} style={{ marginTop: 1.5 }} />
-            <Text className="text-[10px] font-bold flex-1 flex-shrink" style={{ color: colors.primary, fontFamily: fonts.body }}>
-              Voice mode on — tap the mic, speak, and I&apos;ll reply out loud in {selectedLanguage.label}.
+          <View
+            className="mx-4 mb-1 mt-2 px-4 py-3 rounded-2xl flex-row items-start gap-2"
+            style={{ backgroundColor: softTints.pink }}
+          >
+            <Feather name="mic" size={13} color={colors.primary} style={{ marginTop: 1.5 }} />
+            <Text className="text-[11px] font-bold flex-1 flex-shrink leading-4" style={{ color: colors.primary, fontFamily: fonts.body }}>
+              Voice mode on — tap the mic, speak, and I&apos;ll reply out loud in {selectedLanguage.label}. Pause
+              for 3 seconds and I&apos;ll send it automatically.
             </Text>
           </View>
         ) : null}
@@ -468,11 +451,14 @@ export default function QA() {
                 <View key={message.id}>
                   {isCompanion ? (
                     <View
-                      className="max-w-[85%] p-4 rounded-2xl self-start rounded-tl-none border"
-                      style={{
-                        backgroundColor: isUrgent ? colors.dangerLight : colors.surface,
-                        borderColor: isUrgent ? colors.danger : colors.border,
-                      }}
+                      className="max-w-[85%] p-4 rounded-3xl self-start rounded-bl-md border"
+                      style={[
+                        {
+                          backgroundColor: isUrgent ? colors.dangerLight : colors.surface,
+                          borderColor: isUrgent ? colors.danger : colors.border,
+                        },
+                        isUrgent ? null : shadow,
+                      ]}
                     >
                       {isUrgent && (
                         <View className="mb-2 flex-row items-center gap-1.5">
@@ -501,7 +487,7 @@ export default function QA() {
                         </View>
                       )}
                       <Text
-                        className="text-xs font-medium leading-5"
+                        className="text-[15px] font-medium leading-6"
                         style={{
                           color: colors.foreground,
                           fontFamily: fonts.body,
@@ -511,7 +497,7 @@ export default function QA() {
                       </Text>
                       {message.disclaimer && (
                         <Text
-                          className="text-[10px] font-semibold leading-4 mt-3"
+                          className="text-[11px] font-semibold leading-4 mt-3"
                           style={{
                             color: colors.mutedText,
                             fontFamily: fonts.body,
@@ -562,12 +548,12 @@ export default function QA() {
                               color={colors.primary}
                             />
                           )}
-                          <Text className="text-[8px] font-bold uppercase tracking-wide" style={{ color: colors.primary, fontFamily: fonts.body }}>
+                          <Text className="text-[10px] font-bold uppercase tracking-wide" style={{ color: colors.primary, fontFamily: fonts.body }}>
                             {playingMessageId === message.id ? "Playing" : "Listen"}
                           </Text>
                         </TouchableOpacity>
                         <Text
-                          className="text-[8px] font-bold opacity-60"
+                          className="text-[10px] font-bold opacity-70"
                           style={{
                             color: colors.mutedText,
                             fontFamily: fonts.body,
@@ -579,17 +565,17 @@ export default function QA() {
                     </View>
                   ) : (
                     <View
-                      className="max-w-[85%] self-end rounded-2xl rounded-tr-none overflow-hidden shadow-md p-4"
-                      style={{ backgroundColor: colors.primary }}
+                      className="max-w-[85%] self-end rounded-3xl rounded-br-md overflow-hidden p-4"
+                      style={[{ backgroundColor: colors.primary }, shadow]}
                     >
                       <Text
-                        className="text-xs font-medium leading-5"
+                        className="text-[15px] font-medium leading-6"
                         style={{ color: colors.buttonText, fontFamily: fonts.body }}
                       >
                         {message.text}
                       </Text>
                       <Text
-                        className="text-[8px] font-bold text-right mt-1.5 opacity-60"
+                        className="text-[10px] font-bold text-right mt-1.5 opacity-70"
                         style={{ color: colors.buttonText, fontFamily: fonts.body }}
                       >
                         {message.time}
@@ -603,11 +589,14 @@ export default function QA() {
             {/* HUMANIZED ACTIVE TYPING STATUS DOTS SIMULATION */}
             {isCompanionTyping && (
               <View
-                className="self-start rounded-2xl rounded-tl-none border px-4 py-3.5 items-center justify-center flex-row gap-1"
-                style={{
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                }}
+                className="self-start rounded-3xl rounded-bl-md border px-4 py-3.5 items-center justify-center flex-row gap-1"
+                style={[
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                  shadow,
+                ]}
               >
                 <Text
                   className="text-xs font-bold tracking-widest animate-pulse"
@@ -622,15 +611,17 @@ export default function QA() {
 
         {/* PERSISTENT FIXED FOOTER MESSAGE CONSOLE BAR ROW */}
         <View
-          className="px-4 py-3.5 border-t flex-row items-center gap-3"
-          style={{
-            borderColor: colors.border,
-            backgroundColor: colors.surface,
-            paddingBottom: Math.max(14, insets.bottom + 8),
-          }}
+          className="mx-4 mb-2 px-2 py-2 rounded-full flex-row items-center gap-2"
+          style={[
+            {
+              backgroundColor: colors.surface,
+              marginBottom: Math.max(8, insets.bottom),
+            },
+            shadow,
+          ]}
         >
           <TextInput
-            placeholder={recorderState.isRecording ? "Listening..." : "Ask me anything anonymously..."}
+            placeholder={isRecording ? "Listening..." : "Ask me anything anonymously..."}
             placeholderTextColor={colors.mutedText}
             value={typedQuestion}
             onChangeText={setTypedQuestion}
@@ -638,8 +629,8 @@ export default function QA() {
             maxLength={500}
             returnKeyType="send"
             blurOnSubmit={false}
-            editable={!recorderState.isRecording && !isTranscribing}
-            className="flex-1 px-4 py-3 rounded-xl text-sm"
+            editable={!isRecording && !isTranscribing}
+            className="flex-1 px-4 py-3 rounded-full text-sm"
             style={{
               color: colors.foreground,
               backgroundColor: colors.input,
@@ -653,13 +644,13 @@ export default function QA() {
             className="rounded-full overflow-hidden"
           >
             <View
-              className="p-2.5 items-center justify-center"
-              style={{ backgroundColor: recorderState.isRecording ? colors.danger : colors.border }}
+              className="w-11 h-11 items-center justify-center rounded-full"
+              style={{ backgroundColor: isRecording ? colors.danger : colors.input }}
             >
               {isTranscribing ? (
                 <ActivityIndicator size="small" color={colors.mutedText} />
               ) : (
-                <Feather name="mic" size={15} color={recorderState.isRecording ? "#fff" : colors.mutedText} />
+                <Feather name="mic" size={16} color={isRecording ? "#fff" : colors.mutedText} />
               )}
             </View>
           </TouchableOpacity>
@@ -671,17 +662,17 @@ export default function QA() {
           >
             {typedQuestion.trim() && !isCompanionTyping ? (
               <View
-                className="p-2.5 items-center justify-center"
+                className="w-11 h-11 items-center justify-center rounded-full"
                 style={{ backgroundColor: colors.primary }}
               >
-                <Feather name="send" size={15} color={colors.buttonText} />
+                <Feather name="send" size={16} color={colors.buttonText} />
               </View>
             ) : (
               <View
-                className="p-2.5 items-center justify-center"
-                style={{ backgroundColor: colors.border }}
+                className="w-11 h-11 items-center justify-center rounded-full"
+                style={{ backgroundColor: colors.input }}
               >
-                <Feather name="send" size={15} color={colors.mutedText} />
+                <Feather name="send" size={16} color={colors.mutedText} />
               </View>
             )}
           </TouchableOpacity>
@@ -726,6 +717,18 @@ export default function QA() {
           </View>
         </Modal>
       </SafeAreaView>
+
+      {voiceMode ? (
+        <VoiceModeOverlay
+          colors={colors}
+          fonts={fonts}
+          languageLabel={selectedLanguage.label}
+          level={level}
+          onClose={() => setVoiceMode(false)}
+          onMicPress={handleMicPress}
+          status={voiceStatus}
+        />
+      ) : null}
     </>
   );
 }

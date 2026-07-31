@@ -238,23 +238,20 @@ export default function Hygiene() {
         style={{ backgroundColor: colors.background }}
       >
         {/* Upper Navigation Action Header */}
-        <View className="flex-row items-center gap-2 px-6 pt-6">
+        <View className="flex-row items-center gap-3 px-[22px] pt-6 pb-1.5">
           <TouchableOpacity
             onPress={() => router.back()}
             activeOpacity={0.7}
-            className="p-2.5 -ml-2 rounded-full border"
-            style={{
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-            }}
+            className="w-9 h-9 rounded-full items-center justify-center shadow-2xs"
+            style={{ backgroundColor: colors.surface }}
           >
-            <Feather name="arrow-left" size={18} color={colors.foreground} />
+            <Feather name="arrow-left" size={16} color={colors.foreground} />
           </TouchableOpacity>
           <Text
-            className="flex-1 text-2xl font-black tracking-tight ml-2"
+            className="text-lg font-bold tracking-tight"
             style={{ color: colors.foreground, fontFamily: fonts.heading }}
           >
-            Hygiene & Care
+            Hygiene & Wellbeing
           </Text>
         </View>
 
@@ -262,100 +259,61 @@ export default function Hygiene() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 100 }}
         >
-          <View className="mt-6">
-            {/* HORIZONTAL CATEGORY CHIP CONTROLS */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingHorizontal: 24, gap: 8 }}
-              className="mb-6"
-            >
-              {[
-                { id: "products", label: "Products" },
-                { id: "daily", label: "Daily Care" },
-                { id: "activities", label: "Bathing & Movement" },
-                { id: "prevention", label: "Infection Care" },
-              ].map((tab) => {
-                const isSelected = activeTab === tab.id;
+          <View className="mt-5">
+            {/* 2x2 TOPIC CARD GRID — tap a card to switch the active topic */}
+            <View className="flex-row flex-wrap px-[22px]" style={{ gap: 12 }}>
+              {(
+                [
+                  { id: "products", tint: softTints.pink, bg: colors.primaryLight },
+                  { id: "daily", tint: softTints.mint, bg: colors.accentLight },
+                  { id: "activities", tint: softTints.lavender, bg: colors.secondaryLight },
+                  { id: "prevention", tint: softTints.pink, bg: colors.primaryLight },
+                ] as const
+              ).map(({ id, bg }) => {
+                const item = activeResources.find((r) => r.category === id);
+                if (!item) return null;
+                const isSelected = activeTab === id;
                 return (
                   <TouchableOpacity
-                    key={tab.id}
-                    onPress={() => setActiveTab(tab.id as any)}
-                    activeOpacity={0.8}
-                    className="rounded-full px-5 py-2.5 border shadow-3xs"
+                    key={id}
+                    onPress={() => setActiveTab(id)}
+                    activeOpacity={0.85}
+                    className="rounded-[18px] p-4 shadow-2xs"
                     style={{
-                      backgroundColor: isSelected
-                        ? colors.primary
-                        : colors.surface,
+                      width: "47%",
+                      backgroundColor: colors.surface,
+                      borderWidth: isSelected ? 1.5 : 1,
                       borderColor: isSelected ? colors.primary : colors.border,
                     }}
                   >
-                    <Text
-                      className="text-xs font-bold tracking-wide"
-                      style={{
-                        color: isSelected
-                          ? colors.buttonText
-                          : colors.foreground,
-                        fontFamily: fonts.body,
-                      }}
+                    <View
+                      className="w-6 h-6 rounded-lg items-center justify-center"
+                      style={{ backgroundColor: bg }}
                     >
-                      {tab.label}
+                      {renderItemIcon(item)}
+                    </View>
+                    <Text
+                      className="text-[12.5px] font-bold mt-2"
+                      style={{ color: colors.foreground, fontFamily: fonts.heading }}
+                      numberOfLines={2}
+                    >
+                      {item.title}
+                    </Text>
+                    <Text
+                      className="text-[10.5px] font-medium mt-0.5 leading-4"
+                      style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                      numberOfLines={2}
+                    >
+                      {item.description}
                     </Text>
                   </TouchableOpacity>
                 );
               })}
-            </ScrollView>
+            </View>
 
             {/* CONTEXTUAL ACTIVE INTERACTIVE CARD SYSTEM */}
             {currentActiveData && (
-              <View className="mx-6 gap-5">
-                {/* Hero Header Context Card segment */}
-                <View
-                  className="rounded-3xl border p-6 flex-row items-center shadow-2xs relative overflow-hidden"
-                  style={{
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  }}
-                >
-                  {/* Subtle contextual ambient glow background circle layout */}
-                  <View
-                    className="absolute -right-8 -top-8 w-24 h-24 rounded-full opacity-35"
-                    style={{ backgroundColor: softTints.pink }}
-                  />
-
-                  <View
-                    className="p-3.5 rounded-2xl mr-4 z-10"
-                    style={{ backgroundColor: softTints.pink }}
-                  >
-                    {renderItemIcon(currentActiveData)}
-                  </View>
-                  <View className="flex-1 z-10 pr-2">
-                    <Text
-                      className="text-base font-black tracking-tight"
-                      style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                    >
-                      {currentActiveData.title}
-                    </Text>
-                    <Text
-                      className="text-xs font-semibold mt-1 leading-4"
-                      style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                    >
-                      {currentActiveData.description}
-                    </Text>
-                    {!!currentActiveData.estimatedReadTime && (
-                      <View className="flex-row items-center gap-1 mt-2">
-                        <Feather name="clock" size={11} color={colors.mutedText} />
-                        <Text
-                          className="text-[10px] font-bold"
-                          style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                        >
-                          {currentActiveData.estimatedReadTime} min read
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-
+              <View className="mx-6 gap-5 mt-6">
                 {/* Video / Audio Companion Media Row */}
                 {(currentActiveData.videoUrl || currentActiveData.audioUrl) && (
                   <View className="flex-row gap-3">
@@ -470,6 +428,14 @@ export default function Hygiene() {
                 </Text>
               </TouchableOpacity>
             </View>
+
+            {/* Footer trust / privacy note */}
+            <Text
+              className="text-[12px] font-bold text-center mx-[22px] mt-1.5 px-1 py-2"
+              style={{ color: colors.mutedText, fontFamily: fonts.body }}
+            >
+              Gentle reminders, zero judgment. All chats here are private.
+            </Text>
           </View>
         </ScrollView>
       </SafeAreaView>

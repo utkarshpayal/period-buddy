@@ -12,6 +12,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import Svg, { Circle, Polyline } from "react-native-svg";
 import { useTheme } from "../../components/theme";
 import {
   getActionGradient,
@@ -88,6 +89,87 @@ function buildFiveMonthAnalytics(
       month,
     };
   });
+}
+
+const TREND_CHART_WIDTH = 100;
+const TREND_CHART_HEIGHT = 40;
+
+function CycleTrendLine({ bars }: { bars: AnalyticsBar[] }) {
+  const { colors, fonts } = useTheme();
+  const loggedValues = bars.map((b) => b.length).filter((v) => v > 0);
+
+  if (loggedValues.length < 2) {
+    return (
+      <Text
+        className="text-[11px] font-semibold text-center py-6"
+        style={{ color: colors.mutedText, fontFamily: fonts.body }}
+      >
+        Log at least two cycles to see your trend line.
+      </Text>
+    );
+  }
+
+  const max = Math.max(...loggedValues);
+  const min = Math.min(...loggedValues);
+  const range = Math.max(max - min, 1);
+  const stepX = TREND_CHART_WIDTH / (bars.length - 1);
+
+  const points = bars.map((bar, index) => {
+    const x = index * stepX;
+    const y =
+      bar.length > 0
+        ? TREND_CHART_HEIGHT - 4 - ((bar.length - min) / range) * (TREND_CHART_HEIGHT - 8)
+        : null;
+    return { x, y, length: bar.length };
+  });
+
+  const loggedPoints = points.filter((p) => p.y !== null) as { x: number; y: number; length: number }[];
+  const polylinePoints = loggedPoints.map((p) => `${p.x},${p.y}`).join(" ");
+
+  const firstLogged = loggedPoints[0].length;
+  const lastLogged = loggedPoints[loggedPoints.length - 1].length;
+  const delta = lastLogged - firstLogged;
+  const trendColor = delta > 0 ? colors.danger : delta < 0 ? colors.success : colors.mutedText;
+  const trendIcon = delta > 0 ? "trending-up" : delta < 0 ? "trending-down" : "trending-neutral";
+  const trendLabel =
+    delta === 0
+      ? "Steady cycle length"
+      : `${delta > 0 ? "Up" : "Down"} ${Math.abs(delta)} day${Math.abs(delta) === 1 ? "" : "s"} vs 5 months ago`;
+
+  return (
+    <View>
+      <View className="flex-row items-center gap-1.5 mb-2">
+        <MaterialCommunityIcons name={trendIcon} size={14} color={trendColor} />
+        <Text className="text-[11px] font-bold" style={{ color: trendColor, fontFamily: fonts.body }}>
+          {trendLabel}
+        </Text>
+      </View>
+      <Svg width="100%" height={64} viewBox={`0 0 ${TREND_CHART_WIDTH} ${TREND_CHART_HEIGHT}`}>
+        <Polyline
+          points={polylinePoints}
+          fill="none"
+          stroke={colors.primary}
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        {loggedPoints.map((p, index) => (
+          <Circle key={index} cx={p.x} cy={p.y} r={2.4} fill={colors.primary} />
+        ))}
+      </Svg>
+      <View className="flex-row justify-between mt-1">
+        {bars.map((bar, index) => (
+          <Text
+            key={`${bar.month}-${index}`}
+            className="text-[10px] font-bold flex-1 text-center"
+            style={{ color: colors.mutedText, fontFamily: fonts.body }}
+          >
+            {bar.month}
+          </Text>
+        ))}
+      </View>
+    </View>
+  );
 }
 
 export default function Predictions() {
@@ -224,38 +306,65 @@ export default function Predictions() {
                 </View>
               )}
 
-              {/* Hero: Next Period */}
+              {/* Hero: Next Period — circular countdown ring */}
               <View
-                className="border overflow-hidden mb-5"
+                className="border overflow-hidden mb-5 items-center py-6"
                 style={{
+                  backgroundColor: colors.surface,
                   borderColor: colors.border,
                   borderRadius: 28,
                   ...getShadow(colors, isDark),
                 }}
               >
-                <LinearGradient
-                  colors={surfaceGradient}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  className="p-6 flex-row items-center justify-between"
-                >
-                  <View className="flex-1 pr-4">
-                    <Text className="text-xs font-bold tracking-widest uppercase mb-1" style={{ color: colors.primary, fontFamily: fonts.heading }}>
-                      Next Period
-                    </Text>
-                    <Text className="text-3xl font-black tracking-tighter" style={{ color: colors.foreground, fontFamily: fonts.mono }}>
-                      {data.nextPeriodDate}
-                    </Text>
-                    <Text className="mt-1.5 text-xs font-semibold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                      {data.nextPeriodDaysAway === 0
-                        ? "Starting today"
-                        : `In ${data.nextPeriodDaysAway} days`}
-                    </Text>
-                  </View>
-                  <View className="p-3.5 rounded-2xl" style={{ backgroundColor: softTints.pink }}>
-                    <MaterialCommunityIcons name="calendar-heart" size={28} color={colors.primary} />
-                  </View>
-                </LinearGradient>
+                {(() => {
+                  const size = 150;
+                  const strokeWidth = 10;
+                  const radius = (size - strokeWidth) / 2;
+                  const circumference = 2 * Math.PI * radius;
+                  const cycleLen = Math.max(data.cycleLength || 28, 1);
+                  const progress = Math.min(
+                    Math.max((cycleLen - data.nextPeriodDaysAway) / cycleLen, 0),
+                    1,
+                  );
+                  const dashOffset = circumference * (1 - progress);
+                  return (
+                    <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+                      <Circle
+                        cx={size / 2}
+                        cy={size / 2}
+                        r={radius}
+                        stroke={colors.border}
+                        strokeWidth={strokeWidth}
+                        fill="none"
+                      />
+                      <Circle
+                        cx={size / 2}
+                        cy={size / 2}
+                        r={radius}
+                        stroke={colors.primary}
+                        strokeWidth={strokeWidth}
+                        fill="none"
+                        strokeDasharray={`${circumference} ${circumference}`}
+                        strokeDashoffset={dashOffset}
+                        strokeLinecap="round"
+                        rotation={-90}
+                        originX={size / 2}
+                        originY={size / 2}
+                      />
+                    </Svg>
+                  );
+                })()}
+                <View style={{ position: "absolute", top: 44, alignItems: "center" }}>
+                  <Text className="text-3xl font-black" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
+                    {data.nextPeriodDaysAway}
+                  </Text>
+                  <Text className="text-[11px] font-bold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                    days left
+                  </Text>
+                </View>
+                <Text className="mt-2.5 text-base font-black tracking-tight" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
+                  Next period · {data.nextPeriodDate}
+                </Text>
               </View>
 
               {/* Fertile Window + Ovulation */}
@@ -370,7 +479,7 @@ export default function Predictions() {
                           >
                             {d.length > 0 ? (
                               <LinearGradient
-                                colors={isLatest ? actionGradient : [colors.secondary, colors.secondaryLight]}
+                                colors={isLatest ? actionGradient : [colors.accent, colors.mintLight]}
                                 start={{ x: 0, y: 0 }}
                                 end={{ x: 0, y: 1 }}
                                 style={{
@@ -399,6 +508,25 @@ export default function Predictions() {
                     })}
                   </View>
                 </LinearGradient>
+              </View>
+
+              {/* Cycle length trend line */}
+              <View
+                className="border p-5 mb-5"
+                style={{
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  borderRadius: 28,
+                  ...getShadow(colors, isDark),
+                }}
+              >
+                <Text
+                  className="text-xs font-bold tracking-widest uppercase mb-3"
+                  style={{ color: colors.secondary, fontFamily: fonts.heading }}
+                >
+                  Cycle Length Trend
+                </Text>
+                <CycleTrendLine bars={analyticsBars} />
               </View>
 
               {/* Cycle stats */}

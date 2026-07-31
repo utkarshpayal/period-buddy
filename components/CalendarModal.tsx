@@ -184,13 +184,15 @@ export function CalendarModal({
                     }}
                   >
                     <Text
-                      className="text-sm font-bold"
+                      className={isSelected || isToday ? "text-sm font-black" : "text-sm font-semibold"}
                       style={{
                         color: isDisabled
                           ? colors.border
                           : isSelected
                             ? colors.buttonText
-                            : colors.foreground,
+                            : isToday
+                              ? colors.primary
+                              : colors.foreground,
                       }}
                     >
                       {day}

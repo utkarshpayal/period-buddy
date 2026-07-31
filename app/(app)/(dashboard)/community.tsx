@@ -1,11 +1,24 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
+import {
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  useAudioPlayer,
+  useAudioPlayerStatus,
+  useAudioRecorder,
+  useAudioRecorderState,
+} from "expo-audio";
+import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import { useVideoPlayer, VideoView } from "expo-video";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Modal,
+  PanResponder,
   Platform,
+  Pressable,
   ScrollView,
   StatusBar,
   Text,
@@ -18,19 +31,30 @@ import { useAppState } from "../../../components/AppState";
 import { useAuth } from "../../../components/auth-context";
 import OptionsModal from "../../../components/OptionsModal";
 import { alert } from "../../../lib/alert";
+import { showPermissionModal } from "../../../lib/modal-host";
 import { useTheme } from "../../../components/theme";
+import { getShadow } from "../../../components/ui-tokens";
 import {
   communityApi,
   getWebSocketUrl,
+  uploadApi,
+  type CommunityAttachment,
   type CommunityPost,
 } from "../../../lib/api";
 
 // --- BACKEND API LAYER SCHEMAS & INTERFACES ---
+type PendingAttachment = {
+  uri: string;
+  type: "audio" | "image" | "video";
+  mimeType: string;
+};
+
 interface Comment {
   id: string;
   author: string;
   avatar: string;
   content: string;
+  attachment?: CommunityAttachment;
   time: string;
   isOwner: boolean; // true when this comment belongs to the logged-in user
 }
@@ -40,12 +64,18 @@ interface Post {
   author: string;
   avatar: string;
   content: string;
+  attachment?: CommunityAttachment;
+  category?: string;
   likes: number;
   commentsCount: number;
   comments: Comment[];
   time: string;
   isOwner: boolean; // true when this post belongs to the logged-in user
 }
+
+// Matches the filter chips in the design; posts can carry any category
+// string, but composing only ever offers these so filtering stays in sync.
+const COMMUNITY_CATEGORIES = ["PCOS", "Fitness", "Skin"];
 
 function mapCommunityPost(post: CommunityPost): Post {
   // Backend resolveAuthor sets isOwn:true on userId when requester is the author
@@ -56,6 +86,8 @@ function mapCommunityPost(post: CommunityPost): Post {
     author: isOwner ? "You" : post.isAnonymous ? "Anonymous member" : "Community member",
     avatar: isOwner ? "✨" : "NU",
     content: post.content,
+    attachment: post.attachments?.[0],
+    category: post.category,
     likes: post.likeCount ?? post.likes,
     commentsCount: post.commentCount ?? post.commentsCount ?? post.comments?.length ?? 0,
     time: formatRelativeTime(post.createdAt),
@@ -69,6 +101,7 @@ function mapCommunityPost(post: CommunityPost): Post {
           author: isCommentOwner ? "You" : comment.isAnonymous ? "Anonymous member" : "Community member",
           avatar: isCommentOwner ? "U" : "AU",
           content: comment.content,
+          attachment: comment.attachments?.[0],
           time: formatRelativeTime(comment.createdAt),
           isOwner: isCommentOwner,
         };
@@ -86,6 +119,245 @@ function formatRelativeTime(value?: string) {
   if (diffMinutes < 60) return `${diffMinutes}m ago`;
   if (diffMinutes < 1440) return `${Math.round(diffMinutes / 60)}h ago`;
   return `${Math.round(diffMinutes / 1440)}d ago`;
+}
+
+function PostAttachmentView({ attachment }: { attachment: CommunityAttachment }) {
+  const { colors } = useTheme();
+  const [fullscreenVisible, setFullscreenVisible] = useState(false);
+
+  if (attachment.type === "image") {
+    return (
+      <>
+        <Pressable onPress={() => setFullscreenVisible(true)}>
+          <Image
+            source={{ uri: attachment.url }}
+            className="mt-4 w-full rounded-2xl"
+            style={{ aspectRatio: 4 / 3, backgroundColor: colors.surfaceSoft }}
+            resizeMode="cover"
+          />
+        </Pressable>
+        <FullscreenMediaModal
+          visible={fullscreenVisible}
+          onClose={() => setFullscreenVisible(false)}
+          attachment={attachment}
+        />
+      </>
+    );
+  }
+
+  if (attachment.type === "video") {
+    return <PostVideoAttachment url={attachment.url} attachment={attachment} />;
+  }
+
+  return <PostAudioAttachment url={attachment.url} />;
+}
+
+function PostVideoAttachment({
+  url,
+  attachment,
+}: {
+  url: string;
+  attachment: CommunityAttachment;
+}) {
+  const { colors } = useTheme();
+  const [fullscreenVisible, setFullscreenVisible] = useState(false);
+  const player = useVideoPlayer(url, (instance) => {
+    instance.loop = false;
+  });
+
+  return (
+    <>
+      <Pressable onPress={() => setFullscreenVisible(true)}>
+        <View
+          className="mt-4 w-full rounded-2xl overflow-hidden"
+          style={{ aspectRatio: 16 / 9, backgroundColor: colors.surfaceSoft }}
+        >
+          <VideoView
+            player={player}
+            style={{ height: "100%", width: "100%" }}
+            contentFit="cover"
+            nativeControls={false}
+            pointerEvents="none"
+          />
+          <View
+            pointerEvents="none"
+            className="absolute inset-0 items-center justify-center"
+          >
+            <View className="h-12 w-12 items-center justify-center rounded-full border border-white/50 bg-black/35">
+              <Ionicons name="play" size={22} color="white" />
+            </View>
+          </View>
+        </View>
+      </Pressable>
+      <FullscreenMediaModal
+        visible={fullscreenVisible}
+        onClose={() => setFullscreenVisible(false)}
+        attachment={attachment}
+      />
+    </>
+  );
+}
+
+function FullscreenMediaModal({
+  attachment,
+  onClose,
+  visible,
+}: {
+  attachment: CommunityAttachment;
+  onClose: () => void;
+  visible: boolean;
+}) {
+  const player = useVideoPlayer(attachment.type === "video" ? attachment.url : null, (instance) => {
+    instance.loop = false;
+  });
+
+  useEffect(() => {
+    if (attachment.type !== "video") return;
+    if (visible) player.play();
+    else player.pause();
+  }, [visible, player, attachment.type]);
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="fade"
+      transparent
+      onRequestClose={onClose}
+    >
+      <View className="flex-1 items-center justify-center" style={{ backgroundColor: "black" }}>
+        <TouchableOpacity
+          onPress={onClose}
+          className="absolute right-5 top-14 z-10 h-10 w-10 items-center justify-center rounded-full"
+          style={{ backgroundColor: "rgba(255,255,255,0.15)" }}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="close" size={22} color="white" />
+        </TouchableOpacity>
+
+        {attachment.type === "image" ? (
+          <Image
+            source={{ uri: attachment.url }}
+            style={{ width: "100%", height: "80%" }}
+            resizeMode="contain"
+          />
+        ) : (
+          <VideoView
+            player={player}
+            style={{ width: "100%", height: "60%" }}
+            contentFit="contain"
+            nativeControls
+          />
+        )}
+      </View>
+    </Modal>
+  );
+}
+
+function formatAudioTime(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
+}
+
+function PostAudioAttachment({ url }: { url: string }) {
+  const { colors, fonts } = useTheme();
+  const player = useAudioPlayer(url);
+  const status = useAudioPlayerStatus(player);
+  const [trackWidth, setTrackWidth] = useState(0);
+
+  const progress = status.duration > 0 ? status.currentTime / status.duration : 0;
+
+  function seekToRatio(ratio: number) {
+    const clamped = Math.min(1, Math.max(0, ratio));
+    if (status.duration > 0) player.seekTo(clamped * status.duration);
+  }
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (event) => {
+        if (trackWidth > 0) seekToRatio(event.nativeEvent.locationX / trackWidth);
+      },
+      onPanResponderMove: (event) => {
+        if (trackWidth > 0) seekToRatio(event.nativeEvent.locationX / trackWidth);
+      },
+    }),
+  ).current;
+
+  function togglePlayback() {
+    if (status.playing) {
+      player.pause();
+    } else {
+      if (status.didJustFinish || status.currentTime >= status.duration) player.seekTo(0);
+      player.play();
+    }
+  }
+
+  return (
+    <View
+      className="mt-4 flex-row items-center gap-3 rounded-2xl px-4 py-3"
+      style={{ backgroundColor: colors.surfaceSoft }}
+    >
+      <TouchableOpacity
+        activeOpacity={0.85}
+        onPress={togglePlayback}
+        className="w-9 h-9 rounded-full items-center justify-center"
+        style={{ backgroundColor: colors.primary }}
+      >
+        <Ionicons
+          name={status.playing ? "pause" : "play"}
+          size={16}
+          color={colors.buttonText}
+        />
+      </TouchableOpacity>
+
+      <View className="flex-1">
+        <View
+          onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}
+          {...panResponder.panHandlers}
+          className="h-4 justify-center"
+        >
+          <View
+            className="h-1.5 rounded-full overflow-hidden"
+            style={{ backgroundColor: colors.border }}
+          >
+            <View
+              className="h-full rounded-full"
+              style={{
+                width: `${Math.min(100, Math.max(0, progress * 100))}%`,
+                backgroundColor: colors.primary,
+              }}
+            />
+          </View>
+          <View
+            pointerEvents="none"
+            className="absolute h-3 w-3 rounded-full"
+            style={{
+              left: `${Math.min(100, Math.max(0, progress * 100))}%`,
+              marginLeft: -6,
+              backgroundColor: colors.primary,
+            }}
+          />
+        </View>
+        <View className="flex-row justify-between mt-1">
+          <Text
+            className="text-[10px] font-bold"
+            style={{ color: colors.mutedText, fontFamily: fonts.mono }}
+          >
+            {formatAudioTime(status.currentTime)}
+          </Text>
+          <Text
+            className="text-[10px] font-bold"
+            style={{ color: colors.mutedText, fontFamily: fonts.mono }}
+          >
+            {formatAudioTime(status.duration)}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
 }
 
 export default function Community() {
@@ -250,6 +522,10 @@ export default function Community() {
   // isOwner is now tracked on each Post/Comment object from the API — no extra Set needed
   const [isPostsLoading, setIsPostsLoading] = useState(true);
   const [postsError, setPostsError] = useState<string | null>(null);
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [searchVisible, setSearchVisible] = useState(false);
+  const [searchInput, setSearchInput] = useState("");
+  const [submittedSearch, setSubmittedSearch] = useState("");
 
   // Modals Controller States
   const [optionsVisible, setOptionsVisible] = useState(false);
@@ -259,7 +535,20 @@ export default function Community() {
   // Selected Context Holders
   const [activePost, setActivePost] = useState<Post | null>(null);
   const [newPostContent, setNewPostContent] = useState("");
+  const [newPostCategory, setNewPostCategory] = useState<string | null>(null);
   const [newCommentContent, setNewCommentContent] = useState("");
+
+  // Compose-modal attachment picking state
+  const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const audioRecorderState = useAudioRecorderState(audioRecorder);
+
+  // Reply-composer attachment picking state (comments sheet footer)
+  const [pendingReplyAttachment, setPendingReplyAttachment] = useState<PendingAttachment | null>(null);
+  const [isPublishingComment, setIsPublishingComment] = useState(false);
+  const replyAudioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const replyAudioRecorderState = useAudioRecorderState(replyAudioRecorder);
 
   const {
     reportPost,
@@ -275,7 +564,11 @@ export default function Community() {
     setPostsError(null);
 
     try {
-      const postsResponse = await communityApi.getPosts({ limit: 20 });
+      const postsResponse = await communityApi.getPosts({
+        limit: 20,
+        category: activeCategory ?? undefined,
+        search: submittedSearch.trim() || undefined,
+      });
       setPosts(postsResponse.posts.map(mapCommunityPost));
       setLikedPostIds(
         new Set(
@@ -291,7 +584,7 @@ export default function Community() {
     } finally {
       setIsPostsLoading(false);
     }
-  }, []);
+  }, [activeCategory, submittedSearch]);
 
   useEffect(() => {
     loadPosts();
@@ -383,6 +676,100 @@ export default function Community() {
     }
   }
 
+  async function pickAttachmentImage(setter: (attachment: PendingAttachment) => void) {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      showPermissionModal({
+        title: "Photo access needed",
+        message: "Allow photo library access to attach an image.",
+        icon: "images-outline",
+      });
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    const asset = result.assets[0];
+    setter({
+      uri: asset.uri,
+      type: "image",
+      mimeType: asset.mimeType || "image/jpeg",
+    });
+  }
+
+  async function pickAttachmentVideo(setter: (attachment: PendingAttachment) => void) {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      showPermissionModal({
+        title: "Media access needed",
+        message: "Allow media library access to attach a video.",
+        icon: "videocam-outline",
+      });
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["videos"],
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    const asset = result.assets[0];
+    setter({
+      uri: asset.uri,
+      type: "video",
+      mimeType: asset.mimeType || "video/mp4",
+    });
+  }
+
+  async function toggleAttachmentRecording(
+    recorder: ReturnType<typeof useAudioRecorder>,
+    recorderState: ReturnType<typeof useAudioRecorderState>,
+    setter: (attachment: PendingAttachment | null) => void,
+  ) {
+    if (recorderState.isRecording) {
+      await recorder.stop();
+      const uri = recorder.uri;
+      if (uri) {
+        setter({ uri, type: "audio", mimeType: "audio/m4a" });
+      }
+      return;
+    }
+
+    const { granted } = await requestRecordingPermissionsAsync();
+    if (!granted) {
+      showPermissionModal({
+        title: "Microphone access needed",
+        message: "Enable microphone access in Settings to attach a voice note.",
+        icon: "mic-outline",
+      });
+      return;
+    }
+    setter(null);
+    await recorder.prepareToRecordAsync();
+    recorder.record();
+  }
+
+  function resetComposeAttachment() {
+    setPendingAttachment(null);
+    if (audioRecorderState.isRecording) audioRecorder.stop();
+  }
+
+  const handlePickComposeImage = () => pickAttachmentImage(setPendingAttachment);
+  const handlePickComposeVideo = () => pickAttachmentVideo(setPendingAttachment);
+  const handleToggleComposeRecording = () =>
+    toggleAttachmentRecording(audioRecorder, audioRecorderState, setPendingAttachment);
+
+  function resetReplyAttachment() {
+    setPendingReplyAttachment(null);
+    if (replyAudioRecorderState.isRecording) replyAudioRecorder.stop();
+  }
+
+  const handlePickReplyImage = () => pickAttachmentImage(setPendingReplyAttachment);
+  const handlePickReplyVideo = () => pickAttachmentVideo(setPendingReplyAttachment);
+  const handleToggleReplyRecording = () =>
+    toggleAttachmentRecording(replyAudioRecorder, replyAudioRecorderState, setPendingReplyAttachment);
+
   // Threads style real-time sub-array append mutation
   async function handlePublishPost() {
     if (!newPostContent.trim()) {
@@ -392,117 +779,110 @@ export default function Community() {
       );
       return;
     }
+    if (isPublishing) return;
 
-    const payload: Post = {
-      id: `p_local_${Date.now()}`,
-      author: "You",
-      avatar: "✨",
-      content: newPostContent.trim(),
-      likes: 0,
-      commentsCount: 0,
-      time: "Just now",
-      comments: [],
-      isOwner: true,
-    };
-
-    const localId = payload.id;
-    setPosts([payload, ...posts]);
-    setNewPostContent("");
-    setCreatePostVisible(false);
-    earnTokens(5);
-
+    setIsPublishing(true);
     try {
-      const createdPost = await communityApi.createPost({
-        content: payload.content,
-        isAnonymous: true,
-      });
-      // mapCommunityPost reads isOwn from the serialized backend response
-      setPosts((current) => [
-        mapCommunityPost(createdPost),
-        ...current.filter((post) => post.id !== localId),
-      ]);
-    } catch {
-      alert(
-        "Saved locally",
-        "Your post is visible here. It will need the backend online to sync.",
-      );
-      return;
-    }
+      let attachments: CommunityAttachment[] | undefined;
+      if (pendingAttachment) {
+        const { url, key } = await uploadApi.uploadMedia(
+          pendingAttachment.uri,
+          "community",
+          pendingAttachment.mimeType,
+        );
+        attachments = [{ url, key, type: pendingAttachment.type }];
+      }
 
-    alert("Shared", "Your post is now visible in the community feed.");
+      const createdPost = await communityApi.createPost({
+        content: newPostContent.trim(),
+        isAnonymous: true,
+        category: newPostCategory ?? undefined,
+        attachments,
+      });
+
+      setPosts((current) => [mapCommunityPost(createdPost), ...current]);
+      setNewPostContent("");
+      setNewPostCategory(null);
+      resetComposeAttachment();
+      setCreatePostVisible(false);
+      earnTokens(5);
+    } catch (error) {
+      alert(
+        "Couldn't publish post",
+        error instanceof Error ? error.message : "Please try again.",
+      );
+    } finally {
+      setIsPublishing(false);
+    }
   }
 
   async function handlePublishComment() {
-    if (!newCommentContent.trim() || !activePost) return;
+    if (!newCommentContent.trim() || !activePost || isPublishingComment) return;
 
-    const freshComment: Comment = {
-      id: `c_local_${Date.now()}`,
-      author: "You",
-      avatar: "✨",
-      content: newCommentContent.trim(),
-      time: "Just now",
-      isOwner: true,
-    };
-
-    // Immutably patching structural nested relational values
-    const updatedPosts = posts.map((item) => {
-      if (item.id === activePost.id) {
-        const structuralComments = [...item.comments, freshComment];
-        const patchedObject = {
-          ...item,
-          commentsCount: item.commentsCount + 1,
-          comments: structuralComments,
-        };
-        // Update active context tree simultaneously to maintain reactive rendering
-        setActivePost(patchedObject);
-        return patchedObject;
-      }
-      return item;
-    });
-
-    setPosts(updatedPosts);
-    setNewCommentContent("");
-    earnTokens(2);
+    const postId = activePost.id;
+    setIsPublishingComment(true);
 
     try {
+      let attachments: CommunityAttachment[] | undefined;
+      if (pendingReplyAttachment) {
+        const { url, key } = await uploadApi.uploadMedia(
+          pendingReplyAttachment.uri,
+          "community",
+          pendingReplyAttachment.mimeType,
+        );
+        attachments = [{ url, key, type: pendingReplyAttachment.type }];
+      }
+
       const result = await communityApi.addComment(
-        activePost.id,
-        freshComment.content,
+        postId,
+        newCommentContent.trim(),
         true,
+        attachments,
       );
       const createdComment = result.comment;
       const syncedComment: Comment = {
-        id: createdComment.id ?? createdComment._id ?? freshComment.id,
+        id: createdComment.id ?? createdComment._id ?? `c_${Date.now()}`,
         author: createdComment.isAnonymous
           ? "Anonymous member"
           : "Community member",
         avatar: "AU",
         content: createdComment.content,
+        attachment: createdComment.attachments?.[0],
         time: formatRelativeTime(createdComment.createdAt),
         isOwner: true,
       };
+
       setPosts((current) =>
         current.map((item) =>
-          item.id === activePost.id
+          item.id === postId
             ? {
               ...item,
               commentsCount: result.commentsCount,
-              comments: [...item.comments.slice(0, -1), syncedComment],
+              comments: [...item.comments, syncedComment],
             }
             : item,
         ),
       );
       setActivePost((prev) =>
-        prev && prev.id === activePost.id
+        prev && prev.id === postId
           ? {
             ...prev,
             commentsCount: result.commentsCount,
-            comments: [...prev.comments.slice(0, -1), syncedComment],
+            comments: [...prev.comments, syncedComment],
           }
           : prev
       );
-    } catch {
-      // Keep local comment as an offline draft.
+
+      setNewCommentContent("");
+      resetReplyAttachment();
+      earnTokens(2);
+    } catch (error) {
+      alert(
+        "Couldn't post reply",
+        error instanceof Error ? error.message : "Please try again.",
+      );
+    } finally {
+      setIsPublishingComment(false);
     }
   }
 
@@ -631,26 +1011,105 @@ export default function Community() {
             contentContainerStyle={{ paddingBottom: 140 }}
           >
             {/* Header */}
-            <View className="px-6 pt-6">
-              <Text
-                className="text-3xl font-extrabold tracking-tight"
-                style={{ color: colors.foreground, fontFamily: fonts.heading }}
+            <View className="px-6 pt-6 flex-row items-start justify-between">
+              <View className="flex-1 pr-3">
+                <Text
+                  className="text-[22px] font-bold tracking-tight"
+                  style={{ color: colors.foreground, fontFamily: fonts.heading }}
+                >
+                  Community
+                </Text>
+                <Text
+                  className="text-xs font-semibold mt-1"
+                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                >
+                  Share experiences and ask questions anonymously, safely.
+                </Text>
+              </View>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => {
+                  setSearchVisible((visible) => {
+                    const next = !visible;
+                    if (!next && (searchInput || submittedSearch)) {
+                      setSearchInput("");
+                      setSubmittedSearch("");
+                    }
+                    return next;
+                  });
+                }}
+                className="w-9 h-9 rounded-full items-center justify-center"
+                style={{ backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
               >
-                Community
-              </Text>
-              <Text
-                className="text-xs font-semibold mt-1"
-                style={{ color: colors.mutedText, fontFamily: fonts.body }}
-              >
-                Share experiences and ask questions anonymously, safely.
-              </Text>
+                <Ionicons
+                  name={searchVisible ? "close" : "search"}
+                  size={17}
+                  color={colors.foreground}
+                />
+              </TouchableOpacity>
             </View>
+
+            {searchVisible && (
+              <View className="px-6 mt-4">
+                <TextInput
+                  autoFocus
+                  placeholder="Search community posts..."
+                  placeholderTextColor={colors.mutedText}
+                  value={searchInput}
+                  onChangeText={setSearchInput}
+                  onSubmitEditing={() => setSubmittedSearch(searchInput)}
+                  returnKeyType="search"
+                  className="px-4 py-3 rounded-xl text-sm"
+                  style={{
+                    backgroundColor: colors.input,
+                    color: colors.foreground,
+                    fontFamily: fonts.body,
+                  }}
+                />
+              </View>
+            )}
+
+            {/* CATEGORY FILTER CHIPS */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: 24, gap: 8 }}
+              className="mt-4"
+            >
+              {["All", ...COMMUNITY_CATEGORIES].map((chip) => {
+                const isActive =
+                  chip === "All" ? activeCategory === null : activeCategory === chip;
+                return (
+                  <TouchableOpacity
+                    key={chip}
+                    activeOpacity={0.85}
+                    onPress={() => setActiveCategory(chip === "All" ? null : chip)}
+                    className="rounded-full px-4 py-2"
+                    style={{
+                      backgroundColor: isActive ? colors.primary : colors.surface,
+                      borderWidth: isActive ? 0 : 1,
+                      borderColor: colors.border,
+                    }}
+                  >
+                    <Text
+                      className="text-xs font-bold"
+                      style={{
+                        color: isActive ? colors.buttonText : colors.foreground,
+                        fontFamily: fonts.body,
+                      }}
+                    >
+                      {chip}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
 
             {/* FEED CONTAINER */}
             <View className="mt-6 gap-4 px-6">
                 {isPostsLoading && (
                   <View
-                    className="rounded-3xl border p-6 items-center"
+                    className="rounded-2xl border p-6 items-center"
                     style={{
                       backgroundColor: colors.surface,
                       borderColor: colors.border,
@@ -667,7 +1126,7 @@ export default function Community() {
                 )}
                 {!isPostsLoading && postsError && (
                   <View
-                    className="rounded-3xl border p-6 items-center"
+                    className="rounded-2xl border p-6 items-center"
                     style={{
                       backgroundColor: colors.surface,
                       borderColor: colors.border,
@@ -715,10 +1174,11 @@ export default function Community() {
                     return (
                       <View
                         key={post.id}
-                        className="rounded-3xl border p-5 shadow-2xs relative"
+                        className="rounded-2xl border p-5 relative"
                         style={{
                           backgroundColor: colors.surface,
                           borderColor: isReported ? colors.danger : colors.border,
+                          ...getShadow(colors, isDark),
                         }}
                       >
                         <View className="flex-row items-center justify-between">
@@ -726,14 +1186,19 @@ export default function Community() {
                             <View
                               className="w-9 h-9 rounded-full items-center justify-center"
                               style={{
-                                backgroundColor: colors.surfaceSoft,
+                                backgroundColor: colors.primaryLight,
                               }}
                             >
-                              <Text className="text-base">{post.avatar}</Text>
+                              <Text
+                                className="text-sm font-bold"
+                                style={{ color: colors.primary, fontFamily: fonts.body }}
+                              >
+                                {post.avatar}
+                              </Text>
                             </View>
                             <View>
                               <Text
-                                className="text-sm font-bold"
+                                className="text-[13px] font-bold"
                                 style={{ color: colors.foreground, fontFamily: fonts.body }}
                               >
                                 {post.author}
@@ -743,6 +1208,7 @@ export default function Community() {
                                 style={{ color: colors.mutedText, fontFamily: fonts.body }}
                               >
                                 {post.time}
+                                {post.category ? ` · ${post.category}` : ""}
                               </Text>
                             </View>
                           </View>
@@ -765,10 +1231,14 @@ export default function Community() {
                           {post.content}
                         </Text>
 
+                        {post.attachment && (
+                          <PostAttachmentView attachment={post.attachment} />
+                        )}
+
                         {/* Action Bar - all icons left side together */}
                         <View
                           className="mt-5 pt-3 flex-row items-center"
-                          style={{ borderTopWidth: 1, borderTopColor: colors.border, gap: 20 }}
+                          style={{ borderTopWidth: 1, borderTopColor: colors.border, gap: 16 }}
                         >
                           {/* Like */}
                           <TouchableOpacity
@@ -862,7 +1332,7 @@ export default function Community() {
                   })}
                 {!isPostsLoading && !postsError && posts.length === 0 && (
                   <View
-                    className="rounded-3xl border p-6 items-center"
+                    className="rounded-2xl border p-6 items-center"
                     style={{
                       backgroundColor: colors.surface,
                       borderColor: colors.border,
@@ -898,17 +1368,18 @@ export default function Community() {
             </View>
           </ScrollView>
 
-          {/* FLOATING ACTION TRIGGER BAR (THREADS-STYLE FLOAT FAB) */}
+          {/* FLOATING ACTION TRIGGER — new post */}
           <TouchableOpacity
             activeOpacity={0.9}
             onPress={() => setCreatePostVisible(true)}
-            className="absolute bottom-28 right-6 w-14 h-14 rounded-full items-center justify-center shadow-lg border"
+            className="absolute bottom-28 right-6 w-14 h-14 rounded-full items-center justify-center border"
             style={{
               backgroundColor: colors.primary,
               borderColor: colors.background,
+              ...getShadow(colors, isDark),
             }}
           >
-            <Feather name="edit-3" size={22} color={colors.buttonText} />
+            <Ionicons name="add" size={26} color={colors.buttonText} />
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -932,7 +1403,13 @@ export default function Community() {
             }}
           >
             <View className="flex-row justify-between items-center mb-6">
-              <TouchableOpacity onPress={() => setCreatePostVisible(false)}>
+              <TouchableOpacity
+                onPress={() => {
+                  setCreatePostVisible(false);
+                  resetComposeAttachment();
+                  setNewPostCategory(null);
+                }}
+              >
                 <Text
                   className="text-base font-semibold"
                   style={{ color: colors.mutedText, fontFamily: fonts.body }}
@@ -941,27 +1418,32 @@ export default function Community() {
                 </Text>
               </TouchableOpacity>
               <Text
-                className="text-lg font-black"
+                className="text-[17px] font-bold"
                 style={{ color: colors.foreground, fontFamily: fonts.heading }}
               >
                 New Thread
               </Text>
               <TouchableOpacity
                 onPress={handlePublishPost}
-                className="px-4 py-1.5 rounded-full"
-                style={{ backgroundColor: colors.primary }}
+                disabled={isPublishing}
+                className="px-4 py-1.5 rounded-full flex-row items-center gap-2"
+                style={{ backgroundColor: colors.primary, opacity: isPublishing ? 0.7 : 1 }}
               >
+                {isPublishing && <ActivityIndicator size="small" color={colors.buttonText} />}
                 <Text
                   className="text-xs font-bold"
                   style={{ color: colors.buttonText, fontFamily: fonts.body }}
                 >
-                  Post
+                  {isPublishing ? "Posting..." : "Post"}
                 </Text>
               </TouchableOpacity>
             </View>
 
-            <View className="flex-row gap-4 flex-1">
-              <View className="w-10 h-10 bg-pink-100 rounded-full items-center justify-center">
+            <View className="flex-row gap-4">
+              <View
+                className="w-10 h-10 rounded-full items-center justify-center"
+                style={{ backgroundColor: colors.primaryLight }}
+              >
                 <Text className="text-lg">✨</Text>
               </View>
               <TextInput
@@ -975,6 +1457,90 @@ export default function Community() {
                 style={{ color: colors.foreground, verticalAlign: "top", fontFamily: fonts.body }}
                 textAlignVertical="top"
               />
+            </View>
+
+            <View className="mt-4 ml-14 flex-row flex-wrap gap-2">
+              {COMMUNITY_CATEGORIES.map((category) => {
+                const isActive = newPostCategory === category;
+                return (
+                  <TouchableOpacity
+                    key={category}
+                    activeOpacity={0.85}
+                    onPress={() =>
+                      setNewPostCategory((current) =>
+                        current === category ? null : category,
+                      )
+                    }
+                    className="rounded-full px-3 py-1.5"
+                    style={{
+                      backgroundColor: isActive ? colors.primary : colors.surfaceSoft,
+                      borderWidth: isActive ? 0 : 1,
+                      borderColor: colors.border,
+                    }}
+                  >
+                    <Text
+                      className="text-[11px] font-bold"
+                      style={{
+                        color: isActive ? colors.buttonText : colors.mutedText,
+                        fontFamily: fonts.body,
+                      }}
+                    >
+                      {category}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {pendingAttachment && (
+              <View
+                className="mt-4 ml-14 flex-row items-center gap-3 rounded-2xl px-4 py-3"
+                style={{ backgroundColor: colors.surfaceSoft }}
+              >
+                <Ionicons
+                  name={
+                    pendingAttachment.type === "image"
+                      ? "image-outline"
+                      : pendingAttachment.type === "video"
+                        ? "videocam-outline"
+                        : "mic-outline"
+                  }
+                  size={18}
+                  color={colors.primary}
+                />
+                <Text
+                  className="flex-1 text-xs font-bold"
+                  style={{ color: colors.foreground, fontFamily: fonts.body }}
+                >
+                  {pendingAttachment.type === "image"
+                    ? "Photo attached"
+                    : pendingAttachment.type === "video"
+                      ? "Video attached"
+                      : "Voice note attached"}
+                </Text>
+                <TouchableOpacity onPress={resetComposeAttachment}>
+                  <Ionicons name="close-circle" size={18} color={colors.mutedText} />
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <View
+              className="mt-4 ml-14 flex-row items-center gap-5 pt-3"
+              style={{ borderTopWidth: 1, borderTopColor: colors.border }}
+            >
+              <TouchableOpacity onPress={handlePickComposeImage}>
+                <Ionicons name="image-outline" size={22} color={colors.mutedText} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handlePickComposeVideo}>
+                <Ionicons name="videocam-outline" size={22} color={colors.mutedText} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleToggleComposeRecording}>
+                <Ionicons
+                  name={audioRecorderState.isRecording ? "stop-circle" : "mic-outline"}
+                  size={22}
+                  color={audioRecorderState.isRecording ? colors.danger : colors.mutedText}
+                />
+              </TouchableOpacity>
             </View>
           </View>
         </KeyboardAvoidingView>
@@ -1001,7 +1567,7 @@ export default function Community() {
                 <Feather name="x" size={20} color={colors.foreground} />
               </TouchableOpacity>
               <Text
-                className="text-base font-black"
+                className="text-[15px] font-bold"
                 style={{ color: colors.foreground, fontFamily: fonts.heading }}
               >
                 Thread Discussion
@@ -1024,12 +1590,17 @@ export default function Community() {
                   <View className="flex-row items-center gap-3">
                     <View
                       className="w-9 h-9 rounded-full items-center justify-center"
-                      style={{ backgroundColor: colors.surfaceSoft }}
+                      style={{ backgroundColor: colors.primaryLight }}
                     >
-                      <Text className="text-base">{activePost.avatar}</Text>
+                      <Text
+                        className="text-sm font-bold"
+                        style={{ color: colors.primary, fontFamily: fonts.body }}
+                      >
+                        {activePost.avatar}
+                      </Text>
                     </View>
                     <Text
-                      className="text-sm font-bold"
+                      className="text-[13px] font-bold"
                       style={{ color: colors.foreground, fontFamily: fonts.body }}
                     >
                       {activePost.author}
@@ -1059,9 +1630,14 @@ export default function Community() {
                   >
                     <View
                       className="w-9 h-9 rounded-full items-center justify-center"
-                      style={{ backgroundColor: colors.surfaceSoft }}
+                      style={{ backgroundColor: colors.primaryLight }}
                     >
-                      <Text className="text-base">{comment.avatar}</Text>
+                      <Text
+                        className="text-sm font-bold"
+                        style={{ color: colors.primary, fontFamily: fonts.body }}
+                      >
+                        {comment.avatar}
+                      </Text>
                     </View>
                     <View
                       className="flex-1 p-3.5 rounded-2xl"
@@ -1109,6 +1685,9 @@ export default function Community() {
                       >
                         {comment.content}
                       </Text>
+                      {comment.attachment && (
+                        <PostAttachmentView attachment={comment.attachment} />
+                      )}
                     </View>
                   </View>
                 ))}
@@ -1125,7 +1704,6 @@ export default function Community() {
 
             {/* Persistent Absolute Standard Footer Input field layout for writing replies */}
             <View
-              className="px-4 py-3 flex-row items-center gap-3"
               style={{
                 borderTopWidth: 1,
                 borderTopColor: colors.border,
@@ -1133,40 +1711,95 @@ export default function Community() {
                 paddingBottom: Math.max(12, insets.bottom + 8),
               }}
             >
-              <TextInput
-                placeholder="Post your reply..."
-                placeholderTextColor={colors.mutedText}
-                value={newCommentContent}
-                onChangeText={setNewCommentContent}
-                className="flex-1 px-4 py-3 rounded-xl text-sm"
-                style={{
-                  backgroundColor: colors.input,
-                  color: colors.foreground,
-                  fontFamily: fonts.body,
-                }}
-                onSubmitEditing={handlePublishComment}
-                returnKeyType="send"
-              />
-              <TouchableOpacity
-                disabled={!newCommentContent.trim()}
-                onPress={handlePublishComment}
-                className="p-2.5 rounded-full items-center justify-center"
-                style={{
-                  backgroundColor: newCommentContent.trim()
-                    ? colors.primary
-                    : colors.border,
-                }}
-              >
-                <Feather
-                  name="arrow-up"
-                  size={16}
-                  color={
-                    newCommentContent.trim()
-                      ? colors.buttonText
-                      : colors.mutedText
-                  }
+              {pendingReplyAttachment && (
+                <View
+                  className="mx-4 mt-3 flex-row items-center gap-3 rounded-2xl px-4 py-2.5"
+                  style={{ backgroundColor: colors.surfaceSoft }}
+                >
+                  <Ionicons
+                    name={
+                      pendingReplyAttachment.type === "image"
+                        ? "image-outline"
+                        : pendingReplyAttachment.type === "video"
+                          ? "videocam-outline"
+                          : "mic-outline"
+                    }
+                    size={16}
+                    color={colors.primary}
+                  />
+                  <Text
+                    className="flex-1 text-xs font-bold"
+                    style={{ color: colors.foreground, fontFamily: fonts.body }}
+                  >
+                    {pendingReplyAttachment.type === "image"
+                      ? "Photo attached"
+                      : pendingReplyAttachment.type === "video"
+                        ? "Video attached"
+                        : "Voice note attached"}
+                  </Text>
+                  <TouchableOpacity onPress={resetReplyAttachment}>
+                    <Ionicons name="close-circle" size={16} color={colors.mutedText} />
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              <View className="px-4 pt-3 flex-row items-center gap-2">
+                <TouchableOpacity onPress={handlePickReplyImage}>
+                  <Ionicons name="image-outline" size={20} color={colors.mutedText} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handlePickReplyVideo}>
+                  <Ionicons name="videocam-outline" size={20} color={colors.mutedText} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleToggleReplyRecording}>
+                  <Ionicons
+                    name={replyAudioRecorderState.isRecording ? "stop-circle" : "mic-outline"}
+                    size={20}
+                    color={replyAudioRecorderState.isRecording ? colors.danger : colors.mutedText}
+                  />
+                </TouchableOpacity>
+              </View>
+
+              <View className="px-4 pt-2 pb-1 flex-row items-center gap-3">
+                <TextInput
+                  placeholder="Post your reply..."
+                  placeholderTextColor={colors.mutedText}
+                  value={newCommentContent}
+                  onChangeText={setNewCommentContent}
+                  className="flex-1 px-4 py-3 rounded-xl text-sm"
+                  style={{
+                    backgroundColor: colors.input,
+                    color: colors.foreground,
+                    fontFamily: fonts.body,
+                  }}
+                  onSubmitEditing={handlePublishComment}
+                  returnKeyType="send"
                 />
-              </TouchableOpacity>
+                <TouchableOpacity
+                  disabled={!newCommentContent.trim() || isPublishingComment}
+                  onPress={handlePublishComment}
+                  className="p-2.5 rounded-full items-center justify-center"
+                  style={{
+                    backgroundColor: newCommentContent.trim()
+                      ? colors.primary
+                      : colors.border,
+                    opacity: isPublishingComment ? 0.7 : 1,
+                  }}
+                >
+                  {isPublishingComment ? (
+                    <ActivityIndicator size="small" color={colors.buttonText} />
+                  ) : (
+                    <Feather
+                      name="arrow-up"
+                      size={16}
+                      color={
+                        newCommentContent.trim()
+                          ? colors.buttonText
+                          : colors.mutedText
+                      }
+                    />
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </KeyboardAvoidingView>

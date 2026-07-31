@@ -14,13 +14,13 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { alert } from "../../lib/alert";
 import { useTheme } from "../../components/theme";
-import { getActionGradient, getSoftTints } from "../../components/ui-tokens";
+import { getActionGradient, getShadow, HABIT_CATEGORY_COLORS } from "../../components/ui-tokens";
 import { habitsApi, type Habit } from "../../lib/api";
 
 const HABIT_IDEAS = [
-  { title: "Sleep 8 Hours", icon: "moon-outline", color: "#7c3aed", tokens: 45 },
-  { title: "Eat Iron-Rich Food", icon: "nutrition-outline", color: "#d97706", tokens: 35 },
-  { title: "Stretch for 10 Minutes", icon: "body-outline", color: "#0f766e", tokens: 25 },
+  { title: "Sleep 8 Hours", icon: "moon-outline", color: HABIT_CATEGORY_COLORS.sleep, tokens: 45 },
+  { title: "Eat Iron-Rich Food", icon: "nutrition-outline", color: HABIT_CATEGORY_COLORS.nutrition, tokens: 35 },
+  { title: "Stretch for 10 Minutes", icon: "body-outline", color: HABIT_CATEGORY_COLORS.movement, tokens: 25 },
 ];
 
 function computeTreeState(pct: number) {
@@ -39,7 +39,6 @@ export default function Habits() {
   const [refreshing, setRefreshing] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
-  const softTints = getSoftTints(colors);
   const actionGradient = getActionGradient(colors) as [string, string];
 
   const load = useCallback(async (isRefresh = false) => {
@@ -92,6 +91,9 @@ export default function Habits() {
     }
   };
 
+  // Intentionally distinct from the shared wallet balance (see useUserStats()):
+  // this is "points earned from today's visible habit checklist" for the tree
+  // growth bar below, not the account's lifetime/total points total.
   const totalTokens = habits.reduce((acc, h) => acc + (h.completed ? (h.rewardPoints ?? h.tokens) : 0), 0);
   const maxPossibleTokens = Math.max(180, habits.reduce((acc, h) => acc + (h.rewardPoints ?? h.tokens), 0));
   const growthPct = Math.min((totalTokens / maxPossibleTokens) * 100, 100);
@@ -99,6 +101,7 @@ export default function Habits() {
   const hasSuggestedHabits = HABIT_IDEAS.some(
     (idea) => !habits.some((habit) => habit.title === idea.title),
   );
+  const completedCount = habits.filter((h) => h.completed).length;
 
   return (
     <>
@@ -138,66 +141,44 @@ export default function Habits() {
               <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={colors.primary} />
             }
           >
-            {/* Tree Hub Panel */}
-            <View className="mx-6 mt-6">
-              <View
-                className="rounded-3xl border p-5 shadow-2xl relative overflow-hidden"
-                style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+            {/* This week — gradient summary card */}
+            <View className="mx-6 mt-4">
+              <LinearGradient
+                colors={actionGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={{ borderRadius: 22, padding: 18 }}
+                className="flex-row items-center justify-between"
               >
-                <View className="absolute -right-6 -top-6 w-20 h-20 rounded-full opacity-35" style={{ backgroundColor: softTints.pink }} />
-
-                <View className="flex-row items-center justify-between">
-                  <View className="flex-1 pr-2">
-                    <Text
-                      className="text-[10px] font-black tracking-widest uppercase"
-                      style={{ color: colors.primary, fontFamily: fonts.body }}
-                    >
-                      Current Cycle Tree
-                    </Text>
-                    <Text className="mt-1 text-base font-black tracking-tight" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-                      {treeState.label}
-                    </Text>
-                    <Text className="mt-1 text-[11px] font-medium leading-4" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                      {treeState.motivation}
-                    </Text>
-                  </View>
-                  <View
-                    className="h-20 w-20 items-center justify-center rounded-2xl border border-dashed"
-                    style={{ backgroundColor: softTints.pink, borderColor: `${colors.primary}40` }}
-                  >
-                    <MaterialCommunityIcons name={treeState.icon as any} size={36} color={colors.primary} />
-                  </View>
+                <View>
+                  <Text className="text-xs font-black opacity-90" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
+                    This week
+                  </Text>
+                  <Text className="mt-1 text-2xl font-black tracking-tight" style={{ color: colors.buttonText, fontFamily: fonts.heading }}>
+                    {completedCount} of {habits.length || 0} done
+                  </Text>
+                  <Text className="mt-1 text-[11px] font-semibold leading-4" style={{ color: colors.buttonText, opacity: 0.85, fontFamily: fonts.body }}>
+                    {treeState.label} · {treeState.motivation}
+                  </Text>
                 </View>
-
-                {/* Progress Bar */}
-                <View className="mt-5">
-                  <View className="flex-row justify-between items-center mb-1.5 px-0.5">
-                    <Text className="text-[10px] font-bold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                      Score: {totalTokens} / {maxPossibleTokens} Tokens
-                    </Text>
-                    <Text className="text-[10px] font-black" style={{ color: colors.primary, fontFamily: fonts.mono }}>
-                      {Math.round(growthPct)}% Growth
-                    </Text>
-                  </View>
-                  <View className="h-2.5 overflow-hidden rounded-full" style={{ backgroundColor: colors.surfaceSoft }}>
-                    <LinearGradient
-                      colors={actionGradient}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                      style={{ height: "100%", width: `${growthPct}%`, borderRadius: 99 }}
-                    />
-                  </View>
+                <View
+                  className="h-14 w-14 items-center justify-center rounded-full"
+                  style={{ backgroundColor: "rgba(255,255,255,0.22)" }}
+                >
+                  <Text className="text-base font-black" style={{ color: colors.buttonText, fontFamily: fonts.mono }}>
+                    {Math.round(growthPct)}%
+                  </Text>
                 </View>
-              </View>
+              </LinearGradient>
             </View>
 
             {/* Habits List */}
-            <View className="mx-6 mt-8">
-              <Text className="mb-4 text-xs font-black tracking-widest uppercase px-1" style={{ color: colors.primary, fontFamily: fonts.heading }}>
-                Daily Routines Checklist
+            <View className="mx-6 mt-6">
+              <Text className="mb-3 text-xs font-black tracking-widest uppercase px-1" style={{ color: colors.primary, fontFamily: fonts.heading }}>
+                Daily Routines
               </Text>
 
-              <View className="gap-3.5">
+              <View className="gap-3">
                 {habits.length === 0 ? (
                   <View
                     className="items-center rounded-2xl border p-5"
@@ -229,64 +210,52 @@ export default function Habits() {
                       activeOpacity={0.8}
                       onPress={() => toggleHabit(habit.id)}
                       disabled={isToggling}
-                      className="rounded-2xl border shadow-sm overflow-hidden"
+                      className="rounded-2xl shadow-sm flex-row items-center p-4"
                       style={{
                         backgroundColor: colors.surface,
-                        borderColor: habit.completed ? `${resolvedColor}40` : colors.border,
                         opacity: isToggling ? 0.7 : 1,
+                        ...getShadow(colors, isDark),
                       }}
                     >
-                      <View className="flex-row items-center justify-between p-4">
-                        <View className="flex-row items-center flex-1 gap-4">
-                          {/* Checkbox */}
-                          <View
-                            className="h-10 w-10 items-center justify-center rounded-xl border"
-                            style={{
-                              backgroundColor: habit.completed ? resolvedColor : "transparent",
-                              borderColor: habit.completed ? resolvedColor : colors.border,
-                            }}
-                          >
-                            {isToggling ? (
-                              <ActivityIndicator size="small" color={habit.completed ? "white" : colors.mutedText} />
-                            ) : habit.completed ? (
-                              <Feather name="check" size={16} color="white" />
-                            ) : (
-                              <Ionicons name={habit.icon as any} size={18} color={colors.mutedText} />
-                            )}
-                          </View>
+                      {/* Icon avatar */}
+                      <View
+                        className="h-10 w-10 items-center justify-center rounded-full mr-3.5"
+                        style={{ backgroundColor: `${resolvedColor}22` }}
+                      >
+                        <Ionicons name={habit.icon as any} size={18} color={resolvedColor} />
+                      </View>
 
-                          <View className="flex-1">
-                            <Text
-                              className="text-sm font-bold tracking-tight"
-                              style={{
-                                color: habit.completed ? colors.mutedText : colors.foreground,
-                                textDecorationLine: habit.completed ? "line-through" : "none",
-                                opacity: habit.completed ? 0.6 : 1,
-                                fontFamily: fonts.heading,
-                              }}
-                            >
-                              {habit.title}
-                            </Text>
-                            <View className="flex-row items-center gap-1 mt-0.5">
-                              <MaterialCommunityIcons name="fire" size={12} color={colors.warning} />
-                              <Text className="text-[10px] font-bold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                                {habit.streak} day streak
-                              </Text>
-                            </View>
-                          </View>
-                        </View>
-
-                        <View
-                          className="rounded-lg px-2.5 py-1"
-                          style={{ backgroundColor: habit.completed ? colors.border : `${resolvedColor}18` }}
+                      <View className="flex-1">
+                        <Text
+                          className="text-sm font-bold tracking-tight"
+                          style={{
+                            color: habit.completed ? colors.mutedText : colors.foreground,
+                            textDecorationLine: habit.completed ? "line-through" : "none",
+                            opacity: habit.completed ? 0.6 : 1,
+                            fontFamily: fonts.heading,
+                          }}
                         >
-                          <Text
-                            className="text-[10px] font-black"
-                            style={{ color: habit.completed ? colors.mutedText : resolvedColor, fontFamily: fonts.mono }}
-                          >
-                            +{habit.rewardPoints ?? habit.tokens} pts
-                          </Text>
-                        </View>
+                          {habit.title}
+                        </Text>
+                        <Text className="text-[10px] font-bold mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                          🔥 {habit.streak} day streak · +{habit.rewardPoints ?? habit.tokens} pts
+                        </Text>
+                      </View>
+
+                      {/* Checkmark toggle */}
+                      <View
+                        className="h-[26px] w-[26px] items-center justify-center rounded-full border"
+                        style={{
+                          backgroundColor: habit.completed ? colors.primary : "transparent",
+                          borderColor: habit.completed ? colors.primary : colors.border,
+                          borderWidth: 2,
+                        }}
+                      >
+                        {isToggling ? (
+                          <ActivityIndicator size="small" color={habit.completed ? colors.buttonText : colors.mutedText} />
+                        ) : habit.completed ? (
+                          <Feather name="check" size={13} color={colors.buttonText} />
+                        ) : null}
                       </View>
                     </TouchableOpacity>
                   );

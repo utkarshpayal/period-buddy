@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../components/auth-context";
+import { BearMascot } from "../../components/BearMascot";
 import {
   ProfileOnboarding,
   type ProfileOnboardingValues,
@@ -24,6 +25,7 @@ export default function Home() {
   const { isAuthenticated, signIn, signOut, token, user } = useAuth();
   const { colors, isDark } = useTheme();
   const name = [user?.firstName, user?.lastName].filter(Boolean).join(" ");
+  const [showOnboardingForm, setShowOnboardingForm] = React.useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -58,6 +60,88 @@ export default function Home() {
   }
 
   if (user?.isProfileComplete === false) {
+    if (!showOnboardingForm) {
+      // Welcome intro shown once before the profile-setup form, matching the
+      // mascot / greeting / single-CTA mockup for first-run onboarding.
+      return (
+        <>
+          <StatusBar
+            barStyle={isDark ? "light-content" : "dark-content"}
+            backgroundColor={colors.background}
+          />
+          <SafeAreaView
+            className="flex-1"
+            style={{ backgroundColor: colors.background }}
+          >
+            <View className="absolute right-6 top-8 z-10">
+              <ThemeToggle />
+            </View>
+
+            <View className="flex-1 items-center justify-center px-8">
+              <View className="mb-7 items-center justify-center">
+                <BearMascot
+                  faceColor={isDark ? "#4A2E39" : "#F3B4CE"}
+                  featureColor={isDark ? "#1A1216" : "#3A2530"}
+                  noseColor={colors.primary}
+                  size={72}
+                />
+              </View>
+
+              <Text
+                className="text-center font-black"
+                style={{ fontSize: 22, lineHeight: 28, color: colors.foreground }}
+              >
+                {name ? `Hi ${name},` : "Hi there,"}
+              </Text>
+              <Text
+                className="text-center font-black"
+                style={{ fontSize: 22, lineHeight: 28, color: colors.foreground }}
+              >
+                welcome to Period Buddy
+              </Text>
+
+              <Text
+                className="mt-3 text-center text-sm leading-6 font-semibold"
+                style={{ color: colors.mutedText, maxWidth: 300 }}
+              >
+                I&apos;ll help you track, understand, and feel your best — every
+                day of your cycle.
+              </Text>
+
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => setShowOnboardingForm(true)}
+                className="mt-8 w-full rounded-full py-4"
+                style={{ backgroundColor: colors.primary }}
+              >
+                <Text
+                  className="text-center text-base font-bold"
+                  style={{ color: colors.buttonText }}
+                >
+                  Let&apos;s set up your cycle
+                </Text>
+              </TouchableOpacity>
+
+              <View className="flex-row items-center gap-1.5 mt-5">
+                <View
+                  className="rounded-full"
+                  style={{ width: 16, height: 6, backgroundColor: colors.primary }}
+                />
+                <View
+                  className="rounded-full"
+                  style={{ width: 6, height: 6, backgroundColor: colors.border }}
+                />
+                <View
+                  className="rounded-full"
+                  style={{ width: 6, height: 6, backgroundColor: colors.border }}
+                />
+              </View>
+            </View>
+          </SafeAreaView>
+        </>
+      );
+    }
+
     return (
       <>
         <StatusBar
@@ -109,8 +193,10 @@ export default function Home() {
         <View className="flex-1 justify-center px-6">
           <View className="mb-10 items-center">
             <View
-              className="mb-5 h-20 w-20 items-center justify-center rounded-full border-2 overflow-hidden"
+              className="mb-6 items-center justify-center rounded-full border overflow-hidden"
               style={{
+                width: 120,
+                height: 120,
                 backgroundColor: colors.surface,
                 borderColor: colors.border,
               }}
@@ -119,29 +205,30 @@ export default function Home() {
                 source={require("../../assets/images/logo.png")}
                 resizeMode="contain"
                 style={{
-                  width: 56,
-                  height: 56,
+                  width: 80,
+                  height: 80,
                 }}
               />
             </View>
 
             <Text
-              className="text-4xl font-bold"
-              style={{ color: colors.foreground }}
+              className="text-center font-black"
+              style={{ fontSize: 30, lineHeight: 36, color: colors.foreground }}
             >
-              The Nura
+              {name ? `Hi ${name}, welcome to Nura` : "Welcome to Nura"}
             </Text>
 
             <Text
-              className="mt-3 text-center text-base leading-6"
-              style={{ color: colors.foreground }}
+              className="mt-3 text-center text-base leading-6 font-semibold"
+              style={{ color: colors.mutedText, maxWidth: 300 }}
             >
-              {name ? `Welcome, ${name}` : "Welcome to Nura"}
+              I&apos;ll help you track, understand, and feel your best — every day
+              of your cycle.
             </Text>
           </View>
 
           <View
-            className="rounded-2xl border-2 p-6"
+            className="rounded-3xl border p-6"
             style={{
               backgroundColor: colors.surface,
               borderColor: colors.border,
@@ -157,7 +244,7 @@ export default function Home() {
             {user?.email ? (
               <Text
                 className="mt-3 text-center text-base"
-                style={{ color: colors.foreground }}
+                style={{ color: colors.mutedText }}
               >
                 {user.email}
               </Text>
@@ -165,7 +252,7 @@ export default function Home() {
 
             <TouchableOpacity
               activeOpacity={0.85}
-              className="mt-6 rounded-xl py-4"
+              className="mt-6 rounded-full py-4"
               onPress={handleLogout}
               style={{ backgroundColor: colors.primary }}
             >

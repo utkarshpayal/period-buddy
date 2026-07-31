@@ -19,6 +19,7 @@ import { useAuth } from "../../../components/auth-context";
 import { alert } from "../../../lib/alert";
 import { useTheme } from "../../../components/theme";
 import { getShadow, getScreenGradient } from "../../../components/ui-tokens";
+import { formatShortDate } from "../../../lib/format";
 import {
   getWebSocketUrl,
   partnerApi,
@@ -55,7 +56,7 @@ function formatDateKey(dateKey?: string) {
   if (dateKey === todayKey) return "Today";
   if (dateKey === yesterdayKey) return "Yesterday";
 
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return formatShortDate(date);
 }
 
 export default function PartnerViewHome() {
@@ -288,27 +289,33 @@ export default function PartnerViewHome() {
         translucent
       />
       <SafeAreaView className="flex-1">
-        {/* Header - visually distinct "partner mode" banner */}
+        {/* Header - greeting pattern with avatar, matching the mockup's
+            "Hi Ravi / Here's how Maya's doing" partner-home header. */}
         <View className="flex-row items-center justify-between px-5 py-4">
-          <View className="flex-row items-center gap-2">
+          <View className="flex-row items-center gap-2.5">
             <View
-              className="w-8 h-8 rounded-full items-center justify-center"
+              className="w-[38px] h-[38px] rounded-full items-center justify-center"
               style={{ backgroundColor: colors.primaryLight }}
             >
-              <Ionicons name="eye-outline" size={14} color={colors.primary} />
+              <Text
+                className="text-sm font-black"
+                style={{ color: colors.primary, fontFamily: fonts.heading }}
+              >
+                {(user?.firstName?.[0] ?? "P").toUpperCase()}
+              </Text>
             </View>
             <View>
               <Text
-                className="text-sm font-black tracking-wide"
+                className="text-base font-black"
                 style={{ color: colors.foreground, fontFamily: fonts.heading }}
               >
-                Partner View
+                Hi {user?.firstName || "there"}
               </Text>
               <Text
-                style={{ fontSize: 10.5, color: colors.mutedText, fontFamily: fonts.body }}
+                style={{ fontSize: 11, fontWeight: "700", color: colors.mutedText, fontFamily: fonts.body }}
               >
                 {isConnected && partnerName !== "your partner"
-                  ? `Supporting ${partnerName}`
+                  ? `Here's how ${partnerName}'s doing`
                   : "Read-only · shared with you"}
               </Text>
             </View>
@@ -472,25 +479,26 @@ export default function PartnerViewHome() {
                   <Ionicons name="chevron-forward" size={16} color={colors.mutedText} />
                 </TouchableOpacity>
 
-                {/* Cycle status card */}
+                {/* Cycle status hero — gradient card (primary -> primaryLight)
+                    with white text, matching the mockup's "MAYA · CYCLE DAY 14
+                    / Ovulation phase" gradient hero. */}
                 {hasCycle && (
-                  <View
-                    className="rounded-3xl border p-5 mb-4"
-                    style={{
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                      ...getShadow(colors, isDark),
-                    }}
+                  <LinearGradient
+                    colors={[colors.primary, colors.primaryLight]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={{ borderRadius: 22, padding: 20, marginBottom: 14 }}
                   >
                     <Text
-                      className="text-[10px] font-black uppercase tracking-widest mb-2"
-                      style={{ color: colors.primary, fontFamily: fonts.body }}
+                      className="text-[11px] font-bold uppercase"
+                      style={{ color: "rgba(255,255,255,0.85)", fontFamily: fonts.body }}
                     >
-                      Cycle status
+                      {(partnerName !== "your partner" ? partnerName.toUpperCase() : "CYCLE")} · DAY{" "}
+                      {data?.cycle?.currentCycleDay ?? "—"}
                     </Text>
                     <Text
-                      className="text-xl font-black mb-1"
-                      style={{ color: colors.foreground, fontFamily: fonts.heading }}
+                      className="text-[22px] font-black mt-1 mb-2"
+                      style={{ color: "#fff", fontFamily: fonts.heading }}
                     >
                       {(data?.cycle?.currentPhase &&
                         PHASE_LABEL[data.cycle.currentPhase]) ||
@@ -498,34 +506,38 @@ export default function PartnerViewHome() {
                         "—"}
                     </Text>
                     <Text
-                      className="text-xs font-semibold"
-                      style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                      className="text-xs font-semibold leading-5"
+                      style={{ color: "rgba(255,255,255,0.92)", fontFamily: fonts.body }}
                     >
-                      Day {data?.cycle?.currentCycleDay ?? "—"} of cycle
                       {typeof data?.cycle?.nextPeriodDaysAway === "number"
-                        ? ` · Next period in ${data.cycle.nextPeriodDaysAway} day${
+                        ? `Next period in ${data.cycle.nextPeriodDaysAway} day${
                             data.cycle.nextPeriodDaysAway === 1 ? "" : "s"
-                          }`
+                          }.`
+                        : "Cycle details updated by your partner."}
+                      {typeof data?.cycle?.ovulationDaysAway === "number"
+                        ? ` Ovulation ${
+                            data.cycle.ovulationDaysAway === 0
+                              ? "is today"
+                              : `in ${data.cycle.ovulationDaysAway} day${data.cycle.ovulationDaysAway === 1 ? "" : "s"}`
+                          }.`
                         : ""}
                     </Text>
-                    {(data?.cycle?.nextPeriodDate ||
-                      data?.cycle?.fertileWindowRange ||
-                      typeof data?.cycle?.ovulationDaysAway === "number") && (
+                    {(data?.cycle?.nextPeriodDate || data?.cycle?.fertileWindowRange) && (
                       <View
-                        className="flex-row flex-wrap gap-2 mt-3 pt-3 border-t"
-                        style={{ borderColor: colors.border }}
+                        className="flex-row flex-wrap gap-3 mt-3 pt-3 border-t"
+                        style={{ borderColor: "rgba(255,255,255,0.3)" }}
                       >
                         {data?.cycle?.nextPeriodDate && (
                           <View className="flex-1 min-w-[45%]">
                             <Text
                               className="text-[9.5px] font-black uppercase tracking-wider mb-0.5"
-                              style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                              style={{ color: "rgba(255,255,255,0.75)", fontFamily: fonts.body }}
                             >
                               Next period
                             </Text>
                             <Text
                               className="text-xs font-bold"
-                              style={{ color: colors.foreground, fontFamily: fonts.body }}
+                              style={{ color: "#fff", fontFamily: fonts.body }}
                             >
                               {data.cycle.nextPeriodDate}
                             </Text>
@@ -535,40 +547,77 @@ export default function PartnerViewHome() {
                           <View className="flex-1 min-w-[45%]">
                             <Text
                               className="text-[9.5px] font-black uppercase tracking-wider mb-0.5"
-                              style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                              style={{ color: "rgba(255,255,255,0.75)", fontFamily: fonts.body }}
                             >
                               Fertile window
                             </Text>
                             <Text
                               className="text-xs font-bold"
-                              style={{ color: colors.foreground, fontFamily: fonts.body }}
+                              style={{ color: "#fff", fontFamily: fonts.body }}
                             >
                               {data.cycle.fertileWindowRange}
                             </Text>
                           </View>
                         )}
-                        {typeof data?.cycle?.ovulationDaysAway === "number" && (
-                          <View className="flex-1 min-w-[45%]">
-                            <Text
-                              className="text-[9.5px] font-black uppercase tracking-wider mb-0.5"
-                              style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                            >
-                              Ovulation
-                            </Text>
-                            <Text
-                              className="text-xs font-bold"
-                              style={{ color: colors.foreground, fontFamily: fonts.body }}
-                            >
-                              {data.cycle.ovulationDaysAway === 0
-                                ? "Today"
-                                : `In ${data.cycle.ovulationDaysAway} day${
-                                    data.cycle.ovulationDaysAway === 1 ? "" : "s"
-                                  }`}
-                            </Text>
-                          </View>
-                        )}
                       </View>
                     )}
+                  </LinearGradient>
+                )}
+
+                {/* Send a check-in — quick heart-icon nudge, matching the mockup's
+                    "Send Maya a check-in" row directly under the cycle hero. */}
+                {isConnected && (
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={() => {
+                      setTypedMessage((prev) => prev || "Thinking of you 💜 how are you feeling?");
+                      setActiveTab("chat");
+                    }}
+                    className="flex-row items-center justify-between rounded-3xl border p-4 mb-4"
+                    style={{
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                      ...getShadow(colors, isDark),
+                    }}
+                  >
+                    <Text
+                      className="text-xs font-black"
+                      style={{ color: colors.foreground, fontFamily: fonts.heading }}
+                    >
+                      Send {partnerName !== "your partner" ? partnerName : "them"} a check-in
+                    </Text>
+                    <View
+                      className="w-8 h-8 rounded-full items-center justify-center"
+                      style={{ backgroundColor: colors.primaryLight }}
+                    >
+                      <Ionicons name="heart" size={14} color={colors.primary} />
+                    </View>
+                  </TouchableOpacity>
+                )}
+
+                {/* "How to support today" tip — surfaced right under the
+                    hero, matching the mockup's dedicated tip card. */}
+                {hasCare && data?.careSuggestions?.suggestions?.[0] && (
+                  <View
+                    className="rounded-3xl border p-4 mb-4"
+                    style={{
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                      ...getShadow(colors, isDark),
+                    }}
+                  >
+                    <Text
+                      className="text-[13.5px] font-black mb-1.5"
+                      style={{ color: colors.foreground, fontFamily: fonts.heading }}
+                    >
+                      💡 How to support today
+                    </Text>
+                    <Text
+                      className="text-xs font-semibold leading-5"
+                      style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                    >
+                      {data.careSuggestions.suggestions[0].message}
+                    </Text>
                   </View>
                 )}
 

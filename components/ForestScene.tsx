@@ -2,33 +2,18 @@ import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect, useRef } from "react";
 import { Animated, Easing, View } from "react-native";
 import Svg, { Circle, Ellipse, Path, Rect } from "react-native-svg";
+import type { CyclePhase } from "../lib/cycle";
+import { FOREST_PHASE_COLORS } from "./ui-tokens";
 
 // Ported 1:1 from the marketing website's forest simulator
 // (Marketing website/src/pages/Home.jsx) so the app's Wellness Forest shares
 // the same look — same trees, same phase-based sky/hill palette.
 
-export type ForestPhase = "period" | "follicular" | "ovulation" | "luteal";
+export type ForestPhase = CyclePhase;
 
-const PHASE_SKY: Record<ForestPhase, [string, string]> = {
-  period: ["#e2e8f0", "#cbd5e1"],
-  follicular: ["#e0f2fe", "#bae6fd"],
-  ovulation: ["#ffedd5", "#fed7aa"],
-  luteal: ["#fef3c7", "#fde68a"],
-};
-
-const PHASE_HILLS: Record<ForestPhase, [string, string]> = {
-  period: ["#cbd5e1", "#94a3b8"],
-  follicular: ["#95d5b2", "#74c69d"],
-  ovulation: ["#74c69d", "#52b788"],
-  luteal: ["#d97706", "#b45309"],
-};
-
-const PHASE_SUN: Record<ForestPhase, { color: string; glow: string | null }> = {
-  period: { color: "#cbd5e1", glow: null },
-  follicular: { color: "#fbbf24", glow: "#f59e0b" },
-  ovulation: { color: "#fbbf24", glow: "#f59e0b" },
-  luteal: { color: "#f97316", glow: "#ea580c" },
-};
+const PHASE_SKY = FOREST_PHASE_COLORS.sky;
+const PHASE_HILLS = FOREST_PHASE_COLORS.hills;
+const PHASE_SUN = FOREST_PHASE_COLORS.sun;
 
 export function OakSVG({
   color = "#2E8B7A",

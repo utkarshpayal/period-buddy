@@ -169,113 +169,107 @@ export default function Login() {
               }}
             >
               {/* Brand header */}
-              <View className="items-center mb-7">
+              <View className="items-center mb-8">
                 <AuthBrandMark />
                 <Text
-                  className="mt-4 text-center font-black tracking-tight"
-                  style={{ fontSize: 26, color: colors.foreground, fontFamily: fonts.heading }}
+                  className="mt-5 text-center font-black tracking-tight"
+                  style={{ fontSize: 27, color: colors.foreground, fontFamily: fonts.heading }}
                 >
                   Welcome back
                 </Text>
                 <Text
                   className="mt-2 text-center text-sm font-semibold"
-                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                  style={{ color: colors.mutedText, fontFamily: fonts.body, maxWidth: 280 }}
                 >
-                  Sign in to continue your cycle tracking
+                  Buddy missed you. Let&apos;s pick up your cycle where you left off.
                 </Text>
               </View>
 
-              {/* Form card */}
+              {/* Card-free field stack */}
+              <View style={{ gap: 14 }}>
+                <AuthField
+                  icon="mail-outline"
+                  autoCapitalize="none"
+                  autoComplete="email"
+                  keyboardType="email-address"
+                  onChangeText={(text) => {
+                    setErrorMessage("");
+                    setEmail(text);
+                  }}
+                  onSubmitEditing={() => passwordRef.current?.focus()}
+                  placeholder="Email address"
+                  returnKeyType="next"
+                  submitBehavior="submit"
+                  textContentType="emailAddress"
+                  value={email}
+                />
+
+                <AuthField
+                  ref={passwordRef}
+                  icon="lock-closed-outline"
+                  isPassword
+                  onChangeText={(text) => {
+                    setErrorMessage("");
+                    setPassword(text);
+                  }}
+                  onSubmitEditing={handleLogin}
+                  placeholder="Password"
+                  returnKeyType="done"
+                  textContentType="password"
+                  value={password}
+                />
+              </View>
+
+              <TouchableOpacity
+                className="mt-3 mb-5 self-end"
+                onPress={handlePasswordReset}
+              >
+                <Text
+                  style={{
+                    fontSize: 12,
+                    fontWeight: "700",
+                    color: colors.primary,
+                    fontFamily: fonts.body,
+                  }}
+                >
+                  Forgot password?
+                </Text>
+              </TouchableOpacity>
+
               <View
-                className="border overflow-hidden"
                 style={{
-                  borderRadius: 26,
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                  padding: 20,
+                  borderRadius: 999,
                   ...getShadow(colors, isDark),
                 }}
               >
-                <View style={{ gap: 12 }}>
-                  <AuthField
-                    icon="mail-outline"
-                    autoCapitalize="none"
-                    autoComplete="email"
-                    keyboardType="email-address"
-                    onChangeText={(text) => {
-                      setErrorMessage("");
-                      setEmail(text);
-                    }}
-                    onSubmitEditing={() => passwordRef.current?.focus()}
-                    placeholder="Email address"
-                    returnKeyType="next"
-                    submitBehavior="submit"
-                    textContentType="emailAddress"
-                    value={email}
-                  />
-
-                  <AuthField
-                    ref={passwordRef}
-                    icon="lock-closed-outline"
-                    isPassword
-                    onChangeText={(text) => {
-                      setErrorMessage("");
-                      setPassword(text);
-                    }}
-                    onSubmitEditing={handleLogin}
-                    placeholder="Password"
-                    returnKeyType="done"
-                    textContentType="password"
-                    value={password}
-                  />
-                </View>
-
-                <TouchableOpacity
-                  className="mt-3 mb-1 self-end"
-                  onPress={handlePasswordReset}
-                >
-                  <Text
-                    style={{
-                      fontSize: 12,
-                      fontWeight: "700",
-                      color: colors.primary,
-                      fontFamily: fonts.body,
-                    }}
-                  >
-                    Forgot password?
-                  </Text>
-                </TouchableOpacity>
-
-                <View style={{ marginTop: 14 }}>
-                  <AuthPrimaryButton
-                    isLoading={isSubmitting}
-                    label="Log in"
-                    loadingLabel="Logging in..."
-                    onPress={handleLogin}
-                  />
-                </View>
-
-                <AuthDivider />
-
-                <GoogleSignInButton
-                  disabled={isSubmitting}
-                  onError={setErrorMessage}
-                  onSuccess={handleGoogleSignInSuccess}
+                <AuthPrimaryButton
+                  isLoading={isSubmitting}
+                  label="Log in"
+                  loadingLabel="Logging in..."
+                  onPress={handleLogin}
                 />
-
-                {errorMessage ? (
-                  <View style={{ marginTop: 16 }}>
-                    <AuthErrorBanner message={errorMessage} />
-                  </View>
-                ) : null}
               </View>
 
+              {errorMessage ? (
+                <View style={{ marginTop: 16 }}>
+                  <AuthErrorBanner message={errorMessage} />
+                </View>
+              ) : null}
+
+              <AuthDivider />
+
+              <GoogleSignInButton
+                disabled={isSubmitting}
+                onError={setErrorMessage}
+                onSuccess={handleGoogleSignInSuccess}
+              />
+
               {/* Bottom Sign Up text */}
-              <View className="flex-row justify-center mt-6">
+              <View className="flex-row justify-center mt-7">
                 <Text
                   style={{ fontSize: 12.5, color: colors.mutedText, fontFamily: fonts.body }}
                 >
-                  Don&apos;t have an account?{" "}
+                  New here?{" "}
                 </Text>
                 <Link
                   href={{

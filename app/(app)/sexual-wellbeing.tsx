@@ -14,7 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppState } from "../../components/AppState";
 import { useTheme } from "../../components/theme";
-import { getSoftTints } from "../../components/ui-tokens";
+import { getShadow, getSoftTints } from "../../components/ui-tokens";
 import { wellbeingApi, type WellbeingResource } from "../../lib/api";
 
 // --- STRUCTURAL BACKEND API CONTRACTS ---
@@ -314,20 +314,17 @@ export default function SexualWellbeing() {
         style={{ backgroundColor: colors.background }}
       >
         {/* Navigation Action Header */}
-        <View className="flex-row items-center gap-2 px-6 pt-6">
+        <View className="flex-row items-center gap-3 px-[22px] pt-6 pb-1.5">
           <TouchableOpacity
             onPress={() => router.back()}
             activeOpacity={0.7}
-            className="p-2.5 -ml-2 rounded-full border"
-            style={{
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-            }}
+            className="w-9 h-9 items-center justify-center rounded-full"
+            style={{ backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
           >
             <Feather name="arrow-left" size={18} color={colors.foreground} />
           </TouchableOpacity>
           <Text
-            className="flex-1 text-2xl font-black tracking-tight ml-2"
+            className="text-xl font-black tracking-tight"
             style={{ color: colors.foreground, fontFamily: fonts.heading }}
           >
             Wellbeing
@@ -338,10 +335,10 @@ export default function SexualWellbeing() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 120 }}
         >
-          <View className="px-6 mt-4">
+          <View style={{ paddingHorizontal: 22, paddingTop: 8, paddingBottom: 14 }}>
             <Text
-              className="text-xs font-semibold"
-              style={{ color: colors.mutedText, fontFamily: fonts.body }}
+              className="text-[12.5px] font-semibold"
+              style={{ color: colors.mutedText, fontFamily: fonts.body, lineHeight: 18.75 }}
             >
               Consent-centered intimacy guidance, safety resources, and private
               partner conversation tools.
@@ -349,54 +346,57 @@ export default function SexualWellbeing() {
           </View>
 
           {/* DYNAMIC MULTI-MODE PARTNER INTERACTIVE GAME DECKS */}
-          <View className="mx-6 mt-6">
-            <View
-              className="rounded-3xl border p-5 shadow-xs relative overflow-hidden"
-              style={{
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-              }}
-            >
+          <View
+            className="rounded-3xl relative overflow-hidden"
+            style={{
+              backgroundColor: colors.surface,
+              marginHorizontal: 22,
+              marginBottom: 16,
+              padding: 20,
+              ...getShadow(colors, isDark),
+            }}
+          >
               {activeGameMode === "none" && (
-                <View className="items-center py-2">
+                <View className="items-center">
                   <MaterialCommunityIcons
                     name="gamepad-variant-outline"
-                    size={32}
+                    size={30}
                     color={colors.primary}
                   />
                   <Text
-                    className="text-base font-black tracking-tight mt-2.5"
-                    style={{ color: colors.foreground, fontFamily: fonts.heading }}
+                    className="text-[15px] font-black tracking-tight text-center"
+                    style={{ color: colors.foreground, fontFamily: fonts.heading, marginTop: 12 }}
                   >
                     Partner Intimacy Game Center
                   </Text>
                   <Text
-                    className="text-[11px] text-center px-4 leading-4 mt-1"
-                    style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                    className="text-[11.5px] text-center leading-4"
+                    style={{ color: colors.mutedText, fontFamily: fonts.body, marginTop: 6 }}
                   >
                     Choose a specialized conversational or physical card deck to
                     explore comfort, boundaries, and communication together.
                   </Text>
 
                   {loadingWellbeing ? (
-                    <View className="mt-5">
+                    <View className="mt-4">
                       <ActivityIndicator color={colors.primary} />
                     </View>
                   ) : (
-                  <View className="flex-row gap-3 w-full mt-5">
+                  <View className="flex-row w-full" style={{ gap: 10, marginTop: 14 }}>
                     <TouchableOpacity
                       activeOpacity={0.8}
                       disabled={sparkCards.length === 0}
                       onPress={() => setActiveGameMode("spark")}
-                      className="flex-1 rounded-xl py-3 items-center justify-center border"
+                      className="flex-1 items-center justify-center"
                       style={{
-                        backgroundColor: softTints.pink,
-                        borderColor: colors.border,
+                        backgroundColor: colors.primaryLight,
+                        borderRadius: 13,
+                        padding: 11,
                         opacity: sparkCards.length === 0 ? 0.5 : 1,
                       }}
                     >
                       <Text
-                        className="text-xs font-bold"
+                        className="text-[12.5px] font-bold"
                         style={{ color: colors.primary, fontFamily: fonts.body }}
                       >
                         Play Spark
@@ -407,16 +407,17 @@ export default function SexualWellbeing() {
                       activeOpacity={0.8}
                       disabled={positionCards.length === 0}
                       onPress={() => setActiveGameMode("positions")}
-                      className="flex-1 rounded-xl py-3 items-center justify-center border"
+                      className="flex-1 items-center justify-center"
                       style={{
-                        backgroundColor: softTints.lavender,
-                        borderColor: colors.border,
+                        backgroundColor: colors.accent,
+                        borderRadius: 13,
+                        padding: 11,
                         opacity: positionCards.length === 0 ? 0.5 : 1,
                       }}
                     >
                       <Text
-                        className="text-xs font-bold"
-                        style={{ color: colors.lavender, fontFamily: fonts.body }}
+                        className="text-[12.5px] font-bold"
+                        style={{ color: colors.buttonText, fontFamily: fonts.body }}
                       >
                         Comfort Cards
                       </Text>
@@ -554,21 +555,25 @@ export default function SexualWellbeing() {
                   </View>
                 </View>
               )}
-            </View>
           </View>
 
           {/* DYNAMIC SCROLLABLE CLICKABLE RESOURCE HUB */}
           <Text
-            className="text-xs font-black tracking-widest uppercase mt-8 mb-4 px-7"
-            style={{ color: colors.primary, fontFamily: fonts.heading }}
+            className="text-[11px] font-black uppercase"
+            style={{
+              color: colors.primary,
+              fontFamily: fonts.heading,
+              letterSpacing: 1,
+              marginBottom: 10,
+              paddingHorizontal: 22,
+            }}
           >
             Clinical Resource Hub
           </Text>
 
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 24, gap: 14 }}
+          <View
+            className="flex-row flex-wrap"
+            style={{ paddingHorizontal: 22, gap: 10 }}
           >
             {visibleCategories.map((category, index) => {
               const categoryTints = [
@@ -584,24 +589,27 @@ export default function SexualWellbeing() {
                   key={category.id}
                   activeOpacity={0.85}
                   onPress={() => handleOpenArticleModal(category)} // MODAL HOOK APPLIED INSTEAD OF ROUTER REDIRECTS
-                  className="w-64 p-5 rounded-3xl border shadow-3xl justify-between min-h-[210px]"
                   style={{
+                    width: "47%",
                     backgroundColor: colors.surface,
-                    borderColor: colors.border,
+                    borderRadius: 16,
+                    padding: 14,
+                    marginBottom: 10,
+                    ...getShadow(colors, isDark),
                   }}
                 >
                   <View className="flex-row justify-between items-start">
                     <View
-                      className="p-3 rounded-2xl"
-                      style={{ backgroundColor: currentTint }}
+                      className="items-center justify-center"
+                      style={{ width: 34, height: 34, borderRadius: 13, backgroundColor: currentTint }}
                     >
                       <Ionicons
                         name={category.icon as any}
-                        size={20}
+                        size={17}
                         color={category.color}
                       />
                     </View>
-                    <View className="px-2.5 py-1 rounded-md" style={{ backgroundColor: colors.surfaceSoft }}>
+                    <View className="px-2 py-1 rounded-md" style={{ backgroundColor: colors.surfaceSoft }}>
                       <Text
                         className="text-[9px] font-bold tracking-wide"
                         style={{ color: colors.mutedText, fontFamily: fonts.body }}
@@ -611,46 +619,40 @@ export default function SexualWellbeing() {
                     </View>
                   </View>
 
-                  <View className="mt-6 flex-row justify-between items-end">
-                    <View className="flex-1 pr-2">
-                      <Text
-                        className="text-sm font-black tracking-tight"
-                        style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                      >
-                        {category.title}
-                      </Text>
-                      <Text
-                        className="text-[11px] font-medium leading-4 mt-2"
-                        style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                        numberOfLines={2}
-                      >
-                        {category.summary}
-                      </Text>
-                    </View>
-                    <View className="p-1.5 rounded-full shadow-3xs" style={{ backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border }}>
-                      <Feather
-                        name="book-open"
-                        size={13}
-                        color={colors.primary}
-                      />
-                    </View>
-                  </View>
+                  <Text
+                    className="text-xs font-black tracking-tight"
+                    style={{ color: colors.foreground, fontFamily: fonts.heading, marginTop: 10 }}
+                  >
+                    {category.title}
+                  </Text>
+                  <Text
+                    className="text-[11px] font-medium leading-4 mt-1.5"
+                    style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                    numberOfLines={2}
+                  >
+                    {category.summary}
+                  </Text>
                 </TouchableOpacity>
               );
             })}
-          </ScrollView>
+          </View>
 
           {/* VERIFICATION STATEMENT BADGE FOOTER BAR PANEL */}
           <View
-            className="mx-6 mt-8 p-5 rounded-2xl border flex-row items-start gap-4"
+            className="flex-row items-center"
             style={{
               backgroundColor: colors.surface,
-              borderColor: colors.border,
+              borderRadius: 16,
+              padding: 14,
+              gap: 12,
+              marginHorizontal: 22,
+              marginTop: 16,
+              ...getShadow(colors, isDark),
             }}
           >
             <View
-              className="p-2.5 rounded-xl"
-              style={{ backgroundColor: softTints.emerald }}
+              className="items-center justify-center rounded-xl"
+              style={{ width: 36, height: 36, backgroundColor: softTints.emerald }}
             >
               <MaterialCommunityIcons
                 name="shield-account-outline"
@@ -658,21 +660,19 @@ export default function SexualWellbeing() {
                 color={colors.success}
               />
             </View>
-            <View className="flex-1">
+            <Text
+              className="flex-1 text-[11.5px] leading-4"
+              style={{ color: colors.mutedText, fontFamily: fonts.body }}
+            >
               <Text
-                className="text-xs font-bold"
+                className="font-bold"
                 style={{ color: colors.foreground, fontFamily: fonts.heading }}
               >
-                Verified Guidance
+                Verified Guidance —{" "}
               </Text>
-              <Text
-                className="mt-1 text-[11px] font-semibold leading-4"
-                style={{ color: colors.mutedText, fontFamily: fonts.body }}
-              >
-                Every data asset is continuously mapped alongside
-                board-certified health specialists to eliminate misinformation.
-              </Text>
-            </View>
+              every resource is continuously mapped alongside board-certified
+              health specialists to eliminate misinformation.
+            </Text>
           </View>
         </ScrollView>
 

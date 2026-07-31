@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
+import type { CyclePhase } from "./cycle";
 
 const LOCAL_DEV_API_PORT = "5000";
 const envApiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
@@ -109,6 +110,17 @@ export type DashboardSummary = {
   user: AuthUser;
 };
 
+export type MoodValue =
+  | "anxious"
+  | "calm"
+  | "emotional"
+  | "energetic"
+  | "happy"
+  | "irritable"
+  | "neutral"
+  | "sad"
+  | "tired";
+
 export type DayEntry = {
   _id?: string;
   cycleDay?: number;
@@ -118,18 +130,9 @@ export type DayEntry = {
   flow?: "heavy" | "light" | "medium" | "none" | "spotting";
   isIntimate?: boolean;
   medication?: string[];
-  mood?:
-    | "anxious"
-    | "calm"
-    | "emotional"
-    | "energetic"
-    | "happy"
-    | "irritable"
-    | "neutral"
-    | "sad"
-    | "tired";
+  mood?: MoodValue;
   note?: string;
-  phase?: "follicular" | "luteal" | "ovulation" | "period" | string;
+  phase?: CyclePhase | string;
   rewardPoints?: number;
   sleepHours?: number;
   stressLevel?: number;
@@ -399,6 +402,7 @@ export type Nomination = {
 
 export type CommunityComment = {
   _id?: string;
+  attachments?: CommunityAttachment[];
   content: string;
   createdAt?: string;
   id?: string;
@@ -407,8 +411,15 @@ export type CommunityComment = {
   userId?: string | (Pick<AuthUser, "firstName" | "lastName" | "profilePicture"> & { isOwn?: boolean });
 };
 
+export type CommunityAttachment = {
+  key?: string;
+  type: "audio" | "image" | "video";
+  url: string;
+};
+
 export type CommunityPost = {
   _id: string;
+  attachments?: CommunityAttachment[];
   category?: string;
   commentCount?: number;
   comments?: CommunityComment[];
@@ -864,6 +875,9 @@ export const cycleApi = {
 
   getPredictions: () => apiRequest<Predictions>("/api/cycle/predictions"),
 
+  getSymptomPredictions: () =>
+    apiRequest<SymptomPredictionsResponse>("/api/cycle/symptom-predictions"),
+
   saveLog: (payload: Omit<DayEntry, "cycleDay" | "phase" | "tokensEarned">) =>
     apiRequest<{ cycleLog: DayEntry; tokensEarned: number }>("/api/cycle/log", {
       body: JSON.stringify(payload),
@@ -1083,6 +1097,7 @@ export const communityApi = {
     ),
 
   createPost: (payload: {
+    attachments?: CommunityAttachment[];
     category?: string;
     content: string;
     isAnonymous?: boolean;
@@ -1113,11 +1128,16 @@ export const communityApi = {
       method: "POST",
     }),
 
-  addComment: (id: string, content: string, isAnonymous = true) =>
+  addComment: (
+    id: string,
+    content: string,
+    isAnonymous = true,
+    attachments?: CommunityAttachment[],
+  ) =>
     apiRequest<{ comment: CommunityComment; commentsCount: number }>(
       `/api/community/${id}/comment`,
       {
-        body: JSON.stringify({ content, isAnonymous }),
+        body: JSON.stringify({ content, isAnonymous, attachments }),
         method: "POST",
       },
     ),
@@ -1357,17 +1377,20 @@ export const questionAnswerApi = {
 
 export const uploadApi = {
   /**
-   * Uploads a local file (e.g. an `expo-image-picker` result URI) to the
-   * backend, which stores it in S3 and returns its public URL.
+   * Uploads a local file (e.g. an `expo-image-picker`, video, or audio
+   * recording result URI) to the backend, which stores it in S3 and returns
+   * its public URL. Pass `mimeType` explicitly for video/audio assets since
+   * their extension can't be reliably guessed the way image ones can.
    */
-  uploadImage: async (localUri: string, folder = "profile-pictures") => {
+  uploadMedia: async (localUri: string, folder = "profile-pictures", mimeType?: string) => {
     const token = await getToken();
     if (!token) throw new Error("You must be signed in to upload a file.");
 
-    const fileName = localUri.split("/").pop()?.split("?")[0] || "upload.jpg";
+    const fileName = localUri.split("/").pop()?.split("?")[0] || "upload";
     const extensionMatch = /\.(\w+)$/.exec(fileName);
-    const extension = extensionMatch?.[1]?.toLowerCase() || "jpg";
-    const mimeType = extension === "png" ? "image/png" : "image/jpeg";
+    const extension = extensionMatch?.[1]?.toLowerCase();
+    const resolvedMimeType =
+      mimeType || (extension === "png" ? "image/png" : "image/jpeg");
 
     const formData = new FormData();
     formData.append("folder", folder);
@@ -1382,7 +1405,7 @@ export const uploadApi = {
       formData.append("file", {
         uri: localUri,
         name: fileName,
-        type: mimeType,
+        type: resolvedMimeType,
       } as unknown as Blob);
     }
 
@@ -1401,6 +1424,10 @@ export const uploadApi = {
 
     return data.data as { key: string; url: string };
   },
+
+  /** @deprecated use uploadMedia */
+  uploadImage: async (localUri: string, folder = "profile-pictures") =>
+    uploadApi.uploadMedia(localUri, folder),
 };
 
 export type DocType = "bill" | "lab_report" | "other" | "prescription" | "scan";
@@ -1613,4 +1640,92 @@ export const reportApi = {
       body: JSON.stringify(payload),
       method: "POST",
     }),
+};
+
+export type SymptomPrediction = {
+  cyclesAnalyzed: number;
+  likelihood: number;
+  occurrences: number;
+  phase: string;
+  symptom: string;
+};
+
+export type SymptomPredictionsResponse = {
+  nextCycleStart: string | null;
+  predictions: SymptomPrediction[];
+};
+
+export const insightsApi = {
+  /**
+   * Personalized daily insight built server-side from the user's cycle
+   * phase and log history — hormone/mood/energy/skin context plus
+   * exercise/nutrition/sleep/wellness suggestion lists.
+   */
+  getDaily: () =>
+    apiRequest<{
+      dailySummary: string;
+      energyInsight: string;
+      exerciseSuggestions: string[];
+      hormoneExplanation: string;
+      moodInsight: string;
+      nutritionSuggestions: string[];
+      phase: string | null;
+      pregnancyMode: boolean;
+      skinInsight: string;
+      sleepSuggestions: string[];
+      wellnessRecommendations: string[];
+    }>("/api/insights/daily"),
+};
+
+export type ScreeningCondition = "pcos" | "endometriosis" | "fibroid" | "thyroid";
+
+export type ScreeningQuestion = {
+  id: string;
+  text: string;
+  type: "yesno" | "scale";
+};
+
+export type ScreeningQuestionsResponse = {
+  condition: ScreeningCondition;
+  disclaimer: string;
+  questions: ScreeningQuestion[];
+};
+
+export type ScreeningRiskLevel = "low" | "moderate" | "high";
+
+export type ScreeningAssessmentResponse = {
+  condition: ScreeningCondition;
+  createdAt: string;
+  disclaimer: string;
+  doctorDiscussionSummary: string;
+  riskLevel: ScreeningRiskLevel;
+  score: number;
+  summary: string;
+};
+
+export type ScreeningHistoryItem = {
+  _id: string;
+  condition: ScreeningCondition;
+  createdAt: string;
+  riskLevel: ScreeningRiskLevel;
+  score: number;
+  summary: string;
+};
+
+export const screeningApi = {
+  getQuestions: (condition: ScreeningCondition) =>
+    apiRequest<ScreeningQuestionsResponse>(
+      `/api/screening/questions${toQuery({ condition })}`,
+    ),
+
+  submitAssessment: (
+    condition: ScreeningCondition,
+    answers: Record<string, number | boolean>,
+  ) =>
+    apiRequest<ScreeningAssessmentResponse>("/api/screening/assess", {
+      body: JSON.stringify({ condition, answers }),
+      method: "POST",
+    }),
+
+  getHistory: () => apiRequest<ScreeningHistoryItem[]>("/api/screening/history"),
 };

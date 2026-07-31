@@ -2,6 +2,8 @@
 // Charts render inside a static PDF, so every value is direct-labeled — there is no
 // tooltip to fall back on.
 
+import { REPORT_THEME } from "./reportTheme";
+
 export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
@@ -86,8 +88,8 @@ export function sparklineSvg(
       <path d="${linePath}" fill="none" stroke="${opts.color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
       <circle cx="${firstCoord.x}" cy="${firstCoord.y}" r="4" fill="${opts.color}" stroke="#ffffff" stroke-width="2" />
       <circle cx="${lastCoord.x}" cy="${lastCoord.y}" r="4" fill="${opts.color}" stroke="#ffffff" stroke-width="2" />
-      <text x="${firstCoord.x}" y="${Math.max(firstCoord.y - 10, 10)}" font-size="11" fill="#52514e" text-anchor="start">${formatNumber(first.value)}${unit}</text>
-      <text x="${lastCoord.x}" y="${Math.max(lastCoord.y - 10, 10)}" font-size="11" fill="#52514e" text-anchor="end">${formatNumber(last.value)}${unit}</text>
+      <text x="${firstCoord.x}" y="${Math.max(firstCoord.y - 10, 10)}" font-size="11" fill="${REPORT_THEME.labelText}" text-anchor="start">${formatNumber(first.value)}${unit}</text>
+      <text x="${lastCoord.x}" y="${Math.max(lastCoord.y - 10, 10)}" font-size="11" fill="${REPORT_THEME.labelText}" text-anchor="end">${formatNumber(last.value)}${unit}</text>
     </svg>`;
 }
 

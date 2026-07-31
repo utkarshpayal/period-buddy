@@ -6,21 +6,13 @@ import React, {
   useMemo,
   useState,
 } from "react";
+import type { MoodValue } from "../lib/api";
 import { shareWithAppLink } from "../lib/share";
 
 export type DayEntry = {
   energy?: "high" | "low" | "medium" | "steady";
   flow?: "heavy" | "light" | "medium" | "none" | "spotting";
-  mood?:
-    | "anxious"
-    | "calm"
-    | "emotional"
-    | "energetic"
-    | "happy"
-    | "irritable"
-    | "neutral"
-    | "sad"
-    | "tired";
+  mood?: MoodValue;
   isIntimate?: boolean;
   note: string;
   symptoms: string[];

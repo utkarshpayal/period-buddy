@@ -1,4 +1,4 @@
-import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -18,7 +18,6 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { RazorpayCheckoutModal, type RazorpayResult } from "../../components/RazorpayCheckoutModal";
 import { useTheme } from "../../components/theme";
-import { getSoftTints } from "../../components/ui-tokens";
 import {
   consultationApi,
   getWebSocketUrl,
@@ -27,8 +26,6 @@ import {
   type ConsultationOrder,
   type Doctor,
 } from "../../lib/api";
-
-const AVATAR_EMOJIS = ["👩‍⚕️", "🧑‍⚕️", "👨‍⚕️"];
 
 function getDoctorDisplayName(doctor: Doctor) {
   const legacyName = (doctor as Doctor & { name?: string }).name;
@@ -75,8 +72,6 @@ export default function ConsultationScreen() {
   const [typedMessage, setTypedMessage] = useState("");
   const [sendingMessage, setSendingMessage] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
-
-  const softTints = getSoftTints(colors);
 
   const load = useCallback(async (isRefresh = false) => {
     try {
@@ -381,17 +376,25 @@ export default function ConsultationScreen() {
 
       <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
         {/* Nav Header */}
-        <View className="flex-row items-center gap-2 px-6 pt-6">
+        <View className="flex-row items-center gap-3 px-6 pt-6">
           <TouchableOpacity
             onPress={() => router.back()}
             activeOpacity={0.7}
-            className="flex-row items-center gap-1.5"
+            className="h-9 w-9 items-center justify-center rounded-full"
+            style={{
+              backgroundColor: colors.surface,
+              shadowColor: colors.shadow,
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.15,
+              shadowRadius: 8,
+              elevation: 2,
+            }}
           >
             <Feather name="chevron-left" size={20} color={colors.foreground} />
-            <Text className="text-xl font-extrabold tracking-tight" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-              Find a specialist
-            </Text>
           </TouchableOpacity>
+          <Text className="text-xl font-extrabold tracking-tight" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
+            Consultation
+          </Text>
         </View>
 
         <ScrollView
@@ -423,53 +426,68 @@ export default function ConsultationScreen() {
               )}
             </View>
 
-            {/* Active consultations */}
-            {myConsultations.filter((c) => c.status === "paid" || c.status === "active").length > 0 && (
-              <View className="mt-6">
-                <Text className="text-[10px] font-black tracking-widest uppercase mb-3" style={{ color: colors.primary, fontFamily: fonts.heading }}>
-                  Your Active Sessions
-                </Text>
-                {myConsultations
-                  .filter((c) => c.status === "paid" || c.status === "active")
-                  .map((c) => {
-                    const doc = typeof c?.doctorId === "object" ? c.doctorId : null;
-                    return (
-                      <TouchableOpacity
-                        key={c._id}
-                        onPress={() => openChat(c)}
-                        activeOpacity={0.8}
-                        className="mb-3 rounded-2xl border overflow-hidden"
-                        style={{ backgroundColor: colors.surface, borderColor: `${colors.primary}40` }}
-                      >
-                        <LinearGradient
-                          colors={[colors.surface, colors.primaryLight]}
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 1, y: 0 }}
-                          className="flex-row items-center p-4 gap-3"
+            {/* Upcoming / active session hero card */}
+            {(() => {
+              const activeSessions = myConsultations.filter(
+                (c) => c.status === "paid" || c.status === "active",
+              );
+              const heroSession = activeSessions[0];
+              if (!heroSession) return null;
+              const doc = typeof heroSession?.doctorId === "object" ? heroSession.doctorId : null;
+              return (
+                <View className="mt-6">
+                  <TouchableOpacity
+                    onPress={() => openChat(heroSession)}
+                    activeOpacity={0.9}
+                    className="rounded-3xl overflow-hidden"
+                  >
+                    <LinearGradient
+                      colors={[colors.primary, colors.primaryLight]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      className="flex-row items-center justify-between p-[18px]"
+                    >
+                      <View className="flex-1 pr-3">
+                        <Text
+                          className="text-[11px] font-black uppercase tracking-widest"
+                          style={{ color: "rgba(255,255,255,0.85)", fontFamily: fonts.heading }}
                         >
-                          <View className="h-10 w-10 rounded-full items-center justify-center" style={{ backgroundColor: softTints.pink }}>
-                            <Text className="text-lg">👩‍⚕️</Text>
-                          </View>
-                          <View className="flex-1">
-                            <Text className="text-sm font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
-                              {doc ? getDoctorDisplayName(doc) : "Your Doctor"}
-                            </Text>
-                            <Text className="text-[10px] font-bold uppercase tracking-widest mt-0.5" style={{ color: colors.success, fontFamily: fonts.body }}>
-                              Session active - tap to chat
-                            </Text>
-                          </View>
-                          <Feather name="message-circle" size={18} color={colors.primary} />
-                        </LinearGradient>
-                      </TouchableOpacity>
-                    );
-                  })}
-              </View>
-            )}
+                          Active session · tap to chat
+                        </Text>
+                        <Text
+                          className="text-base font-bold mt-1"
+                          style={{ color: "#FFFFFF", fontFamily: fonts.heading }}
+                        >
+                          {doc ? getDoctorDisplayName(doc) : "Your Doctor"}
+                        </Text>
+                        <Text
+                          className="text-xs mt-0.5"
+                          style={{ color: "rgba(255,255,255,0.9)", fontFamily: fonts.body }}
+                        >
+                          {doc?.specialty ?? "Gynecologist"} · Chat & video call
+                        </Text>
+                      </View>
+                      <View
+                        className="rounded-xl px-3.5 py-2.5"
+                        style={{ backgroundColor: "#FFFFFF" }}
+                      >
+                        <Text
+                          className="text-xs font-extrabold"
+                          style={{ color: colors.primary, fontFamily: fonts.heading }}
+                        >
+                          Join
+                        </Text>
+                      </View>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+              );
+            })()}
 
-            {/* Doctors list */}
-            <View className="mt-6 gap-4">
-              <Text className="text-[10px] font-black tracking-widest uppercase" style={{ color: colors.mutedText, fontFamily: fonts.heading }}>
-                {loadingDoctors ? "Loading specialists…" : "AVAILABLE SPECIALISTS"}
+            {/* Recommended experts */}
+            <View className="mt-6 gap-3">
+              <Text className="text-[15px] font-bold" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
+                {loadingDoctors ? "Loading specialists…" : "Recommended experts"}
               </Text>
 
               {loadingDoctors ? (
@@ -477,59 +495,69 @@ export default function ConsultationScreen() {
               ) : (
                 filteredDoctors.map((doctor, i) => {
                   const isSelected = selectedDoctor?._id === doctor._id;
-                  const avatarColor = i % 2 === 0 ? "#FFF1ED" : colors.primaryLight;
+                  const avatarBgOptions = [colors.primaryLight, colors.accentLight, colors.warningLight];
+                  const avatarTextOptions = [colors.primary, colors.foreground, colors.foreground];
+                  const avatarBg = avatarBgOptions[i % avatarBgOptions.length];
+                  const avatarText = avatarTextOptions[i % avatarTextOptions.length];
+                  const initials = getDoctorDisplayName(doctor)
+                    .split(" ")
+                    .filter(Boolean)
+                    .slice(0, 2)
+                    .map((part) => part[0]?.toUpperCase())
+                    .join("");
+
                   return (
                     <TouchableOpacity
                       key={doctor._id}
                       activeOpacity={0.9}
                       onPress={() => setSelectedDoctor(doctor)}
-                      className="rounded-2xl border p-4 shadow-2xs flex-row items-center justify-between"
+                      className="rounded-2xl p-3.5 flex-row items-center gap-3"
                       style={{
                         backgroundColor: colors.surface,
-                        borderColor: isSelected ? colors.primary : colors.border,
-                        borderWidth: isSelected ? 1.5 : 1,
+                        borderWidth: isSelected ? 1.5 : 0,
+                        borderColor: isSelected ? colors.primary : "transparent",
+                        shadowColor: colors.shadow,
+                        shadowOffset: { width: 0, height: 6 },
+                        shadowOpacity: isDark ? 0.25 : 0.08,
+                        shadowRadius: 14,
+                        elevation: 2,
                       }}
                     >
-                      <View className="flex-row items-center flex-1">
-                        {/* Avatar block */}
-                        <View
-                          className="h-12 w-12 items-center justify-center rounded-xl"
-                          style={{ backgroundColor: avatarColor }}
-                        >
-                          <Text className="text-xl">{AVATAR_EMOJIS[i % AVATAR_EMOJIS.length]}</Text>
-                        </View>
-
-                        <View className="ml-3 flex-1">
-                          <Text className="text-sm font-extrabold tracking-tight" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-                            {getDoctorDisplayName(doctor)}
-                          </Text>
-                          <Text className="text-xs font-semibold mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                            {doctor.specialty} · {12 - (i % 4)} yrs exp
-                          </Text>
-                          <View className="mt-1 flex-row items-center gap-1">
-                            <Ionicons name="star" size={12} color={colors.primary} />
-                            <Text className="text-xs font-black" style={{ color: colors.foreground, fontFamily: fonts.mono }}>
-                              {doctor.rating} <Text style={{ color: colors.mutedText }}>({320 - i * 45})</Text>
-                            </Text>
-                          </View>
-                        </View>
-                      </View>
-
-                      {/* Right side circular action indicator */}
+                      {/* Avatar */}
                       <View
-                        className="h-7 w-7 rounded-full items-center justify-center"
-                        style={{
-                          backgroundColor: isSelected
-                            ? (isDark ? colors.surfaceStrong : "#17212E")
-                            : colors.surfaceSoft,
-                        }}
+                        className="h-11 w-11 items-center justify-center rounded-full"
+                        style={{ backgroundColor: avatarBg }}
                       >
-                        <Feather
-                          name="chevron-right"
-                          size={14}
-                          color={isSelected ? "#FFFFFF" : colors.foreground}
-                        />
+                        <Text className="text-[15px] font-bold" style={{ color: avatarText, fontFamily: fonts.heading }}>
+                          {initials || "DR"}
+                        </Text>
                       </View>
+
+                      {/* Middle info */}
+                      <View className="flex-1">
+                        <Text className="text-[13.5px] font-bold" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
+                          {getDoctorDisplayName(doctor)}
+                        </Text>
+                        <Text className="text-[11px] font-semibold mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                          {doctor.specialty} · ★ {doctor.rating}
+                        </Text>
+                      </View>
+
+                      {/* Book button */}
+                      <TouchableOpacity
+                        activeOpacity={0.85}
+                        disabled={booking}
+                        onPress={() => {
+                          setSelectedDoctor(doctor);
+                          handleBookAndPay(doctor);
+                        }}
+                        className="rounded-xl px-3.5 py-2"
+                        style={{ backgroundColor: colors.primary, opacity: booking ? 0.7 : 1 }}
+                      >
+                        <Text className="text-[11.5px] font-bold" style={{ color: colors.buttonText, fontFamily: fonts.heading }}>
+                          {getConsultationForDoctor(doctor._id) ? "Chat" : "Book"}
+                        </Text>
+                      </TouchableOpacity>
                     </TouchableOpacity>
                   );
                 })

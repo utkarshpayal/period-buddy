@@ -17,7 +17,7 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 import { useTheme, type ThemeColors } from "../../components/theme";
-import { getShadow, getSoftTints } from "../../components/ui-tokens";
+import { getShadow, getSoftTints, HEALTH_ISSUE_COLORS } from "../../components/ui-tokens";
 import { healthIssuesApi, type HealthIssue as ApiHealthIssue } from "../../lib/api";
 
 // --- BACKEND API LAYER SCHEMAS & CONTRACTS ---
@@ -123,15 +123,15 @@ function getIssueAccentColor(
   colors: ThemeColors,
 ) {
   switch (issue.color) {
-    case "#ef4444":
+    case HEALTH_ISSUE_COLORS.red:
       return colors.primary;
-    case "#f97316":
+    case HEALTH_ISSUE_COLORS.orange:
       return colors.warning;
-    case "#fbbf24":
+    case HEALTH_ISSUE_COLORS.amber:
       return colors.accent;
-    case "#ec4899":
+    case HEALTH_ISSUE_COLORS.pink:
       return colors.rose;
-    case "#8b5cf6":
+    case HEALTH_ISSUE_COLORS.purple:
       return colors.lavender;
     default:
       return colors.mint;
@@ -313,41 +313,49 @@ export default function HealthIssues() {
                     key={issue.id}
                     onPress={() => handleTriggerDetails(issue.id)}
                     activeOpacity={0.75}
-                    className="flex-row items-center p-4 rounded-2xl border shadow-3xl"
+                    className="flex-row items-center justify-between p-4 rounded-[18px]"
                     style={{
                       backgroundColor: colors.surface,
-                      borderColor: colors.border,
+                      ...getShadow(colors, isDark),
                     }}
                   >
-                    <View
-                      className="p-3 rounded-xl mr-4"
-                      style={{ backgroundColor: activeTint }}
-                    >
-                      <Ionicons
-                        name={issue.icon as any}
-                        size={20}
-                        color={accentColor}
-                      />
+                    <View className="flex-row items-center flex-1 pr-3">
+                      <View
+                        className="p-2.5 rounded-xl mr-3.5"
+                        style={{ backgroundColor: activeTint }}
+                      >
+                        <Ionicons
+                          name={issue.icon as any}
+                          size={18}
+                          color={accentColor}
+                        />
+                      </View>
+                      <View className="flex-1">
+                        <Text
+                          className="text-sm font-extrabold tracking-tight"
+                          style={{ color: colors.foreground, fontFamily: fonts.heading }}
+                        >
+                          {issue.title}
+                        </Text>
+                        <Text
+                          className="text-[11px] font-semibold mt-0.5"
+                          style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                        >
+                          {issue.category}
+                        </Text>
+                      </View>
                     </View>
-                    <View className="flex-1 pr-2">
+                    <View
+                      className="rounded-xl px-3 py-1.5"
+                      style={{ backgroundColor: `${accentColor}1F` }}
+                    >
                       <Text
-                        className="text-[10px] font-black uppercase tracking-wider"
+                        className="text-[10px] font-black"
                         style={{ color: accentColor, fontFamily: fonts.body }}
                       >
-                        {issue.category}
-                      </Text>
-                      <Text
-                        className="text-sm font-extrabold tracking-tight mt-0.5"
-                        style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                      >
-                        {issue.title}
+                        View
                       </Text>
                     </View>
-                    <Feather
-                      name="chevron-right"
-                      size={16}
-                      color={colors.mutedText}
-                    />
                   </TouchableOpacity>
                 );
               })}

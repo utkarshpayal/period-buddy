@@ -176,161 +176,157 @@ export default function SignUp() {
                 transform: [{ translateY: slideAnim }],
               }}
             >
-              {/* Brand header */}
+              {/* Brand header (back button handled by AuthTopBar above) */}
               <View className="items-center mb-7">
                 <AuthBrandMark />
                 <Text
-                  className="mt-4 text-center font-black tracking-tight"
-                  style={{ fontSize: 26, color: colors.foreground, fontFamily: fonts.heading }}
+                  className="mt-5 text-center font-black tracking-tight"
+                  style={{ fontSize: 27, color: colors.foreground, fontFamily: fonts.heading }}
                 >
                   Create your account
                 </Text>
                 <Text
                   className="mt-2 text-center text-sm font-semibold"
-                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                  style={{ color: colors.mutedText, fontFamily: fonts.body, maxWidth: 280 }}
                 >
-                  Your private space for tracking and care
+                  Takes 2 minutes. Your data stays private, always.
                 </Text>
               </View>
 
-              {/* Form card */}
-              <View
-                className="border overflow-hidden"
+              {/* Info banner shown only when arriving with a partner invite code */}
+              {partnerCode ? (
+                <View
+                  className="mb-4 flex-row items-center gap-2.5 p-3.5 rounded-2xl border"
+                  style={{ backgroundColor: colors.primaryLight, borderColor: colors.border }}
+                >
+                  <Ionicons name="heart-outline" size={15} color={colors.primary} />
+                  <Text
+                    className="flex-1 text-[11px] font-semibold leading-4"
+                    style={{ color: colors.foreground, fontFamily: fonts.body }}
+                  >
+                    Connecting to your partner&apos;s account after sign up.
+                  </Text>
+                </View>
+              ) : null}
+
+              {/* Card-free field stack */}
+              <View style={{ gap: 14 }}>
+                <View className="flex-row" style={{ gap: 10 }}>
+                  <View style={{ flex: 1 }}>
+                    <AuthField
+                      icon="person-outline"
+                      autoComplete="given-name"
+                      onChangeText={(text) => {
+                        setErrorMessage("");
+                        setFirstName(text);
+                      }}
+                      onSubmitEditing={() => lastNameRef.current?.focus()}
+                      placeholder="First name"
+                      returnKeyType="next"
+                      submitBehavior="submit"
+                      textContentType="givenName"
+                      value={firstName}
+                    />
+                  </View>
+
+                  <View style={{ flex: 1 }}>
+                    <AuthField
+                      ref={lastNameRef}
+                      icon="person-outline"
+                      autoComplete="family-name"
+                      onChangeText={(text) => {
+                        setErrorMessage("");
+                        setLastName(text);
+                      }}
+                      onSubmitEditing={() => emailRef.current?.focus()}
+                      placeholder="Last name"
+                      returnKeyType="next"
+                      submitBehavior="submit"
+                      textContentType="familyName"
+                      value={lastName}
+                    />
+                  </View>
+                </View>
+
+                <AuthField
+                  ref={emailRef}
+                  icon="mail-outline"
+                  autoCapitalize="none"
+                  autoComplete="email"
+                  keyboardType="email-address"
+                  onChangeText={(text) => {
+                    setErrorMessage("");
+                    setEmail(text);
+                  }}
+                  onSubmitEditing={() => passwordRef.current?.focus()}
+                  placeholder="Email address"
+                  returnKeyType="next"
+                  submitBehavior="submit"
+                  textContentType="emailAddress"
+                  value={email}
+                />
+
+                <AuthField
+                  ref={passwordRef}
+                  icon="lock-closed-outline"
+                  isPassword
+                  onChangeText={(text) => {
+                    setErrorMessage("");
+                    setPassword(text);
+                  }}
+                  onSubmitEditing={handleSignup}
+                  placeholder="Password"
+                  returnKeyType="done"
+                  textContentType="newPassword"
+                  value={password}
+                />
+              </View>
+
+              <Text
+                className="mt-4"
                 style={{
-                  borderRadius: 26,
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                  padding: 20,
+                  fontSize: 11,
+                  lineHeight: 15,
+                  color: colors.mutedText,
+                  fontFamily: fonts.body,
+                }}
+              >
+                By continuing you agree to our Terms &amp; Privacy Policy. Use at least 8
+                characters and keep your password private.
+              </Text>
+
+              <View
+                style={{
+                  marginTop: 14,
+                  borderRadius: 999,
                   ...getShadow(colors, isDark),
                 }}
               >
-                {/* Info banner shown only when arriving with a partner invite code */}
-                {partnerCode ? (
-                  <View
-                    className="mb-4 flex-row items-center gap-2.5 p-3.5 rounded-2xl border"
-                    style={{ backgroundColor: colors.primaryLight, borderColor: colors.border }}
-                  >
-                    <Ionicons name="heart-outline" size={15} color={colors.primary} />
-                    <Text
-                      className="flex-1 text-[11px] font-semibold leading-4"
-                      style={{ color: colors.foreground, fontFamily: fonts.body }}
-                    >
-                      Connecting to your partner&apos;s account after sign up.
-                    </Text>
-                  </View>
-                ) : null}
-
-                <View style={{ gap: 12 }}>
-                  <View className="flex-row" style={{ gap: 10 }}>
-                    <View style={{ flex: 1 }}>
-                      <AuthField
-                        icon="person-outline"
-                        autoComplete="given-name"
-                        onChangeText={(text) => {
-                          setErrorMessage("");
-                          setFirstName(text);
-                        }}
-                        onSubmitEditing={() => lastNameRef.current?.focus()}
-                        placeholder="First name"
-                        returnKeyType="next"
-                        submitBehavior="submit"
-                        textContentType="givenName"
-                        value={firstName}
-                      />
-                    </View>
-
-                    <View style={{ flex: 1 }}>
-                      <AuthField
-                        ref={lastNameRef}
-                        icon="person-outline"
-                        autoComplete="family-name"
-                        onChangeText={(text) => {
-                          setErrorMessage("");
-                          setLastName(text);
-                        }}
-                        onSubmitEditing={() => emailRef.current?.focus()}
-                        placeholder="Last name"
-                        returnKeyType="next"
-                        submitBehavior="submit"
-                        textContentType="familyName"
-                        value={lastName}
-                      />
-                    </View>
-                  </View>
-
-                  <AuthField
-                    ref={emailRef}
-                    icon="mail-outline"
-                    autoCapitalize="none"
-                    autoComplete="email"
-                    keyboardType="email-address"
-                    onChangeText={(text) => {
-                      setErrorMessage("");
-                      setEmail(text);
-                    }}
-                    onSubmitEditing={() => passwordRef.current?.focus()}
-                    placeholder="Email address"
-                    returnKeyType="next"
-                    submitBehavior="submit"
-                    textContentType="emailAddress"
-                    value={email}
-                  />
-
-                  <AuthField
-                    ref={passwordRef}
-                    icon="lock-closed-outline"
-                    isPassword
-                    onChangeText={(text) => {
-                      setErrorMessage("");
-                      setPassword(text);
-                    }}
-                    onSubmitEditing={handleSignup}
-                    placeholder="Password"
-                    returnKeyType="done"
-                    textContentType="newPassword"
-                    value={password}
-                  />
-                </View>
-
-                <Text
-                  className="mt-3"
-                  style={{
-                    fontSize: 11,
-                    lineHeight: 15,
-                    color: colors.mutedText,
-                    fontFamily: fonts.body,
-                  }}
-                >
-                  Use at least 8 characters. Keep it private and easy to remember.
-                </Text>
-
-                <View style={{ marginTop: 16 }}>
-                  <AuthPrimaryButton
-                    isLoading={isSubmitting}
-                    label="Create account"
-                    loadingLabel="Creating account..."
-                    onPress={handleSignup}
-                  />
-                </View>
-
-                <AuthDivider />
-
-                <GoogleSignInButton
-                  disabled={isSubmitting}
-                  onError={setErrorMessage}
-                  onSuccess={handleGoogleSignInSuccess}
-                  role={role}
+                <AuthPrimaryButton
+                  isLoading={isSubmitting}
+                  label="Create account"
+                  loadingLabel="Creating account..."
+                  onPress={handleSignup}
                 />
-
-                {errorMessage ? (
-                  <View style={{ marginTop: 16 }}>
-                    <AuthErrorBanner message={errorMessage} />
-                  </View>
-                ) : null}
               </View>
 
+              {errorMessage ? (
+                <View style={{ marginTop: 16 }}>
+                  <AuthErrorBanner message={errorMessage} />
+                </View>
+              ) : null}
+
+              <AuthDivider />
+
+              <GoogleSignInButton
+                disabled={isSubmitting}
+                onError={setErrorMessage}
+                onSuccess={handleGoogleSignInSuccess}
+                role={role}
+              />
+
               {/* Bottom Sign In text */}
-              <View className="flex-row justify-center mt-6">
+              <View className="flex-row justify-center mt-7">
                 <Text
                   style={{ fontSize: 12.5, color: colors.mutedText, fontFamily: fonts.body }}
                 >

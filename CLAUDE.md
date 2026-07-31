@@ -55,8 +55,14 @@ Modals are centralized: `components/modals/AppModalHost.tsx` is a single host re
 
 ### Data layer (`lib/api.ts`)
 
-All backend access goes through one file: typed request helpers (`apiRequest`, `apiEnvelopeRequest`) plus one `xApi` object per domain (`authApi`, `cycleApi`, `habitsApi`, `forestApi`, `consultationApi`, `partnerApi`, `buddyApi`, `nominationsApi`, `communityApi`, `blogsApi`, `reelsApi`, `healthIssuesApi`, `wellbeingApi`, `questionAnswerApi`, `uploadApi`, `documentApi`, `speechApi`, `reportApi`). Every response envelope is `{ data, error, message, ... }`; `apiRequest` unwraps `.data`, `apiEnvelopeRequest` returns the raw envelope (used for auth flows that need `token`/`user`/`isProfileComplete` alongside data).
+All backend access goes through one file: typed request helpers (`apiRequest`, `apiEnvelopeRequest`) plus one `xApi` object per domain (`authApi`, `cycleApi`, `habitsApi`, `forestApi`, `consultationApi`, `partnerApi`, `buddyApi`, `nominationsApi`, `communityApi`, `blogsApi`, `reelsApi`, `healthIssuesApi`, `wellbeingApi`, `questionAnswerApi`, `uploadApi`, `documentApi`, `speechApi`, `reportApi`, `insightsApi`, `screeningApi`). Every response envelope is `{ data, error, message, ... }`; `apiRequest` unwraps `.data`, `apiEnvelopeRequest` returns the raw envelope (used for auth flows that need `token`/`user`/`isProfileComplete` alongside data).
 
+- `cycleApi.getSymptomPredictions()` — `GET /api/cycle/symptom-predictions`, per-symptom likelihood by cycle phase derived from the user's own logged history; powers `app/(app)/symptom-predictions.tsx`.
+- `insightsApi.getDaily()` — `GET /api/insights/daily`, personalized daily hormone/mood/energy/skin insight plus exercise/nutrition/sleep/wellness suggestion lists; powers `app/(app)/insights.tsx`.
+- `screeningApi` (`getQuestions`, `submitAssessment`, `getHistory`) — `/api/screening/*`, the PCOS/endometriosis/fibroid/thyroid symptom checker flow; powers `app/(app)/symptom-checker.tsx`.
+
+- `lib/cycle.ts` is the canonical source for the `CyclePhase` type and `getCyclePhase(cycleDay, periodLength, cycleLength)` — import it instead of re-deriving cycle phase locally (tracker, forest, symptom predictions, and `DayEntry.phase` in `lib/api.ts` all use it).
+- `hooks/useUserStats.ts` is the canonical source for streak/wallet numbers (`{ streakCount, walletBalance }`); it fetches the dashboard once and syncs it into auth-context. Screens should consume this hook instead of reading `user.streakCount`/`user.walletBalance`/`user.tokenEarned` directly, so streak/points never drift between screens.
 - Auth token is stored in AsyncStorage under `period-buddy.auth-session` (`AUTH_SESSION_KEY`) and attached as `Authorization: Bearer` automatically; pass `skipAuth: true` for public endpoints.
 - A 401 triggers a global `onUnauthorized` handler registered by `AuthProvider`, which clears the local session — don't hand-roll 401 handling per screen.
 - Several types carry `@deprecated` fields kept for backend backward-compat (e.g. `tokenEarned` → `walletBalance`, `likes` → `likeCount`, `views`/`viewsCount` → `viewCount`) — use the non-deprecated field in new code.
@@ -65,7 +71,15 @@ All backend access goes through one file: typed request helpers (`apiRequest`, `
 
 ### Styling
 
-NativeWind (Tailwind for RN) via `tailwind.config.js` / `global.css`, plus `components/theme.tsx` (light/dark, hydrated before first paint) and `components/ui-tokens.ts` for shared design tokens.
+NativeWind (Tailwind for RN) via `tailwind.config.js` / `global.css`, plus `components/theme.tsx` (light/dark, hydrated before first paint) and `components/ui-tokens.ts` for shared design tokens (including `getSeverityColor` for danger/warning/success by numeric threshold).
+
+### Shared screen scaffolding
+
+`components/ScreenHeader.tsx` (back button + title) and `components/LoadingErrorState.tsx` (full-screen loading/error-with-retry) cover the common shape of simple detail screens; `hooks/useAsyncLoad.ts` collapses the load-on-mount + pull-to-refresh + error-state boilerplate around a single fetcher. `lib/format.ts` holds small shared date formatters like `formatShortDate`. Prefer these over re-implementing the same screen shell.
+
+### Voice input
+
+`hooks/useVoiceInput.ts` wraps `expo-audio` recording (with metering enabled) behind `{ handleMicPress, isRecording, isTranscribing, level }`: tap-to-start/tap-to-stop always works, and when `voiceMode` is true it also auto-stops and transcribes after ~3s of on-device silence (via live dB metering), calling `onTranscript`. `components/VoiceOrb.tsx` is the reusable animated mic (Reanimated pulsing rings driven by `level`, themed via `colors.primary`/`colors.accent`/`colors.danger`). `components/VoiceModeOverlay.tsx` is a full-screen `Modal` — centered large `VoiceOrb`, rotating sci-fi sweep rings, and a status line (listening/thinking/speaking) — that `app/(app)/qa.tsx` and `app/(app)/document-chat.tsx` render whenever `voiceMode` is true; both screens also run a small effect that auto re-arms the mic (`handleMicPress`) whenever voice mode is idle (not recording/transcribing/replying/speaking), so the mic opens automatically on entering voice mode and after each spoken reply, Assistant-style.
 
 ### Platform-specific files
 

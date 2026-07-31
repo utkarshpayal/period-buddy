@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -12,10 +13,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle } from "react-native-svg";
 import { useAuth } from "../../../components/auth-context";
 import { useTheme } from "../../../components/theme";
-import { getShadow } from "../../../components/ui-tokens";
+import { getHeroGradient, getShadow } from "../../../components/ui-tokens";
+import StatCard from "../../../components/StatCard";
+import { useUserStats } from "../../../hooks/useUserStats";
+import { formatShortDate } from "../../../lib/format";
 import {
   authApi,
   cycleApi,
+  partnerApi,
   type DashboardSummary,
   type Predictions,
 } from "../../../lib/api";
@@ -101,13 +106,54 @@ const PHASE_LABELS: Record<string, string> = {
   luteal: "Luteal",
 };
 
+const WEEKDAY_LETTERS = ["M", "T", "W", "T", "F", "S", "S"];
+
+// Builds the current Mon–Sun week (day letter + date number) purely for the
+// week-strip decoration below the header — presentational only, no data/state.
+function buildCurrentWeekStrip(today: Date) {
+  const jsDay = today.getDay(); // 0 = Sun ... 6 = Sat
+  const mondayOffset = jsDay === 0 ? -6 : 1 - jsDay;
+  const monday = new Date(today);
+  monday.setDate(today.getDate() + mondayOffset);
+  monday.setHours(0, 0, 0, 0);
+  const todayStart = new Date(today);
+  todayStart.setHours(0, 0, 0, 0);
+
+  return Array.from({ length: 7 }, (_, i) => {
+    const date = new Date(monday);
+    date.setDate(monday.getDate() + i);
+    return {
+      letter: WEEKDAY_LETTERS[i],
+      dayNumber: date.getDate(),
+      isToday: date.getTime() === todayStart.getTime(),
+      isFuture: date.getTime() > todayStart.getTime(),
+    };
+  });
+}
+
 export default function Home() {
   const { colors, isDark, fonts } = useTheme();
   const { user, updateUser } = useAuth();
+  const { streakCount, walletBalance, isLoading: isStatsLoading } = useUserStats();
   const router = useRouter();
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
-  const [isDashboardLoading, setIsDashboardLoading] = useState(true);
   const [predictions, setPredictions] = useState<Predictions | null>(null);
+  const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    partnerApi
+      .getNotifications()
+      .then((notifs) => {
+        if (isMounted) setHasUnreadNotifications(notifs.some((n) => !n.isRead));
+      })
+      .catch(() => {});
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -131,8 +177,6 @@ export default function Home() {
           setDashboard(null);
           setPredictions(null);
         }
-      } finally {
-        if (isMounted) setIsDashboardLoading(false);
       }
     }
 
@@ -147,7 +191,6 @@ export default function Home() {
   // locally-cached demo/fallback number, which would silently show a
   // previous (or nonexistent) account's stats on this device/browser.
   const loggedDays = Math.max(dashboard?.trackedDays ?? 0, 0);
-  const dashboardTokens = dashboard?.tokens ?? 0;
   const cycleDay = Math.max(
     predictions?.currentCycleDay ??
     dashboard?.predictions?.currentCycleDay ??
@@ -179,6 +222,9 @@ export default function Home() {
   const treeHealth =
     dashboard?.forestHealth ?? Math.min(100, Math.max(45, 55 + loggedDays * 6));
 
+  const weekStrip = useMemo(() => buildCurrentWeekStrip(new Date()), []);
+  const heroGradient = getHeroGradient(colors, isDark);
+
   return (
     <>
       <StatusBar
@@ -189,56 +235,71 @@ export default function Home() {
       <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
         {/* FIXED HEADER - stays in place while body scrolls */}
         <View
-          className="px-6 pt-3 pb-2.5 flex-row justify-between items-center"
+          className="px-6 pt-3 pb-2 flex-row items-center justify-between"
           style={{ backgroundColor: colors.background }}
         >
-          <View className="flex-1 mr-4">
-            <Text
-              className="font-black tracking-tight"
-              style={{ fontSize: 17, color: colors.foreground, fontFamily: fonts.heading }}
-              numberOfLines={1}
-            >
-              {isDark ? "Good evening, " : "Good morning, "}
-              {user?.firstName || "Utkarsh"} 👋
-            </Text>
-            {/* <Text
-              className="mt-0.5"
-              style={{ fontSize: 11.5, color: colors.mutedText, fontFamily: fonts.body }}
-              numberOfLines={1}
-            >
-              Day {cycleDay} · {phaseLabel} phase ·{" "}
-              {predictions?.nextPeriodDaysAway !== undefined
-                ? predictions.nextPeriodDaysAway
-                : Math.max(1, 28 - cycleDay)}{" "}
-              days to period
-            </Text> */}
-          </View>
-
-          <View className="flex-row items-center gap-2">
+          <View className="flex-row items-center flex-1 mr-3">
             <View
-              className="flex-row items-center rounded-full"
               style={{
-                backgroundColor: isDark ? colors.primaryLight : colors.primaryLight,
-                paddingHorizontal: 10,
-                paddingVertical: 6,
+                width: 38,
+                height: 38,
+                borderRadius: 19,
+                backgroundColor: colors.primaryLight,
+                alignItems: "center",
+                justifyContent: "center",
+                marginRight: 10,
               }}
             >
-              <Ionicons name="flame" size={12} color={colors.primary} style={{ marginRight: 5 }} />
-              <Text style={{ fontSize: 11, fontWeight: "800", color: colors.primary, fontFamily: fonts.body }}>
-                {dashboard?.user?.streakCount ?? user?.streakCount ?? 1}d
-              </Text>
+              <Ionicons name="happy" size={19} color={colors.primary} />
             </View>
-
-            <View
-              className="flex-row items-center rounded-full border"
-              style={{ backgroundColor: colors.surface, borderColor: colors.border, paddingHorizontal: 10, paddingVertical: 6 }}
-            >
-              <Ionicons name="trophy" size={12} color={colors.primary} style={{ marginRight: 5 }} />
-              <Text style={{ fontSize: 11, fontWeight: "800", color: colors.foreground, fontFamily: fonts.body }}>
-                {isDashboardLoading ? "…" : dashboardTokens}
+            <View className="flex-1">
+              <Text
+                className="tracking-tight"
+                style={{ fontSize: 16, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}
+                numberOfLines={1}
+              >
+                {isDark ? "Good evening, " : "Hi "}
+                {user?.firstName || "Utkarsh"} 👋
+              </Text>
+              <Text
+                style={{ fontSize: 12, color: colors.mutedText, fontFamily: fonts.body, marginTop: 1 }}
+                numberOfLines={1}
+              >
+                You&apos;ve got this today
               </Text>
             </View>
           </View>
+
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => router.push("/(app)/notifications")}
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: 19,
+              backgroundColor: colors.surface,
+              alignItems: "center",
+              justifyContent: "center",
+              ...getShadow(colors, isDark),
+            }}
+          >
+            <Ionicons name="notifications-outline" size={18} color={colors.foreground} />
+            {hasUnreadNotifications && (
+              <View
+                style={{
+                  position: "absolute",
+                  top: 8,
+                  right: 9,
+                  width: 8,
+                  height: 8,
+                  borderRadius: 4,
+                  backgroundColor: colors.danger,
+                  borderWidth: 1.5,
+                  borderColor: colors.surface,
+                }}
+              />
+            )}
+          </TouchableOpacity>
         </View>
 
         {/* SCROLLABLE BODY */}
@@ -246,14 +307,83 @@ export default function Home() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 120 }}
         >
-          {/* TODAY'S PHASE CARD */}
-          <View className="mx-6 mb-3.5 mt-2">
-            <View
-              className="p-5 border"
+          {/* STAT PILLS ROW */}
+          <View className="mx-6 mt-3 mb-4 flex-row" style={{ gap: 10 }}>
+            <StatCard
+              variant="tile"
+              icon="flame"
+              iconColor={colors.primary}
+              iconBg={colors.primaryLight}
+              value={`${streakCount}`}
+              label="day streak"
+              valueColor={colors.foreground}
+              labelColor={colors.mutedText}
+              valueFontFamily={fonts.heading}
+              labelFontFamily={fonts.body}
+              backgroundColor={colors.surface}
+              containerStyle={{ borderRadius: 18, ...getShadow(colors, isDark) }}
+            />
+
+            <StatCard
+              variant="tile"
+              icon="trophy"
+              iconColor={colors.accent}
+              iconBg={colors.accentLight}
+              value={isStatsLoading ? "…" : `${walletBalance}`}
+              label="wallet pts"
+              valueColor={colors.foreground}
+              labelColor={colors.mutedText}
+              valueFontFamily={fonts.heading}
+              labelFontFamily={fonts.body}
+              backgroundColor={colors.surface}
+              containerStyle={{ borderRadius: 18, ...getShadow(colors, isDark) }}
+            />
+          </View>
+
+          {/* WEEK STRIP */}
+          <View className="mx-6 mb-4 flex-row justify-between">
+            {weekStrip.map((day, idx) => (
+              <View key={idx} className="items-center" style={{ width: 34 }}>
+                <Text style={{ fontSize: 11, fontWeight: "700", color: colors.mutedText, fontFamily: fonts.body, marginBottom: 6 }}>
+                  {day.letter}
+                </Text>
+                <View
+                  style={{
+                    width: 30,
+                    height: 30,
+                    borderRadius: 15,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor: day.isToday ? colors.primary : "transparent",
+                    borderWidth: day.isFuture && !day.isToday ? 1.5 : 0,
+                    borderColor: colors.primary,
+                    borderStyle: day.isFuture && !day.isToday ? "dashed" : "solid",
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      fontWeight: day.isToday ? "800" : "600",
+                      color: day.isToday ? colors.buttonText : colors.foreground,
+                      fontFamily: fonts.body,
+                    }}
+                  >
+                    {day.dayNumber}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+
+          {/* CYCLE PHASE HERO CARD */}
+          <View className="mx-6 mb-4">
+            <LinearGradient
+              colors={heroGradient as [string, string, ...string[]]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
               style={{
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-                borderRadius: 24,
+                borderRadius: 22,
+                padding: 20,
                 ...getShadow(colors, isDark),
               }}
             >
@@ -263,48 +393,88 @@ export default function Home() {
                     style={{
                       fontSize: 10,
                       fontWeight: "800",
-                      color: colors.primary,
-                      letterSpacing: 0.6,
+                      color: "#fff",
+                      letterSpacing: 0.8,
                       fontFamily: fonts.body,
                       textTransform: "uppercase",
+                      opacity: 0.85,
                     }}
                   >
-                    Today · {new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" }).toUpperCase()}
+                    Cycle day {cycleDay}
                   </Text>
                   <Text
                     className="mt-1"
                     style={{
-                      fontSize: 20,
+                      fontSize: 22,
                       fontWeight: "800",
-                      color: colors.foreground,
+                      color: "#fff",
                       fontFamily: fonts.heading,
                     }}
                   >
-                    Day {cycleDay} · {phaseLabel} phase
+                    {phaseLabel} phase
                   </Text>
                   <Text
-                    className="mt-1"
-                    style={{ fontSize: 11, color: colors.mutedText, fontFamily: fonts.body }}
+                    className="mt-1.5"
+                    style={{ fontSize: 12, color: "#fff", opacity: 0.9, fontFamily: fonts.body, lineHeight: 17 }}
                   >
-                    Expected period: {expectedEndDate !== "soon" ? new Date(expectedEndDate).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "soon"} · Fertile window: {fertileWindow}
+                    Expected period {expectedEndDate !== "soon" ? formatShortDate(expectedEndDate) : "soon"} · Fertile window {fertileWindow}
                   </Text>
                 </View>
                 <View
                   style={{
-                    width: 38, height: 38, borderRadius: 11,
-                    backgroundColor: colors.primaryLight,
+                    width: 40, height: 40, borderRadius: 20,
+                    backgroundColor: "rgba(255,255,255,0.25)",
                     alignItems: "center", justifyContent: "center",
                   }}
                 >
-                  <Ionicons name="water" size={17} color={colors.primary} />
+                  <Ionicons name="water" size={18} color="#fff" />
                 </View>
               </View>
-            </View>
+            </LinearGradient>
+          </View>
+
+          {/* QUICK ACTIONS */}
+          <View className="mx-6 mb-5 flex-row justify-around">
+            {[
+              { label: "Log period", icon: "water", route: "/(app)/tracker", primary: true },
+              { label: "Symptoms", icon: "pulse-outline", route: "/(app)/health-issues", primary: false },
+              { label: "Mood", icon: "happy-outline", route: "/(app)/habits", primary: false },
+            ].map((action, idx) => (
+              <TouchableOpacity
+                key={idx}
+                activeOpacity={0.8}
+                onPress={() => router.push(action.route as any)}
+                className="items-center"
+              >
+                <View
+                  style={{
+                    width: 56,
+                    height: 56,
+                    borderRadius: 28,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor: action.primary ? colors.primary : colors.surface,
+                    ...getShadow(colors, isDark),
+                  }}
+                >
+                  <Ionicons
+                    name={action.icon as any}
+                    size={22}
+                    color={action.primary ? colors.buttonText : colors.primary}
+                  />
+                </View>
+                <Text
+                  style={{ fontSize: 11, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body, marginTop: 6 }}
+                >
+                  {action.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
 
           {/* CYCLE HEALTH STAT CARD */}
           <View className="mx-6 mb-3.5">
-            <View className="border p-5" style={{ backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 24, ...getShadow(colors, isDark) }}>
+            <View className="border p-5" style={{ backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 22, ...getShadow(colors, isDark) }}>
               <View className="flex-row items-center justify-between">
                 <View className="flex-1 pr-4">
                   <Text style={{ fontSize: 10, fontWeight: "800", color: colors.primary, letterSpacing: 0.6, fontFamily: fonts.body, textTransform: "uppercase" }}>
@@ -356,7 +526,7 @@ export default function Home() {
 
           {/* CYCLE LENGTH TREND — ALWAYS VISIBLE */}
           <View className="mx-6 mb-3.5">
-            <View className="border p-5" style={{ backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 24, ...getShadow(colors, isDark) }}>
+            <View className="border p-5" style={{ backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 22, ...getShadow(colors, isDark) }}>
               <View className="flex-row justify-between items-center mb-5">
                 <Text style={{ fontSize: 14, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
                   Cycle length trend
@@ -389,7 +559,7 @@ export default function Home() {
           </View>
 
           {/* YOUR CARE LIST */}
-          <View className="mx-6 mb-6">
+          <View className="mx-6 mb-5">
             <Text className="mb-2.5" style={{ fontSize: 14.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
               Your care
             </Text>
@@ -397,6 +567,9 @@ export default function Home() {
             <View style={{ gap: 9 }}>
               {[
                 { title: "Smart Predictions", desc: "Cycle forecasts, windows, and trends", icon: "trending-up-outline", route: "/(app)/predictions" },
+                { title: "Daily Insights", desc: "Personalized hormone, mood & energy tips", icon: "sparkles-outline", route: "/(app)/insights" },
+                { title: "Symptom Predictions", desc: "Likely symptoms by cycle phase", icon: "pulse-outline", route: "/(app)/symptom-predictions" },
+                { title: "Symptom Checker", desc: "PCOS, endometriosis, fibroid & thyroid screening", icon: "clipboard-outline", route: "/(app)/symptom-checker" },
                 { title: "Gynecologist Consultation", desc: "Private specialist booking, secure chat", icon: "chatbubbles-outline", route: "/(app)/consultation" },
               ].map((careItem, i) => (
                 <TouchableOpacity
@@ -404,7 +577,7 @@ export default function Home() {
                   onPress={() => router.push(careItem.route as any)}
                   activeOpacity={0.7}
                   className="flex-row items-center border"
-                  style={{ backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 16, padding: 13 }}
+                  style={{ backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 18, padding: 14 }}
                 >
                   <View style={{ width: 38, height: 38, borderRadius: 11, backgroundColor: colors.primaryLight, alignItems: "center", justifyContent: "center", marginRight: 12 }}>
                     <Ionicons name={careItem.icon as any} size={17} color={colors.primary} />
@@ -420,7 +593,7 @@ export default function Home() {
           </View>
 
           {/* WELLNESS & SUPPORT GRID */}
-          <View className="mx-6 mb-6">
+          <View className="mx-6 mb-5">
             <Text className="mb-2.5" style={{ fontSize: 14.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
               Wellness & support
             </Text>
@@ -428,7 +601,7 @@ export default function Home() {
             <View className="flex-row flex-wrap justify-between" style={{ gap: 10 }}>
               {[
                 { title: "Health Concerns", desc: "Irregularities & symptoms", icon: "alert-circle-outline", route: "/(app)/health-issues" },
-                { title: "Anonymous Q&A", desc: "Ask privately, expert-answered", icon: "help-circle-outline", route: "/(app)/qa" },
+                { title: "Nura AI", desc: "Ask privately, expert-answered", icon: "help-circle-outline", route: "/(app)/qa" },
                 { title: "Hygiene & Care", desc: "Product guidance & comfort", icon: "leaf-outline", route: "/(app)/hygiene" },
                 { title: "Sexual Wellbeing", desc: "Consent, intimacy & safety", icon: "heart-outline", route: "/(app)/sexual-wellbeing" },
               ].map((wellness, idx) => (
@@ -437,7 +610,7 @@ export default function Home() {
                   onPress={() => router.push(wellness.route as any)}
                   activeOpacity={0.7}
                   className="border"
-                  style={{ width: "48%", backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 16, padding: 12 }}
+                  style={{ width: "48%", backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 18, padding: 14 }}
                 >
                   <View style={{ alignSelf: "flex-start", padding: 8, borderRadius: 10, backgroundColor: colors.primaryLight, marginBottom: 10 }}>
                     <Ionicons name={wellness.icon as any} size={16} color={colors.primary} />
@@ -469,7 +642,7 @@ export default function Home() {
                   onPress={() => router.push(exp.route as any)}
                   activeOpacity={0.8}
                   className="border items-center justify-center"
-                  style={{ width: "31%", backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 16, paddingVertical: 14, paddingHorizontal: 8 }}
+                  style={{ width: "31%", backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 18, paddingVertical: 14, paddingHorizontal: 8 }}
                 >
                   <View
                     style={{
@@ -496,4 +669,3 @@ export default function Home() {
     </>
   );
 }
-

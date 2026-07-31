@@ -4,6 +4,7 @@ import { Platform } from "react-native";
 import { barListHtml, escapeHtml, kpiRowHtml, sparklineSvg } from "./reportCharts";
 import { simpleMarkdownToHtml } from "./reportMarkdown";
 import { reportApi, type DocType, type HealthReportCycleStats, type LanguageCode, type ReportCountItem } from "./api";
+import { REPORT_THEME } from "./reportTheme";
 
 const DOC_TYPE_LABELS: Record<DocType, string> = {
   bill: "Medical Bill",
@@ -43,37 +44,37 @@ const REPORT_STYLES = `
   * { box-sizing: border-box; }
   body {
     font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
-    color: #17212E;
+    color: ${REPORT_THEME.text};
     background: #F5F7FA;
     margin: 0;
     padding: 32px;
   }
   h1 { font-size: 22px; margin: 0 0 4px; }
-  h2 { font-size: 15px; margin: 0 0 12px; color: #17212E; }
-  h4 { font-size: 13px; margin: 14px 0 4px; color: #17212E; }
-  p { font-size: 12px; line-height: 1.6; margin: 0 0 8px; color: #33414f; }
+  h2 { font-size: 15px; margin: 0 0 12px; color: ${REPORT_THEME.text}; }
+  h4 { font-size: 13px; margin: 14px 0 4px; color: ${REPORT_THEME.text}; }
+  p { font-size: 12px; line-height: 1.6; margin: 0 0 8px; color: ${REPORT_THEME.bodyText}; }
   ul { margin: 0 0 8px; padding-left: 18px; }
   hr { border: none; border-top: 1px solid #e1e0d9; margin: 10px 0; }
-  li { font-size: 12px; line-height: 1.6; color: #33414f; margin-bottom: 2px; }
-  .header { border-bottom: 1px solid #E3E7ED; padding-bottom: 16px; margin-bottom: 20px; }
-  .header .meta { font-size: 11px; color: #66748A; margin-top: 4px; }
+  li { font-size: 12px; line-height: 1.6; color: ${REPORT_THEME.bodyText}; margin-bottom: 2px; }
+  .header { border-bottom: 1px solid ${REPORT_THEME.border}; padding-bottom: 16px; margin-bottom: 20px; }
+  .header .meta { font-size: 11px; color: ${REPORT_THEME.mutedText}; margin-top: 4px; }
   .kpi-row { display: flex; gap: 10px; margin-bottom: 20px; }
-  .stat-tile { flex: 1; background: #FFFFFF; border: 1px solid #E3E7ED; border-radius: 12px; padding: 12px; }
-  .stat-value { font-size: 18px; font-weight: 600; color: #17212E; }
-  .stat-label { font-size: 10px; color: #66748A; margin-top: 2px; }
-  .card { background: #FFFFFF; border: 1px solid #E3E7ED; border-radius: 14px; padding: 16px; margin-bottom: 16px; page-break-inside: avoid; }
+  .stat-tile { flex: 1; background: #FFFFFF; border: 1px solid ${REPORT_THEME.border}; border-radius: 12px; padding: 12px; }
+  .stat-value { font-size: 18px; font-weight: 600; color: ${REPORT_THEME.text}; }
+  .stat-label { font-size: 10px; color: ${REPORT_THEME.mutedText}; margin-top: 2px; }
+  .card { background: #FFFFFF; border: 1px solid ${REPORT_THEME.border}; border-radius: 14px; padding: 16px; margin-bottom: 16px; page-break-inside: avoid; }
   .bar-chart { display: flex; flex-direction: column; gap: 8px; }
   .bar-row { display: flex; align-items: center; gap: 8px; }
-  .bar-label { width: 92px; font-size: 10px; color: #52514e; flex-shrink: 0; }
+  .bar-label { width: 92px; font-size: 10px; color: ${REPORT_THEME.labelText}; flex-shrink: 0; }
   .bar-track { flex: 1; height: 14px; border-radius: 7px; overflow: hidden; }
   .bar-fill { height: 100%; border-radius: 7px; }
-  .bar-value { width: 32px; text-align: right; font-size: 10px; color: #52514e; flex-shrink: 0; }
+  .bar-value { width: 32px; text-align: right; font-size: 10px; color: ${REPORT_THEME.labelText}; flex-shrink: 0; }
   .empty-note { font-size: 11px; color: #898781; font-style: italic; }
   table { width: 100%; border-collapse: collapse; margin-top: 4px; }
-  th, td { text-align: left; font-size: 10.5px; padding: 6px 4px; border-bottom: 1px solid #E3E7ED; color: #33414f; }
-  th { color: #66748A; font-weight: 600; }
+  th, td { text-align: left; font-size: 10.5px; padding: 6px 4px; border-bottom: 1px solid ${REPORT_THEME.border}; color: ${REPORT_THEME.bodyText}; }
+  th { color: ${REPORT_THEME.mutedText}; font-weight: 600; }
   .footer { font-size: 10px; color: #898781; text-align: center; margin-top: 12px; }
-  .trend-label { font-size: 11px; color: #66748A; margin-bottom: 4px; }
+  .trend-label { font-size: 11px; color: ${REPORT_THEME.mutedText}; margin-bottom: 4px; }
   @media print {
     body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }
@@ -122,7 +123,7 @@ function buildReportHtml(params: {
   const trendsHtml = [
     trendSectionHtml("Sleep hours", cycle.trends.sleepHours, "#805AD5", "hrs"),
     trendSectionHtml("Water intake", cycle.trends.waterIntake, "#3182CE", "ml"),
-    trendSectionHtml("Stress level", cycle.trends.stressLevel, "#E4694F", "/10"),
+    trendSectionHtml("Stress level", cycle.trends.stressLevel, REPORT_THEME.stressBar, "/10"),
   ]
     .filter(Boolean)
     .join("");
@@ -150,7 +151,7 @@ function buildReportHtml(params: {
 
     <div class="card">
       <h2>Symptoms</h2>
-      ${cycle.symptomCounts.length > 0 ? barListHtml(cycle.symptomCounts, { color: "#2E8B7A", trackColor: "#EAF6F4" }) : `<div class="empty-note">No symptoms logged in this range.</div>`}
+      ${cycle.symptomCounts.length > 0 ? barListHtml(cycle.symptomCounts, { color: REPORT_THEME.symptomsBar, trackColor: "#EAF6F4" }) : `<div class="empty-note">No symptoms logged in this range.</div>`}
     </div>
 
     <div class="card">
@@ -167,7 +168,7 @@ function buildReportHtml(params: {
 
     <div class="card">
       <h2>Documents (${documentCount})</h2>
-      ${docTypeCounts.length > 0 ? barListHtml(docTypeCounts, { color: "#E4694F", trackColor: "#FFF1ED" }) : `<div class="empty-note">No documents uploaded in this range.</div>`}
+      ${docTypeCounts.length > 0 ? barListHtml(docTypeCounts, { color: REPORT_THEME.stressBar, trackColor: REPORT_THEME.documentsTrack }) : `<div class="empty-note">No documents uploaded in this range.</div>`}
       ${
         documents.length > 0
           ? `<table><thead><tr><th>Title</th><th>Type</th><th>Date</th></tr></thead><tbody>${documentRows}</tbody></table>`

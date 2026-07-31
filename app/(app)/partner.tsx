@@ -16,8 +16,9 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { alert } from "../../lib/alert";
+import { ScreenHeader } from "../../components/ScreenHeader";
 import { useTheme } from "../../components/theme";
-import { getSoftTints } from "../../components/ui-tokens";
+import { getShadow, getSoftTints } from "../../components/ui-tokens";
 import {
   partnerApi,
   getWebSocketUrl,
@@ -293,31 +294,23 @@ export default function Partner() {
           className="flex-1"
           keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
         >
-        {/* Nav */}
-        <View className="flex-row items-center gap-2 px-6 pt-6">
-          <TouchableOpacity
-            onPress={() => router.back()}
-            activeOpacity={0.7}
-            className="p-2.5 -ml-2 rounded-full border"
-            style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-          >
-            <Feather name="arrow-left" size={18} color={colors.foreground} />
-          </TouchableOpacity>
-          <Text className="flex-1 text-2xl font-black tracking-tight ml-2" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-            Partner Sync
-          </Text>
-          {isConnected ? (
-            <View className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-full" style={{ backgroundColor: softTints.emerald }}>
-              <View className="w-2 h-2 rounded-full" style={{ backgroundColor: colors.success }} />
-              <Text className="text-[10px] font-black" style={{ color: colors.success, fontFamily: fonts.body }}>Connected</Text>
-            </View>
-          ) : inviteCode ? (
-            <View className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-full" style={{ backgroundColor: softTints.lavender }}>
-              <View className="w-2 h-2 rounded-full" style={{ backgroundColor: colors.lavender }} />
-              <Text className="text-[10px] font-black" style={{ color: colors.lavender, fontFamily: fonts.body }}>Invite Pending</Text>
-            </View>
-          ) : null}
-        </View>
+        <ScreenHeader
+          title="Partner Sync"
+          onBack={() => router.back()}
+          right={
+            isConnected ? (
+              <View className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-full" style={{ backgroundColor: softTints.emerald }}>
+                <View className="w-2 h-2 rounded-full" style={{ backgroundColor: colors.success }} />
+                <Text className="text-[10px] font-black" style={{ color: colors.success, fontFamily: fonts.body }}>Connected</Text>
+              </View>
+            ) : inviteCode ? (
+              <View className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-full" style={{ backgroundColor: softTints.pink }}>
+                <View className="w-2 h-2 rounded-full" style={{ backgroundColor: colors.primary }} />
+                <Text className="text-[10px] font-black" style={{ color: colors.primary, fontFamily: fonts.body }}>Invite Pending</Text>
+              </View>
+            ) : null
+          }
+        />
 
         {/* Tab pills */}
         <View className="mt-5">
@@ -338,10 +331,10 @@ export default function Partner() {
                   key={tab.id}
                   onPress={() => setActiveTab(tab.id as any)}
                   activeOpacity={0.8}
-                  className="rounded-full px-5 py-2.5 border shadow-sm"
+                  className="rounded-full px-5 py-2.5"
                   style={{
                     backgroundColor: isSelected ? colors.primary : colors.surface,
-                    borderColor: isSelected ? colors.primary : colors.border,
+                    ...getShadow(colors, isDark),
                   }}
                 >
                   <Text
@@ -388,12 +381,12 @@ export default function Partner() {
                 {[
                   { icon: "people-outline", bg: softTints.pink, color: colors.primary, title: "What's Shared", desc: "Cycle phase, comfort tips, and alerts can be shared only when you allow them." },
                   { icon: "heart-outline", bg: softTints.emerald, color: colors.success, title: "Better Support", desc: "Help your partner understand what kind of care, space, or reminders may help." },
-                  { icon: "shield-checkmark-outline", bg: softTints.lavender, color: colors.lavender, title: "Privacy First", desc: "Everything shared is your choice. You can change permissions any time." },
+                  { icon: "shield-checkmark-outline", bg: softTints.pink, color: colors.primary, title: "Privacy First", desc: "Everything shared is your choice. You can change permissions any time." },
                 ].map((card) => (
                   <View
                     key={card.title}
-                    className="rounded-3xl border p-5 shadow-sm flex-row items-center"
-                    style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+                    className="rounded-3xl p-5 flex-row items-center"
+                    style={{ backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
                   >
                     <View className="p-3 rounded-2xl mr-4" style={{ backgroundColor: card.bg }}>
                       <Ionicons name={card.icon as any} size={20} color={card.color} />
@@ -412,10 +405,10 @@ export default function Partner() {
                 <TouchableOpacity
                   activeOpacity={0.85}
                   onPress={() => setActiveTab(isConnected ? "access" : "invite")}
-                  className="mt-4 rounded-2xl py-4 items-center justify-center shadow-md"
-                  style={{ backgroundColor: colors.primary }}
+                  className="mt-4 rounded-2xl py-4 items-center justify-center"
+                  style={{ backgroundColor: colors.primary, ...getShadow(colors, isDark) }}
                 >
-                  <Text className="text-sm font-bold tracking-wide text-white" style={{ fontFamily: fonts.body }}>
+                  <Text className="text-sm font-bold tracking-wide" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
                     {isConnected ? "Manage Permissions" : "Proceed to Sync Setup"}
                   </Text>
                 </TouchableOpacity>
@@ -427,8 +420,8 @@ export default function Partner() {
               <View className="gap-5">
                 {/* Generate code section */}
                 <View
-                  className="rounded-3xl border p-6 items-center shadow-sm"
-                  style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+                  className="rounded-3xl p-6 items-center"
+                  style={{ backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
                 >
                   <View className="p-4 rounded-2xl mb-4" style={{ backgroundColor: softTints.pink }}>
                     <MaterialCommunityIcons name="heart-flash" size={32} color={colors.primary} />
@@ -485,7 +478,7 @@ export default function Partner() {
                       {generatingCode ? (
                         <ActivityIndicator color={colors.buttonText} />
                       ) : (
-                        <Text className="text-xs font-bold tracking-wide text-white uppercase" style={{ fontFamily: fonts.body }}>
+                        <Text className="text-xs font-bold tracking-wide uppercase" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
                           Generate Unique Code
                         </Text>
                       )}
@@ -515,17 +508,17 @@ export default function Partner() {
 
                 <View
                   className="flex-row items-start p-3.5 rounded-2xl border gap-2.5"
-                  style={{ backgroundColor: softTints.lavender, borderColor: colors.border }}
+                  style={{ backgroundColor: softTints.pink, borderColor: colors.border }}
                 >
-                  <Ionicons name="shield-checkmark-outline" size={15} color={colors.lavender} style={{ marginTop: 1 }} />
+                  <Ionicons name="shield-checkmark-outline" size={15} color={colors.primary} style={{ marginTop: 1 }} />
                   <Text className="flex-1 text-[11px] font-semibold leading-4" style={{ color: colors.foreground, fontFamily: fonts.body }}>
                     You&apos;re in control — change these anytime, and disconnecting removes access immediately.
                   </Text>
                 </View>
 
                 <View
-                  className="rounded-3xl border shadow-sm p-4 gap-4"
-                  style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+                  className="rounded-3xl p-4 gap-4"
+                  style={{ backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
                 >
                   {[
                     { key: "shareCyclePhase" as const, title: "Cycle Phase", desc: "They'll see your current phase and countdown to your next period — not exact dates from past cycles.", value: perms.shareCyclePhase },
@@ -547,7 +540,7 @@ export default function Partner() {
                         <Switch
                           value={item.value}
                           onValueChange={(v) => updatePerm(item.key, v)}
-                          trackColor={{ true: colors.primary }}
+                          trackColor={{ true: colors.success }}
                         />
                       </View>
                       {i < arr.length - 1 && (
@@ -589,7 +582,7 @@ export default function Partner() {
                       className="mt-5 px-6 py-3 rounded-2xl"
                       style={{ backgroundColor: colors.primary }}
                     >
-                      <Text className="text-sm font-bold text-white" style={{ fontFamily: fonts.body }}>Link Partner</Text>
+                      <Text className="text-sm font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>Link Partner</Text>
                     </TouchableOpacity>
                   </View>
                 ) : chatMessages.length === 0 ? (

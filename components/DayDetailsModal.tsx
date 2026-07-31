@@ -15,6 +15,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { DayEntry } from "./AppState";
 import { useTheme } from "./theme";
+import { getShadow, MOOD_OPTIONS } from "./ui-tokens";
 
 type LogOption<Value extends string> = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -39,17 +40,7 @@ const flowOptions: LogOption<NonNullable<DayEntry["flow"]>>[] = [
   { icon: "rainy-outline", label: "Heavy", value: "heavy" },
 ];
 
-const moodOptions: LogOption<NonNullable<DayEntry["mood"]>>[] = [
-  { icon: "happy-outline", label: "Happy", value: "happy" },
-  { icon: "leaf-outline", label: "Calm", value: "calm" },
-  { icon: "cloud-outline", label: "Emotional", value: "emotional" },
-  { icon: "moon-outline", label: "Tired", value: "tired" },
-  { icon: "sad-outline", label: "Sad", value: "sad" },
-  { icon: "alert-circle-outline", label: "Anxious", value: "anxious" },
-  { icon: "flash-outline", label: "Irritable", value: "irritable" },
-  { icon: "remove-circle-outline", label: "Neutral", value: "neutral" },
-  { icon: "sunny-outline", label: "Energetic", value: "energetic" },
-];
+const moodOptions: LogOption<NonNullable<DayEntry["mood"]>>[] = MOOD_OPTIONS;
 
 const energyOptions: LogOption<NonNullable<DayEntry["energy"]>>[] = [
   { icon: "battery-charging-outline", label: "High", value: "high" },
@@ -81,7 +72,7 @@ export default function DayDetailsModal({
   onSaveNote?: (note: string) => void;
   onLogSymptom?: (symptom: string) => void;
 }) {
-  const { colors, fonts } = useTheme();
+  const { colors, fonts, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const [noteText, setNoteText] = useState(details ?? "");
   const [selectedEnergy, setSelectedEnergy] = useState<DayEntry["energy"]>();
@@ -267,18 +258,19 @@ export default function DayDetailsModal({
           style={{
             backgroundColor: colors.surface,
             borderColor: colors.border,
-            borderTopLeftRadius: 16,
-            borderTopRightRadius: 16,
+            borderTopLeftRadius: 28,
+            borderTopRightRadius: 28,
             borderWidth: 1,
             maxHeight: "86%",
             overflow: "hidden",
+            ...getShadow(colors, isDark),
           }}
         >
-          <View style={{ alignItems: "center", paddingTop: 10 }}>
+          <View style={{ alignItems: "center", paddingTop: 12 }}>
             <View
               style={{
                 backgroundColor: colors.border,
-                borderRadius: 2,
+                borderRadius: 3,
                 height: 4,
                 width: 44,
               }}

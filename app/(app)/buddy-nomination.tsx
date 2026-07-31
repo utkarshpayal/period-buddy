@@ -1,4 +1,4 @@
-import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Feather, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -17,7 +17,7 @@ import { useAppState } from "../../components/AppState";
 import { BuddyVideoCall, type BuddyVideoCallHandle } from "../../components/BuddyVideoCall";
 import { alert } from "../../lib/alert";
 import { useTheme } from "../../components/theme";
-import { getSoftTints } from "../../components/ui-tokens";
+import { getShadow, getSoftTints } from "../../components/ui-tokens";
 import {
   buddyApi,
   getWebSocketUrl,
@@ -532,49 +532,15 @@ export default function BuddyNomination() {
           </View>
 
           <View className="mx-6 mt-6">
-            {/* BRAND INTRO HERO EXCLUSIVES INFOCARD */}
+            {/* Intro copy — mirrors the mockup's plain subtitle under the header */}
             {!isChatConsoleOpen && (
-              <View
-                className="rounded-3xl border p-5 shadow-xs relative overflow-hidden mb-6"
-                style={{
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                }}
+              <Text
+                className="text-xs font-semibold leading-5 mb-5"
+                style={{ color: colors.mutedText, fontFamily: fonts.body }}
               >
-                <View
-                  className="absolute -right-6 -top-6 w-20 h-20 rounded-full opacity-35"
-                  style={{ backgroundColor: softTints.pink }}
-                />
-
-                <View className="flex-row items-center gap-2 mb-3.5">
-                  <MaterialCommunityIcons
-                    name="moon-waning-crescent"
-                    size={16}
-                    color={colors.primary}
-                  />
-                  <Text
-                    className="text-xs font-black tracking-widest uppercase"
-                    style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                  >
-                    Monthly Peer Match
-                  </Text>
-                </View>
-
-                <Text
-                  className="text-base font-black tracking-tight leading-5 mb-1.5"
-                  style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                >
-                  Nominate Your Period Buddy
-                </Text>
-                <Text
-                  className="text-xs leading-4"
-                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                >
-                  Sync timelines with another member who has similar cycle
-                  milestones. Compare patterns and chat with privacy in
-                  mind.
-                </Text>
-              </View>
+                Choose someone who checks in on you — sync timelines with a member who has similar cycle
+                milestones and chat with privacy in mind.
+              </Text>
             )}
 
             {/* CONDITIONAL CONTROLLER HUB SWITCH: DISCOVERY FEED VS PRIVATE ACTIVE CONSOLE */}
@@ -614,7 +580,7 @@ export default function BuddyNomination() {
                     <ActivityIndicator color={colors.primary} />
                   </View>
                 ) : (
-                <View className="gap-4">
+                <View className="gap-2.5">
                   {sortedNominees.map((buddy) => {
                     const isSelectedBuddy = activeNominatedId === buddy.id;
                     const isAnyBuddyLocked = activeNominatedId !== null;
@@ -622,149 +588,78 @@ export default function BuddyNomination() {
                     return (
                       <View
                         key={buddy.id}
-                        className="rounded-3xl border shadow-2xl overflow-hidden"
+                        className="rounded-2xl border p-3.5"
                         style={{
-                          backgroundColor: isSelectedBuddy
-                            ? colors.primaryLight
-                            : colors.surface,
-                          borderColor: isSelectedBuddy
-                            ? colors.primary
-                            : colors.border,
-                          borderWidth: isSelectedBuddy ? 2.5 : 1,
-                          opacity:
-                            isAnyBuddyLocked && !isSelectedBuddy ? 0.45 : 1,
+                          backgroundColor: colors.surface,
+                          borderColor: colors.border,
+                          opacity: isAnyBuddyLocked && !isSelectedBuddy ? 0.45 : 1,
+                          ...getShadow(colors, isDark),
                         }}
                       >
-                        <View className="flex-row items-center justify-between p-5">
-                          <View className="flex-row items-center gap-4 flex-1">
-                            <View
-                              className="h-14 w-14 items-center justify-center rounded-full border"
-                              style={{
-                                backgroundColor: colors.surfaceSoft,
-                                borderColor: colors.border,
-                              }}
-                            >
-                              <Text className="text-2xl" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                                {buddy.avatarSeed}
-                              </Text>
-                            </View>
-
-                            <View className="flex-1">
-                              <View className="flex-row items-center gap-2 flex-wrap">
-                                <Text
-                                  className="text-sm font-black tracking-tight"
-                                  style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                                >
-                                  {buddy.name}
-                                </Text>
-                                {isSelectedBuddy && (
-                                  <View
-                                    className="px-2 py-0.5 rounded-full flex-row items-center gap-1"
-                                    style={{
-                                      backgroundColor: colors.successLight,
-                                      borderColor: `${colors.success}33`,
-                                      borderWidth: 1,
-                                    }}
-                                  >
-                                    <View className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: colors.success }} />
-                                    <Text
-                                      className="text-[8px] font-black uppercase tracking-wider"
-                                      style={{ color: colors.success, fontFamily: fonts.body }}
-                                    >
-                                      Active
-                                    </Text>
-                                  </View>
-                                )}
-                              </View>
-                              <View className="flex-row items-center gap-1.5 mt-0.5">
-                                <View className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: colors.primary }} />
-                                <Text
-                                  className="text-[11px] font-bold"
-                                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                                >
-                                  {buddy.cyclePhase}
-                                </Text>
-                              </View>
-                              <Text className="mt-1 text-[9px] font-black uppercase" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                                {buddy.lastUpdate}
-                              </Text>
-                            </View>
-                          </View>
-
-                          {/* Compatibility Badge Circle parameters layout */}
-                          <View className="items-center">
-                            <View
-                              className="h-11 w-11 items-center justify-center rounded-full"
-                              style={{ backgroundColor: softTints.emerald }}
-                            >
-                              <Text className="text-xs font-black" style={{ color: colors.success, fontFamily: fonts.mono }}>
-                                {buddy.compatibility}%
-                              </Text>
-                            </View>
-                            <Text className="mt-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                              Overlap
+                        {/* Compact row: avatar + name/meta + pill CTA, mirrors mockup's flat contact row */}
+                        <View className="flex-row items-center gap-3">
+                          <View
+                            className="h-10 w-10 items-center justify-center rounded-full"
+                            style={{ backgroundColor: softTints.pink }}
+                          >
+                            <Text className="text-sm font-black" style={{ color: colors.primary, fontFamily: fonts.body }}>
+                              {buddy.avatarSeed}
                             </Text>
                           </View>
-                        </View>
 
-                        {/* SUB ELEMENT: PILL ATTRIBUTES LABELS COMPARE ROW */}
-                        <View className="flex-row flex-wrap gap-1.5 px-5 pb-4">
-                          {buddy.similarities.map((chip, cIdx) => (
-                            <View
-                              key={cIdx}
-                              className="px-2.5 py-1 rounded-md"
-                              style={{
-                                backgroundColor: colors.surfaceSoft,
-                                borderWidth: 1,
-                                borderColor: colors.border,
-                              }}
-                            >
-                              <Text
-                                className="text-[9px] font-bold"
-                                style={{ color: colors.foreground, fontFamily: fonts.body }}
-                              >
-                                #{chip}
-                              </Text>
-                            </View>
-                          ))}
-                        </View>
-
-                        {/* CALL TO TASK DYNAMIC NOMINATIONS BAR FOOTER BUTTON */}
-                        <TouchableOpacity
-                          activeOpacity={0.8}
-                          disabled={isAnyBuddyLocked && !isSelectedBuddy}
-                          className="mx-5 mb-5 rounded-xl py-3 flex-row items-center justify-center gap-2 border shadow-3xs"
-                          onPress={() => {
-                            if (isSelectedBuddy) {
-                              setIsChatConsoleOpen(true);
-                            } else {
-                              handleNominateBuddy(buddy.id);
-                            }
-                          }}
-                          style={{
-                            backgroundColor: colors.primary,
-                            borderColor: colors.primary,
-                          }}
-                        >
-                          {isSelectedBuddy ? (
-                            <>
-                              <Ionicons name="chatbubble-ellipses" size={15} color={colors.buttonText} />
-                              <Text
-                                className="text-xs font-bold tracking-wide"
-                                style={{ color: colors.buttonText, fontFamily: fonts.body }}
-                              >
-                                Chat with Buddy
-                              </Text>
-                            </>
-                          ) : (
+                          <View className="flex-1">
                             <Text
-                              className="text-xs font-bold tracking-wide"
-                              style={{ color: colors.buttonText, fontFamily: fonts.body }}
+                              className="text-[13.5px] font-extrabold"
+                              style={{ color: colors.foreground, fontFamily: fonts.body }}
+                              numberOfLines={1}
                             >
-                              Nominate as Buddy
+                              {buddy.name}
                             </Text>
-                          )}
-                        </TouchableOpacity>
+                            <Text
+                              className="text-[11px] font-semibold mt-0.5"
+                              style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                              numberOfLines={1}
+                            >
+                              {buddy.cyclePhase} · {buddy.compatibility}% overlap
+                            </Text>
+                          </View>
+
+                          <TouchableOpacity
+                            activeOpacity={0.8}
+                            disabled={isAnyBuddyLocked && !isSelectedBuddy}
+                            onPress={() => {
+                              if (isSelectedBuddy) {
+                                setIsChatConsoleOpen(true);
+                              } else {
+                                handleNominateBuddy(buddy.id);
+                              }
+                            }}
+                            className="rounded-full px-4 py-2 flex-row items-center gap-1.5"
+                            style={
+                              isSelectedBuddy
+                                ? { backgroundColor: colors.success }
+                                : { borderWidth: 1.5, borderColor: colors.primary }
+                            }
+                          >
+                            <Text
+                              className="text-[11.5px] font-extrabold"
+                              style={{ color: isSelectedBuddy ? "#fff" : colors.primary, fontFamily: fonts.body }}
+                            >
+                              {isSelectedBuddy ? "Added" : "Invite"}
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+
+                        {/* Similarity tags — compact, single line under the row */}
+                        {buddy.similarities.length > 0 && (
+                          <Text
+                            className="text-[10px] font-semibold mt-2.5 pl-[52px]"
+                            style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                            numberOfLines={1}
+                          >
+                            {buddy.similarities.map((s) => `#${s}`).join("  ")}
+                          </Text>
+                        )}
                       </View>
                     );
                   })}

@@ -2,10 +2,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { Tabs, useRouter } from "expo-router";
 import React, { useState, useEffect } from "react";
 import {
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   StatusBar,
+  StyleSheet,
   Text,
   TouchableOpacity,
   View,
@@ -17,6 +19,84 @@ import { ProfileOnboarding } from "../../../components/profile-onboarding";
 import { submitOnboarding } from "../../../lib/auth";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { getWebSocketUrl } from "../../../lib/api";
+
+const CENTER_AVATAR_SOURCE = require("../../../assets/images/icon.png");
+
+// Center avatar tab: a full circular avatar floats above the tab bar,
+// overlapping its bottom edge slightly (tabBarStyle has overflow: "visible").
+const AVATAR_SIZE = 76;
+const AVATAR_WRAP_SIZE = 100;
+const AVATAR_WRAP_TOP = -54;
+
+type DashboardTab = {
+  name: string;
+  label: string;
+  iconFocused?: string;
+  iconUnfocused?: string;
+  image?: any;
+};
+
+const DASHBOARD_TABS: DashboardTab[] = [
+  {
+    name: "home",
+    label: "Home",
+    iconFocused: "home",
+    iconUnfocused: "home-outline",
+  },
+  {
+    name: "tracker",
+    label: "Tracker",
+    iconFocused: "calendar",
+    iconUnfocused: "calendar-outline",
+  },
+  {
+    name: "ai-chat",
+    label: "AI Chat",
+    image: CENTER_AVATAR_SOURCE,
+  },
+  {
+    name: "community",
+    label: "Community",
+    iconFocused: "people",
+    iconUnfocused: "people-outline",
+  },
+  {
+    name: "profile",
+    label: "Profile",
+    iconFocused: "person",
+    iconUnfocused: "person-outline",
+  },
+];
+
+function CenterAvatarTabIcon({ image }: { image: any }) {
+  return (
+    <View style={styles.avatarWrap} pointerEvents="none">
+      <Image source={image} style={styles.avatarImage} resizeMode="contain" />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  avatarWrap: {
+    position: "absolute",
+    top: AVATAR_WRAP_TOP,
+    width: AVATAR_WRAP_SIZE,
+    height: AVATAR_WRAP_SIZE,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 10,
+    elevation: 10,
+  },
+  avatarImage: {
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+  },
+  tabButton: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});
 
 export default function DashboardLayout() {
   const { colors, isDark, fonts } = useTheme();
@@ -190,40 +270,16 @@ export default function DashboardLayout() {
           borderLeftWidth: 0,
           borderRightWidth: 0,
           borderBottomWidth: 0,
-          height: Platform.OS === "ios" ? 84 : 70,
+          height: Platform.OS === "ios" ? 86 : 72,
           elevation: 0,
           shadowColor: "transparent",
-          paddingBottom: Platform.OS === "ios" ? 24 : 12,
-          paddingTop: 8,
+          paddingBottom: Platform.OS === "ios" ? 26 : 14,
+          paddingTop: 10,
+          overflow: "visible",
         },
       }}
     >
-      {[
-        {
-          name: "tracker",
-          label: "Calendar",
-          iconFocused: "calendar",
-          iconUnfocused: "calendar-outline",
-        },
-        {
-          name: "home",
-          label: "Dashboard",
-          iconFocused: "home",
-          iconUnfocused: "home-outline",
-        },
-        {
-          name: "community",
-          label: "Community",
-          iconFocused: "people",
-          iconUnfocused: "people-outline",
-        },
-        {
-          name: "profile",
-          label: "Profile",
-          iconFocused: "person",
-          iconUnfocused: "person-outline",
-        },
-      ].map((tab) => (
+      {DASHBOARD_TABS.map((tab) => (
         <Tabs.Screen
           key={tab.name}
           name={tab.name}
@@ -243,20 +299,19 @@ export default function DashboardLayout() {
                 <TouchableOpacity
                   {...cleanProps}
                   activeOpacity={0.9}
-                  style={{
-                    flex: 1,
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
+                  style={styles.tabButton}
                 />
               );
             },
-            tabBarIcon: ({ focused }) => (
+            tabBarIcon: ({ focused }) =>
+              tab.image ? (
+                <CenterAvatarTabIcon image={tab.image} />
+              ) : (
               <View
                 className="items-center justify-center relative"
                 style={{
-                  backgroundColor: focused ? (isDark ? "rgba(232, 166, 160, 0.12)" : "#FFF1ED") : "transparent",
-                  borderRadius: 12,
+                  backgroundColor: focused ? colors.primaryLight : "transparent",
+                  borderRadius: 14,
                   paddingVertical: 5,
                   paddingHorizontal: 12,
                   minWidth: 64,
@@ -294,7 +349,7 @@ export default function DashboardLayout() {
                   {tab.label}
                 </Text>
               </View>
-            ),
+              ),
           }}
         />
       ))}
