@@ -1,9 +1,13 @@
 import { Stack } from "expo-router";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { AppLockProvider, useAppLock } from "../components/AppLock";
 import { AppLockScreen } from "../components/AppLockScreen";
 import { AuthProvider } from "../components/auth-context";
 import { AppModalHost } from "../components/modals/AppModalHost";
+import {
+  hasRequestedPermissions,
+  PermissionsGate,
+} from "../components/PermissionsGate";
 import { ThemeProvider, useTheme } from "../components/theme";
 import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
@@ -19,15 +23,29 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 function AppShell() {
   const { hasHydrated } = useTheme();
   const { isLocked } = useAppLock();
+  const [permissionsChecked, setPermissionsChecked] = useState(false);
+  const [needsPermissionsGate, setNeedsPermissionsGate] = useState(false);
 
   useEffect(() => {
-    if (hasHydrated) {
+    hasRequestedPermissions().then((requested) => {
+      setNeedsPermissionsGate(!requested);
+      setPermissionsChecked(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (hasHydrated && permissionsChecked) {
       SplashScreen.hideAsync().catch(() => {});
     }
-  }, [hasHydrated]);
+  }, [hasHydrated, permissionsChecked]);
 
-  if (!hasHydrated) {
+  if (!hasHydrated || !permissionsChecked) {
     return null;
+  }
+
+  // Shown once, before the very first login/signup screen, on a fresh install.
+  if (needsPermissionsGate) {
+    return <PermissionsGate onDone={() => setNeedsPermissionsGate(false)} />;
   }
 
   return (

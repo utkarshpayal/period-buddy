@@ -18,7 +18,7 @@ import {
   type ProfileOnboardingValues,
 } from "../../components/profile-onboarding";
 import { ThemeToggle, useTheme } from "../../components/theme";
-import { submitOnboarding } from "../../lib/auth";
+import { submitCycleSettings, submitOnboarding } from "../../lib/auth";
 
 export default function Home() {
   const router = useRouter();
@@ -47,6 +47,20 @@ export default function Home() {
     const updatedUser = response.data ?? response.user;
     const isProfileComplete =
       response.isProfileComplete ?? updatedUser?.isProfileComplete ?? true;
+
+    try {
+      await submitCycleSettings(
+        {
+          cycleLength: values.cycleLength,
+          lastPeriodStartDate: values.lastPeriodStartDate,
+          periodLength: values.periodLength,
+          trackingGoal: values.trackingGoal,
+        },
+        token,
+      );
+    } catch (error) {
+      console.error("Failed to save cycle settings:", error);
+    }
 
     await signIn({
       token,
@@ -202,11 +216,11 @@ export default function Home() {
               }}
             >
               <Image
-                source={require("../../assets/images/logo.png")}
+                source={require("../../assets/images/icon-logo-nobg.png")}
                 resizeMode="contain"
                 style={{
-                  width: 80,
-                  height: 80,
+                  width: 90,
+                  height: 90,
                 }}
               />
             </View>

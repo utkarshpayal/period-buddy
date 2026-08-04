@@ -46,19 +46,19 @@ export function AuthBrandMark() {
 
   return (
     <View
-      className="items-center justify-center rounded-[22px] border overflow-hidden"
+      className="items-center justify-center rounded-[28px] border overflow-hidden"
       style={{
-        width: 60,
-        height: 60,
+        width: 94,
+        height: 94,
         backgroundColor: colors.surface,
         borderColor: colors.border,
         ...getShadow(colors, isDark),
       }}
     >
       <Image
-        source={require("../assets/images/logo-withoutbg.png")}
+        source={require("../assets/images/icon-logo-nobg.png")}
         resizeMode="contain"
-        style={{ width: "68%", height: "68%" }}
+        style={{ width: "100%", height: "100%" }}
       />
     </View>
   );

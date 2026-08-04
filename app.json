@@ -4,13 +4,13 @@
     "slug": "period-budddy",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/logo-adaptive.png",
+    "icon": "./assets/images/icon-square.png",
     "splash": {
-      "image": "./assets/images/logo.png",
+      "image": "./assets/images/full-logo-nobg.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "scheme": "thenura",
+    "scheme": ["thenura", "com.uvin124.thenura"],
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -27,7 +27,7 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#fff0f6",
-        "foregroundImage": "./assets/images/logo-adaptive.png"
+        "foregroundImage": "./assets/images/icon-square.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -41,7 +41,7 @@
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/logo-withoutbg.png"
+      "favicon": "./assets/images/icon-square.png"
     },
     "plugins": [
       "expo-router",
@@ -60,7 +60,7 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/logo.png",
+          "icon": "./assets/images/icon-square.png",
           "color": "#fff0f6",
           "sounds": [
             "./lib/notification.wav"
@@ -78,7 +78,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/logo.png",
+          "image": "./assets/images/full-logo-nobg.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",

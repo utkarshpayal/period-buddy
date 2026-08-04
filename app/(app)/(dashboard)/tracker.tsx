@@ -710,6 +710,10 @@ export default function Tracker() {
       temperature: log.temperature,
       stressLevel: log.stressLevel,
       medication: log.medication,
+      digestion: log.digestion,
+      skin: log.skin,
+      discharge: log.discharge,
+      exercise: log.exercise,
     };
   }
 

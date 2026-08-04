@@ -34,6 +34,14 @@ interface UseVoiceInputOptions {
 export function useVoiceInput({ language, voiceMode, onTranscript }: UseVoiceInputOptions) {
   const recorder = useAudioRecorder(RECORDER_OPTIONS);
   const recorderState = useAudioRecorderState(recorder, METERING_POLL_MS);
+
+  // Ask for mic permission as soon as this hook mounts, before any recorder
+  // method touches the native audio hardware — some Android builds crash
+  // natively (instead of failing in JS) if recording is prepared/started
+  // without the permission already granted.
+  useEffect(() => {
+    requestRecordingPermissionsAsync().catch(() => {});
+  }, []);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [level, setLevel] = useState(0);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);

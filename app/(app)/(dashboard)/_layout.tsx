@@ -12,13 +12,15 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { requestRecordingPermissionsAsync } from "expo-audio";
 import { useTheme } from "../../../components/theme";
 
 import { useAuth } from "../../../components/auth-context";
 import { ProfileOnboarding } from "../../../components/profile-onboarding";
-import { submitOnboarding } from "../../../lib/auth";
+import { submitCycleSettings, submitOnboarding } from "../../../lib/auth";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { getWebSocketUrl } from "../../../lib/api";
+import { showPermissionModal } from "../../../lib/modal-host";
 
 const CENTER_AVATAR_SOURCE = require("../../../assets/images/icon.png");
 
@@ -215,6 +217,21 @@ export default function DashboardLayout() {
       const updatedUser = response.data ?? response.user;
       const isProfileComplete =
         response.isProfileComplete ?? updatedUser?.isProfileComplete ?? true;
+
+      try {
+        await submitCycleSettings(
+          {
+            cycleLength: values.cycleLength,
+            lastPeriodStartDate: values.lastPeriodStartDate,
+            periodLength: values.periodLength,
+            trackingGoal: values.trackingGoal,
+          },
+          token,
+        );
+      } catch (error) {
+        console.error("Failed to save cycle settings:", error);
+      }
+
       await signIn({
         token,
         user: {
@@ -284,9 +301,36 @@ export default function DashboardLayout() {
           key={tab.name}
           name={tab.name}
           listeners={{
-            tabPress: () => {
+            tabPress: (e) => {
               if (tab.name === "community") {
                 setUnreadCommunity(false);
+              }
+              if (tab.name === "ai-chat") {
+                // Voice chat needs the mic before it's useful, and Android can
+                // crash natively if recording is touched without it granted —
+                // gate navigation on the permission instead of letting the
+                // screen open and fail silently. There's no OS-level
+                // "speaker" permission to request; playback just works.
+                e.preventDefault();
+                requestRecordingPermissionsAsync()
+                  .then(({ granted }) => {
+                    if (granted) {
+                      router.push("/(app)/(dashboard)/ai-chat");
+                    } else {
+                      showPermissionModal({
+                        title: "Microphone access needed",
+                        message: "Enable microphone access in Settings to use voice chat with Buddy.",
+                        icon: "mic-outline",
+                      });
+                    }
+                  })
+                  .catch(() => {
+                    showPermissionModal({
+                      title: "Microphone access needed",
+                      message: "Enable microphone access in Settings to use voice chat with Buddy.",
+                      icon: "mic-outline",
+                    });
+                  });
               }
             },
           }}

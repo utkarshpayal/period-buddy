@@ -31,6 +31,13 @@ export type OnboardingPayload = {
   profilePicture: string;
 };
 
+export type CycleSettingsPayload = {
+  cycleLength: number;
+  lastPeriodStartDate: string;
+  periodLength: number;
+  trackingGoal: string;
+};
+
 export function loginUser(payload: LoginPayload) {
   return authApi.login(payload);
 }
@@ -92,6 +99,21 @@ export async function connectPartnerAndResolveRoute(inviteCode?: string) {
 
 export function submitOnboarding(payload: OnboardingPayload, token: string) {
   return apiEnvelopeRequest<AuthUser>("/api/auth/onboarding", {
+    body: JSON.stringify(payload),
+    headers: { Authorization: `Bearer ${token}` },
+    method: "POST",
+    skipAuth: true,
+  });
+}
+
+/**
+ * Called right after submitOnboarding, from the same pre-hydration moment
+ * (session isn't in AsyncStorage yet), so it needs the token passed
+ * explicitly rather than relying on cycleApi.saveSettings' automatic
+ * Authorization header.
+ */
+export function submitCycleSettings(payload: CycleSettingsPayload, token: string) {
+  return apiEnvelopeRequest("/api/cycle/settings", {
     body: JSON.stringify(payload),
     headers: { Authorization: `Bearer ${token}` },
     method: "POST",

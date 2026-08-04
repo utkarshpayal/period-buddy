@@ -30,6 +30,42 @@ const symptomOptions: LogOption<string>[] = [
   { icon: "bed-outline", label: "Fatigue", value: "fatigue" },
   { icon: "restaurant-outline", label: "Cravings", value: "cravings" },
   { icon: "happy-outline", label: "Mood swing", value: "mood-swing" },
+  { icon: "warning-outline", label: "Nausea", value: "nausea" },
+  { icon: "body-outline", label: "Backache", value: "backache" },
+  { icon: "sparkles-outline", label: "Acne", value: "acne" },
+  { icon: "heart-half-outline", label: "Tender breasts", value: "tender-breasts" },
+  { icon: "flag-outline", label: "Constipation", value: "constipation" },
+  { icon: "moon-outline", label: "Insomnia", value: "insomnia" },
+];
+
+const digestionOptions: LogOption<NonNullable<DayEntry["digestion"]>>[] = [
+  { icon: "checkmark-circle-outline", label: "Normal", value: "normal" },
+  { icon: "swap-vertical-outline", label: "Constipated", value: "constipated" },
+  { icon: "thunderstorm-outline", label: "Diarrhea", value: "diarrhea" },
+  { icon: "water-outline", label: "Bloated", value: "bloated" },
+];
+
+const skinOptions: LogOption<NonNullable<DayEntry["skin"]>>[] = [
+  { icon: "sunny-outline", label: "Clear", value: "clear" },
+  { icon: "water-outline", label: "Oily", value: "oily" },
+  { icon: "snow-outline", label: "Dry", value: "dry" },
+  { icon: "sparkles-outline", label: "Acne", value: "acne" },
+];
+
+const dischargeOptions: LogOption<NonNullable<DayEntry["discharge"]>>[] = [
+  { icon: "remove-circle-outline", label: "None", value: "none" },
+  { icon: "ellipse-outline", label: "Sticky", value: "sticky" },
+  { icon: "water-outline", label: "Creamy", value: "creamy" },
+  { icon: "rainy-outline", label: "Watery", value: "watery" },
+  { icon: "egg-outline", label: "Egg-white", value: "egg-white" },
+];
+
+const exerciseOptions: LogOption<string>[] = [
+  { icon: "walk-outline", label: "Walking", value: "walking" },
+  { icon: "bicycle-outline", label: "Cardio", value: "cardio" },
+  { icon: "barbell-outline", label: "Strength", value: "strength" },
+  { icon: "body-outline", label: "Yoga", value: "yoga" },
+  { icon: "fitness-outline", label: "Stretching", value: "stretching" },
 ];
 
 const flowOptions: LogOption<NonNullable<DayEntry["flow"]>>[] = [
@@ -86,6 +122,10 @@ export default function DayDetailsModal({
   const [stressLevel, setStressLevel] = useState<number | undefined>();
   const [medText, setMedText] = useState("");
   const [isIntimate, setIsIntimate] = useState(false);
+  const [selectedDigestion, setSelectedDigestion] = useState<DayEntry["digestion"]>();
+  const [selectedSkin, setSelectedSkin] = useState<DayEntry["skin"]>();
+  const [selectedDischarge, setSelectedDischarge] = useState<DayEntry["discharge"]>();
+  const [selectedExercise, setSelectedExercise] = useState<string[]>([]);
 
   useEffect(() => {
     if (!visible) return;
@@ -102,6 +142,10 @@ export default function DayDetailsModal({
     setStressLevel(entry?.stressLevel);
     setMedText(entry?.medication ? entry.medication.join(", ") : "");
     setIsIntimate(entry?.isIntimate ?? false);
+    setSelectedDigestion(entry?.digestion);
+    setSelectedSkin(entry?.skin);
+    setSelectedDischarge(entry?.discharge);
+    setSelectedExercise(entry?.exercise ?? []);
   }, [visible, details, entry]);
 
   function handleSave() {
@@ -126,6 +170,10 @@ export default function DayDetailsModal({
         temperature: parsedTemp,
         stressLevel,
         medication: meds.length > 0 ? meds : undefined,
+        digestion: selectedDigestion,
+        skin: selectedSkin,
+        discharge: selectedDischarge,
+        exercise: selectedExercise.length > 0 ? selectedExercise : undefined,
       });
     } else if (onSaveNote) {
       onSaveNote(noteText.trim());
@@ -146,6 +194,14 @@ export default function DayDetailsModal({
       current.includes(symptom)
         ? current.filter((item) => item !== symptom)
         : [...current, symptom],
+    );
+  }
+
+  function toggleExercise(activity: string) {
+    setSelectedExercise((current) =>
+      current.includes(activity)
+        ? current.filter((item) => item !== activity)
+        : [...current, activity],
     );
   }
 
@@ -323,7 +379,7 @@ export default function DayDetailsModal({
                 : "Log what changed today"}
             </Text>
 
-            <SectionTitle title="Symptoms" />
+            <SectionTitle title="Symptoms" icon="pulse-outline" />
             <View style={styles.optionWrap}>
               {symptomOptions.map((symptom) =>
                 renderOption({
@@ -334,7 +390,7 @@ export default function DayDetailsModal({
               )}
             </View>
 
-            <SectionTitle title="Flow" />
+            <SectionTitle title="Flow" icon="water" />
             <View style={styles.optionWrap}>
               {flowOptions.map((flow) =>
                 renderOption({
@@ -348,7 +404,7 @@ export default function DayDetailsModal({
               )}
             </View>
 
-            <SectionTitle title="Mood" />
+            <SectionTitle title="Mood" icon="happy-outline" />
             <View style={styles.optionWrap}>
               {moodOptions.map((mood) =>
                 renderOption({
@@ -362,7 +418,7 @@ export default function DayDetailsModal({
               )}
             </View>
 
-            <SectionTitle title="Energy" />
+            <SectionTitle title="Energy" icon="battery-half-outline" />
             <View style={styles.optionWrap}>
               {energyOptions.map((energy) =>
                 renderOption({
@@ -376,7 +432,60 @@ export default function DayDetailsModal({
               )}
             </View>
 
-            <SectionTitle title="Sleep Hours" />
+            <SectionTitle title="Digestion" icon="nutrition-outline" />
+            <View style={styles.optionWrap}>
+              {digestionOptions.map((option) =>
+                renderOption({
+                  ...option,
+                  isSelected: selectedDigestion === option.value,
+                  onPress: () =>
+                    setSelectedDigestion((current) =>
+                      current === option.value ? undefined : option.value,
+                    ),
+                }),
+              )}
+            </View>
+
+            <SectionTitle title="Skin" icon="sparkles-outline" />
+            <View style={styles.optionWrap}>
+              {skinOptions.map((option) =>
+                renderOption({
+                  ...option,
+                  isSelected: selectedSkin === option.value,
+                  onPress: () =>
+                    setSelectedSkin((current) =>
+                      current === option.value ? undefined : option.value,
+                    ),
+                }),
+              )}
+            </View>
+
+            <SectionTitle title="Discharge" icon="water-outline" />
+            <View style={styles.optionWrap}>
+              {dischargeOptions.map((option) =>
+                renderOption({
+                  ...option,
+                  isSelected: selectedDischarge === option.value,
+                  onPress: () =>
+                    setSelectedDischarge((current) =>
+                      current === option.value ? undefined : option.value,
+                    ),
+                }),
+              )}
+            </View>
+
+            <SectionTitle title="Exercise" icon="fitness-outline" />
+            <View style={styles.optionWrap}>
+              {exerciseOptions.map((option) =>
+                renderOption({
+                  ...option,
+                  isSelected: selectedExercise.includes(option.value),
+                  onPress: () => toggleExercise(option.value),
+                }),
+              )}
+            </View>
+
+            <SectionTitle title="Sleep Hours" icon="bed-outline" />
             <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 10 }}>
               <TouchableOpacity
                 onPress={() => setSleepHours((h) => Math.max(0, (h ?? 8) - 1))}
@@ -418,7 +527,7 @@ export default function DayDetailsModal({
               )}
             </View>
 
-            <SectionTitle title="Water Intake" />
+            <SectionTitle title="Water Intake" icon="beaker-outline" />
             <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 10 }}>
               <TouchableOpacity
                 onPress={() => setWaterIntake((w) => Math.max(0, (w ?? 250) - 250))}
@@ -507,7 +616,7 @@ export default function DayDetailsModal({
               </View>
             </View>
 
-            <SectionTitle title="Stress Level (1 - 10)" />
+            <SectionTitle title="Stress Level (1 - 10)" icon="pulse" />
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, marginTop: 10 }}>
               {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((level) => {
                 const isSelected = stressLevel === level;
@@ -541,7 +650,7 @@ export default function DayDetailsModal({
               })}
             </ScrollView>
 
-            <SectionTitle title="Medications" />
+            <SectionTitle title="Medications" icon="medkit-outline" />
             <TextInput
               value={medText}
               onChangeText={setMedText}
@@ -561,7 +670,7 @@ export default function DayDetailsModal({
               }}
             />
 
-            <SectionTitle title="Intimate day" />
+            <SectionTitle title="Intimate day" icon="heart-outline" />
             <View
               style={{
                 flexDirection: "row",
@@ -596,7 +705,7 @@ export default function DayDetailsModal({
               />
             </View>
 
-            <SectionTitle title="Notes" />
+            <SectionTitle title="Notes" icon="document-text-outline" />
             <TextInput
               value={noteText}
               onChangeText={setNoteText}
@@ -683,20 +792,22 @@ export default function DayDetailsModal({
   );
 }
 
-function SectionTitle({ title }: { title: string }) {
+function SectionTitle({ title, icon }: { title: string; icon?: keyof typeof Ionicons.glyphMap }) {
   const { colors, fonts } = useTheme();
 
   return (
-    <Text
-      style={{
-        color: colors.foreground,
-        fontWeight: "700",
-        marginTop: 18,
-        fontFamily: fonts.heading,
-      }}
-    >
-      {title}
-    </Text>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 18 }}>
+      {icon ? <Ionicons name={icon} size={15} color={colors.primary} /> : null}
+      <Text
+        style={{
+          color: colors.foreground,
+          fontWeight: "700",
+          fontFamily: fonts.heading,
+        }}
+      >
+        {title}
+      </Text>
+    </View>
   );
 }
 

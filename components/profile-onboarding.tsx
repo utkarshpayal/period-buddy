@@ -40,6 +40,24 @@ const onboardingSteps = [
     subtitle: "Add a picture to personalize your dashboard profile.",
     title: "Add a profile picture",
   },
+  {
+    icon: "water-outline",
+    id: "lastPeriodStartDate",
+    subtitle: "This is the anchor date we use to predict your next cycle.",
+    title: "When did your last period start?",
+  },
+  {
+    icon: "sync-outline",
+    id: "cycleDetails",
+    subtitle: "Rough averages are fine — we'll refine these as you log more.",
+    title: "How long are your period and cycle?",
+  },
+  {
+    icon: "flag-outline",
+    id: "trackingGoal",
+    subtitle: "This helps us tailor insights and reminders for you.",
+    title: "What brings you to Period Buddy?",
+  },
 ] as const;
 
 const genderOptions: { label: string; value: string }[] = [
@@ -49,13 +67,25 @@ const genderOptions: { label: string; value: string }[] = [
   { label: "Prefer not to say", value: "prefer_not_to_say" },
 ];
 
+const trackingGoalOptions: { label: string; value: string }[] = [
+  { label: "Track my period", value: "track_period" },
+  { label: "Trying to conceive", value: "achieve_pregnancy" },
+  { label: "Avoid pregnancy", value: "avoid_pregnancy" },
+  { label: "Manage symptoms", value: "manage_symptoms" },
+  { label: "General health", value: "general_health" },
+];
+
 type OnboardingStepId = (typeof onboardingSteps)[number]["id"];
 
 export type ProfileOnboardingValues = {
+  cycleLength: number;
   dateOfBirth: string;
   gender: string;
+  lastPeriodStartDate: string;
+  periodLength: number;
   phone: string;
   profilePicture: string;
+  trackingGoal: string;
 };
 
 type ProfileOnboardingProps = {
@@ -75,6 +105,11 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
+  const [lastPeriodStartDate, setLastPeriodStartDate] = useState("");
+  const [isPeriodDatePickerVisible, setIsPeriodDatePickerVisible] = useState(false);
+  const [periodLength, setPeriodLength] = useState("5");
+  const [cycleLength, setCycleLength] = useState("28");
+  const [trackingGoal, setTrackingGoal] = useState("");
 
   const minAdultDate = new Date();
   minAdultDate.setFullYear(minAdultDate.getFullYear() - 13);
@@ -165,6 +200,29 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
       return;
     }
 
+    if (currentStep.id === "lastPeriodStartDate" && !lastPeriodStartDate.trim()) {
+      setErrorMessage("Please select the start date of your last period.");
+      return;
+    }
+
+    if (currentStep.id === "cycleDetails") {
+      const period = Number(periodLength);
+      const cycle = Number(cycleLength);
+      if (!period || period < 1 || period > 10) {
+        setErrorMessage("Period length should be between 1 and 10 days.");
+        return;
+      }
+      if (!cycle || cycle < 20 || cycle > 45) {
+        setErrorMessage("Cycle length should be between 20 and 45 days.");
+        return;
+      }
+    }
+
+    if (currentStep.id === "trackingGoal" && !trackingGoal) {
+      setErrorMessage("Please select a goal to continue.");
+      return;
+    }
+
     setErrorMessage("");
 
     if (isLastOnboardingStep) {
@@ -177,10 +235,14 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
 
   async function handleSubmitOnboarding() {
     const values = {
+      cycleLength: Number(cycleLength) || 28,
       dateOfBirth: dateOfBirth.trim(),
       gender: gender || "prefer_not_to_say",
+      lastPeriodStartDate: lastPeriodStartDate.trim(),
+      periodLength: Number(periodLength) || 5,
       phone: phone.trim(),
       profilePicture: profilePictureUrl ?? "",
+      trackingGoal: trackingGoal || "track_period",
     };
 
     try {
@@ -337,6 +399,140 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
             textContentType="telephoneNumber"
             value={phone}
           />
+        </View>
+      );
+    }
+
+    if (stepId === "lastPeriodStartDate") {
+      return (
+        <View className="mb-4">
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => setIsPeriodDatePickerVisible(true)}
+            className="flex-row items-center rounded-2xl border px-4 h-14"
+            style={{
+              backgroundColor: colors.input,
+              borderColor: isPeriodDatePickerVisible ? colors.primary : colors.border,
+              borderWidth: isPeriodDatePickerVisible ? 1.5 : 1,
+            }}
+          >
+            <Ionicons
+              name="water-outline"
+              size={20}
+              color={isPeriodDatePickerVisible ? colors.primary : colors.mutedText}
+            />
+
+            <Text
+              className="ml-3 flex-1 text-base font-semibold"
+              style={{ color: lastPeriodStartDate ? colors.foreground : colors.mutedText }}
+            >
+              {lastPeriodStartDate
+                ? formatDisplayDate(lastPeriodStartDate)
+                : "Select the start date"}
+            </Text>
+
+            <Ionicons name="chevron-down" size={16} color={colors.mutedText} />
+          </TouchableOpacity>
+
+          <CalendarModal
+            initialDateKey={lastPeriodStartDate || undefined}
+            maximumDate={new Date()}
+            minimumDate={new Date(new Date().getFullYear() - 1, 0, 1)}
+            onClose={() => setIsPeriodDatePickerVisible(false)}
+            onSelect={(dateKey) => {
+              setErrorMessage("");
+              setLastPeriodStartDate(dateKey);
+              setIsPeriodDatePickerVisible(false);
+            }}
+            visible={isPeriodDatePickerVisible}
+          />
+        </View>
+      );
+    }
+
+    if (stepId === "cycleDetails") {
+      return (
+        <View className="mb-4 gap-4">
+          <View>
+            <Text className="mb-2 text-xs font-bold uppercase tracking-wider" style={{ color: colors.mutedText }}>
+              Period length (days)
+            </Text>
+            <TextInput
+              keyboardType="number-pad"
+              onChangeText={(text) => {
+                setErrorMessage("");
+                setPeriodLength(text.replace(/[^0-9]/g, ""));
+              }}
+              placeholder="5"
+              placeholderTextColor={colors.mutedText}
+              className="rounded-2xl border px-4 h-14 text-base font-semibold outline-none"
+              style={{ backgroundColor: colors.input, borderColor: colors.border, color: colors.foreground }}
+              value={periodLength}
+            />
+          </View>
+
+          <View>
+            <Text className="mb-2 text-xs font-bold uppercase tracking-wider" style={{ color: colors.mutedText }}>
+              Cycle length (days)
+            </Text>
+            <TextInput
+              keyboardType="number-pad"
+              onChangeText={(text) => {
+                setErrorMessage("");
+                setCycleLength(text.replace(/[^0-9]/g, ""));
+              }}
+              placeholder="28"
+              placeholderTextColor={colors.mutedText}
+              className="rounded-2xl border px-4 h-14 text-base font-semibold outline-none"
+              style={{ backgroundColor: colors.input, borderColor: colors.border, color: colors.foreground }}
+              value={cycleLength}
+            />
+          </View>
+        </View>
+      );
+    }
+
+    if (stepId === "trackingGoal") {
+      return (
+        <View className="mb-4 gap-3">
+          {trackingGoalOptions.map((option) => {
+            const isSelected = trackingGoal === option.value;
+
+            return (
+              <TouchableOpacity
+                activeOpacity={0.9}
+                className="flex-row items-center justify-between rounded-2xl border px-5 py-4"
+                key={option.value}
+                onPress={() => {
+                  setErrorMessage("");
+                  setTrackingGoal(option.value);
+                }}
+                style={{
+                  backgroundColor: isSelected ? colors.primaryLight : colors.input,
+                  borderColor: isSelected ? colors.primary : colors.border,
+                  borderWidth: isSelected ? 1.5 : 1,
+                }}
+              >
+                <Text
+                  className="text-sm font-bold"
+                  style={{ color: isSelected ? colors.primary : colors.foreground }}
+                >
+                  {option.label}
+                </Text>
+
+                {isSelected ? (
+                  <View
+                    className="h-5.5 w-5.5 rounded-full items-center justify-center"
+                    style={{ backgroundColor: colors.primary }}
+                  >
+                    <Ionicons name="checkmark" size={12} color={colors.buttonText} />
+                  </View>
+                ) : (
+                  <View className="h-5.5 w-5.5 rounded-full border" style={{ borderColor: colors.border }} />
+                )}
+              </TouchableOpacity>
+            );
+          })}
         </View>
       );
     }

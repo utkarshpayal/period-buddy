@@ -126,7 +126,10 @@ export type DayEntry = {
   cycleDay?: number;
   date?: string;
   dateKey: string;
+  digestion?: "bloated" | "constipated" | "diarrhea" | "normal";
+  discharge?: "creamy" | "egg-white" | "none" | "sticky" | "watery";
   energy?: "high" | "low" | "medium" | "steady";
+  exercise?: string[];
   flow?: "heavy" | "light" | "medium" | "none" | "spotting";
   isIntimate?: boolean;
   medication?: string[];
@@ -134,6 +137,7 @@ export type DayEntry = {
   note?: string;
   phase?: CyclePhase | string;
   rewardPoints?: number;
+  skin?: "acne" | "clear" | "dry" | "oily";
   sleepHours?: number;
   stressLevel?: number;
   symptoms?: string[];
@@ -1375,6 +1379,36 @@ export const questionAnswerApi = {
     apiRequest<void>(`/api/questions/${id}`, { method: "DELETE" }),
 };
 
+export type VoiceAgentPendingAction = {
+  action: "log_cycle_entry";
+  payload: Partial<DayEntry>;
+};
+
+export type VoiceAgentReply =
+  | { type: "answer"; text: string }
+  | ({ type: "action_proposal"; followUpQuestion?: string } & VoiceAgentPendingAction)
+  | ({ type: "action_confirm"; confirmationText: string } & VoiceAgentPendingAction)
+  | ({
+      type: "action_result";
+      action: "log_cycle_entry";
+      text: string;
+      cycleLog: DayEntry;
+      tokensEarned: number;
+    });
+
+export const voiceAgentApi = {
+  converse: (
+    transcript: string,
+    language?: LanguageCode,
+    pendingAction?: VoiceAgentPendingAction,
+    confirmed?: boolean,
+  ) =>
+    apiRequest<VoiceAgentReply>("/api/voice-agent/converse", {
+      body: JSON.stringify({ transcript, language, pendingAction, confirmed }),
+      method: "POST",
+    }),
+};
+
 export const uploadApi = {
   /**
    * Uploads a local file (e.g. an `expo-image-picker`, video, or audio
@@ -1512,6 +1546,12 @@ export const documentApi = {
 
   remove: (id: string) =>
     apiRequest<void>(`/api/documents/${id}`, { method: "DELETE" }),
+
+  /** Re-runs text extraction for a document stuck at "pending"/"failed"/"limited". */
+  retryExtraction: (id: string) =>
+    apiRequest<{ document: MedicalDocument }>(`/api/documents/${id}/retry-extraction`, {
+      method: "POST",
+    }),
 
   summarize: (payload: { endDate: string; language?: LanguageCode; startDate: string }) =>
     apiRequest<{

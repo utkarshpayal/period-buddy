@@ -50,19 +50,13 @@ export function GoogleSignInButton({
     webClientId: WEB_CLIENT_ID,
     responseType: Platform.OS === "web" ? AuthSession.ResponseType.IdToken : AuthSession.ResponseType.Code,
     shouldAutoExchangeCode: false,
-    // expo-auth-session defaults the native redirect to
-    // `<applicationId>:/oauthredirect` (com.uvin124.thenura:/...), but Expo's
-    // Android manifest generator only registers an intent filter for
-    // app.json's `scheme` ("thenura") — never the applicationId — so on
-    // Android that redirect lands nowhere and the browser just continues on
-    // Google's own site instead of returning to the app. Forcing the
-    // already-registered "thenura" scheme here fixes the handoff without
-    // touching the manifest. iOS isn't affected (its Info.plist template
-    // registers the bundle identifier as a URL scheme by default), so leave
-    // it on the default applicationId-based redirect.
-    ...(Platform.OS === "android"
-      ? { redirectUri: AuthSession.makeRedirectUri({ scheme: "thenura", path: "oauthredirect" }) }
-      : {}),
+    // Google's Android-type OAuth client only accepts the default
+    // `<applicationId>:/oauthredirect` redirect (com.uvin124.thenura:/...) —
+    // it has no configurable redirect URI whitelist like the Web client
+    // does, so it can't be pointed at a custom scheme. app.json's `scheme`
+    // array now also registers an intent filter for that applicationId
+    // scheme (see app.json), so the default redirect routes back into the
+    // app correctly without needing an override here.
   });
 
   useEffect(() => {

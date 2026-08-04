@@ -22,7 +22,14 @@ import { getShadow, getSoftTints } from "../../components/ui-tokens";
 import { VoiceModeOverlay, type VoiceStatus } from "../../components/VoiceModeOverlay";
 import { useVoiceInput } from "../../hooks/useVoiceInput";
 import { alert } from "../../lib/alert";
-import { questionAnswerApi, speechApi, type Language, type LanguageCode } from "../../lib/api";
+import {
+  questionAnswerApi,
+  speechApi,
+  voiceAgentApi,
+  type Language,
+  type LanguageCode,
+  type VoiceAgentPendingAction,
+} from "../../lib/api";
 import { resolveAudioUri } from "../../lib/audio";
 import { SUPPORTED_LANGUAGES } from "../../lib/languages";
 
@@ -66,6 +73,7 @@ export default function QA() {
   const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
   const [synthesizingMessageId, setSynthesizingMessageId] = useState<string | null>(null);
   const [voiceMode, setVoiceMode] = useState(false);
+  const [pendingVoiceAction, setPendingVoiceAction] = useState<VoiceAgentPendingAction | undefined>();
   const playerRef = useRef<AudioPlayer | null>(null);
 
   const { handleMicPress, isRecording, isTranscribing, level } = useVoiceInput({
@@ -73,7 +81,7 @@ export default function QA() {
     voiceMode,
     onTranscript: (transcript) => {
       if (voiceMode) {
-        handleTriggerConversation(transcript);
+        handleVoiceAgentTurn(transcript);
       } else {
         setTypedQuestion((prev) => (prev.trim() ? `${prev.trim()} ${transcript}` : transcript));
       }
@@ -214,6 +222,75 @@ export default function QA() {
       hour: "numeric",
       minute: "2-digit",
     });
+  }
+
+  const AFFIRMATIVE_PATTERN = /\b(yes|yeah|yep|confirm|correct|sure|save it|do it|go ahead)\b/i;
+
+  /**
+   * Voice mode's action-capable path — routes transcripts through the
+   * backend voice agent (Sarvam-driven) instead of the plain Q&A endpoint,
+   * so a spoken "log today's entry" can be gathered and saved through a
+   * short back-and-forth instead of only ever getting a text answer back.
+   */
+  async function handleVoiceAgentTurn(transcript: string) {
+    const cleanTranscript = transcript.trim();
+    if (!cleanTranscript || isCompanionTyping) return;
+
+    setChatLog((prev) => [
+      ...prev,
+      { id: `msg_u_${Date.now()}`, sender: "user", text: cleanTranscript, time: formatCurrentTime() },
+    ]);
+    setIsCompanionTyping(true);
+
+    try {
+      const confirming = Boolean(pendingVoiceAction) && AFFIRMATIVE_PATTERN.test(cleanTranscript);
+      const reply = await voiceAgentApi.converse(
+        cleanTranscript,
+        language,
+        pendingVoiceAction,
+        confirming,
+      );
+
+      let replyMessage: ChatMessage;
+      if (reply.type === "answer") {
+        replyMessage = { id: `msg_c_${Date.now()}`, sender: "companion", text: reply.text, time: formatCurrentTime() };
+        setPendingVoiceAction(undefined);
+      } else if (reply.type === "action_proposal") {
+        replyMessage = {
+          id: `msg_c_${Date.now()}`,
+          sender: "companion",
+          text: reply.followUpQuestion ?? "Can you tell me a bit more?",
+          time: formatCurrentTime(),
+        };
+        setPendingVoiceAction({ action: reply.action, payload: reply.payload });
+      } else if (reply.type === "action_confirm") {
+        replyMessage = {
+          id: `msg_c_${Date.now()}`,
+          sender: "companion",
+          text: reply.confirmationText,
+          time: formatCurrentTime(),
+        };
+        setPendingVoiceAction({ action: reply.action, payload: reply.payload });
+      } else {
+        replyMessage = { id: `msg_c_${Date.now()}`, sender: "companion", text: reply.text, time: formatCurrentTime() };
+        setPendingVoiceAction(undefined);
+      }
+
+      setChatLog((prev) => [...prev, replyMessage]);
+      handleListen(replyMessage);
+    } catch (error) {
+      const failureMessage: ChatMessage = {
+        id: `msg_c_${Date.now()}`,
+        sender: "companion",
+        text: error instanceof Error ? error.message : "Sorry, I couldn't process that just now.",
+        time: formatCurrentTime(),
+      };
+      setChatLog((prev) => [...prev, failureMessage]);
+      handleListen(failureMessage);
+    } finally {
+      setIsCompanionTyping(false);
+      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+    }
   }
 
   function handleTriggerConversation(overrideText?: string) {
@@ -724,6 +801,7 @@ export default function QA() {
           fonts={fonts}
           languageLabel={selectedLanguage.label}
           level={level}
+          onCancel={() => setPendingVoiceAction(undefined)}
           onClose={() => setVoiceMode(false)}
           onMicPress={handleMicPress}
           status={voiceStatus}

@@ -20,6 +20,7 @@ interface VoiceModeOverlayProps {
   fonts: { body: string; heading: string };
   languageLabel: string;
   level: number;
+  onCancel?: () => void;
   onClose: () => void;
   onMicPress: () => void;
   onShare?: () => void;
@@ -84,6 +85,7 @@ export function VoiceModeOverlay({
   fonts,
   languageLabel,
   level,
+  onCancel,
   onClose,
   onMicPress,
   onShare,
@@ -184,9 +186,11 @@ export function VoiceModeOverlay({
 
             <View className="flex-row items-center gap-5">
               <TouchableOpacity
+                onPress={onCancel}
+                disabled={!onCancel}
                 activeOpacity={0.75}
                 className="w-11 h-11 rounded-full items-center justify-center"
-                style={{ backgroundColor: "rgba(255,255,255,0.1)" }}
+                style={{ backgroundColor: "rgba(255,255,255,0.1)", opacity: onCancel ? 1 : 0.4 }}
               >
                 <Feather name="square" size={16} color="#fff" />
               </TouchableOpacity>

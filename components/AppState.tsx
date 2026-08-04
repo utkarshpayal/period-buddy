@@ -10,11 +10,15 @@ import type { MoodValue } from "../lib/api";
 import { shareWithAppLink } from "../lib/share";
 
 export type DayEntry = {
+  digestion?: "bloated" | "constipated" | "diarrhea" | "normal";
+  discharge?: "creamy" | "egg-white" | "none" | "sticky" | "watery";
   energy?: "high" | "low" | "medium" | "steady";
+  exercise?: string[];
   flow?: "heavy" | "light" | "medium" | "none" | "spotting";
   mood?: MoodValue;
   isIntimate?: boolean;
   note: string;
+  skin?: "acne" | "clear" | "dry" | "oily";
   symptoms: string[];
   updatedAt: string;
   sleepHours?: number;

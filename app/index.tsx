@@ -82,9 +82,9 @@ export default function Index() {
                 }}
               >
                 <Image
-                  source={require("../assets/images/logo-withoutbg.png")}
+                  source={require("../assets/images/icon-logo-nobg.png")}
                   resizeMode="contain"
-                  style={{ width: "70%", height: "70%" }}
+                  style={{ width: "100%", height: "100%" }}
                 />
                 {/* <View
                   className="absolute -bottom-2 -right-2 w-8 h-8 rounded-full items-center justify-center border"
