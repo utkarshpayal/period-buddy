@@ -5,6 +5,7 @@ import { RefreshControl, ScrollView, StatusBar, Text, View } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
 import { ScreenHeader } from "../../components/ScreenHeader";
+import { SkeletonCard } from "../../components/Skeleton";
 import { useTheme } from "../../components/theme";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
 import { useAsyncLoad } from "../../hooks/useAsyncLoad";
@@ -110,6 +111,13 @@ export default function DailyInsightsScreen() {
           onRetry={() => reload()}
           loadingLabel="Building today's insights…"
           errorTitle="Couldn't load insights"
+          skeleton={
+            <View className="gap-4 px-6 pt-4">
+              <SkeletonCard />
+              <SkeletonCard />
+              <SkeletonCard />
+            </View>
+          }
         >
           {data ? (
           <ScrollView

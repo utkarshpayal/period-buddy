@@ -15,13 +15,13 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import Svg, { Circle } from "react-native-svg";
+import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop } from "react-native-svg";
 import type { DayEntry as LocalDayEntry } from "../../../components/AppState";
 import { useAppState } from "../../../components/AppState";
 import { useAuth } from "../../../components/auth-context";
 import DayDetailsModal from "../../../components/DayDetailsModal";
 import { useTheme } from "../../../components/theme";
-import { getShadow, getSoftTints } from "../../../components/ui-tokens";
+import { getHeroGradient, getShadow, getSoftTints } from "../../../components/ui-tokens";
 import {
   authApi,
   cycleApi,
@@ -277,6 +277,7 @@ function RingScrubber({
   nextPeriodDaysAway: number;
 }) {
   const { colors, isDark, fonts } = useTheme();
+  const heroGradient = getHeroGradient(colors, isDark);
   const displayDay = previewCycleDay ?? cycleDay;
   const displayPhase = getCyclePhase(
     displayDay,
@@ -330,6 +331,17 @@ function RingScrubber({
       {...panResponder.panHandlers}
     >
       <Svg width={RING_SIZE} height={RING_SIZE} viewBox="0 0 100 100">
+        <Defs>
+          <SvgGradient id="cycleRingGradient" x1="0" y1="0" x2="1" y2="1">
+            {heroGradient.map((stop, index) => (
+              <Stop
+                key={stop}
+                offset={index / (heroGradient.length - 1)}
+                stopColor={stop}
+              />
+            ))}
+          </SvgGradient>
+        </Defs>
         <Circle
           cx="50"
           cy="50"
@@ -343,7 +355,7 @@ function RingScrubber({
           cy="50"
           r={RING_RADIUS}
           fill="none"
-          stroke={colors.primary}
+          stroke="url(#cycleRingGradient)"
           strokeWidth={RING_STROKE_WIDTH}
           strokeLinecap="round"
           strokeDasharray={`${handleFraction * RING_CIRCUMFERENCE} ${RING_CIRCUMFERENCE}`}

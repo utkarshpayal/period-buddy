@@ -34,7 +34,7 @@ export default function Index() {
       const timer = setTimeout(() => {
         router.replace(
           user?.partnerRole === "viewer"
-            ? "/(app)/(partner-view)/home"
+            ? "/(app)/(partner-view)/overview"
             : "/(app)/(dashboard)/tracker",
         );
       }, 100);

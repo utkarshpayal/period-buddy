@@ -4,7 +4,6 @@ import React, { useState } from "react";
 import {
   ActivityIndicator,
   ScrollView,
-  Share,
   StatusBar,
   Text,
   TouchableOpacity,
@@ -14,6 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { useTheme } from "../../components/theme";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
+import { shareWithAppLink } from "../../lib/share";
 import {
   screeningApi,
   type ScreeningAssessmentResponse,
@@ -120,7 +120,11 @@ export default function SymptomCheckerScreen() {
       result.disclaimer,
     ].join("\n");
     try {
-      await Share.share({ message });
+      // Results themselves aren't a re-openable screen (no per-assessment
+      // detail route), but the link still opens the app straight to the
+      // symptom checker instead of just its Play Store/App Store listing —
+      // consistent with how posts/blogs/invites share.
+      await shareWithAppLink(message, "symptom-checker");
     } catch {
       // user cancelled share sheet — nothing to do
     }
@@ -252,13 +256,13 @@ export default function SymptomCheckerScreen() {
                             }}
                           >
                             <Text
-                              className="text-xs font-black"
+                              className="text-[9px] font-black"
                               style={{ color: selected ? colors.buttonText : colors.foreground, fontFamily: fonts.body }}
                             >
                               {value}
                             </Text>
                             <Text
-                              className="text-[9px] font-semibold mt-0.5"
+                              className="text-xs font-semibold mt-0.5"
                               style={{ color: selected ? colors.buttonText : colors.mutedText, fontFamily: fonts.body }}
                             >
                               {label}

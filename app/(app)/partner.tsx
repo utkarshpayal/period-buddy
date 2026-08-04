@@ -540,7 +540,9 @@ export default function Partner() {
                         <Switch
                           value={item.value}
                           onValueChange={(v) => updatePerm(item.key, v)}
-                          trackColor={{ true: colors.success }}
+                          trackColor={{ false: colors.border, true: colors.success }}
+                          thumbColor={colors.surface}
+                          ios_backgroundColor={colors.border}
                         />
                       </View>
                       {i < arr.length - 1 && (

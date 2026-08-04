@@ -51,7 +51,7 @@ Modals are centralized: `components/modals/AppModalHost.tsx` is a single host re
 - `(tabs)/` — pre-auth flow: `login`, `signup`, `partner-connect`, and a `home` shown before onboarding.
 - `(app)/` — authenticated app, one screen per top-level feature (tracker, habits, forest, consultation, community, blogs, reels, documents, document-chat, qa, health-issues, hygiene, sexual-wellbeing, buddy-nomination, partner, app-lock, ...).
   - `(app)/(dashboard)/` — the main tab bar: `home`, `tracker`, `community`, `profile`.
-  - `(app)/(partner-view)/` — separate `home` shown when the signed-in user is a connected partner "viewer" rather than the data owner (see `AuthUser.partnerRole`).
+  - `(app)/(partner-view)/` — shown when the signed-in user is a connected partner "viewer" rather than the data owner (see `AuthUser.partnerRole`). Has its own floating tab bar (`_layout.tsx`) matching `(dashboard)/_layout.tsx`'s look exactly (same sizes/colors/center-avatar treatment): `home` (read-only shared overview), `chat` (owner↔partner messaging), `ai-chat` (center avatar, same mic-permission-gated voice assistant), `community` (identical UI to the owner's — both re-export `components/screens/CommunityScreen.tsx`), `profile` (partner's own account: notifications, app lock, disconnect, logout). Cross-tab state (profile, notifications, live chat messages, the one WebSocket connection) lives in `_state.tsx`'s `PartnerViewStateProvider`/`usePartnerViewState()`, since Tabs screens are siblings and would otherwise each re-fetch/reconnect independently.
 
 ### Data layer (`lib/api.ts`)
 
@@ -69,13 +69,23 @@ All backend access goes through one file: typed request helpers (`apiRequest`, `
 - File uploads (`uploadApi.uploadImage`, `documentApi.upload`, `speechApi.transcribe`) bypass the JSON helpers and build `FormData` directly, with a web-vs-native branch (web needs a real `Blob`, native uses the RN `{uri,name,type}` shape).
 - Realtime (buddy chat, video call signaling) goes over a WebSocket at `WS_BASE_URL` — construct the URL via `getWebSocketUrl()` so the auth token query param is attached consistently.
 
+### Sharing & deep links
+
+`lib/share.ts` (`shareWithAppLink`, used via `components/AppState.tsx`'s `sharePost` or directly) is the one way to share anything that should reopen in-app: it wraps an in-app path (e.g. `"community?postId=abc123"`) into `https://thenura.care/app?deeplink=<path>`, which falls back to the Play Store listing if the app isn't installed (`Marketing website/src/pages/AppRedirect.jsx`, separate repo). Don't call `Share.share` directly for shareable in-app content — use `shareWithAppLink` so the link actually reopens the right screen instead of just launching the app cold. Screens that can be deep-linked into read their target id from `useLocalSearchParams` (see `community.tsx`'s `postId`, `blogs.tsx`'s `slug`, `partner-connect.tsx`'s `code`) and resolve it themselves after mount.
+
+Two link shapes can arrive: the bare custom scheme (`thenura://community?postId=abc123`), which expo-router routes automatically, and the `https://thenura.care/app?deeplink=...` wrapper above, which needs one extra unwrap — done in `app/_layout.tsx` via `lib/deeplink.ts#resolveDeepLink`, listening on `Linking.getInitialURL()`/`addEventListener("url", ...)`. For the https form to open the app directly instead of the browser (true one-tap open), `app.json`'s `ios.associatedDomains` / `android.intentFilters` need matching `apple-app-site-association`/`assetlinks.json` files hosted on the marketing site — that verification file is out of this repo.
+
 ### Styling
 
 NativeWind (Tailwind for RN) via `tailwind.config.js` / `global.css`, plus `components/theme.tsx` (light/dark, hydrated before first paint) and `components/ui-tokens.ts` for shared design tokens (including `getSeverityColor` for danger/warning/success by numeric threshold).
 
+**Fonts:** exactly two typefaces app-wide — Manrope (`fonts.heading`/`fonts.body`) for all headings and body copy, IBM Plex Mono (`fonts.mono`/`fonts.monoSemiBold`) for numeric/code-like content (streaks, OTPs, stats). Both are loaded once in `app/_layout.tsx` via `useFonts`; don't add other font families without updating `ThemeFonts` there too. Since NativeWind's `font-*` classes only set `fontWeight` (no `fontFamily` in `tailwind.config.js`), `app/_layout.tsx` also sets `Text`/`TextInput` `defaultProps.style` to Manrope so anything that omits an explicit `fontFamily: fonts.body` still renders consistently instead of falling back to the OS default — explicit `fontFamily` on a component still overrides this default.
+
 ### Shared screen scaffolding
 
 `components/ScreenHeader.tsx` (back button + title) and `components/LoadingErrorState.tsx` (full-screen loading/error-with-retry) cover the common shape of simple detail screens; `hooks/useAsyncLoad.ts` collapses the load-on-mount + pull-to-refresh + error-state boilerplate around a single fetcher. `lib/format.ts` holds small shared date formatters like `formatShortDate`. Prefer these over re-implementing the same screen shell.
+
+A full screen shared verbatim across route groups (not just scaffolding) lives in `components/screens/` — e.g. `CommunityScreen.tsx`, re-exported by both `(dashboard)/community.tsx` and `(partner-view)/forum.tsx` — so the two roles can never visually drift apart on a screen that should look identical for both.
 
 ### Voice input
 

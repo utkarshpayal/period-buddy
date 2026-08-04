@@ -14,7 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { alert } from "../../lib/alert";
 import { useTheme } from "../../components/theme";
-import { getActionGradient, getShadow, HABIT_CATEGORY_COLORS } from "../../components/ui-tokens";
+import { getHeroGradient, getShadow, HABIT_CATEGORY_COLORS } from "../../components/ui-tokens";
 import { habitsApi, type Habit } from "../../lib/api";
 
 const HABIT_IDEAS = [
@@ -39,7 +39,7 @@ export default function Habits() {
   const [refreshing, setRefreshing] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
-  const actionGradient = getActionGradient(colors) as [string, string];
+  const heroGradient = getHeroGradient(colors, isDark) as [string, string, string];
 
   const load = useCallback(async (isRefresh = false) => {
     try {
@@ -144,13 +144,13 @@ export default function Habits() {
             {/* This week — gradient summary card */}
             <View className="mx-6 mt-4">
               <LinearGradient
-                colors={actionGradient}
+                colors={heroGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={{ borderRadius: 22, padding: 18 }}
                 className="flex-row items-center justify-between"
               >
-                <View>
+                <View className="flex-1 shrink pr-3">
                   <Text className="text-xs font-black opacity-90" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
                     This week
                   </Text>
@@ -162,7 +162,7 @@ export default function Habits() {
                   </Text>
                 </View>
                 <View
-                  className="h-14 w-14 items-center justify-center rounded-full"
+                  className="h-14 w-14 shrink-0 items-center justify-center rounded-full"
                   style={{ backgroundColor: "rgba(255,255,255,0.22)" }}
                 >
                   <Text className="text-base font-black" style={{ color: colors.buttonText, fontFamily: fonts.mono }}>
@@ -225,9 +225,16 @@ export default function Habits() {
                         <Ionicons name={habit.icon as any} size={18} color={resolvedColor} />
                       </View>
 
-                      <View className="flex-1">
+                      {/* minWidth: 0 stops this flex item from growing past
+                          the row's available width to fit its text content
+                          (the default flexbox min-width:auto), which was
+                          pushing long habit titles/streak text out past the
+                          card edge instead of wrapping/truncating inside it. */}
+                      <View className="flex-1" style={{ minWidth: 0 }}>
                         <Text
                           className="text-sm font-bold tracking-tight"
+                          numberOfLines={1}
+                          ellipsizeMode="tail"
                           style={{
                             color: habit.completed ? colors.mutedText : colors.foreground,
                             textDecorationLine: habit.completed ? "line-through" : "none",
@@ -237,7 +244,12 @@ export default function Habits() {
                         >
                           {habit.title}
                         </Text>
-                        <Text className="text-[10px] font-bold mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                        <Text
+                          className="text-[10px] font-bold mt-0.5"
+                          numberOfLines={1}
+                          ellipsizeMode="tail"
+                          style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                        >
                           🔥 {habit.streak} day streak · +{habit.rewardPoints ?? habit.tokens} pts
                         </Text>
                       </View>

@@ -782,6 +782,7 @@ export const authApi = {
     }),
 
   signup: (payload: {
+    agreedToPrivacyPolicy?: boolean;
     dateOfBirth?: string;
     email: string;
     firstName: string;

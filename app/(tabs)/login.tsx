@@ -16,7 +16,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../components/auth-context";
 import {
-  AuthBrandMark,
   AuthDivider,
   AuthErrorBanner,
   AuthField,
@@ -168,11 +167,10 @@ export default function Login() {
                 transform: [{ translateY: slideAnim }],
               }}
             >
-              {/* Brand header */}
+              {/* Header */}
               <View className="items-center mb-8">
-                <AuthBrandMark />
                 <Text
-                  className="mt-5 text-center font-black tracking-tight"
+                  className="text-center font-black tracking-tight"
                   style={{ fontSize: 27, color: colors.foreground, fontFamily: fonts.heading }}
                 >
                   Welcome back

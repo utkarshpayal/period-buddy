@@ -12,10 +12,10 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import Svg, { Circle, Polyline } from "react-native-svg";
+import Svg, { Circle, Defs, LinearGradient as SvgGradient, Polyline, Stop } from "react-native-svg";
 import { useTheme } from "../../components/theme";
 import {
-  getActionGradient,
+  getHeroGradient,
   getSoftTints,
   getSurfaceGradient,
   getShadow,
@@ -95,7 +95,8 @@ const TREND_CHART_WIDTH = 100;
 const TREND_CHART_HEIGHT = 40;
 
 function CycleTrendLine({ bars }: { bars: AnalyticsBar[] }) {
-  const { colors, fonts } = useTheme();
+  const { colors, isDark, fonts } = useTheme();
+  const heroGradient = getHeroGradient(colors, isDark);
   const loggedValues = bars.map((b) => b.length).filter((v) => v > 0);
 
   if (loggedValues.length < 2) {
@@ -145,16 +146,27 @@ function CycleTrendLine({ bars }: { bars: AnalyticsBar[] }) {
         </Text>
       </View>
       <Svg width="100%" height={64} viewBox={`0 0 ${TREND_CHART_WIDTH} ${TREND_CHART_HEIGHT}`}>
+        <Defs>
+          <SvgGradient id="trendLineGradient" x1="0" y1="0" x2="1" y2="0">
+            {heroGradient.map((stop, index) => (
+              <Stop
+                key={stop}
+                offset={index / (heroGradient.length - 1)}
+                stopColor={stop}
+              />
+            ))}
+          </SvgGradient>
+        </Defs>
         <Polyline
           points={polylinePoints}
           fill="none"
-          stroke={colors.primary}
+          stroke="url(#trendLineGradient)"
           strokeWidth={2}
           strokeLinecap="round"
           strokeLinejoin="round"
         />
         {loggedPoints.map((p, index) => (
-          <Circle key={index} cx={p.x} cy={p.y} r={2.4} fill={colors.primary} />
+          <Circle key={index} cx={p.x} cy={p.y} r={2.4} fill={colors.primaryDark} />
         ))}
       </Svg>
       <View className="flex-row justify-between mt-1">
@@ -190,7 +202,7 @@ export default function Predictions() {
 
   const softTints = getSoftTints(colors);
   const surfaceGradient = getSurfaceGradient(colors, isDark) as [string, string];
-  const actionGradient = getActionGradient(colors) as [string, string];
+  const heroGradient = getHeroGradient(colors, isDark) as [string, string, string];
 
   const load = useCallback(async (isRefresh = false) => {
     try {
@@ -328,40 +340,66 @@ export default function Predictions() {
                   );
                   const dashOffset = circumference * (1 - progress);
                   return (
-                    <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-                      <Circle
-                        cx={size / 2}
-                        cy={size / 2}
-                        r={radius}
-                        stroke={colors.border}
-                        strokeWidth={strokeWidth}
-                        fill="none"
-                      />
-                      <Circle
-                        cx={size / 2}
-                        cy={size / 2}
-                        r={radius}
-                        stroke={colors.primary}
-                        strokeWidth={strokeWidth}
-                        fill="none"
-                        strokeDasharray={`${circumference} ${circumference}`}
-                        strokeDashoffset={dashOffset}
-                        strokeLinecap="round"
-                        rotation={-90}
-                        originX={size / 2}
-                        originY={size / 2}
-                      />
-                    </Svg>
+                    <View style={{ width: size, height: size }}>
+                      <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+                        <Defs>
+                          <SvgGradient id="countdownRingGradient" x1="0" y1="0" x2="1" y2="1">
+                            {heroGradient.map((stop, index) => (
+                              <Stop
+                                key={stop}
+                                offset={index / (heroGradient.length - 1)}
+                                stopColor={stop}
+                              />
+                            ))}
+                          </SvgGradient>
+                        </Defs>
+                        <Circle
+                          cx={size / 2}
+                          cy={size / 2}
+                          r={radius}
+                          stroke={colors.border}
+                          strokeWidth={strokeWidth}
+                          fill="none"
+                        />
+                        <Circle
+                          cx={size / 2}
+                          cy={size / 2}
+                          r={radius}
+                          stroke="url(#countdownRingGradient)"
+                          strokeWidth={strokeWidth}
+                          fill="none"
+                          strokeDasharray={`${circumference} ${circumference}`}
+                          strokeDashoffset={dashOffset}
+                          strokeLinecap="round"
+                          rotation={-90}
+                          originX={size / 2}
+                          originY={size / 2}
+                        />
+                      </Svg>
+                      {/* Absolutely centered over the ring via inset:0 + flex
+                          centering, instead of a hand-tuned `top` offset that
+                          drifted out of the circle's actual center. */}
+                      <View
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <Text className="text-3xl font-black" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
+                          {data.nextPeriodDaysAway}
+                        </Text>
+                        <Text className="text-[11px] font-bold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                          days left
+                        </Text>
+                      </View>
+                    </View>
                   );
                 })()}
-                <View style={{ position: "absolute", top: 44, alignItems: "center" }}>
-                  <Text className="text-3xl font-black" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-                    {data.nextPeriodDaysAway}
-                  </Text>
-                  <Text className="text-[11px] font-bold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                    days left
-                  </Text>
-                </View>
                 <Text className="mt-2.5 text-base font-black tracking-tight" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
                   Next period · {data.nextPeriodDate}
                 </Text>
@@ -479,7 +517,7 @@ export default function Predictions() {
                           >
                             {d.length > 0 ? (
                               <LinearGradient
-                                colors={isLatest ? actionGradient : [colors.accent, colors.mintLight]}
+                                colors={isLatest ? heroGradient : [colors.accent, colors.mintLight]}
                                 start={{ x: 0, y: 0 }}
                                 end={{ x: 0, y: 1 }}
                                 style={{

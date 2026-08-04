@@ -275,27 +275,6 @@ export default function Forest() {
                 </Text>
               </View>
 
-              <View
-                className="absolute bottom-4 left-4 rounded-2xl border px-3 py-2"
-                style={{
-                  backgroundColor: isDark ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.85)",
-                  borderColor: isDark ? "rgba(255,255,255,0.1)" : colors.border,
-                }}
-              >
-                <Text
-                  className="text-[10px] font-black uppercase"
-                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                >
-                  Care streak
-                </Text>
-                <Text
-                  className="text-sm font-black"
-                  style={{ color: colors.foreground, fontFamily: fonts.mono }}
-                >
-                  {forestStatus?.careActions ?? 0} actions
-                </Text>
-              </View>
-
               {isNourished && (
                 <Animated.View
                   className="absolute inset-0 items-center justify-center"

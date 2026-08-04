@@ -4,6 +4,7 @@ import { RefreshControl, ScrollView, StatusBar, Text, TouchableOpacity, View } f
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
 import { ScreenHeader } from "../../components/ScreenHeader";
+import { SkeletonCard } from "../../components/Skeleton";
 import { useTheme } from "../../components/theme";
 import { getSeverityColor, getShadow, getSoftTints } from "../../components/ui-tokens";
 import { useAsyncLoad } from "../../hooks/useAsyncLoad";
@@ -77,6 +78,13 @@ export default function SymptomPredictionsScreen() {
           loadingLabel="Analyzing your cycle history…"
           errorIcon="chart-line-variant"
           errorTitle="Couldn't load predictions"
+          skeleton={
+            <View className="gap-4 px-6 pt-4">
+              <SkeletonCard />
+              <SkeletonCard />
+              <SkeletonCard />
+            </View>
+          }
         >
           {predictions.length === 0 ? (
             <ScrollView

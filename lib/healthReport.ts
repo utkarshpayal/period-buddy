@@ -47,22 +47,33 @@ const REPORT_STYLES = `
     color: ${REPORT_THEME.text};
     background: #F5F7FA;
     margin: 0;
-    padding: 32px;
+    padding: 0 32px 32px;
   }
-  h1 { font-size: 22px; margin: 0 0 4px; }
+  h1 { font-size: 20px; margin: 0 0 2px; letter-spacing: -0.2px; }
   h2 { font-size: 15px; margin: 0 0 12px; color: ${REPORT_THEME.text}; }
   h4 { font-size: 13px; margin: 14px 0 4px; color: ${REPORT_THEME.text}; }
   p { font-size: 12px; line-height: 1.6; margin: 0 0 8px; color: ${REPORT_THEME.bodyText}; }
   ul { margin: 0 0 8px; padding-left: 18px; }
   hr { border: none; border-top: 1px solid #e1e0d9; margin: 10px 0; }
   li { font-size: 12px; line-height: 1.6; color: ${REPORT_THEME.bodyText}; margin-bottom: 2px; }
-  .header { border-bottom: 1px solid ${REPORT_THEME.border}; padding-bottom: 16px; margin-bottom: 20px; }
+
+  /* Letterhead */
+  .letterhead-bar { height: 6px; background: linear-gradient(90deg, ${REPORT_THEME.brand}, #F5A6C0); margin: 0 -32px 24px; }
+  .header { display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 1.5px solid ${REPORT_THEME.text}; padding-bottom: 14px; margin-bottom: 20px; }
+  .header .brand-row { display: flex; align-items: center; gap: 9px; }
+  .header .brand-mark { width: 30px; height: 30px; border-radius: 9px; background: ${REPORT_THEME.brand}; color: #fff; font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .header .brand-name { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: ${REPORT_THEME.brand}; }
   .header .meta { font-size: 11px; color: ${REPORT_THEME.mutedText}; margin-top: 4px; }
+  .header .report-id { text-align: right; font-size: 10px; color: ${REPORT_THEME.mutedText}; line-height: 1.6; }
+  .header .report-id b { color: ${REPORT_THEME.text}; font-weight: 700; }
+
   .kpi-row { display: flex; gap: 10px; margin-bottom: 20px; }
   .stat-tile { flex: 1; background: #FFFFFF; border: 1px solid ${REPORT_THEME.border}; border-radius: 12px; padding: 12px; }
   .stat-value { font-size: 18px; font-weight: 600; color: ${REPORT_THEME.text}; }
   .stat-label { font-size: 10px; color: ${REPORT_THEME.mutedText}; margin-top: 2px; }
   .card { background: #FFFFFF; border: 1px solid ${REPORT_THEME.border}; border-radius: 14px; padding: 16px; margin-bottom: 16px; page-break-inside: avoid; }
+  .card h2 { display: flex; align-items: center; gap: 8px; }
+  .card h2::before { content: ""; width: 4px; height: 14px; border-radius: 2px; background: ${REPORT_THEME.brand}; display: inline-block; }
   .bar-chart { display: flex; flex-direction: column; gap: 8px; }
   .bar-row { display: flex; align-items: center; gap: 8px; }
   .bar-label { width: 92px; font-size: 10px; color: ${REPORT_THEME.labelText}; flex-shrink: 0; }
@@ -73,7 +84,12 @@ const REPORT_STYLES = `
   table { width: 100%; border-collapse: collapse; margin-top: 4px; }
   th, td { text-align: left; font-size: 10.5px; padding: 6px 4px; border-bottom: 1px solid ${REPORT_THEME.border}; color: ${REPORT_THEME.bodyText}; }
   th { color: ${REPORT_THEME.mutedText}; font-weight: 600; }
-  .footer { font-size: 10px; color: #898781; text-align: center; margin-top: 12px; }
+
+  /* Footer / authenticity block */
+  .footer { border-top: 1px solid ${REPORT_THEME.border}; margin-top: 20px; padding-top: 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .footer .disclaimer { font-size: 9.5px; line-height: 1.5; color: #898781; max-width: 420px; }
+  .footer .signoff { text-align: right; font-size: 9.5px; color: ${REPORT_THEME.mutedText}; line-height: 1.5; flex-shrink: 0; }
+  .footer .signoff b { color: ${REPORT_THEME.text}; }
   .trend-label { font-size: 11px; color: ${REPORT_THEME.mutedText}; margin-bottom: 4px; }
   @media print {
     body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -128,6 +144,16 @@ function buildReportHtml(params: {
     .filter(Boolean)
     .join("");
 
+  // A short, deterministic-looking report ID gives the document the kind of
+  // reference number a real clinical/lab report carries — useful for the
+  // user to quote if they need to refer back to this specific export.
+  const generatedAt = new Date();
+  const reportId = `NURA-${generatedAt.toISOString().slice(0, 10).replace(/-/g, "")}-${generatedAt
+    .getTime()
+    .toString(36)
+    .slice(-5)
+    .toUpperCase()}`;
+
   return `<!doctype html>
 <html>
   <head>
@@ -135,10 +161,21 @@ function buildReportHtml(params: {
     <style>${REPORT_STYLES}</style>
   </head>
   <body>
+    <div class="letterhead-bar"></div>
     <div class="header">
-      <h1>${userName ? `${escapeHtml(userName)}'s Health Report` : "Health Report"}</h1>
-      <div class="meta">
-        ${escapeHtml(formatDateLabel(startKey))} – ${escapeHtml(formatDateLabel(endKey))} · Generated ${escapeHtml(new Date().toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" }))} by Nura
+      <div>
+        <div class="brand-row">
+          <div class="brand-mark">N</div>
+          <div class="brand-name">Nura</div>
+        </div>
+        <h1 style="margin-top: 10px;">${userName ? `${escapeHtml(userName)}'s Health Report` : "Health Report"}</h1>
+        <div class="meta">
+          ${escapeHtml(formatDateLabel(startKey))} – ${escapeHtml(formatDateLabel(endKey))}
+        </div>
+      </div>
+      <div class="report-id">
+        <div>Report ID: <b>${escapeHtml(reportId)}</b></div>
+        <div>Generated: <b>${escapeHtml(generatedAt.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" }))}</b></div>
       </div>
     </div>
 
@@ -178,7 +215,17 @@ function buildReportHtml(params: {
 
     ${analysisHtml ? `<div class="card"><h2>AI Analysis</h2>${analysisHtml}</div>` : ""}
 
-    <div class="footer">Generated by Nura · Not a substitute for professional medical advice.</div>
+    <div class="footer">
+      <div class="disclaimer">
+        This report summarizes self-reported data logged in the Nura app. It is intended for personal
+        reference and to support conversations with a qualified healthcare provider — it is not a
+        diagnosis and is not a substitute for professional medical advice.
+      </div>
+      <div class="signoff">
+        <div><b>Nura</b> · Report ${escapeHtml(reportId)}</div>
+        <div>Page generated automatically — no signature required</div>
+      </div>
+    </div>
   </body>
 </html>`;
 }

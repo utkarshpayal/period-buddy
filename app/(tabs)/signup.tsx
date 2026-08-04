@@ -17,7 +17,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../components/auth-context";
 import {
-  AuthBrandMark,
   AuthDivider,
   AuthErrorBanner,
   AuthField,
@@ -43,6 +42,7 @@ export default function SignUp() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const role: "user" | "partner" = partnerCode ? "partner" : "user";
+  const [agreedToPrivacyPolicy, setAgreedToPrivacyPolicy] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isOtpModalVisible, setIsOtpModalVisible] = useState(false);
@@ -77,6 +77,11 @@ export default function SignUp() {
       return;
     }
 
+    if (!agreedToPrivacyPolicy) {
+      setErrorMessage("Please agree to the Privacy Policy to continue.");
+      return;
+    }
+
     try {
       setIsSubmitting(true);
 
@@ -89,6 +94,7 @@ export default function SignUp() {
         email: email.trim().toLowerCase(),
         password,
         role,
+        agreedToPrivacyPolicy,
       });
 
       setIsOtpModalVisible(true);
@@ -176,11 +182,10 @@ export default function SignUp() {
                 transform: [{ translateY: slideAnim }],
               }}
             >
-              {/* Brand header (back button handled by AuthTopBar above) */}
+              {/* Header (back button handled by AuthTopBar above) */}
               <View className="items-center mb-7">
-                <AuthBrandMark />
                 <Text
-                  className="mt-5 text-center font-black tracking-tight"
+                  className="text-center font-black tracking-tight"
                   style={{ fontSize: 27, color: colors.foreground, fontFamily: fonts.heading }}
                 >
                   Create your account
@@ -291,9 +296,49 @@ export default function SignUp() {
                   fontFamily: fonts.body,
                 }}
               >
-                By continuing you agree to our Terms &amp; Privacy Policy. Use at least 8
-                characters and keep your password private.
+                Use at least 8 characters and keep your password private.
               </Text>
+
+              <TouchableOpacity
+                activeOpacity={0.8}
+                className="mt-4 flex-row items-start"
+                onPress={() => {
+                  setErrorMessage("");
+                  setAgreedToPrivacyPolicy((prev) => !prev);
+                }}
+                style={{ gap: 10 }}
+              >
+                <View
+                  className="items-center justify-center rounded-md border"
+                  style={{
+                    width: 20,
+                    height: 20,
+                    marginTop: 1,
+                    backgroundColor: agreedToPrivacyPolicy ? colors.primary : colors.input,
+                    borderColor: agreedToPrivacyPolicy ? colors.primary : colors.border,
+                    borderWidth: 1.5,
+                  }}
+                >
+                  {agreedToPrivacyPolicy ? (
+                    <Ionicons name="checkmark" size={13} color={colors.buttonText} />
+                  ) : null}
+                </View>
+                <Text
+                  className="flex-1"
+                  style={{
+                    fontSize: 12,
+                    lineHeight: 17,
+                    color: colors.foreground,
+                    fontFamily: fonts.body,
+                  }}
+                >
+                  I agree to the{" "}
+                  <Text style={{ fontWeight: "800", color: colors.primary }}>
+                    Terms &amp; Privacy Policy
+                  </Text>
+                  .
+                </Text>
+              </TouchableOpacity>
 
               <View
                 style={{
@@ -303,6 +348,7 @@ export default function SignUp() {
                 }}
               >
                 <AuthPrimaryButton
+                  disabled={!agreedToPrivacyPolicy}
                   isLoading={isSubmitting}
                   label="Create account"
                   loadingLabel="Creating account..."

@@ -14,6 +14,7 @@ type LoginPayload = {
 };
 
 type SignupPayload = {
+  agreedToPrivacyPolicy?: boolean;
   dateOfBirth?: string;
   email: string;
   firstName: string;
@@ -92,7 +93,7 @@ export async function connectPartnerAndResolveRoute(inviteCode?: string) {
     partnerRole,
     destination:
       partnerRole === "viewer"
-        ? ("/(app)/(partner-view)/home" as const)
+        ? ("/(app)/(partner-view)/overview" as const)
         : ("/(app)/(dashboard)/tracker" as const),
   };
 }

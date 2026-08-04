@@ -18,7 +18,7 @@ import { useTheme } from "../../../components/theme";
 import { useAuth } from "../../../components/auth-context";
 import { ProfileOnboarding } from "../../../components/profile-onboarding";
 import { submitCycleSettings, submitOnboarding } from "../../../lib/auth";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { getWebSocketUrl } from "../../../lib/api";
 import { showPermissionModal } from "../../../lib/modal-host";
 
@@ -104,6 +104,7 @@ export default function DashboardLayout() {
   const { colors, isDark, fonts } = useTheme();
   const { token, user, signIn } = useAuth();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [unreadCommunity, setUnreadCommunity] = useState(false);
 
   // Auth guard: if there's no session (never logged in, logged out, or the
@@ -113,7 +114,7 @@ export default function DashboardLayout() {
     if (!token) {
       router.replace("/(tabs)/login");
     } else if (user?.partnerRole === "viewer") {
-      router.replace("/(app)/(partner-view)/home");
+      router.replace("/(app)/(partner-view)/overview");
     }
   }, [token, user?.partnerRole, router]);
 
@@ -287,10 +288,10 @@ export default function DashboardLayout() {
           borderLeftWidth: 0,
           borderRightWidth: 0,
           borderBottomWidth: 0,
-          height: Platform.OS === "ios" ? 86 : 72,
+          height: (Platform.OS === "ios" ? 60 : 58) + Math.max(insets.bottom, Platform.OS === "ios" ? 26 : 14),
           elevation: 0,
           shadowColor: "transparent",
-          paddingBottom: Platform.OS === "ios" ? 26 : 14,
+          paddingBottom: Math.max(insets.bottom, Platform.OS === "ios" ? 26 : 14),
           paddingTop: 10,
           overflow: "visible",
         },

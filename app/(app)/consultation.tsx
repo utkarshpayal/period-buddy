@@ -583,16 +583,15 @@ export default function ConsultationScreen() {
                         onPress={() => setSelectedSlot(slot)}
                         className="flex-1 rounded-xl py-3 items-center justify-center border"
                         style={{
-                          backgroundColor: isSlotSelected
-                            ? (isDark ? colors.surfaceStrong : "#17212E")
-                            : colors.surface,
-                          borderColor: isSlotSelected ? "transparent" : colors.border,
+                          backgroundColor: colors.surface,
+                          borderColor: isSlotSelected ? colors.foreground : colors.border,
+                          borderWidth: isSlotSelected ? 1.5 : 1,
                         }}
                       >
                         <Text
                           className="text-xs font-bold"
                           style={{
-                            color: isSlotSelected ? "#FFFFFF" : colors.foreground,
+                            color: colors.foreground,
                             fontFamily: fonts.body,
                           }}
                         >

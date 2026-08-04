@@ -10,6 +10,7 @@ export function LoadingErrorState({
   loadingLabel,
   errorIcon = "alert-circle-outline",
   errorTitle = "Something went wrong",
+  skeleton,
   children,
 }: {
   loading: boolean;
@@ -18,11 +19,16 @@ export function LoadingErrorState({
   loadingLabel?: string;
   errorIcon?: React.ComponentProps<typeof MaterialCommunityIcons>["name"];
   errorTitle?: string;
+  /** Custom placeholder shown instead of the spinner while loading — pass a
+   * SkeletonList/SkeletonCard (or your own layout) shaped like the content
+   * this screen will render, so the loading state doesn't jump/reflow. */
+  skeleton?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const { colors, fonts } = useTheme();
 
   if (loading) {
+    if (skeleton) return <>{skeleton}</>;
     return (
       <View className="flex-1 items-center justify-center">
         <ActivityIndicator size="large" color={colors.primary} />

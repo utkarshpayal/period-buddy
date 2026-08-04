@@ -23,12 +23,6 @@ const onboardingSteps = [
     title: "What is your date of birth?",
   },
   {
-    icon: "people-outline",
-    id: "gender",
-    subtitle: "Choose the identity that feels right to you.",
-    title: "What is your gender?",
-  },
-  {
     icon: "call-outline",
     id: "phone",
     subtitle: "We will only use this for clinical consult notifications.",
@@ -60,13 +54,6 @@ const onboardingSteps = [
   },
 ] as const;
 
-const genderOptions: { label: string; value: string }[] = [
-  { label: "Female", value: "female" },
-  { label: "Male", value: "male" },
-  { label: "Other / Non-binary", value: "other" },
-  { label: "Prefer not to say", value: "prefer_not_to_say" },
-];
-
 const trackingGoalOptions: { label: string; value: string }[] = [
   { label: "Track my period", value: "track_period" },
   { label: "Trying to conceive", value: "achieve_pregnancy" },
@@ -80,6 +67,9 @@ type OnboardingStepId = (typeof onboardingSteps)[number]["id"];
 export type ProfileOnboardingValues = {
   cycleLength: number;
   dateOfBirth: string;
+  // No longer collected from the user (the gender onboarding step was
+  // removed); still sent to the backend since POST /api/auth/onboarding
+  // requires a non-empty value.
   gender: string;
   lastPeriodStartDate: string;
   periodLength: number;
@@ -97,7 +87,6 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [isDatePickerVisible, setIsDatePickerVisible] = useState(false);
-  const [gender, setGender] = useState("");
   const [phone, setPhone] = useState("");
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
   const [profilePictureUrl, setProfilePictureUrl] = useState<string | null>(null);
@@ -183,15 +172,10 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
   function goToNextOnboardingStep() {
     if (isSubmitting) return;
 
-    // Date of birth and gender are required by the backend (POST /api/auth/onboarding
-    // rejects an empty dateOfBirth/gender with a 422), so they can't be skipped here.
+    // Date of birth is required by the backend (POST /api/auth/onboarding
+    // rejects an empty dateOfBirth with a 422), so it can't be skipped here.
     if (currentStep.id === "dateOfBirth" && !dateOfBirth.trim()) {
       setErrorMessage("Date of birth is required to continue.");
-      return;
-    }
-
-    if (currentStep.id === "gender" && !gender) {
-      setErrorMessage("Please select a gender to continue.");
       return;
     }
 
@@ -237,7 +221,9 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
     const values = {
       cycleLength: Number(cycleLength) || 28,
       dateOfBirth: dateOfBirth.trim(),
-      gender: gender || "prefer_not_to_say",
+      // Gender is no longer collected via onboarding; send the backend's
+      // "prefer not to say" default so the required field is still satisfied.
+      gender: "prefer_not_to_say",
       lastPeriodStartDate: lastPeriodStartDate.trim(),
       periodLength: Number(periodLength) || 5,
       phone: phone.trim(),
@@ -311,57 +297,6 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
             onSelect={handleSelectDate}
             visible={isDatePickerVisible}
           />
-        </View>
-      );
-    }
-
-    if (stepId === "gender") {
-      return (
-        <View className="mb-4 gap-3">
-          {genderOptions.map((option) => {
-            const isSelected = gender === option.value;
-
-            return (
-              <TouchableOpacity
-                activeOpacity={0.9}
-                className="flex-row items-center justify-between rounded-2xl border px-5 py-4"
-                key={option.value}
-                onPress={() => setGender(option.value)}
-                style={{
-                  backgroundColor: isSelected ? colors.primaryLight : colors.input,
-                  borderColor: isSelected ? colors.primary : colors.border,
-                  borderWidth: isSelected ? 1.5 : 1,
-                }}
-              >
-                <Text
-                  className="text-sm font-bold"
-                  style={{
-                    color: isSelected ? colors.primary : colors.foreground,
-                  }}
-                >
-                  {option.label}
-                </Text>
-
-                {isSelected ? (
-                  <View
-                    className="h-5.5 w-5.5 rounded-full items-center justify-center"
-                    style={{ backgroundColor: colors.primary }}
-                  >
-                    <Ionicons
-                      name="checkmark"
-                      size={12}
-                      color={colors.buttonText}
-                    />
-                  </View>
-                ) : (
-                  <View
-                    className="h-5.5 w-5.5 rounded-full border"
-                    style={{ borderColor: colors.border }}
-                  />
-                )}
-              </TouchableOpacity>
-            );
-          })}
         </View>
       );
     }
@@ -683,7 +618,7 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
         {/* Action Buttons */}
         <View className="flex-row gap-3 mt-4">
           {/* Skip is only offered for fields the backend treats as optional
-              (phone, profilePicture) — dateOfBirth and gender are required by
+              (phone, profilePicture) — dateOfBirth is required by
               POST /api/auth/onboarding and must be filled in to proceed. */}
           {(currentStep.id === "phone" || currentStep.id === "profilePicture") && (
             <TouchableOpacity

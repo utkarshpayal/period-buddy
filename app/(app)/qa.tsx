@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { type AudioPlayer, createAudioPlayer } from "expo-audio";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -57,6 +57,9 @@ const defaultCompanionDisclaimer =
 export default function QA() {
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
+  // The dashboard's center avatar tab links here with ?voiceMode=1 so tapping
+  // it drops straight into voice-to-voice instead of the text chat.
+  const { voiceMode: voiceModeParam } = useLocalSearchParams<{ voiceMode?: string }>();
   const { earnTokens } = useAppState();
   const scrollViewRef = useRef<ScrollView>(null);
   const insets = useSafeAreaInsets();
@@ -72,7 +75,7 @@ export default function QA() {
   const [languagePickerVisible, setLanguagePickerVisible] = useState(false);
   const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
   const [synthesizingMessageId, setSynthesizingMessageId] = useState<string | null>(null);
-  const [voiceMode, setVoiceMode] = useState(false);
+  const [voiceMode, setVoiceMode] = useState(voiceModeParam === "1");
   const [pendingVoiceAction, setPendingVoiceAction] = useState<VoiceAgentPendingAction | undefined>();
   const playerRef = useRef<AudioPlayer | null>(null);
 

@@ -22,7 +22,8 @@
         "NSCameraUsageDescription": "The Nura uses your camera for video calls with your Period Buddy.",
         "NSMicrophoneUsageDescription": "The Nura uses your microphone for video calls with your Period Buddy.",
         "NSFaceIDUsageDescription": "The Nura uses Face ID to unlock the app and keep your data private."
-      }
+      },
+      "associatedDomains": ["applinks:thenura.care"]
     },
     "android": {
       "adaptiveIcon": {
@@ -36,6 +37,20 @@
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "thenura.care",
+              "pathPrefix": "/app"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
       ]
     },
     "web": {

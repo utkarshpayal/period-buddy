@@ -5,6 +5,7 @@ import { RefreshControl, ScrollView, StatusBar, Text, TouchableOpacity, View } f
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
+import { SkeletonList } from "../../components/Skeleton";
 import { useTheme } from "../../components/theme";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
 import { useAsyncLoad } from "../../hooks/useAsyncLoad";
@@ -92,6 +93,7 @@ export default function NotificationsScreen() {
         error={error}
         onRetry={() => reload()}
         loadingLabel="Loading notifications..."
+        skeleton={<SkeletonList count={6} style={{ paddingTop: 16 }} />}
       >
         <ScrollView
           className="flex-1 px-6"

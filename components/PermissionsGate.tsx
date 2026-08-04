@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import { requestRecordingPermissionsAsync } from "expo-audio";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Platform, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { registerForPushNotificationsAsync } from "../lib/notifications";
@@ -79,6 +79,38 @@ export function PermissionsGate({ onDone }: { onDone: () => void }) {
       setRequestingId(null);
     }
   }
+
+  // Fire every OS permission dialog as soon as this screen mounts instead of
+  // waiting for a per-row tap — the user should be asked properly (mic
+  // included) on first open, not have to know to press "Allow" on each row.
+  // Requests run sequentially: firing native permission dialogs in parallel
+  // is unreliable on Android (they can silently no-op or get dropped when
+  // another one is still on screen).
+  useEffect(() => {
+    let cancelled = false;
+
+    async function requestAll() {
+      for (const row of permissionRows) {
+        if (cancelled) return;
+        setRequestingId(row.id);
+        try {
+          const granted = await row.request();
+          if (!cancelled && granted) {
+            setGrantedIds((prev) => new Set(prev).add(row.id));
+          }
+        } catch {
+          // Same as handleRequest above — a rejected prompt just leaves the
+          // row available to retry via its "Allow" button.
+        }
+      }
+      if (!cancelled) setRequestingId(null);
+    }
+
+    requestAll();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function handleContinue() {
     await AsyncStorage.setItem(PERMISSIONS_REQUESTED_KEY, "true");
