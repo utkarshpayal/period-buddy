@@ -5,18 +5,21 @@ import { requestRecordingPermissionsAsync } from "expo-audio";
 import React, { useEffect, useState } from "react";
 import { Platform, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { openAppSettings } from "../lib/modal-host";
 import { registerForPushNotificationsAsync } from "../lib/notifications";
 import { useTheme } from "./theme";
 import { getShadow } from "./ui-tokens";
 
 const PERMISSIONS_REQUESTED_KEY = "period-buddy.permissions-requested";
 
+type PermissionRowResult = { granted: boolean; canAskAgain: boolean };
+
 type PermissionRowConfig = {
   id: "notifications" | "microphone" | "media";
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
   description: string;
-  request: () => Promise<boolean>;
+  request: () => Promise<PermissionRowResult>;
 };
 
 const permissionRows: PermissionRowConfig[] = [
@@ -26,9 +29,9 @@ const permissionRows: PermissionRowConfig[] = [
     title: "Notifications",
     description: "Get period, ovulation, and reminder alerts right on time.",
     request: async () => {
-      if (Platform.OS === "web") return true;
+      if (Platform.OS === "web") return { granted: true, canAskAgain: true };
       const token = await registerForPushNotificationsAsync();
-      return Boolean(token);
+      return { granted: Boolean(token), canAskAgain: true };
     },
   },
   {
@@ -37,8 +40,8 @@ const permissionRows: PermissionRowConfig[] = [
     title: "Microphone",
     description: "Talk to Buddy hands-free to log entries and ask questions.",
     request: async () => {
-      const { granted } = await requestRecordingPermissionsAsync();
-      return granted;
+      const { granted, canAskAgain } = await requestRecordingPermissionsAsync();
+      return { granted, canAskAgain };
     },
   },
   {
@@ -47,8 +50,8 @@ const permissionRows: PermissionRowConfig[] = [
     title: "Photos",
     description: "Pick a profile picture and attach photos to documents.",
     request: async () => {
-      const result = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      return result.granted;
+      const { granted, canAskAgain } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      return { granted, canAskAgain };
     },
   },
 ];
@@ -68,9 +71,15 @@ export function PermissionsGate({ onDone }: { onDone: () => void }) {
     if (requestingId) return;
     setRequestingId(row.id);
     try {
-      const granted = await row.request();
+      const { granted, canAskAgain } = await row.request();
       if (granted) {
         setGrantedIds((prev) => new Set(prev).add(row.id));
+      } else if (!canAskAgain) {
+        // OS already refused twice (or "don't ask again") — it will never
+        // show the native dialog again, so a repeat tap here would silently
+        // no-op forever. Send the user straight to the settings screen
+        // instead of leaving the button looking dead.
+        openAppSettings();
       }
     } catch {
       // Permission prompts can reject on some platforms/emulators; treat as
@@ -94,7 +103,7 @@ export function PermissionsGate({ onDone }: { onDone: () => void }) {
         if (cancelled) return;
         setRequestingId(row.id);
         try {
-          const granted = await row.request();
+          const { granted } = await row.request();
           if (!cancelled && granted) {
             setGrantedIds((prev) => new Set(prev).add(row.id));
           }
