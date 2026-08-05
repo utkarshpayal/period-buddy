@@ -85,9 +85,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow The Nura to choose your profile picture.",
-          "cameraPermission": false,
-          "microphonePermission": false
+          "photosPermission": "Allow The Nura to choose your profile picture."
         }
       ],
       [
