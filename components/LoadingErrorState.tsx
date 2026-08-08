@@ -1,6 +1,7 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
-import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
+import { Text, TouchableOpacity, View } from "react-native";
+import { Loader } from "./Loader";
 import { useTheme } from "./theme";
 
 export function LoadingErrorState({
@@ -31,12 +32,7 @@ export function LoadingErrorState({
     if (skeleton) return <>{skeleton}</>;
     return (
       <View className="flex-1 items-center justify-center">
-        <ActivityIndicator size="large" color={colors.primary} />
-        {loadingLabel ? (
-          <Text className="mt-4 text-sm font-semibold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-            {loadingLabel}
-          </Text>
-        ) : null}
+        <Loader label={loadingLabel} />
       </View>
     );
   }

@@ -113,7 +113,9 @@ export default function DayDetailsModal({
   const [noteText, setNoteText] = useState(details ?? "");
   const [selectedEnergy, setSelectedEnergy] = useState<DayEntry["energy"]>();
   const [selectedFlow, setSelectedFlow] = useState<DayEntry["flow"]>();
-  const [selectedMood, setSelectedMood] = useState<DayEntry["mood"]>();
+  // Mood/skin/digestion are multi-select (can co-occur in a day). The scalar
+  // DayEntry field is still populated from the first choice on save.
+  const [selectedMoods, setSelectedMoods] = useState<NonNullable<DayEntry["mood"]>[]>([]);
   const [selectedSymptoms, setSelectedSymptoms] = useState<string[]>([]);
   const [sleepHours, setSleepHours] = useState<number | undefined>();
   const [waterIntake, setWaterIntake] = useState<number | undefined>();
@@ -122,8 +124,8 @@ export default function DayDetailsModal({
   const [stressLevel, setStressLevel] = useState<number | undefined>();
   const [medText, setMedText] = useState("");
   const [isIntimate, setIsIntimate] = useState(false);
-  const [selectedDigestion, setSelectedDigestion] = useState<DayEntry["digestion"]>();
-  const [selectedSkin, setSelectedSkin] = useState<DayEntry["skin"]>();
+  const [selectedDigestions, setSelectedDigestions] = useState<NonNullable<DayEntry["digestion"]>[]>([]);
+  const [selectedSkins, setSelectedSkins] = useState<NonNullable<DayEntry["skin"]>[]>([]);
   const [selectedDischarge, setSelectedDischarge] = useState<DayEntry["discharge"]>();
   const [selectedExercise, setSelectedExercise] = useState<string[]>([]);
 
@@ -133,7 +135,9 @@ export default function DayDetailsModal({
     setNoteText(entry?.note ?? details ?? "");
     setSelectedEnergy(entry?.energy);
     setSelectedFlow(entry?.flow);
-    setSelectedMood(entry?.mood);
+    // Prefer the plural array when present; fall back to the scalar so
+    // previously-saved single values still hydrate.
+    setSelectedMoods(entry?.moods ?? (entry?.mood ? [entry.mood] : []));
     setSelectedSymptoms(entry?.symptoms ?? []);
     setSleepHours(entry?.sleepHours);
     setWaterIntake(entry?.waterIntake);
@@ -142,8 +146,8 @@ export default function DayDetailsModal({
     setStressLevel(entry?.stressLevel);
     setMedText(entry?.medication ? entry.medication.join(", ") : "");
     setIsIntimate(entry?.isIntimate ?? false);
-    setSelectedDigestion(entry?.digestion);
-    setSelectedSkin(entry?.skin);
+    setSelectedDigestions(entry?.digestions ?? (entry?.digestion ? [entry.digestion] : []));
+    setSelectedSkins(entry?.skins ?? (entry?.skin ? [entry.skin] : []));
     setSelectedDischarge(entry?.discharge);
     setSelectedExercise(entry?.exercise ?? []);
   }, [visible, details, entry]);
@@ -160,7 +164,10 @@ export default function DayDetailsModal({
       onSaveEntry({
         energy: selectedEnergy,
         flow: selectedFlow,
-        mood: selectedMood,
+        // Scalar stays the primary (first) choice for backward-compat; the full
+        // multi-select set is sent additively as the plural field.
+        mood: selectedMoods[0],
+        moods: selectedMoods.length > 0 ? selectedMoods : undefined,
         isIntimate,
         note: noteText.trim(),
         symptoms: selectedSymptoms,
@@ -170,8 +177,10 @@ export default function DayDetailsModal({
         temperature: parsedTemp,
         stressLevel,
         medication: meds.length > 0 ? meds : undefined,
-        digestion: selectedDigestion,
-        skin: selectedSkin,
+        digestion: selectedDigestions[0],
+        digestions: selectedDigestions.length > 0 ? selectedDigestions : undefined,
+        skin: selectedSkins[0],
+        skins: selectedSkins.length > 0 ? selectedSkins : undefined,
         discharge: selectedDischarge,
         exercise: selectedExercise.length > 0 ? selectedExercise : undefined,
       });
@@ -205,17 +214,31 @@ export default function DayDetailsModal({
     );
   }
 
+  // Generic multi-select toggle for the array-backed option groups.
+  function toggleInArray<T>(
+    setter: React.Dispatch<React.SetStateAction<T[]>>,
+    value: T,
+  ) {
+    setter((current) =>
+      current.includes(value)
+        ? current.filter((item) => item !== value)
+        : [...current, value],
+    );
+  }
+
   function renderOption<Value extends string>({
     icon,
     isSelected,
     label,
     onPress,
+    value,
   }: LogOption<Value> & {
     isSelected: boolean;
     onPress: () => void;
   }) {
     return (
       <TouchableOpacity
+        key={value}
         accessibilityRole="button"
         activeOpacity={0.85}
         onPress={onPress}
@@ -409,11 +432,8 @@ export default function DayDetailsModal({
               {moodOptions.map((mood) =>
                 renderOption({
                   ...mood,
-                  isSelected: selectedMood === mood.value,
-                  onPress: () =>
-                    setSelectedMood((current) =>
-                      current === mood.value ? undefined : mood.value,
-                    ),
+                  isSelected: selectedMoods.includes(mood.value),
+                  onPress: () => toggleInArray(setSelectedMoods, mood.value),
                 }),
               )}
             </View>
@@ -437,11 +457,8 @@ export default function DayDetailsModal({
               {digestionOptions.map((option) =>
                 renderOption({
                   ...option,
-                  isSelected: selectedDigestion === option.value,
-                  onPress: () =>
-                    setSelectedDigestion((current) =>
-                      current === option.value ? undefined : option.value,
-                    ),
+                  isSelected: selectedDigestions.includes(option.value),
+                  onPress: () => toggleInArray(setSelectedDigestions, option.value),
                 }),
               )}
             </View>
@@ -451,11 +468,8 @@ export default function DayDetailsModal({
               {skinOptions.map((option) =>
                 renderOption({
                   ...option,
-                  isSelected: selectedSkin === option.value,
-                  onPress: () =>
-                    setSelectedSkin((current) =>
-                      current === option.value ? undefined : option.value,
-                    ),
+                  isSelected: selectedSkins.includes(option.value),
+                  onPress: () => toggleInArray(setSelectedSkins, option.value),
                 }),
               )}
             </View>

@@ -646,17 +646,17 @@ export default function QA() {
                   ) : (
                     <View
                       className="max-w-[85%] self-end rounded-3xl rounded-br-md overflow-hidden p-4"
-                      style={[{ backgroundColor: colors.primary }, shadow]}
+                      style={[{ backgroundColor: colors.primaryDark }, shadow]}
                     >
                       <Text
                         className="text-[15px] font-medium leading-6"
-                        style={{ color: colors.buttonText, fontFamily: fonts.body }}
+                        style={{ color: "#FFFFFF", fontFamily: fonts.body }}
                       >
                         {message.text}
                       </Text>
                       <Text
                         className="text-[10px] font-bold text-right mt-1.5 opacity-70"
-                        style={{ color: colors.buttonText, fontFamily: fonts.body }}
+                        style={{ color: "#FFFFFF", fontFamily: fonts.body }}
                       >
                         {message.time}
                       </Text>
@@ -708,7 +708,7 @@ export default function QA() {
             onSubmitEditing={() => handleTriggerConversation()}
             maxLength={500}
             returnKeyType="send"
-            blurOnSubmit={false}
+            submitBehavior="submit"
             editable={!isRecording && !isTranscribing}
             className="flex-1 px-4 py-3 rounded-full text-sm"
             style={{
@@ -738,6 +738,8 @@ export default function QA() {
             disabled={!typedQuestion.trim() || isCompanionTyping}
             onPress={() => handleTriggerConversation()}
             activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Send question"
             className="rounded-full overflow-hidden"
           >
             {typedQuestion.trim() && !isCompanionTyping ? (

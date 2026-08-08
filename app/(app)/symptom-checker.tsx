@@ -32,6 +32,34 @@ const CONDITIONS: { id: ScreeningCondition; label: string; icon: keyof typeof Ma
 
 const SCALE_LABELS = ["None", "Mild", "Moderate", "Severe"];
 
+// Severity ramp icons for the 0–3 scale options — a filling circle that reads
+// at a glance without relying on color alone.
+const SCALE_ICONS: (keyof typeof MaterialCommunityIcons.glyphMap)[] = [
+  "circle-outline",
+  "circle-slice-2",
+  "circle-slice-5",
+  "circle-slice-8",
+];
+
+// Picks a relevant icon for a screening question by keyword, so each question
+// carries a small visual cue instead of being a wall of text.
+function getQuestionIcon(text: string): keyof typeof MaterialCommunityIcons.glyphMap {
+  const t = text.toLowerCase();
+  if (/(pain|cramp|ache|pelvic)/.test(t)) return "lightning-bolt";
+  if (/(bleed|flow|period|spotting|menstru)/.test(t)) return "water";
+  if (/(weight|gain|loss)/.test(t)) return "scale-bathroom";
+  if (/(hair|hirsut)/.test(t)) return "content-cut";
+  if (/(acne|skin|oily)/.test(t)) return "face-woman-shimmer";
+  if (/(mood|anxi|depress|irritab|stress)/.test(t)) return "emoticon-sad-outline";
+  if (/(tired|fatigue|energy|exhaust)/.test(t)) return "battery-low";
+  if (/(sleep|insomnia)/.test(t)) return "sleep";
+  if (/(cycle|irregular|late|missed)/.test(t)) return "calendar-sync";
+  if (/(bloat|gas|digest|bowel|constip)/.test(t)) return "stomach";
+  if (/(cold|hot|temperature|sweat|heat)/.test(t)) return "thermometer";
+  if (/(heart|palpitat|pulse)/.test(t)) return "heart-pulse";
+  return "help-circle-outline";
+}
+
 export default function SymptomCheckerScreen() {
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
@@ -208,15 +236,30 @@ export default function SymptomCheckerScreen() {
                   className="border p-6 mb-6"
                   style={{ backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 24, ...getShadow(colors, isDark) }}
                 >
-                  <Text className="text-base font-bold leading-6 mb-5" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-                    {currentQuestion.text}
-                  </Text>
+                  <View className="flex-row items-start gap-3 mb-5">
+                    <View
+                      className="items-center justify-center rounded-2xl"
+                      style={{ width: 40, height: 40, backgroundColor: softTints.pink }}
+                    >
+                      <MaterialCommunityIcons
+                        name={getQuestionIcon(currentQuestion.text)}
+                        size={20}
+                        color={colors.primary}
+                      />
+                    </View>
+                    <Text
+                      className="flex-1 text-base font-bold leading-6"
+                      style={{ color: colors.foreground, fontFamily: fonts.heading }}
+                    >
+                      {currentQuestion.text}
+                    </Text>
+                  </View>
 
                   {currentQuestion.type === "yesno" ? (
                     <View className="flex-row gap-3">
                       {[
-                        { label: "No", value: false },
-                        { label: "Yes", value: true },
+                        { label: "No", value: false, icon: "close-circle-outline" as const },
+                        { label: "Yes", value: true, icon: "check-circle-outline" as const },
                       ].map((opt) => {
                         const selected = answers[currentQuestion.id] === opt.value;
                         return (
@@ -224,12 +267,17 @@ export default function SymptomCheckerScreen() {
                             key={opt.label}
                             onPress={() => handleAnswer(currentQuestion, opt.value)}
                             activeOpacity={0.8}
-                            className="flex-1 items-center py-3.5 rounded-2xl border"
+                            className="flex-1 flex-row items-center justify-center gap-2 py-3.5 rounded-2xl border"
                             style={{
                               backgroundColor: selected ? colors.primary : colors.input,
                               borderColor: selected ? colors.primary : colors.border,
                             }}
                           >
+                            <MaterialCommunityIcons
+                              name={opt.icon}
+                              size={18}
+                              color={selected ? colors.buttonText : colors.mutedText}
+                            />
                             <Text
                               className="text-sm font-black"
                               style={{ color: selected ? colors.buttonText : colors.foreground, fontFamily: fonts.body }}
@@ -255,14 +303,13 @@ export default function SymptomCheckerScreen() {
                               borderColor: selected ? colors.primary : colors.border,
                             }}
                           >
+                            <MaterialCommunityIcons
+                              name={SCALE_ICONS[value]}
+                              size={18}
+                              color={selected ? colors.buttonText : colors.primary}
+                            />
                             <Text
-                              className="text-[9px] font-black"
-                              style={{ color: selected ? colors.buttonText : colors.foreground, fontFamily: fonts.body }}
-                            >
-                              {value}
-                            </Text>
-                            <Text
-                              className="text-xs font-semibold mt-0.5"
+                              className="text-xs font-semibold mt-1"
                               style={{ color: selected ? colors.buttonText : colors.mutedText, fontFamily: fonts.body }}
                             >
                               {label}

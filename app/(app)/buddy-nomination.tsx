@@ -2,7 +2,6 @@ import { Feather, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -17,6 +16,7 @@ import { useAppState } from "../../components/AppState";
 import { BuddyVideoCall, type BuddyVideoCallHandle } from "../../components/BuddyVideoCall";
 import { alert } from "../../lib/alert";
 import { useTheme } from "../../components/theme";
+import { SkeletonRow } from "../../components/Skeleton";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
 import {
   buddyApi,
@@ -576,8 +576,11 @@ export default function BuddyNomination() {
 
                 {/* MATCH STACK FEED TIMELINE LOOP */}
                 {loadingNominees && nominees.length === 0 ? (
-                  <View className="items-center py-16">
-                    <ActivityIndicator color={colors.primary} />
+                  <View className="gap-2.5">
+                    <SkeletonRow />
+                    <SkeletonRow />
+                    <SkeletonRow />
+                    <SkeletonRow />
                   </View>
                 ) : (
                 <View className="gap-2.5">

@@ -3,7 +3,6 @@ import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   RefreshControl,
   ScrollView,
   StatusBar,
@@ -14,6 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, Defs, LinearGradient as SvgGradient, Polyline, Stop } from "react-native-svg";
 import { useTheme } from "../../components/theme";
+import { SkeletonCard } from "../../components/Skeleton";
 import {
   getHeroGradient,
   getSoftTints,
@@ -260,11 +260,10 @@ export default function Predictions() {
         </View>
 
         {loading ? (
-          <View className="flex-1 items-center justify-center">
-            <ActivityIndicator size="large" color={colors.primary} />
-            <Text className="mt-4 text-sm font-semibold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-              Computing your cycle…
-            </Text>
+          <View className="px-6 mt-6 gap-4">
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
           </View>
         ) : error ? (
           <View className="flex-1 items-center justify-center px-8">

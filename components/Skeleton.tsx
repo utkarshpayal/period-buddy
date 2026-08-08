@@ -95,3 +95,90 @@ export function SkeletonList({ count = 4, style }: { count?: number; style?: Vie
     </View>
   );
 }
+
+/**
+ * A skeleton shaped like a community/social post card — avatar + author,
+ * a few content lines, and an action row. Use it as the loading placeholder
+ * for a feed of posts (Instagram-style) instead of a spinner in an empty box.
+ */
+export function SkeletonPostCard({ style }: { style?: ViewStyle }) {
+  const { colors, isDark } = useTheme();
+  return (
+    <View
+      className="rounded-3xl p-5"
+      style={{
+        backgroundColor: colors.surface,
+        borderWidth: isDark ? 0 : 1,
+        borderColor: colors.border,
+        ...style,
+      }}
+    >
+      {/* Header: avatar + author/time */}
+      <View className="flex-row items-center gap-3">
+        <SkeletonBlock width={40} height={40} radius={20} />
+        <View className="gap-2">
+          <SkeletonBlock width={120} height={12} />
+          <SkeletonBlock width={72} height={10} />
+        </View>
+      </View>
+      {/* Body lines */}
+      <View className="gap-2.5 mt-4">
+        <SkeletonBlock width="100%" height={12} />
+        <SkeletonBlock width="92%" height={12} />
+        <SkeletonBlock width="60%" height={12} />
+      </View>
+      {/* Action row */}
+      <View className="flex-row gap-3 mt-5">
+        <SkeletonBlock width={52} height={22} radius={11} />
+        <SkeletonBlock width={52} height={22} radius={11} />
+        <SkeletonBlock width={40} height={22} radius={11} />
+      </View>
+    </View>
+  );
+}
+
+/** A vertical stack of `count` post-card skeletons for a loading feed. */
+export function SkeletonPostList({ count = 4, style }: { count?: number; style?: ViewStyle }) {
+  return (
+    <View className="gap-4 px-6" style={style}>
+      {Array.from({ length: count }).map((_, i) => (
+        <SkeletonPostCard key={i} />
+      ))}
+    </View>
+  );
+}
+
+/** A media card skeleton: cover image block + title/subtitle, for blog/reel grids. */
+export function SkeletonMediaCard({ style }: { style?: ViewStyle }) {
+  const { colors, isDark } = useTheme();
+  return (
+    <View
+      className="overflow-hidden rounded-2xl"
+      style={{
+        backgroundColor: colors.surface,
+        borderWidth: isDark ? 0 : 1,
+        borderColor: colors.border,
+        ...style,
+      }}
+    >
+      <SkeletonBlock width="100%" height={120} radius={0} />
+      <View className="p-3 gap-2">
+        <SkeletonBlock width="90%" height={12} />
+        <SkeletonBlock width="55%" height={10} />
+      </View>
+    </View>
+  );
+}
+
+/** A 2-column grid of media-card skeletons for a loading blog/reel feed. */
+export function SkeletonMediaGrid({ count = 6, style }: { count?: number; style?: ViewStyle }) {
+  return (
+    <View className="flex-row flex-wrap justify-between px-6" style={{ rowGap: 14, ...style }}>
+      {Array.from({ length: count }).map((_, i) => (
+        <View key={i} style={{ width: "48%" }}>
+          <SkeletonMediaCard />
+        </View>
+      ))}
+    </View>
+  );
+}

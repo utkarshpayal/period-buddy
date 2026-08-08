@@ -11,14 +11,19 @@ import { shareWithAppLink } from "../lib/share";
 
 export type DayEntry = {
   digestion?: "bloated" | "constipated" | "diarrhea" | "normal";
+  // Multi-select counterparts (see lib/api.ts DayEntry) — the scalar field
+  // stays the primary value; these carry the full set for co-occurring states.
+  digestions?: ("bloated" | "constipated" | "diarrhea" | "normal")[];
   discharge?: "creamy" | "egg-white" | "none" | "sticky" | "watery";
   energy?: "high" | "low" | "medium" | "steady";
   exercise?: string[];
   flow?: "heavy" | "light" | "medium" | "none" | "spotting";
   mood?: MoodValue;
+  moods?: MoodValue[];
   isIntimate?: boolean;
   note: string;
   skin?: "acne" | "clear" | "dry" | "oily";
+  skins?: ("acne" | "clear" | "dry" | "oily")[];
   symptoms: string[];
   updatedAt: string;
   sleepHours?: number;

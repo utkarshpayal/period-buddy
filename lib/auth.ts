@@ -37,6 +37,10 @@ export type CycleSettingsPayload = {
   lastPeriodStartDate: string;
   periodLength: number;
   trackingGoal: string;
+  // Full multi-select goal set from onboarding. Sent additively alongside the
+  // scalar `trackingGoal` (which stays the primary/first goal for backward
+  // compat); the backend can adopt this without breaking existing clients.
+  trackingGoals?: string[];
 };
 
 export function loginUser(payload: LoginPayload) {

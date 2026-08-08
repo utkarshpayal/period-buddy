@@ -2,7 +2,6 @@ import { Feather, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   Image,
   Modal,
   Pressable,
@@ -17,6 +16,7 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 import { useTheme, type ThemeColors } from "../../components/theme";
+import { SkeletonCard } from "../../components/Skeleton";
 import { getShadow, getSoftTints, HEALTH_ISSUE_COLORS } from "../../components/ui-tokens";
 import { healthIssuesApi, type HealthIssue as ApiHealthIssue } from "../../lib/api";
 
@@ -290,8 +290,11 @@ export default function HealthIssues() {
 
             {/* HIGH-FIDELITY ASYMMETRIC CLEAN LIST CARD ROWS */}
             {loadingIssues && issues.length === 0 ? (
-              <View className="items-center py-16">
-                <ActivityIndicator color={colors.primary} />
+              <View className="gap-3.5">
+                <SkeletonCard />
+                <SkeletonCard />
+                <SkeletonCard />
+                <SkeletonCard />
               </View>
             ) : (
             <View className="gap-3.5">

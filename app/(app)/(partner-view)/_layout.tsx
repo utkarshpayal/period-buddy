@@ -1,11 +1,11 @@
-import { Ionicons } from "@expo/vector-icons";
 import { requestRecordingPermissionsAsync } from "expo-audio";
 import { Tabs, useRouter } from "expo-router";
 import React, { useEffect } from "react";
-import { Image, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Image, StyleSheet, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../../../components/auth-context";
 import { useTheme } from "../../../components/theme";
+import { TabBarItem } from "../../../components/TabBarItem";
 import { showPermissionModal } from "../../../lib/modal-host";
 import { PartnerViewStateProvider } from "./_state";
 
@@ -74,7 +74,7 @@ const styles = StyleSheet.create({
 
 export default function PartnerViewLayout() {
   const { token, user } = useAuth();
-  const { colors, fonts } = useTheme();
+  const { colors, isDark } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -94,24 +94,28 @@ export default function PartnerViewLayout() {
         screenOptions={{
           headerShown: false,
           tabBarShowLabel: false,
+          // Soft & airy rounded-top sheet — matches the owner dashboard tab bar
+          // exactly (full width, generous top radius, soft upward shadow).
           tabBarStyle: {
             position: "absolute",
-            bottom: 0,
             left: 0,
             right: 0,
+            bottom: 0,
+            height: 62 + Math.max(insets.bottom, 12),
+            paddingBottom: Math.max(insets.bottom, 12),
+            paddingTop: 12,
             backgroundColor: colors.surface,
-            borderColor: colors.border,
-            borderTopWidth: 1,
-            borderLeftWidth: 0,
-            borderRightWidth: 0,
-            borderBottomWidth: 0,
-            height: (Platform.OS === "ios" ? 60 : 58) + Math.max(insets.bottom, Platform.OS === "ios" ? 26 : 14),
-            elevation: 0,
-            shadowColor: "transparent",
-            paddingBottom: Math.max(insets.bottom, Platform.OS === "ios" ? 26 : 14),
-            paddingTop: 10,
+            borderTopLeftRadius: 26,
+            borderTopRightRadius: 26,
+            borderTopWidth: 0,
             overflow: "visible",
+            elevation: 22,
+            shadowColor: isDark ? "#000000" : colors.shadow,
+            shadowOffset: { width: 0, height: -6 },
+            shadowOpacity: isDark ? 0.45 : 0.12,
+            shadowRadius: 20,
           },
+          tabBarItemStyle: { height: 48 },
         }}
       >
         {PARTNER_TABS.map((tab) => (
@@ -159,35 +163,12 @@ export default function PartnerViewLayout() {
                 tab.image ? (
                   <CenterAvatarTabIcon image={tab.image} />
                 ) : (
-                  <View
-                    className="items-center justify-center relative"
-                    style={{
-                      backgroundColor: focused ? colors.primaryLight : "transparent",
-                      borderRadius: 14,
-                      paddingVertical: 5,
-                      paddingHorizontal: 12,
-                      minWidth: 64,
-                      height: 48,
-                      gap: 3,
-                    }}
-                  >
-                    <Ionicons
-                      name={(focused ? tab.iconFocused : tab.iconUnfocused) as any}
-                      size={17}
-                      color={focused ? colors.primary : colors.mutedText}
-                    />
-                    <Text
-                      numberOfLines={1}
-                      style={{
-                        fontFamily: fonts.body,
-                        fontSize: 9.5,
-                        fontWeight: focused ? "700" : "600",
-                        color: focused ? colors.primary : colors.mutedText,
-                      }}
-                    >
-                      {tab.label}
-                    </Text>
-                  </View>
+                  <TabBarItem
+                    focused={focused}
+                    iconFocused={tab.iconFocused as string}
+                    iconUnfocused={tab.iconUnfocused as string}
+                    label={tab.label}
+                  />
                 ),
             }}
           />

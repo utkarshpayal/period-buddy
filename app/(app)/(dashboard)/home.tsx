@@ -273,6 +273,8 @@ export default function Home() {
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={() => router.push("/(app)/notifications")}
+            accessibilityRole="button"
+            accessibilityLabel="Notifications"
             style={{
               width: 38,
               height: 38,
@@ -436,9 +438,9 @@ export default function Home() {
           {/* QUICK ACTIONS */}
           <View className="mx-6 mb-5 flex-row justify-around">
             {[
-              { label: "Log period", icon: "water", route: "/(app)/tracker", primary: true },
-              { label: "Symptoms", icon: "pulse-outline", route: "/(app)/health-issues", primary: false },
-              { label: "Mood", icon: "happy-outline", route: "/(app)/habits", primary: false },
+              { label: "Log period", icon: "water", route: "/(app)/tracker?log=today", primary: true },
+              { label: "Symptoms", icon: "pulse-outline", route: "/(app)/tracker?log=today", primary: false },
+              { label: "Mood", icon: "happy-outline", route: "/(app)/tracker?log=today", primary: false },
             ].map((action, idx) => (
               <TouchableOpacity
                 key={idx}

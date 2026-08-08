@@ -104,14 +104,27 @@ export default function Partner() {
 
     let socket: WebSocket | null = null;
     let isDisconnected = false;
+    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+    // Auto-reconnect with capped backoff + jitter so a dropped socket resumes
+    // live chat instead of silently going stale until the screen remounts.
+    let reconnectAttempts = 0;
+    function scheduleReconnect() {
+      if (isDisconnected) return;
+      const base = Math.min(30000, 1000 * 2 ** reconnectAttempts);
+      reconnectAttempts += 1;
+      reconnectTimeout = setTimeout(connectWS, base / 2 + Math.random() * (base / 2));
+    }
 
     async function connectWS() {
+      if (isDisconnected) return;
       try {
         const wsUrl = await getWebSocketUrl();
+        if (isDisconnected) return;
         socket = new WebSocket(wsUrl);
 
         socket.onopen = () => {
           if (isDisconnected) return;
+          reconnectAttempts = 0;
           console.log("WebSocket connected for partner chat");
           socket?.send(JSON.stringify({
             type: "join",
@@ -170,10 +183,13 @@ export default function Partner() {
         };
 
         socket.onclose = () => {
-          console.log("WebSocket closed");
+          if (isDisconnected) return;
+          console.log("Partner chat WebSocket closed, retrying with backoff…");
+          scheduleReconnect();
         };
       } catch (err) {
         console.warn("Failed to setup WebSocket:", err);
+        scheduleReconnect();
       }
     }
 
@@ -181,6 +197,7 @@ export default function Partner() {
 
     return () => {
       isDisconnected = true;
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
       if (socket) {
         try {
           socket.send(JSON.stringify({
@@ -602,13 +619,13 @@ export default function Partner() {
                         key={msg._id ?? i}
                         className={`max-w-[80%] p-4 rounded-2xl ${isPartner ? "self-start rounded-tl-none border" : "self-end rounded-tr-none"}`}
                         style={{
-                          backgroundColor: isPartner ? colors.surface : colors.primary,
+                          backgroundColor: isPartner ? colors.surface : colors.primaryDark,
                           borderColor: isPartner ? colors.border : undefined,
                         }}
                       >
                         <Text
                           className="text-xs font-medium leading-5"
-                          style={{ color: isPartner ? colors.foreground : colors.buttonText, fontFamily: fonts.body }}
+                          style={{ color: isPartner ? colors.foreground : "#FFFFFF", fontFamily: fonts.body }}
                         >
                           {msg.text}
                         </Text>
@@ -639,12 +656,14 @@ export default function Partner() {
               className="flex-1 px-4 py-3 rounded-xl text-sm"
               style={{ backgroundColor: colors.input, color: colors.foreground, fontFamily: fonts.body }}
               onSubmitEditing={handleSendMessage}
-              blurOnSubmit={false}
+              submitBehavior="submit"
               returnKeyType="send"
             />
             <TouchableOpacity
               disabled={!typedMessage.trim() || sendingMessage}
               onPress={handleSendMessage}
+              accessibilityRole="button"
+              accessibilityLabel="Send message"
               className="p-2.5 rounded-full items-center justify-center"
               style={{ backgroundColor: typedMessage.trim() ? colors.primary : colors.border }}
             >

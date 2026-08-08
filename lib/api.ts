@@ -127,6 +127,12 @@ export type DayEntry = {
   date?: string;
   dateKey: string;
   digestion?: "bloated" | "constipated" | "diarrhea" | "normal";
+  // Multi-select counterparts for fields that can genuinely co-occur in a day
+  // (e.g. bloated *and* constipated, acne *and* oily, several moods). Sent
+  // additively alongside the scalar field — the scalar stays the primary/first
+  // value for backward-compat, and the backend can adopt these arrays without
+  // breaking existing clients. Prefer these in new UI.
+  digestions?: ("bloated" | "constipated" | "diarrhea" | "normal")[];
   discharge?: "creamy" | "egg-white" | "none" | "sticky" | "watery";
   energy?: "high" | "low" | "medium" | "steady";
   exercise?: string[];
@@ -134,10 +140,12 @@ export type DayEntry = {
   isIntimate?: boolean;
   medication?: string[];
   mood?: MoodValue;
+  moods?: MoodValue[];
   note?: string;
   phase?: CyclePhase | string;
   rewardPoints?: number;
   skin?: "acne" | "clear" | "dry" | "oily";
+  skins?: ("acne" | "clear" | "dry" | "oily")[];
   sleepHours?: number;
   stressLevel?: number;
   symptoms?: string[];
@@ -885,7 +893,13 @@ export const cycleApi = {
 
   saveLog: (payload: Omit<DayEntry, "cycleDay" | "phase" | "tokensEarned">) =>
     apiRequest<{ cycleLog: DayEntry; tokensEarned: number }>("/api/cycle/log", {
-      body: JSON.stringify(payload),
+      // Send the client's timezone offset so the backend anchors the tracking
+      // streak to the user's *local* "today", not server UTC (avoids near-
+      // midnight off-by-one for users far from UTC).
+      body: JSON.stringify({
+        ...payload,
+        timezoneOffsetMinutes: new Date().getTimezoneOffset(),
+      }),
       method: "POST",
     }),
 

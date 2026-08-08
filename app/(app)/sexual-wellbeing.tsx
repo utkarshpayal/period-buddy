@@ -2,7 +2,6 @@ import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Linking,
   Modal,
   ScrollView,
@@ -14,6 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppState } from "../../components/AppState";
 import { useTheme } from "../../components/theme";
+import { SkeletonBlock } from "../../components/Skeleton";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
 import { wellbeingApi, type WellbeingResource } from "../../lib/api";
 
@@ -378,8 +378,9 @@ export default function SexualWellbeing() {
                   </Text>
 
                   {loadingWellbeing ? (
-                    <View className="mt-4">
-                      <ActivityIndicator color={colors.primary} />
+                    <View className="flex-row w-full" style={{ gap: 10, marginTop: 14 }}>
+                      <SkeletonBlock width="48%" height={120} radius={16} />
+                      <SkeletonBlock width="48%" height={120} radius={16} />
                     </View>
                   ) : (
                   <View className="flex-row w-full" style={{ gap: 10, marginTop: 14 }}>

@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../../../components/theme";
+import { SkeletonRow } from "../../../components/Skeleton";
 import { partnerApi } from "../../../lib/api";
 import { usePartnerViewState } from "./_state";
 
@@ -131,8 +132,12 @@ export default function PartnerViewChat() {
               </Text>
             </View>
           ) : loadingMessages ? (
-            <View className="flex-1 items-center justify-center">
-              <ActivityIndicator color={colors.primary} />
+            <View className="px-4 pt-4 gap-5">
+              <SkeletonRow />
+              <SkeletonRow />
+              <SkeletonRow />
+              <SkeletonRow />
+              <SkeletonRow />
             </View>
           ) : (
             <>
@@ -162,7 +167,7 @@ export default function PartnerViewChat() {
                           className="rounded-2xl px-3.5 py-2"
                           style={{
                             maxWidth: "80%",
-                            backgroundColor: mine ? colors.primary : colors.surface,
+                            backgroundColor: mine ? colors.primaryDark : colors.surface,
                             borderWidth: mine ? 0 : 1,
                             borderColor: colors.border,
                           }}
@@ -170,7 +175,7 @@ export default function PartnerViewChat() {
                           <Text
                             className="text-xs font-semibold"
                             style={{
-                              color: mine ? colors.buttonText : colors.foreground,
+                              color: mine ? "#FFFFFF" : colors.foreground,
                               fontFamily: fonts.body,
                             }}
                           >
@@ -207,6 +212,8 @@ export default function PartnerViewChat() {
                 <TouchableOpacity
                   disabled={!typedMessage.trim() || sendingMessage}
                   onPress={handleSendMessage}
+                  accessibilityRole="button"
+                  accessibilityLabel="Send message"
                   className="w-9 h-9 rounded-full items-center justify-center"
                   style={{ backgroundColor: typedMessage.trim() ? colors.primary : colors.border }}
                 >

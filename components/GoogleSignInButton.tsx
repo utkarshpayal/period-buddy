@@ -1,7 +1,7 @@
 import * as AuthSession from "expo-auth-session";
 import * as Google from "expo-auth-session/providers/google";
 import * as WebBrowser from "expo-web-browser";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { ActivityIndicator, Text, TouchableOpacity, View, Platform } from "react-native";
 import { googleAuth } from "../lib/auth";
 import type { AuthUser } from "../lib/api";
@@ -59,12 +59,6 @@ export function GoogleSignInButton({
     // app correctly without needing an override here.
   });
 
-  useEffect(() => {
-    if (request) {
-      console.log("DEBUG: Google Auth Redirect URI =", request.redirectUri);
-    }
-  }, [request]);
-
   const handlePress = async () => {
     try {
       const result = await promptAsync();
@@ -72,8 +66,6 @@ export function GoogleSignInButton({
       if (result.type === "dismiss" || result.type === "cancel") return;
 
       if (result.type === "error") {
-        console.log("DEBUG: Google Auth error =", result.error?.code, result.error?.message, result.params);
-
         // Google's OAuth server returns error=access_denied both when the
         // user taps "Cancel"/"Deny" on the consent screen AND when the app
         // itself isn't authorized (unverified consent screen with no test

@@ -22,6 +22,8 @@ export function ScreenHeader({
       <TouchableOpacity
         onPress={onBack ?? (() => router.back())}
         activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
         className="w-9 h-9 items-center justify-center -ml-1 rounded-full"
         style={{ backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
       >

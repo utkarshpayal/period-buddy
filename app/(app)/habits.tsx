@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { alert } from "../../lib/alert";
 import { useTheme } from "../../components/theme";
+import { SkeletonList } from "../../components/Skeleton";
 import { getHeroGradient, getShadow, HABIT_CATEGORY_COLORS } from "../../components/ui-tokens";
 import { habitsApi, type Habit } from "../../lib/api";
 
@@ -127,12 +128,7 @@ export default function Habits() {
         </View>
 
         {loading ? (
-          <View className="flex-1 items-center justify-center px-6">
-            <ActivityIndicator size="large" color={colors.primary} />
-            <Text className="mt-4 text-xs font-bold text-center" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-              Loading your daily routines...
-            </Text>
-          </View>
+          <SkeletonList count={6} style={{ marginTop: 16 }} />
         ) : (
           <ScrollView
             showsVerticalScrollIndicator={false}

@@ -18,6 +18,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { RazorpayCheckoutModal, type RazorpayResult } from "../../components/RazorpayCheckoutModal";
 import { useTheme } from "../../components/theme";
+import { SkeletonRow } from "../../components/Skeleton";
 import {
   consultationApi,
   getWebSocketUrl,
@@ -491,7 +492,11 @@ export default function ConsultationScreen() {
               </Text>
 
               {loadingDoctors ? (
-                <ActivityIndicator color={colors.primary} />
+                <View className="gap-3">
+                  <SkeletonRow />
+                  <SkeletonRow />
+                  <SkeletonRow />
+                </View>
               ) : (
                 filteredDoctors.map((doctor, i) => {
                   const isSelected = selectedDoctor?._id === doctor._id;
@@ -711,7 +716,12 @@ export default function ConsultationScreen() {
                 keyboardShouldPersistTaps="handled"
               >
                 {loadingMessages ? (
-                  <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
+                  <View className="gap-5 pt-2">
+                    <SkeletonRow />
+                    <SkeletonRow />
+                    <SkeletonRow />
+                    <SkeletonRow />
+                  </View>
                 ) : (
                   <View className="gap-4">
                     {/* Hardcoded introductory messages to match mockup precisely */}
@@ -803,12 +813,14 @@ export default function ConsultationScreen() {
                   className="flex-1 px-4 py-3 rounded-xl text-sm"
                   style={{ backgroundColor: colors.input, color: colors.foreground, fontFamily: fonts.body }}
                   onSubmitEditing={handleSendMessage}
-                  blurOnSubmit={false}
+                  submitBehavior="submit"
                   returnKeyType="send"
                 />
                 <TouchableOpacity
                   disabled={!typedMessage.trim() || sendingMessage}
                   onPress={handleSendMessage}
+                  accessibilityRole="button"
+                  accessibilityLabel="Send message"
                   className="h-10 w-10 rounded-full items-center justify-center"
                   style={{ backgroundColor: typedMessage.trim() ? colors.primary : colors.surfaceSoft }}
                 >

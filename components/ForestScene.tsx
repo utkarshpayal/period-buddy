@@ -178,6 +178,20 @@ function cycleTreeForPhase(phase: ForestPhase) {
   return <AutumnSVG />;
 }
 
+// Per-phase motion + ambient particle character, so the scene feels alive in a
+// way that matches the cycle phase: calm and rainy during the period, gently
+// blooming in the follicular phase, bright and energetic at ovulation, and a
+// warm falling-leaf drift in the luteal phase.
+const PHASE_MOTION: Record<
+  ForestPhase,
+  { swayDeg: number; swayMs: number; particle: string; particleColors: string[] }
+> = {
+  period: { swayDeg: 2, swayMs: 2600, particle: "rain", particleColors: ["#9DB4C0", "#B8C6CF"] },
+  follicular: { swayDeg: 3, swayMs: 1900, particle: "petal", particleColors: ["#F6C6D8", "#FADCE6", "#FBE3B3"] },
+  ovulation: { swayDeg: 4.5, swayMs: 1300, particle: "sparkle", particleColors: ["#FFE082", "#FFF3C4", "#FFFFFF"] },
+  luteal: { swayDeg: 3.5, swayMs: 2100, particle: "leaf", particleColors: ["#E4694F", "#E28743", "#D9B26B", "#FFC107"] },
+};
+
 function FloatingCloud({ top, left, delay, scale = 1 }: { top: number; left: number; delay: number; scale?: number }) {
   const drift = useRef(new Animated.Value(0)).current;
 
@@ -241,7 +255,17 @@ function FloatingCloud({ top, left, delay, scale = 1 }: { top: number; left: num
   );
 }
 
-function SwayingTree({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
+function SwayingTree({
+  children,
+  delay = 0,
+  swayDeg = 3,
+  swayMs = 1800,
+}: {
+  children: React.ReactNode;
+  delay?: number;
+  swayDeg?: number;
+  swayMs?: number;
+}) {
   const sway = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -249,13 +273,13 @@ function SwayingTree({ children, delay = 0 }: { children: React.ReactNode; delay
       Animated.sequence([
         Animated.delay(delay),
         Animated.timing(sway, {
-          duration: 1800,
+          duration: swayMs,
           easing: Easing.inOut(Easing.sin),
           toValue: 1,
           useNativeDriver: true,
         }),
         Animated.timing(sway, {
-          duration: 1800,
+          duration: swayMs,
           easing: Easing.inOut(Easing.sin),
           toValue: 0,
           useNativeDriver: true,
@@ -264,11 +288,140 @@ function SwayingTree({ children, delay = 0 }: { children: React.ReactNode; delay
     );
     animation.start();
     return () => animation.stop();
-  }, [delay, sway]);
+  }, [delay, sway, swayMs]);
 
-  const rotate = sway.interpolate({ inputRange: [0, 1], outputRange: ["-3deg", "3deg"] });
+  const rotate = sway.interpolate({
+    inputRange: [0, 1],
+    outputRange: [`-${swayDeg}deg`, `${swayDeg}deg`],
+  });
 
   return <Animated.View style={{ transform: [{ rotate }] }}>{children}</Animated.View>;
+}
+
+// A softly breathing sun/moon: the glow radius and scale pulse gently. At
+// ovulation the glow is strongest, giving the scene its "bright day" feel.
+function PulsingSun({ color, glow, top }: { color: string; glow: string | null; top: number }) {
+  const pulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { duration: 2200, easing: Easing.inOut(Easing.sin), toValue: 1, useNativeDriver: true }),
+        Animated.timing(pulse, { duration: 2200, easing: Easing.inOut(Easing.sin), toValue: 0, useNativeDriver: true }),
+      ]),
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [pulse]);
+
+  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, glow ? 1.08 : 1.02] });
+
+  return (
+    <Animated.View
+      style={{
+        position: "absolute",
+        top,
+        right: 28,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: color,
+        transform: [{ scale }],
+        ...(glow
+          ? { shadowColor: glow, shadowOpacity: 0.9, shadowRadius: 16, shadowOffset: { width: 0, height: 0 } }
+          : null),
+      }}
+    />
+  );
+}
+
+// One drifting ambient particle (rain streak / petal / sparkle / leaf) that
+// falls from above the scene to below it, swaying sideways on the way down and
+// then looping. Shape and motion are chosen per phase.
+function Particle({
+  kind,
+  color,
+  startLeft,
+  delay,
+  height,
+  swayX,
+}: {
+  kind: string;
+  color: string;
+  startLeft: number;
+  delay: number;
+  height: number;
+  swayX: number;
+}) {
+  const t = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const duration = kind === "rain" ? 1400 : kind === "sparkle" ? 2600 : 3400;
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.delay(delay),
+        Animated.timing(t, { duration, easing: Easing.linear, toValue: 1, useNativeDriver: true }),
+      ]),
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [t, delay, kind]);
+
+  const translateY = t.interpolate({ inputRange: [0, 1], outputRange: [-12, height + 12] });
+  const translateX = t.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, swayX, 0] });
+  const opacity = t.interpolate({ inputRange: [0, 0.1, 0.85, 1], outputRange: [0, 1, 1, 0] });
+  const rotate = t.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "220deg"] });
+
+  const base = {
+    position: "absolute" as const,
+    top: 0,
+    left: startLeft,
+    transform: [{ translateX }, { translateY }, ...(kind === "rain" ? [] : [{ rotate }])],
+    opacity,
+  };
+
+  if (kind === "rain") {
+    return <Animated.View style={[base, { width: 2, height: 10, borderRadius: 1, backgroundColor: color }]} />;
+  }
+  if (kind === "sparkle") {
+    return <Animated.View style={[base, { width: 5, height: 5, borderRadius: 2.5, backgroundColor: color }]} />;
+  }
+  // petal / leaf — a small rounded blob, leaves slightly larger
+  const s = kind === "leaf" ? 9 : 7;
+  return (
+    <Animated.View
+      style={[base, { width: s, height: s * 0.7, borderTopLeftRadius: s, borderBottomRightRadius: s, backgroundColor: color }]}
+    />
+  );
+}
+
+function FallingParticles({ phase, height, width = 320 }: { phase: ForestPhase; height: number; width?: number }) {
+  const motion = PHASE_MOTION[phase];
+  const count = motion.particle === "rain" ? 14 : motion.particle === "sparkle" ? 10 : 9;
+  // Deterministic spread (no Math.random — keeps SSR/reanimated-safe & stable).
+  const particles = Array.from({ length: count }, (_, i) => ({
+    key: i,
+    color: motion.particleColors[i % motion.particleColors.length],
+    startLeft: 12 + ((i * 53) % (width - 24)),
+    delay: (i * 260) % 2400,
+    swayX: motion.particle === "rain" ? 4 : (i % 2 === 0 ? 16 : -16),
+  }));
+
+  return (
+    <View pointerEvents="none" style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}>
+      {particles.map((p) => (
+        <Particle
+          key={p.key}
+          kind={motion.particle}
+          color={p.color}
+          startLeft={p.startLeft}
+          delay={p.delay}
+          height={height}
+          swayX={p.swayX}
+        />
+      ))}
+    </View>
+  );
 }
 
 export type ForestSceneProps = {
@@ -280,6 +433,7 @@ export function ForestScene({ height = 236, phase }: ForestSceneProps) {
   const sky = PHASE_SKY[phase];
   const hills = PHASE_HILLS[phase];
   const sun = PHASE_SUN[phase];
+  const motion = PHASE_MOTION[phase];
 
   return (
     <View style={{ height, width: "100%", overflow: "hidden", position: "relative" }}>
@@ -291,29 +445,14 @@ export function ForestScene({ height = 236, phase }: ForestSceneProps) {
         style={{ position: "absolute", top: 0, left: 0, right: 0, height: "60%" }}
       />
 
-      {/* Sun / moon */}
-      <View
-        style={{
-          position: "absolute",
-          top: phase === "period" ? 18 : 14,
-          right: 28,
-          width: 40,
-          height: 40,
-          borderRadius: 20,
-          backgroundColor: sun.color,
-          ...(sun.glow
-            ? {
-                shadowColor: sun.glow,
-                shadowOpacity: 0.9,
-                shadowRadius: 14,
-                shadowOffset: { width: 0, height: 0 },
-              }
-            : null),
-        }}
-      />
+      {/* Sun / moon — softly breathing, glow varies by phase */}
+      <PulsingSun color={sun.color} glow={sun.glow} top={phase === "period" ? 18 : 14} />
 
       <FloatingCloud top={20} left={20} delay={0} />
       <FloatingCloud top={46} left={160} delay={2000} scale={0.8} />
+
+      {/* Phase-specific ambient particles (rain / petals / sparkles / leaves) */}
+      <FallingParticles phase={phase} height={height} />
 
       {/* Hills */}
       <LinearGradient
@@ -344,14 +483,16 @@ export function ForestScene({ height = 236, phase }: ForestSceneProps) {
           gap: 10,
         }}
       >
-        <SwayingTree delay={0}>
+        <SwayingTree delay={0} swayDeg={motion.swayDeg} swayMs={motion.swayMs}>
           <PalmSVG size={44} />
         </SwayingTree>
-        <SwayingTree delay={300}>
+        <SwayingTree delay={300} swayDeg={motion.swayDeg} swayMs={motion.swayMs}>
           <MushroomSVG size={44} />
         </SwayingTree>
-        <SwayingTree delay={150}>{cycleTreeForPhase(phase)}</SwayingTree>
-        <SwayingTree delay={450}>
+        <SwayingTree delay={150} swayDeg={motion.swayDeg + 1} swayMs={motion.swayMs}>
+          {cycleTreeForPhase(phase)}
+        </SwayingTree>
+        <SwayingTree delay={450} swayDeg={motion.swayDeg} swayMs={motion.swayMs}>
           <PineSVG size={44} />
         </SwayingTree>
       </View>

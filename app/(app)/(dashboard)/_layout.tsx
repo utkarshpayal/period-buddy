@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import { Tabs, useRouter } from "expo-router";
 import React, { useState, useEffect } from "react";
 import {
@@ -8,12 +7,12 @@ import {
   ScrollView,
   StatusBar,
   StyleSheet,
-  Text,
   TouchableOpacity,
   View,
 } from "react-native";
 import { requestRecordingPermissionsAsync } from "expo-audio";
 import { useTheme } from "../../../components/theme";
+import { TabBarItem } from "../../../components/TabBarItem";
 
 import { useAuth } from "../../../components/auth-context";
 import { ProfileOnboarding } from "../../../components/profile-onboarding";
@@ -101,7 +100,7 @@ const styles = StyleSheet.create({
 });
 
 export default function DashboardLayout() {
-  const { colors, isDark, fonts } = useTheme();
+  const { colors, isDark } = useTheme();
   const { token, user, signIn } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -125,6 +124,16 @@ export default function DashboardLayout() {
     let socket: WebSocket | null = null;
     let isDisconnected = false;
     let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+    // Capped exponential backoff with jitter — a fixed 3s retry means every
+    // client reconnects in lockstep after a server restart (thundering herd).
+    let reconnectAttempts = 0;
+    function scheduleReconnect() {
+      if (isDisconnected) return;
+      const base = Math.min(30000, 1000 * 2 ** reconnectAttempts);
+      const delay = base / 2 + Math.random() * (base / 2);
+      reconnectAttempts += 1;
+      reconnectTimeout = setTimeout(connectWS, delay);
+    }
 
     function connectWS() {
       if (isDisconnected) return;
@@ -137,6 +146,7 @@ export default function DashboardLayout() {
 
           socket.onopen = () => {
             if (isDisconnected) return;
+            reconnectAttempts = 0; // reset backoff on a healthy connection
             console.log("WebSocket connected for global notifications");
 
             // Join personal room for comment/like notifications on our posts
@@ -176,13 +186,13 @@ export default function DashboardLayout() {
 
           socket.onclose = () => {
             if (isDisconnected) return;
-            console.log("Notification WebSocket closed, retrying in 3s...");
-            reconnectTimeout = setTimeout(connectWS, 3000);
+            console.log("Notification WebSocket closed, retrying with backoff…");
+            scheduleReconnect();
           };
         })
         .catch((err) => {
-          console.warn("Failed to get WebSocket URL, retrying in 5s...", err);
-          reconnectTimeout = setTimeout(connectWS, 5000);
+          console.warn("Failed to get WebSocket URL, retrying with backoff…", err);
+          scheduleReconnect();
         });
     }
 
@@ -226,6 +236,7 @@ export default function DashboardLayout() {
             lastPeriodStartDate: values.lastPeriodStartDate,
             periodLength: values.periodLength,
             trackingGoal: values.trackingGoal,
+            trackingGoals: values.trackingGoals,
           },
           token,
         );
@@ -277,24 +288,31 @@ export default function DashboardLayout() {
       screenOptions={{
         headerShown: false,
         tabBarShowLabel: false,
+        // Soft & airy: a full-width bar with a generous rounded top (like a
+        // raised bottom sheet) and a soft upward shadow — roomier and more
+        // premium than a flat strip, without the cramped feel of a fully
+        // detached pill around the protruding center avatar.
         tabBarStyle: {
           position: "absolute",
-          bottom: 0,
           left: 0,
           right: 0,
+          bottom: 0,
+          height: 62 + Math.max(insets.bottom, 12),
+          paddingBottom: Math.max(insets.bottom, 12),
+          paddingTop: 12,
           backgroundColor: colors.surface,
-          borderColor: colors.border,
-          borderTopWidth: 1,
-          borderLeftWidth: 0,
-          borderRightWidth: 0,
-          borderBottomWidth: 0,
-          height: (Platform.OS === "ios" ? 60 : 58) + Math.max(insets.bottom, Platform.OS === "ios" ? 26 : 14),
-          elevation: 0,
-          shadowColor: "transparent",
-          paddingBottom: Math.max(insets.bottom, Platform.OS === "ios" ? 26 : 14),
-          paddingTop: 10,
+          borderTopLeftRadius: 26,
+          borderTopRightRadius: 26,
+          borderTopWidth: 0,
           overflow: "visible",
+          // Soft upward ambient shadow so the sheet lifts off the content.
+          elevation: 22,
+          shadowColor: isDark ? "#000000" : colors.shadow,
+          shadowOffset: { width: 0, height: -6 },
+          shadowOpacity: isDark ? 0.45 : 0.12,
+          shadowRadius: 20,
         },
+        tabBarItemStyle: { height: 48 },
       }}
     >
       {DASHBOARD_TABS.map((tab) => (
@@ -352,48 +370,13 @@ export default function DashboardLayout() {
               tab.image ? (
                 <CenterAvatarTabIcon image={tab.image} />
               ) : (
-              <View
-                className="items-center justify-center relative"
-                style={{
-                  backgroundColor: focused ? colors.primaryLight : "transparent",
-                  borderRadius: 14,
-                  paddingVertical: 5,
-                  paddingHorizontal: 12,
-                  minWidth: 64,
-                  height: 48,
-                  gap: 3,
-                }}
-              >
-                <Ionicons
-                  name={(focused ? tab.iconFocused : tab.iconUnfocused) as any}
-                  size={17}
-                  color={focused ? colors.primary : colors.mutedText}
+                <TabBarItem
+                  focused={focused}
+                  iconFocused={tab.iconFocused as string}
+                  iconUnfocused={tab.iconUnfocused as string}
+                  label={tab.label}
+                  showBadge={tab.name === "community" && unreadCommunity}
                 />
-                {tab.name === "community" && unreadCommunity && (
-                  <View
-                    style={{
-                      position: "absolute",
-                      top: 4,
-                      right: 10,
-                      width: 6,
-                      height: 6,
-                      borderRadius: 3,
-                      backgroundColor: colors.danger,
-                    }}
-                  />
-                )}
-                <Text
-                  numberOfLines={1}
-                  style={{
-                    fontFamily: fonts.body,
-                    fontSize: 9.5,
-                    fontWeight: focused ? "700" : "600",
-                    color: focused ? colors.primary : colors.mutedText,
-                  }}
-                >
-                  {tab.label}
-                </Text>
-              </View>
               ),
           }}
         />

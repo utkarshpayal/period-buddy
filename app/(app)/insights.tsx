@@ -7,7 +7,7 @@ import { LoadingErrorState } from "../../components/LoadingErrorState";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { SkeletonCard } from "../../components/Skeleton";
 import { useTheme } from "../../components/theme";
-import { getShadow, getSoftTints } from "../../components/ui-tokens";
+import { getHeroGradient, getShadow, getSoftTints } from "../../components/ui-tokens";
 import { useAsyncLoad } from "../../hooks/useAsyncLoad";
 import { insightsApi } from "../../lib/api";
 
@@ -22,14 +22,12 @@ const PHASE_LABELS: Record<string, string> = {
 
 function SuggestionChips({
   items,
-  color,
   bg,
 }: {
   items: string[];
-  color: string;
   bg: string;
 }) {
-  const { fonts } = useTheme();
+  const { colors, fonts } = useTheme();
   if (!items.length) return null;
   return (
     <View className="flex-row flex-wrap gap-2 mt-3">
@@ -39,7 +37,9 @@ function SuggestionChips({
           className="rounded-full px-3 py-1.5"
           style={{ backgroundColor: bg }}
         >
-          <Text className="text-[11px] font-bold" style={{ color, fontFamily: fonts.body }}>
+          {/* Text uses foreground, not the accent `color`: the chip's bg is a
+              soft tint of that same accent, so accent-on-tint was near-invisible. */}
+          <Text className="text-[11px] font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
             {item}
           </Text>
         </View>
@@ -77,7 +77,7 @@ function InsightCard({
         <View className="p-2 rounded-xl" style={{ backgroundColor: bg }}>
           <Feather name={icon} size={15} color={color} />
         </View>
-        <Text className="text-xs font-black uppercase tracking-wide" style={{ color, fontFamily: fonts.heading }}>
+        <Text className="text-xs font-black uppercase tracking-wide" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
           {title}
         </Text>
       </View>
@@ -176,11 +176,11 @@ export default function DailyInsightsScreen() {
                 className="border overflow-hidden mb-5"
                 style={{ borderColor: colors.border, borderRadius: 22, ...getShadow(colors, isDark) }}
               >
-                <LinearGradient colors={[colors.secondary, colors.primaryLight]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="p-[18px]">
-                  <Text className="text-xs font-bold tracking-widest uppercase mb-1" style={{ color: colors.buttonText, opacity: 0.85, fontFamily: fonts.heading }}>
+                <LinearGradient colors={getHeroGradient(colors, isDark) as [string, string, string]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="p-[18px]">
+                  <Text className="text-xs font-bold tracking-widest uppercase mb-1" style={{ color: "#FFFFFF", opacity: 0.85, fontFamily: fonts.heading }}>
                     {phaseLabel ? `${phaseLabel} phase` : "Today"}
                   </Text>
-                  <Text className="text-[13.5px] font-semibold leading-6" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
+                  <Text className="text-[13.5px] font-semibold leading-6" style={{ color: "#FFFFFF", fontFamily: fonts.body }}>
                     {data.dailySummary || "No summary available yet — keep logging to unlock a fuller picture."}
                   </Text>
                 </LinearGradient>
@@ -241,11 +241,11 @@ export default function DailyInsightsScreen() {
                       <View className="p-2 rounded-xl" style={{ backgroundColor: section.bg }}>
                         <Feather name={section.icon} size={15} color={section.color} />
                       </View>
-                      <Text className="text-xs font-black uppercase tracking-wide" style={{ color: section.color, fontFamily: fonts.heading }}>
+                      <Text className="text-xs font-black uppercase tracking-wide" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
                         {section.title} suggestions
                       </Text>
                     </View>
-                    <SuggestionChips items={section.items} color={section.color} bg={section.bg} />
+                    <SuggestionChips items={section.items} bg={section.bg} />
                   </View>
                 ) : null,
               )}

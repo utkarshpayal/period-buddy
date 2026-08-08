@@ -49,7 +49,7 @@ const onboardingSteps = [
   {
     icon: "flag-outline",
     id: "trackingGoal",
-    subtitle: "This helps us tailor insights and reminders for you.",
+    subtitle: "Pick all that apply — this helps us tailor insights and reminders for you.",
     title: "What brings you to Period Buddy?",
   },
 ] as const;
@@ -76,6 +76,7 @@ export type ProfileOnboardingValues = {
   phone: string;
   profilePicture: string;
   trackingGoal: string;
+  trackingGoals: string[];
 };
 
 type ProfileOnboardingProps = {
@@ -98,7 +99,19 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
   const [isPeriodDatePickerVisible, setIsPeriodDatePickerVisible] = useState(false);
   const [periodLength, setPeriodLength] = useState("5");
   const [cycleLength, setCycleLength] = useState("28");
-  const [trackingGoal, setTrackingGoal] = useState("");
+  // Multi-select: users often have more than one reason for tracking. The
+  // primary (first-selected) goal is still sent as the scalar `trackingGoal`
+  // for backend backward-compat; the full set is sent additively as
+  // `trackingGoals` for the backend to adopt.
+  const [trackingGoals, setTrackingGoals] = useState<string[]>([]);
+  function toggleTrackingGoal(value: string) {
+    setErrorMessage("");
+    setTrackingGoals((current) =>
+      current.includes(value)
+        ? current.filter((v) => v !== value)
+        : [...current, value],
+    );
+  }
 
   const minAdultDate = new Date();
   minAdultDate.setFullYear(minAdultDate.getFullYear() - 13);
@@ -202,8 +215,8 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
       }
     }
 
-    if (currentStep.id === "trackingGoal" && !trackingGoal) {
-      setErrorMessage("Please select a goal to continue.");
+    if (currentStep.id === "trackingGoal" && trackingGoals.length === 0) {
+      setErrorMessage("Please select at least one goal to continue.");
       return;
     }
 
@@ -228,7 +241,8 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
       periodLength: Number(periodLength) || 5,
       phone: phone.trim(),
       profilePicture: profilePictureUrl ?? "",
-      trackingGoal: trackingGoal || "track_period",
+      trackingGoal: trackingGoals[0] || "track_period",
+      trackingGoals: trackingGoals.length ? trackingGoals : ["track_period"],
     };
 
     try {
@@ -431,17 +445,14 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
       return (
         <View className="mb-4 gap-3">
           {trackingGoalOptions.map((option) => {
-            const isSelected = trackingGoal === option.value;
+            const isSelected = trackingGoals.includes(option.value);
 
             return (
               <TouchableOpacity
                 activeOpacity={0.9}
                 className="flex-row items-center justify-between rounded-2xl border px-5 py-4"
                 key={option.value}
-                onPress={() => {
-                  setErrorMessage("");
-                  setTrackingGoal(option.value);
-                }}
+                onPress={() => toggleTrackingGoal(option.value)}
                 style={{
                   backgroundColor: isSelected ? colors.primaryLight : colors.input,
                   borderColor: isSelected ? colors.primary : colors.border,

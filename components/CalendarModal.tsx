@@ -104,7 +104,7 @@ export function CalendarModal({
         >
           {/* Year navigation */}
           <View className="flex-row items-center justify-between mb-1">
-            <TouchableOpacity onPress={() => changeYear(-1)} className="p-2" hitSlop={6}>
+            <TouchableOpacity onPress={() => changeYear(-1)} accessibilityRole="button" accessibilityLabel="Previous year" className="p-2" hitSlop={6}>
               <Ionicons name="play-back" size={14} color={colors.mutedText} />
             </TouchableOpacity>
             <Text
@@ -113,14 +113,14 @@ export function CalendarModal({
             >
               {viewedYear}
             </Text>
-            <TouchableOpacity onPress={() => changeYear(1)} className="p-2" hitSlop={6}>
+            <TouchableOpacity onPress={() => changeYear(1)} accessibilityRole="button" accessibilityLabel="Next year" className="p-2" hitSlop={6}>
               <Ionicons name="play-forward" size={14} color={colors.mutedText} />
             </TouchableOpacity>
           </View>
 
           {/* Month navigation */}
           <View className="flex-row items-center justify-between mb-4">
-            <TouchableOpacity onPress={() => changeMonth(-1)} className="p-2" hitSlop={8}>
+            <TouchableOpacity onPress={() => changeMonth(-1)} accessibilityRole="button" accessibilityLabel="Previous month" className="p-2" hitSlop={8}>
               <Ionicons name="chevron-back" size={20} color={colors.foreground} />
             </TouchableOpacity>
             <Text
@@ -129,7 +129,7 @@ export function CalendarModal({
             >
               {MONTH_LABELS[viewedMonth]}
             </Text>
-            <TouchableOpacity onPress={() => changeMonth(1)} className="p-2" hitSlop={8}>
+            <TouchableOpacity onPress={() => changeMonth(1)} accessibilityRole="button" accessibilityLabel="Next month" className="p-2" hitSlop={8}>
               <Ionicons name="chevron-forward" size={20} color={colors.foreground} />
             </TouchableOpacity>
           </View>

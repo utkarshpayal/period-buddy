@@ -1,5 +1,5 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -21,7 +21,7 @@ import { useAppState } from "../../../components/AppState";
 import { useAuth } from "../../../components/auth-context";
 import DayDetailsModal from "../../../components/DayDetailsModal";
 import { useTheme } from "../../../components/theme";
-import { getHeroGradient, getShadow, getSoftTints } from "../../../components/ui-tokens";
+import { getShadow, getSoftTints } from "../../../components/ui-tokens";
 import {
   authApi,
   cycleApi,
@@ -277,13 +277,21 @@ function RingScrubber({
   nextPeriodDaysAway: number;
 }) {
   const { colors, isDark, fonts } = useTheme();
-  const heroGradient = getHeroGradient(colors, isDark);
   const displayDay = previewCycleDay ?? cycleDay;
   const displayPhase = getCyclePhase(
     displayDay,
     activePeriodLength,
     activeCycleLength,
   );
+  // The progress arc is a clean single-hue gradient tinted by the current
+  // cycle phase (light → full via stopOpacity), so it reads as one cohesive
+  // color instead of the muddy pink→lavender→mint hero mix it used before.
+  const ringColor = {
+    period: colors.rose,
+    follicular: colors.accent,
+    ovulation: colors.secondary,
+    luteal: colors.warning,
+  }[displayPhase];
   const isHighFertility =
     displayPhase === "ovulation" ||
     (displayDay >= ovulationDayPivot - 5 && displayDay <= ovulationDayPivot);
@@ -333,13 +341,8 @@ function RingScrubber({
       <Svg width={RING_SIZE} height={RING_SIZE} viewBox="0 0 100 100">
         <Defs>
           <SvgGradient id="cycleRingGradient" x1="0" y1="0" x2="1" y2="1">
-            {heroGradient.map((stop, index) => (
-              <Stop
-                key={stop}
-                offset={index / (heroGradient.length - 1)}
-                stopColor={stop}
-              />
-            ))}
+            <Stop offset="0" stopColor={ringColor} stopOpacity={0.5} />
+            <Stop offset="1" stopColor={ringColor} stopOpacity={1} />
           </SvgGradient>
         </Defs>
         <Circle
@@ -471,6 +474,9 @@ function RingScrubber({
 export default function Tracker() {
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
+  // Home's "Symptoms"/"Mood" quick actions deep-link here with ?log=today to
+  // auto-open today's day-log modal (that's where symptoms & mood are logged).
+  const { log: logParam } = useLocalSearchParams<{ log?: string }>();
   const [selectedDate, setSelectedDate] = useState<SelectedDate | null>(null);
   const [dayDetailsVisible, setDayDetailsVisible] = useState(false);
   const [selectedYear, setSelectedYear] = useState(() =>
@@ -712,6 +718,7 @@ export default function Tracker() {
       energy: log.energy,
       flow: log.flow,
       mood: log.mood,
+      moods: log.moods,
       isIntimate: log.isIntimate ?? false,
       note: log.note ?? "",
       symptoms: log.symptoms ?? [],
@@ -723,7 +730,9 @@ export default function Tracker() {
       stressLevel: log.stressLevel,
       medication: log.medication,
       digestion: log.digestion,
+      digestions: log.digestions,
       skin: log.skin,
+      skins: log.skins,
       discharge: log.discharge,
       exercise: log.exercise,
     };
@@ -817,6 +826,12 @@ export default function Tracker() {
     openDate(today);
   }
 
+  // Auto-open today's log when arriving from Home's Symptoms/Mood shortcuts.
+  useEffect(() => {
+    if (logParam === "today") openToday();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logParam]);
+
   function openCycleSettings() {
     setSettingsError("");
     setSettingsVisible(true);
@@ -846,9 +861,9 @@ export default function Tracker() {
     if (
       Number.isNaN(reminderDaysBefore) ||
       reminderDaysBefore < 0 ||
-      reminderDaysBefore > 14
+      reminderDaysBefore > 10
     ) {
-      setSettingsError("Reminder timing should be between 0 and 14 days.");
+      setSettingsError("Reminder timing should be between 0 and 10 days.");
       return;
     }
 
@@ -1025,6 +1040,15 @@ export default function Tracker() {
               const entry =
                 dayEntries[dateKey] ?? remoteDayEntries[dateKey];
               const hasFlowLog = Boolean(entry?.flow && entry.flow !== "none");
+              const hasLog = Boolean(
+                entry?.note?.trim() ||
+                entry?.symptoms?.length ||
+                entry?.flow ||
+                entry?.mood ||
+                entry?.energy ||
+                dayNotes[dateKey]?.trim(),
+              );
+              const isPredictedPeriod = phase === "period" && !hasLog;
               const isOvulationPeakDay = cDay === ovulationDayPivot;
               const isFertile =
                 cDay >= ovulationDayPivot - 5 && cDay <= ovulationDayPivot + 1;
@@ -1051,36 +1075,46 @@ export default function Tracker() {
                     {weekday}
                   </Text>
                   <View
-                    className="h-10 w-10 items-center justify-center rounded-2xl border"
+                    className="h-10 w-10 items-center justify-center rounded-2xl relative"
                     style={{
-                      backgroundColor: isToday ? colors.primary : style.bg,
-                      borderColor: isToday
+                      // Logged day = solid filled; predicted (unlogged) period
+                      // day = dashed outline only.
+                      backgroundColor: isToday
                         ? colors.primary
-                        : hasFlowLog
-                          ? style.color
+                        : hasLog
+                          ? style.bg
                           : "transparent",
-                      borderStyle: hasFlowLog ? "solid" : "dashed",
-                      borderWidth: isToday || hasFlowLog ? 1.5 : 0,
-                      paddingTop: markerIcon && !isToday ? 2 : 0,
+                      borderColor: isToday ? colors.primary : style.color,
+                      borderStyle: isPredictedPeriod && !isToday ? "dashed" : "solid",
+                      borderWidth: isToday || hasLog || isPredictedPeriod ? 1.5 : 0,
                     }}
                   >
-                    {markerIcon && !isToday && (
-                      <MaterialCommunityIcons
-                        name={markerIcon}
-                        size={10}
-                        color={style.color}
-                      />
-                    )}
                     <Text
                       className="text-xs font-extrabold"
                       style={{
-                        color: isToday ? colors.buttonText : style.color,
+                        color: isToday
+                          ? colors.buttonText
+                          : phase === "period"
+                            ? style.color
+                            : colors.foreground,
                         fontFamily: fonts.body,
-                        marginTop: markerIcon && !isToday ? 1 : 0,
                       }}
                     >
                       {dayNum}
                     </Text>
+                    {markerIcon && !isToday ? (
+                      <MaterialCommunityIcons
+                        name={markerIcon}
+                        size={9}
+                        color={style.color}
+                        style={{ position: "absolute", bottom: 2 }}
+                      />
+                    ) : !isToday && phase !== "period" ? (
+                      <View
+                        className="absolute bottom-1.5 h-1 w-1 rounded-full"
+                        style={{ backgroundColor: style.color, opacity: 0.55 }}
+                      />
+                    ) : null}
                   </View>
                 </TouchableOpacity>
               );
@@ -1218,31 +1252,6 @@ export default function Tracker() {
             ))}
           </View>
 
-          {/* Elegant Horizontal Legend Row */}
-          <View className="px-6 mt-6 flex-row flex-wrap gap-2">
-            {(Object.keys(phaseStyles) as CyclePhase[]).map((key) => (
-              <View
-                key={key}
-                className="flex-row items-center px-3 py-1.5 rounded-full border"
-                style={{
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                }}
-              >
-                <View
-                  className="w-2.5 h-2.5 rounded-full mr-2"
-                  style={{ backgroundColor: phaseStyles[key].color }}
-                />
-                <Text
-                  className="text-[10px] font-bold tracking-wide"
-                  style={{ color: colors.foreground, fontFamily: fonts.body }}
-                >
-                  {phaseStyles[key].label}
-                </Text>
-              </View>
-            ))}
-          </View>
-
           {/* Calendar Body Area */}
           <View className="mx-4 mt-6">
             <View
@@ -1291,70 +1300,36 @@ export default function Tracker() {
                     />
                   </TouchableOpacity>
                 </View>
+                {/* The single calendar legend — one chip per cycle phase,
+                    colored from phaseStyles so it always matches the day cells. */}
                 <View className="mt-2 flex-row items-center flex-wrap gap-x-4 gap-y-1.5">
-                  <View className="flex-row items-center gap-1.5">
-                    <View
-                      className="h-4 w-4 rounded-full items-center justify-center"
-                      style={{ backgroundColor: colors.danger }}
-                    >
-                      <MaterialCommunityIcons
-                        name="water"
-                        size={9}
-                        color={colors.buttonText}
-                      />
+                  {(
+                    [
+                      { phase: "period", icon: "water" },
+                      { phase: "follicular", icon: "sprout" },
+                      { phase: "ovulation", icon: "egg" },
+                      { phase: "luteal", icon: "moon-waning-crescent" },
+                    ] as const
+                  ).map(({ phase, icon }) => (
+                    <View key={phase} className="flex-row items-center gap-1.5">
+                      <View
+                        className="h-4 w-4 rounded-full items-center justify-center"
+                        style={{ backgroundColor: phaseStyles[phase].color }}
+                      >
+                        <MaterialCommunityIcons
+                          name={icon}
+                          size={9}
+                          color={colors.buttonText}
+                        />
+                      </View>
+                      <Text
+                        className="text-[10px] font-bold"
+                        style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                      >
+                        {phaseStyles[phase].label}
+                      </Text>
                     </View>
-                    <Text
-                      className="text-[10px] font-bold"
-                      style={{
-                        color: colors.mutedText,
-                        fontFamily: fonts.body,
-                      }}
-                    >
-                      Period
-                    </Text>
-                  </View>
-                  <View className="flex-row items-center gap-1.5">
-                    <View
-                      className="h-4 w-4 rounded-full items-center justify-center"
-                      style={{ backgroundColor: colors.success }}
-                    >
-                      <MaterialCommunityIcons
-                        name="egg"
-                        size={9}
-                        color={colors.buttonText}
-                      />
-                    </View>
-                    <Text
-                      className="text-[10px] font-bold"
-                      style={{
-                        color: colors.mutedText,
-                        fontFamily: fonts.body,
-                      }}
-                    >
-                      Ovulation
-                    </Text>
-                  </View>
-                  <View className="flex-row items-center gap-1.5">
-                    <View
-                      className="h-4 w-4 rounded-full items-center justify-center"
-                      style={{ backgroundColor: colors.info }}
-                    >
-                      <MaterialCommunityIcons
-                        name="dna"
-                        size={9}
-                        color={colors.buttonText}
-                      />
-                    </View>
-                    <Text
-                      className="text-[10px] font-bold"
-                      style={{
-                        color: colors.mutedText,
-                        fontFamily: fonts.body,
-                      }}
-                    >
-                      Fertile window
-                    </Text>
-                  </View>
+                  ))}
                 </View>
               </View>
 
@@ -1463,15 +1438,23 @@ export default function Tracker() {
                               : isFertileDay
                                 ? "dna"
                                 : null;
-                          const isPredictedHighlight =
-                            (cell.phase === "period" && !hasFlowLog) ||
-                            isOvulationPeak;
-
+                          // Logged vs predicted: a day the user actually logged
+                          // is rendered as a SOLID FILLED pill (confirmed); a
+                          // predicted period day they haven't logged yet shows
+                          // as a DASHED OUTLINE only (algorithm guess, not
+                          // confirmed). Other unlogged days stay neutral with a
+                          // small phase dot, the selected day is a solid primary
+                          // pill, and today keeps a thin primary ring.
+                          const isPeriod = cell.phase === "period";
+                          const isLogged = hasLog;
+                          const isPredictedPeriod = isPeriod && !isLogged;
                           const dayTextColor = isSelected
                             ? colors.buttonText
                             : isToday
                               ? colors.primary
-                              : style.color;
+                              : isPeriod || isLogged
+                                ? style.color
+                                : colors.foreground;
 
                           return (
                             <TouchableOpacity
@@ -1482,62 +1465,54 @@ export default function Tracker() {
                               style={{ height: 46, width: `${100 / 7}%` }}
                             >
                               <View
-                                className="items-center justify-center rounded-2xl border relative"
+                                className="items-center justify-center rounded-2xl relative"
                                 style={{
+                                  // Filled when confirmed (logged) or period-
+                                  // phase-with-a-log; transparent when it's just
+                                  // a predicted period day (outline only).
                                   backgroundColor: isSelected
                                     ? colors.primary
-                                    : style.bg,
-                                  borderColor: isSelected
+                                    : isLogged
+                                      ? style.bg
+                                      : "transparent",
+                                  borderColor: isToday
                                     ? colors.primary
-                                    : isToday
-                                      ? colors.primary
-                                      : style.color,
+                                    : style.color,
                                   borderStyle:
-                                    !isSelected &&
-                                    !hasLog &&
-                                    (isPredictedHighlight || (isToday && cell.phase !== "period"))
+                                    isPredictedPeriod && !isToday && !isSelected
                                       ? "dashed"
                                       : "solid",
-                                  borderWidth:
-                                    isSelected || isToday || hasFlowLog || isOvulationPeak
+                                  borderWidth: isSelected
+                                    ? 0
+                                    : isToday || isLogged || isPredictedPeriod
                                       ? 1.5
                                       : 0,
                                   height: 38,
                                   width: 36,
-                                  paddingTop: markerIcon ? 3 : 0,
                                 }}
                               >
-                                {markerIcon && (
-                                  <MaterialCommunityIcons
-                                    name={markerIcon}
-                                    size={10}
-                                    color={
-                                      isSelected
-                                        ? colors.buttonText
-                                        : style.color
-                                    }
-                                  />
-                                )}
                                 <Text
                                   className="text-xs font-black"
-                                  style={{
-                                    color: dayTextColor,
-                                    fontFamily: fonts.mono,
-                                    marginTop: markerIcon ? 1 : 0,
-                                  }}
+                                  style={{ color: dayTextColor, fontFamily: fonts.mono }}
                                 >
                                   {cell.day}
                                 </Text>
-                                {hasLog && !markerIcon && (
-                                  <View
-                                    className="absolute bottom-1 h-1 w-1 rounded-full"
-                                    style={{
-                                      backgroundColor: isSelected
-                                        ? colors.buttonText
-                                        : style.color,
-                                    }}
+                                {/* Phase / log indicator: a logged or peak day
+                                    shows its marker icon, every other day a
+                                    small phase-colored dot. */}
+                                {markerIcon ? (
+                                  <MaterialCommunityIcons
+                                    name={markerIcon}
+                                    size={9}
+                                    color={isSelected ? colors.buttonText : style.color}
+                                    style={{ position: "absolute", bottom: 2 }}
                                   />
-                                )}
+                                ) : !isSelected && !isPeriod ? (
+                                  <View
+                                    className="absolute bottom-1.5 h-1 w-1 rounded-full"
+                                    style={{ backgroundColor: style.color, opacity: hasLog ? 1 : 0.55 }}
+                                  />
+                                ) : null}
                               </View>
                             </TouchableOpacity>
                           );
@@ -2328,7 +2303,7 @@ export default function Tracker() {
                           Remind me before
                         </Text>
                         <PillStepper
-                          max={14}
+                          max={10}
                           min={0}
                           onChange={setReminderDaysBeforeInput}
                           size="sm"

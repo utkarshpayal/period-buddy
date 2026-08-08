@@ -22,6 +22,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useAppState } from "../../components/AppState";
 import { alert } from "../../lib/alert";
 import { useTheme } from "../../components/theme";
+import { SkeletonMediaGrid } from "../../components/Skeleton";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
 import {
   blogsApi,
@@ -603,9 +604,7 @@ export default function Blogs() {
 
           {/* DYNAMIC MEDIA CONTENT TIMELINE CARDS WRAPPER */}
           {(loadingFeed && !showBookmarksOnly && content.length === 0) || (loadingBookmarks && showBookmarksOnly) ? (
-            <View className="items-center py-16">
-              <ActivityIndicator color={colors.primary} />
-            </View>
+            <SkeletonMediaGrid count={6} style={{ marginTop: 24 }} />
           ) : (
           <View className="mt-6 flex-row flex-wrap justify-between px-6" style={{ rowGap: 14 }}>
             {filteredContent.map((item) => {

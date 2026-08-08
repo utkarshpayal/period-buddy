@@ -21,6 +21,7 @@ import { WebView } from "react-native-webview";
 import { CalendarModal } from "../../components/CalendarModal";
 import { useAuth } from "../../components/auth-context";
 import { useTheme } from "../../components/theme";
+import { SkeletonRow } from "../../components/Skeleton";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
 import { alert } from "../../lib/alert";
 import { showPermissionModal } from "../../lib/modal-host";
@@ -460,8 +461,12 @@ export default function DocumentsScreen() {
           {/* List */}
           <View className="mt-4 px-6 gap-3">
             {loading ? (
-              <View className="items-center py-16">
-                <ActivityIndicator color={colors.primary} />
+              <View className="gap-3">
+                <SkeletonRow />
+                <SkeletonRow />
+                <SkeletonRow />
+                <SkeletonRow />
+                <SkeletonRow />
               </View>
             ) : documents.length === 0 ? (
               <View className="items-center rounded-2xl border p-8 mt-4" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>

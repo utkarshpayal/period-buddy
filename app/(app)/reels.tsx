@@ -815,6 +815,8 @@ export default function Reels() {
                 <View className="absolute left-5 right-5 top-4 flex-row items-center gap-3">
                   <TouchableOpacity
                     activeOpacity={0.78}
+                    accessibilityRole="button"
+                    accessibilityLabel="Go back"
                     className="h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/35"
                     onPress={() => router.back()}
                   >
@@ -830,6 +832,8 @@ export default function Reels() {
                   </View>
                   <TouchableOpacity
                     activeOpacity={0.78}
+                    accessibilityRole="button"
+                    accessibilityLabel="Filter by category"
                     onPress={() => setCategoryPickerVisible(true)}
                     className="flex-row items-center gap-1 rounded-full bg-white/15 px-3 py-1.5"
                   >
@@ -866,6 +870,8 @@ export default function Reels() {
 
                   <TouchableOpacity
                     activeOpacity={0.82}
+                    accessibilityRole="button"
+                    accessibilityLabel={isFollowing ? "Unfollow creator" : "Follow creator"}
                     className="items-center"
                     onPress={() => handleToggleFollow(item.id, item.creatorId)}
                   >
@@ -892,6 +898,8 @@ export default function Reels() {
 
                   <TouchableOpacity
                     activeOpacity={0.82}
+                    accessibilityRole="button"
+                    accessibilityLabel="View poll"
                     className="items-center"
                     onPress={() => setPollReelId(item.id)}
                   >

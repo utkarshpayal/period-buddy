@@ -83,7 +83,7 @@ NativeWind (Tailwind for RN) via `tailwind.config.js` / `global.css`, plus `comp
 
 ### Shared screen scaffolding
 
-`components/ScreenHeader.tsx` (back button + title) and `components/LoadingErrorState.tsx` (full-screen loading/error-with-retry) cover the common shape of simple detail screens; `hooks/useAsyncLoad.ts` collapses the load-on-mount + pull-to-refresh + error-state boilerplate around a single fetcher. `lib/format.ts` holds small shared date formatters like `formatShortDate`. Prefer these over re-implementing the same screen shell.
+`components/ScreenHeader.tsx` (back button + title) and `components/LoadingErrorState.tsx` (full-screen loading/error-with-retry) cover the common shape of simple detail screens; its default loading state is the branded `components/Loader.tsx` (bear mascot inside a pulsing/rotating themed ring — use it, or `<Loader fullscreen />`, instead of a bare `ActivityIndicator` for page-level waits); `hooks/useAsyncLoad.ts` collapses the load-on-mount + pull-to-refresh + error-state boilerplate around a single fetcher. `lib/format.ts` holds small shared date formatters like `formatShortDate`. Prefer these over re-implementing the same screen shell.
 
 A full screen shared verbatim across route groups (not just scaffolding) lives in `components/screens/` — e.g. `CommunityScreen.tsx`, re-exported by both `(dashboard)/community.tsx` and `(partner-view)/forum.tsx` — so the two roles can never visually drift apart on a screen that should look identical for both.
 

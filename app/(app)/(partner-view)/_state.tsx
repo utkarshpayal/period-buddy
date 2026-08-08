@@ -60,14 +60,27 @@ export function PartnerViewStateProvider({ children }: { children: React.ReactNo
 
     let socket: WebSocket | null = null;
     let isDisconnected = false;
+    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+    // Auto-reconnect with capped backoff + jitter so the partner view keeps
+    // syncing chat/notifications after a transient socket drop.
+    let reconnectAttempts = 0;
+    function scheduleReconnect() {
+      if (isDisconnected) return;
+      const base = Math.min(30000, 1000 * 2 ** reconnectAttempts);
+      reconnectAttempts += 1;
+      reconnectTimeout = setTimeout(connectWS, base / 2 + Math.random() * (base / 2));
+    }
 
     async function connectWS() {
+      if (isDisconnected) return;
       try {
         const wsUrl = await getWebSocketUrl();
+        if (isDisconnected) return;
         socket = new WebSocket(wsUrl);
 
         socket.onopen = () => {
           if (isDisconnected) return;
+          reconnectAttempts = 0;
           socket?.send(JSON.stringify({ type: "join", room: `partner_${profile!._id}` }));
         };
 
@@ -116,8 +129,14 @@ export function PartnerViewStateProvider({ children }: { children: React.ReactNo
         };
 
         socket.onerror = (err) => console.warn("WebSocket error:", err);
+
+        socket.onclose = () => {
+          if (isDisconnected) return;
+          scheduleReconnect();
+        };
       } catch (err) {
         console.warn("Failed to setup WebSocket:", err);
+        scheduleReconnect();
       }
     }
 
@@ -125,6 +144,7 @@ export function PartnerViewStateProvider({ children }: { children: React.ReactNo
 
     return () => {
       isDisconnected = true;
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
       if (socket) {
         try {
           socket.send(JSON.stringify({ type: "leave", room: `partner_${profile!._id}` }));

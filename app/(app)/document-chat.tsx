@@ -355,19 +355,19 @@ export default function DocumentChatScreen() {
                       <View
                         className="max-w-[85%] self-end overflow-hidden shadow-md p-4"
                         style={{
-                          backgroundColor: colors.primary,
+                          backgroundColor: colors.primaryDark,
                           borderTopLeftRadius: 16,
                           borderTopRightRadius: 16,
                           borderBottomLeftRadius: 16,
                           borderBottomRightRadius: 4,
                         }}
                       >
-                        <Text className="text-[15px] font-medium leading-6" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
+                        <Text className="text-[15px] font-medium leading-6" style={{ color: "#FFFFFF", fontFamily: fonts.body }}>
                           {message.text}
                         </Text>
                         <Text
                           className="text-[10px] font-bold text-right mt-1.5 opacity-70"
-                          style={{ color: colors.buttonText, fontFamily: fonts.body }}
+                          style={{ color: "#FFFFFF", fontFamily: fonts.body }}
                         >
                           {formatTime(message.createdAt)}
                         </Text>
@@ -406,7 +406,7 @@ export default function DocumentChatScreen() {
               onSubmitEditing={() => handleSend()}
               maxLength={1000}
               returnKeyType="send"
-              blurOnSubmit={false}
+              submitBehavior="submit"
               editable={!isRecording && !isTranscribing}
               className="flex-1 px-4 py-3 rounded-xl text-sm"
               style={{ color: colors.foreground, backgroundColor: colors.input, fontFamily: fonts.body }}
@@ -432,6 +432,8 @@ export default function DocumentChatScreen() {
               disabled={!typedMessage.trim() || isReplying}
               onPress={() => handleSend()}
               activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Send message"
               className="rounded-full overflow-hidden"
             >
               {typedMessage.trim() && !isReplying ? (
