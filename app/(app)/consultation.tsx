@@ -16,6 +16,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { WebView } from "react-native-webview";
 import { RazorpayCheckoutModal, type RazorpayResult } from "../../components/RazorpayCheckoutModal";
 import { useTheme } from "../../components/theme";
 import { SkeletonRow } from "../../components/Skeleton";
@@ -38,6 +39,46 @@ function getDoctorDisplayName(doctor: Doctor) {
   );
 }
 
+/**
+ * Resolves the shared video-room URL for a consultation. Prefers the
+ * server-issued meetingLink; falls back to the same deterministic Jitsi room
+ * the backend uses (doctorController.meetingLinkFor), so patient and doctor
+ * always land in the same room even for older bookings without a stored link.
+ */
+function getMeetingUrl(consultation: Consultation | null): string | null {
+  if (!consultation) return null;
+  const base = consultation.meetingLink || `https://meet.jit.si/PeriodBuddy-Consult-${consultation._id}`;
+  // Skip the prejoin lobby and start unmuted for a 1:1 clinical call.
+  return `${base}#config.prejoinPageEnabled=false&config.startWithVideoMuted=false&config.startWithAudioMuted=false`;
+}
+
+/** "14:30" -> "2:30 PM" */
+function to12Hour(hhmm: string): string {
+  const [h, m] = hhmm.split(":").map(Number);
+  if (Number.isNaN(h)) return hhmm;
+  const period = h >= 12 ? "PM" : "AM";
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  return `${hour12}:${String(m ?? 0).padStart(2, "0")} ${period}`;
+}
+
+/** Expands availability ranges into hourly bookable slot labels. */
+function slotsFromRanges(ranges: { startTime: string; endTime: string }[]): string[] {
+  const out: string[] = [];
+  for (const r of ranges) {
+    const [sh, sm] = r.startTime.split(":").map(Number);
+    const [eh, em] = r.endTime.split(":").map(Number);
+    let cur = sh * 60 + (sm || 0);
+    const end = eh * 60 + (em || 0);
+    while (cur < end) {
+      const hh = Math.floor(cur / 60);
+      const mm = cur % 60;
+      out.push(to12Hour(`${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`));
+      cur += 60;
+    }
+  }
+  return out;
+}
+
 export default function ConsultationScreen() {
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
@@ -56,8 +97,12 @@ export default function ConsultationScreen() {
   const [booking, setBooking] = useState(false);
   const [checkoutOrder, setCheckoutOrder] = useState<ConsultationOrder | null>(null);
 
-  // Slot Selection
+  // Slot Selection — populated from the doctor's real availability, with a
+  // sensible fallback when a doctor hasn't published a schedule yet.
+  const FALLBACK_SLOTS = ["4:00 PM", "5:30 PM", "7:00 PM"];
   const [selectedSlot, setSelectedSlot] = useState("4:00 PM");
+  const [availableSlots, setAvailableSlots] = useState<string[]>(FALLBACK_SLOTS);
+  const [availabilityLabel, setAvailabilityLabel] = useState("SELECT A SLOT - TODAY");
 
   // Video Call WebSocket signaling states
   const [videoCallModalVisible, setVideoCallModalVisible] = useState(false);
@@ -68,6 +113,7 @@ export default function ConsultationScreen() {
 
   // Chat
   const [activeConsultation, setActiveConsultation] = useState<Consultation | null>(null);
+  const meetingUrl = getMeetingUrl(activeConsultation);
   const [chatMessages, setChatMessages] = useState<ConsultationMessage[]>([]);
   const [chatModalVisible, setChatModalVisible] = useState(false);
   const [typedMessage, setTypedMessage] = useState("");
@@ -164,111 +210,63 @@ export default function ConsultationScreen() {
     };
   }, [chatModalVisible, activeConsultation]);
 
-  // Video Call WebSocket signaling setup
+  // Load the selected doctor's real weekly availability and turn today's
+  // ranges into bookable slots (falling back to defaults when none exist).
   useEffect(() => {
-    if (!videoCallModalVisible || !activeConsultation) return;
+    if (!selectedDoctor?._id) return;
+    let cancelled = false;
 
-    let socket: WebSocket | null = null;
-    let isDisconnected = false;
-    setVideoCallStatus("Connecting to signaling server...");
-    setVideoCallLogs(["[WS] Connecting to WebSocket..."]);
-
-    async function setupSignaling() {
+    (async () => {
       try {
-        const wsUrl = await getWebSocketUrl();
-        socket = new WebSocket(wsUrl);
+        const availability = await consultationApi.getDoctorAvailability(selectedDoctor._id);
+        if (cancelled) return;
 
-        socket.onopen = () => {
-          if (isDisconnected) return;
-          setVideoCallLogs((prev) => [...prev, "[WS] Connected to signaling channel."]);
-          setVideoCallStatus("Calling doctor...");
+        const today = new Date().getDay();
+        const todayEntry = availability.days.find((d) => d.dayOfWeek === today);
+        const upcoming =
+          todayEntry ??
+          availability.days
+            .slice()
+            .sort((a, b) => ((a.dayOfWeek - today + 7) % 7) - ((b.dayOfWeek - today + 7) % 7))[0];
 
-          // Join call signaling room
-          socket?.send(
-            JSON.stringify({
-              type: "join_video_call",
-              room: `videocall_${activeConsultation!._id}`,
-            })
+        const slots = upcoming ? slotsFromRanges(upcoming.slots) : [];
+        if (slots.length) {
+          setAvailableSlots(slots);
+          setSelectedSlot(slots[0]);
+          setAvailabilityLabel(
+            upcoming && upcoming.dayOfWeek === today
+              ? "SELECT A SLOT - TODAY"
+              : `SELECT A SLOT - ${upcoming?.day?.toUpperCase() ?? ""}`,
           );
-
-          // Send call invitation
-          socket?.send(
-            JSON.stringify({
-              type: "video_offer",
-              room: `videocall_${activeConsultation!._id}`,
-              offer: { sdp: "mock_webrtc_sdp", type: "offer" },
-            })
-          );
-          setVideoCallLogs((prev) => [...prev, "[WS] Sent WebRTC SDP Offer to doctor."]);
-        };
-
-        socket.onmessage = (event) => {
-          if (isDisconnected) return;
-          try {
-            const data = JSON.parse(event.data);
-            if (data.type === "video_answer") {
-              setVideoCallLogs((prev) => [...prev, "[WS] Received SDP Answer from doctor."]);
-              setVideoCallStatus("Connecting stream...");
-              setTimeout(() => {
-                if (!isDisconnected) {
-                  setVideoCallStatus("Call Active");
-                  setVideoCallLogs((prev) => [
-                    ...prev,
-                    "[WebRTC] P2P ICE Connection established.",
-                    "[WebRTC] Media streams active.",
-                  ]);
-                }
-              }, 1200);
-            } else if (data.type === "ice_candidate") {
-              setVideoCallLogs((prev) => [...prev, `[WS] Received ICE candidate from doctor.`]);
-            }
-          } catch (err) {
-            console.error(err);
-          }
-        };
-
-        socket.onerror = () => {
-          setVideoCallLogs((prev) => [...prev, "[WS] WebSocket signaling error."]);
-        };
-
-        socket.onclose = () => {
-          setVideoCallLogs((prev) => [...prev, "[WS] Disconnected from signaling channel."]);
-        };
-
-        // Simulate incoming doctor answer if backend doesn't automatically loop it back
-        setTimeout(() => {
-          if (socket && socket.readyState === WebSocket.OPEN && !isDisconnected) {
-            socket.send(
-              JSON.stringify({
-                type: "video_answer",
-                room: `videocall_${activeConsultation!._id}`,
-                answer: { sdp: "mock_webrtc_sdp_answer", type: "answer" },
-              })
-            );
-          }
-        }, 2000);
-      } catch (err) {
-        setVideoCallLogs((prev) => [...prev, "[WS] Failed to start signaling: " + String(err)]);
+        } else {
+          setAvailableSlots(FALLBACK_SLOTS);
+          setSelectedSlot(FALLBACK_SLOTS[0]);
+          setAvailabilityLabel("SELECT A SLOT - TODAY");
+        }
+      } catch {
+        if (!cancelled) {
+          setAvailableSlots(FALLBACK_SLOTS);
+          setAvailabilityLabel("SELECT A SLOT - TODAY");
+        }
       }
-    }
-
-    setupSignaling();
+    })();
 
     return () => {
-      isDisconnected = true;
-      if (socket) {
-        try {
-          socket.send(
-            JSON.stringify({
-              type: "video_disconnect",
-              room: `videocall_${activeConsultation!._id}`,
-            })
-          );
-        } catch {}
-        socket.close();
-      }
+      cancelled = true;
     };
-  }, [videoCallModalVisible, activeConsultation]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDoctor?._id]);
+
+  // Video call: the shared Jitsi room (WebView) handles media directly, so the
+  // old mock WebRTC signaling is gone. We just reflect status for the header.
+  useEffect(() => {
+    if (!videoCallModalVisible || !activeConsultation) {
+      setVideoCallStatus("Idle");
+      return;
+    }
+    setVideoCallStatus("In consultation room");
+    setVideoCallLogs([]);
+  }, [videoCallModalVisible, activeConsultation])
 
 
   const getConsultationForDoctor = (doctorId: string) =>
@@ -576,10 +574,10 @@ export default function ConsultationScreen() {
                   className="text-[10px] font-black uppercase tracking-widest mb-3"
                   style={{ color: colors.mutedText, fontFamily: fonts.body }}
                 >
-                  SELECT A SLOT - TODAY
+                  {availabilityLabel}
                 </Text>
-                <View className="flex-row gap-2">
-                  {["4:00 PM", "5:30 PM", "7:00 PM"].map((slot) => {
+                <View className="flex-row flex-wrap gap-2">
+                  {availableSlots.map((slot) => {
                     const isSlotSelected = selectedSlot === slot;
                     return (
                       <TouchableOpacity
@@ -648,7 +646,7 @@ export default function ConsultationScreen() {
                 >
                   {getConsultationForDoctor(selectedDoctor._id)
                     ? "Open Consultation Chat"
-                    : `Confirm booking - ₹${selectedDoctor.pricePerSession * 10 || 499}`}
+                    : `Confirm booking - ₹${selectedDoctor.pricePerSession || 499}`}
                 </Text>
               )}
             </TouchableOpacity>
@@ -865,65 +863,41 @@ export default function ConsultationScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Video Streams Display */}
+            {/* Video Streams Display — real shared room (Jitsi) that the
+                clinician portal joins from the same meetingLink. */}
             <View className="flex-1 my-6 rounded-3xl overflow-hidden relative bg-black/40 border border-white/5 justify-center items-center">
-              {videoCallStatus === "Call Active" ? (
-                /* Simulated Doctor Stream */
-                <View className="items-center justify-center">
-                  <View className="h-24 w-24 rounded-full bg-primary/20 border border-primary/40 items-center justify-center mb-3">
-                    <Text className="text-4xl">👩‍⚕️</Text>
-                  </View>
-                  <Text className="text-white font-extrabold text-lg">
-                    {selectedDoctor ? getDoctorDisplayName(selectedDoctor) : "Doctor"}
-                  </Text>
-                  <Text className="text-gray-400 text-xs mt-1">
-                    Streaming active • 1080p
-                  </Text>
-                </View>
+              {meetingUrl ? (
+                <WebView
+                  source={{ uri: meetingUrl }}
+                  style={{ flex: 1, width: "100%", backgroundColor: "#130F1A" }}
+                  originWhitelist={["*"]}
+                  javaScriptEnabled
+                  domStorageEnabled
+                  allowsInlineMediaPlayback
+                  mediaPlaybackRequiresUserAction={false}
+                  mediaCapturePermissionGrantType="grant"
+                  allowsProtectedMedia
+                  onError={() =>
+                    setVideoCallLogs((prev) => [...prev, "[WebView] Failed to load the video room."])
+                  }
+                  startInLoadingState
+                  renderLoading={() => (
+                    <View className="absolute inset-0 items-center justify-center" style={{ backgroundColor: "#130F1A" }}>
+                      <ActivityIndicator size="large" color={colors.primary} />
+                      <Text className="text-white font-semibold text-sm mt-4">
+                        Connecting to the consultation room…
+                      </Text>
+                    </View>
+                  )}
+                />
               ) : (
-                /* Connecting screen */
                 <View className="items-center justify-center">
                   <ActivityIndicator size="large" color={colors.primary} />
                   <Text className="text-white font-semibold text-sm mt-4">
-                    Setting up peer connection...
+                    Preparing the consultation room…
                   </Text>
                 </View>
               )}
-
-              {/* Local Video Inset Box (Bottom Right) */}
-              <View
-                className="absolute bottom-4 right-4 w-28 h-36 rounded-2xl border border-white/15 overflow-hidden items-center justify-center"
-                style={{ backgroundColor: "#2A2438" }}
-              >
-                {videoOff ? (
-                  <Feather name="video-off" size={20} color="#FFFFFF" />
-                ) : (
-                  <View className="items-center">
-                    <Text className="text-2xl mb-1">👩</Text>
-                    <Text className="text-[10px] font-black text-gray-300 uppercase tracking-widest">
-                      You
-                    </Text>
-                  </View>
-                )}
-              </View>
-
-              {/* Live WebRTC / WebSocket Signaling Console Logs */}
-              <View
-                className="absolute top-4 left-4 right-4 bg-black/70 rounded-xl p-3 border border-white/10"
-                style={{ maxHeight: 90 }}
-              >
-                <ScrollView showsVerticalScrollIndicator={false}>
-                  {videoCallLogs.map((log, i) => (
-                    <Text
-                      key={i}
-                      className="text-[9px] leading-4 text-emerald-400"
-                      style={{ fontFamily: fonts.mono }}
-                    >
-                      {log}
-                    </Text>
-                  ))}
-                </ScrollView>
-              </View>
             </View>
 
             {/* Controls Row */}

@@ -302,6 +302,25 @@ export type PartnerPermissions = {
   shareReports: boolean;
 };
 
+export type DoctorAvailabilityRange = {
+  startTime: string;
+  endTime: string;
+  maxSlots?: number;
+  timezone?: string;
+};
+
+export type DoctorAvailabilityDay = {
+  dayOfWeek: number;
+  day: string;
+  slots: DoctorAvailabilityRange[];
+};
+
+export type DoctorAvailability = {
+  doctorId: string;
+  isAvailable: boolean;
+  days: DoctorAvailabilityDay[];
+};
+
 export type ConsultationOrder = {
   // Present when a paid/active session already exists for this doctor — the
   // backend short-circuits order creation rather than double-charging, and
@@ -965,6 +984,11 @@ export const consultationApi = {
   getDoctors: (search?: string) =>
     apiRequest<Doctor[]>(
       `/api/consultation/doctors${toQuery({ search })}`,
+    ),
+
+  getDoctorAvailability: (doctorId: string) =>
+    apiRequest<DoctorAvailability>(
+      `/api/consultation/doctors/${doctorId}/availability`,
     ),
 
   createOrder: (doctorId: string) =>
