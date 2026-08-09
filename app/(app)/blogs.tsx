@@ -606,7 +606,12 @@ export default function Blogs() {
           {(loadingFeed && !showBookmarksOnly && content.length === 0) || (loadingBookmarks && showBookmarksOnly) ? (
             <SkeletonMediaGrid count={6} style={{ marginTop: 24 }} />
           ) : (
-          <View className="mt-6 flex-row flex-wrap justify-between px-6" style={{ rowGap: 14 }}>
+<View className="mt-6 px-6">
+  {/* CONTENT GRID */}
+  <View
+    className="flex-row flex-wrap justify-between"
+    style={{ rowGap: 14 }}
+  >
             {filteredContent.map((item) => {
               const isBookmarked = bookmarkedIds.has(item.id);
               const isVideo = item.type === "reel";
@@ -623,8 +628,6 @@ export default function Blogs() {
                     borderColor: colors.border,
                   }}
                 >
-                  {/* MEDIA TILE — image on top with badge overlays, matches
-                      the mockup's bento-style content grid card. */}
                   <View className="w-full h-36 relative bg-neutral-100 dark:bg-neutral-800">
                     <Image
                       source={{ uri: item.imageUrl }}
@@ -635,7 +638,7 @@ export default function Blogs() {
                     {isVideo && (
                       <View className="absolute inset-0 items-center justify-center bg-black/10">
                         <View className="w-9 h-9 rounded-full bg-white/85 items-center justify-center shadow-sm">
-                          <Ionicons name="play" size={14} color={colors.primary} className="ml-0.5" />
+                          <Ionicons name="play" size={14} color={colors.primary} />
                         </View>
                       </View>
                     )}
@@ -662,8 +665,6 @@ export default function Blogs() {
                     </TouchableOpacity>
                   </View>
 
-                  {/* CONTENT BLOCK — title, then type · duration/read-time
-                      meta line, matching the mockup's card footer. */}
                   <View className="p-2.5">
                     <Text
                       className="text-[11.5px] font-black leading-4"
@@ -675,7 +676,7 @@ export default function Blogs() {
                     <View className="flex-row items-center gap-1 mt-1.5">
                       <Text
                         className="text-[10px] font-bold"
-                        style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                        style={{ color: colors.mutedText, fontFamily: fonts.body, }}
                       >
                         {isVideo ? "Reel" : "Blog"} · {item.time}
                       </Text>
@@ -702,44 +703,58 @@ export default function Blogs() {
                 </TouchableOpacity>
               );
             })}
-
+          </View>
+          
+          {/* EMPTY STATE */}
             {filteredContent.length === 0 && (
               <View className="items-center py-10">
                 <Text
-                  className="text-sm font-medium"
-                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                >
-                  {showBookmarksOnly
-                    ? "No bookmarked content yet — tap the bookmark icon on any article to save it here."
-                    : "No insights found for this filter yet."}
-                </Text>
-              </View>
-            )}
+                  className="text-sm font-medium text-center"
+        style={{
+          color: colors.mutedText,
+          fontFamily: fonts.body,
+        }}
+      >
+        {showBookmarksOnly
+          ? "No bookmarked content yet — tap the bookmark icon on any article to save it here."
+          : "No insights found for this filter yet."}
+      </Text>
+    </View>
+  )}
 
-            {!showBookmarksOnly && !usingFallback && hasMore && filteredContent.length > 0 && (
-              <TouchableOpacity
-                onPress={handleLoadMore}
-                disabled={loadingMore}
-                activeOpacity={0.8}
-                className="items-center justify-center py-3 rounded-2xl border mt-1"
-                style={{
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                }}
-              >
-                {loadingMore ? (
-                  <ActivityIndicator color={colors.primary} />
-                ) : (
-                  <Text
-                    className="text-xs font-bold"
-                    style={{ color: colors.primary, fontFamily: fonts.body }}
-                  >
-                    Load More
-                  </Text>
-                )}
-              </TouchableOpacity>
-            )}
-          </View>
+  {/* LOAD MORE */}
+  {!showBookmarksOnly &&
+    !usingFallback &&
+    hasMore &&
+    filteredContent.length > 0 && (
+      <View className="w-full items-center mt-4">
+        <TouchableOpacity
+          onPress={handleLoadMore}
+          disabled={loadingMore}
+          activeOpacity={0.8}
+          className="items-center justify-center px-6 py-3 rounded-2xl border"
+          style={{
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+          }}
+        >
+          {loadingMore ? (
+            <ActivityIndicator color={colors.primary} />
+          ) : (
+            <Text
+              className="text-xs font-bold text-center"
+              style={{
+                color: colors.primary,
+                fontFamily: fonts.body,
+              }}
+            >
+              Load More
+            </Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    )}
+</View>
           )}
         </ScrollView>
 
