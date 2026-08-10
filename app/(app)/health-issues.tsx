@@ -1,10 +1,11 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Image,
   Modal,
   Pressable,
+  RefreshControl,
   ScrollView,
   StatusBar,
   Text,
@@ -166,31 +167,35 @@ export default function HealthIssues() {
   const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [issues, setIssues] = useState<HealthIssue[]>([]);
   const [loadingIssues, setLoadingIssues] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [categoryPickerVisible, setCategoryPickerVisible] = useState(false);
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadIssues() {
-      try {
-        const response = await healthIssuesApi.getIssues();
-        if (isMounted && response.length > 0) {
-          setIssues(response.map(mapHealthIssue));
-        }
-      } catch {
-        if (isMounted) setIssues(fallbackIssues);
-      } finally {
-        if (isMounted) setLoadingIssues(false);
+  const loadIssues = useCallback(async () => {
+    try {
+      const response = await healthIssuesApi.getIssues();
+      if (response.length > 0) {
+        setIssues(response.map(mapHealthIssue));
       }
+    } catch {
+      setIssues(fallbackIssues);
+    } finally {
+      setLoadingIssues(false);
     }
-
-    loadIssues();
-
-    return () => {
-      isMounted = false;
-    };
   }, []);
+
+  useEffect(() => {
+    loadIssues();
+  }, [loadIssues]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await loadIssues();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadIssues]);
 
   const softTints = getSoftTints(colors);
 
@@ -247,6 +252,9 @@ export default function HealthIssues() {
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 100 }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+          }
         >
           <View className="mx-6 mt-6">
             <Text

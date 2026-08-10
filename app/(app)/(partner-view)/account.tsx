@@ -1,7 +1,7 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
-import { ScrollView, StatusBar, Switch, Text, TouchableOpacity, View } from "react-native";
+import React, { useCallback, useState } from "react";
+import { RefreshControl, ScrollView, StatusBar, Switch, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Avatar from "../../../components/Avatar";
 import { useAuth } from "../../../components/auth-context";
@@ -22,6 +22,16 @@ export default function PartnerViewAccount() {
   const [savingPreference, setSavingPreference] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await refreshProfile();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshProfile]);
 
   const displayName = [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Nura partner";
   const displayEmail = user?.email || "Private account";
@@ -101,7 +111,13 @@ export default function PartnerViewAccount() {
           <ThemeToggle />
         </View>
 
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 140 }}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 140 }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+          }
+        >
           {/* Identity */}
           <View className="items-center px-6 pt-8">
             <Avatar

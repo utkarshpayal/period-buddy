@@ -3,10 +3,11 @@ import {
   MaterialCommunityIcons,
 } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
   Easing,
+  RefreshControl,
   ScrollView,
   StatusBar,
   Text,
@@ -46,6 +47,7 @@ export default function Forest() {
   const [isNourished, setIsNourished] = useState(false);
   const [forestStatus, setForestStatus] = useState<ForestStatus | null>(null);
   const [currentPhase, setCurrentPhase] = useState<string | undefined>(undefined);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     const animation = Animated.loop(
@@ -70,33 +72,29 @@ export default function Forest() {
     return () => animation.stop();
   }, [sparkleAnim]);
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadForestStatus() {
-      try {
-        const status = await forestApi.getStatus();
-        if (isMounted) setForestStatus(status);
-      } catch {
-        if (isMounted) setForestStatus(null);
-      }
-    }
-
-    loadForestStatus();
-
-    cycleApi
-      .getPredictions()
-      .then((predictions) => {
-        if (isMounted) setCurrentPhase(predictions?.currentPhase);
-      })
-      .catch(() => {
-        if (isMounted) setCurrentPhase(undefined);
-      });
-
-    return () => {
-      isMounted = false;
-    };
+  const loadForest = useCallback(async () => {
+    const [status, predictions] = await Promise.allSettled([
+      forestApi.getStatus(),
+      cycleApi.getPredictions(),
+    ]);
+    setForestStatus(status.status === "fulfilled" ? status.value : null);
+    setCurrentPhase(
+      predictions.status === "fulfilled" ? predictions.value?.currentPhase : undefined,
+    );
   }, []);
+
+  useEffect(() => {
+    loadForest();
+  }, [loadForest]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await loadForest();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadForest]);
 
   const currentHealth = forestStatus?.currentHealth ?? 55;
 
@@ -187,7 +185,12 @@ export default function Forest() {
         className="flex-1"
         style={{ backgroundColor: colors.background }}
       >
-        <ScrollView contentContainerClassName="pb-10">
+        <ScrollView
+          contentContainerClassName="pb-10"
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+          }
+        >
           {/* Header — circular back button + title, matches mockup frame "19 · FOREST" */}
           <View className="flex-row items-center gap-3 px-[22px] pt-6">
             <TouchableOpacity

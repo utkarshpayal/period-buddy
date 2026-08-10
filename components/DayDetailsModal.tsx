@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Modal,
@@ -96,6 +96,7 @@ export default function DayDetailsModal({
   onSaveEntry,
   onSaveNote,
   onLogSymptom,
+  focusSection,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -107,9 +108,15 @@ export default function DayDetailsModal({
   onSaveEntry?: (entry: Omit<DayEntry, "updatedAt">) => void;
   onSaveNote?: (note: string) => void;
   onLogSymptom?: (symptom: string) => void;
+  /** When set, the modal scrolls to this section on open (Home quick actions). */
+  focusSection?: "symptoms" | "flow" | "mood";
 }) {
   const { colors, fonts, isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  const scrollRef = useRef<ScrollView>(null);
+  // Y offset of each focusable section within the scroll content, recorded via
+  // onLayout so a Home quick action can jump straight to Flow/Symptoms/Mood.
+  const sectionY = useRef<Record<string, number>>({});
   const [noteText, setNoteText] = useState(details ?? "");
   const [selectedEnergy, setSelectedEnergy] = useState<DayEntry["energy"]>();
   const [selectedFlow, setSelectedFlow] = useState<DayEntry["flow"]>();
@@ -151,6 +158,54 @@ export default function DayDetailsModal({
     setSelectedDischarge(entry?.discharge);
     setSelectedExercise(entry?.exercise ?? []);
   }, [visible, details, entry]);
+
+  // Section a Home / tracker quick action asked us to jump to, still pending a
+  // scroll. Cleared once we've scrolled to it (see recordSection / the effect).
+  const pendingFocus = useRef<typeof focusSection>(undefined);
+
+  function scrollToSection(section: NonNullable<typeof focusSection>) {
+    const y = sectionY.current[section];
+    if (y == null) return false;
+    scrollRef.current?.scrollTo({ y: Math.max(0, y - 8), animated: true });
+    return true;
+  }
+
+  // Records a section's Y offset; if it's the section we're waiting to focus,
+  // scroll to it the moment it lays out (handles the very first open reliably).
+  function recordSection(section: NonNullable<typeof focusSection>, y: number) {
+    sectionY.current[section] = y;
+    if (pendingFocus.current === section) {
+      pendingFocus.current = undefined;
+      scrollToSection(section);
+    }
+  }
+
+  // On open, jump to the requested section. We both try immediately (with a few
+  // retries for the layout race) and arm recordSection for the first-open case.
+  useEffect(() => {
+    if (!visible) {
+      pendingFocus.current = undefined;
+      return;
+    }
+    if (!focusSection) {
+      // No focus target — reset to the top so the previous scroll doesn't stick.
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+      return;
+    }
+    pendingFocus.current = focusSection;
+    let tries = 0;
+    const attempt = () => {
+      if (pendingFocus.current !== focusSection) return; // already handled by onLayout
+      if (scrollToSection(focusSection)) {
+        pendingFocus.current = undefined;
+        return;
+      }
+      if (++tries < 8) timer = setTimeout(attempt, 60);
+    };
+    let timer = setTimeout(attempt, 60);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, focusSection]);
 
   function handleSave() {
     if (onSaveEntry) {
@@ -357,6 +412,7 @@ export default function DayDetailsModal({
           </View>
 
           <ScrollView
+            ref={scrollRef}
             automaticallyAdjustKeyboardInsets
             keyboardDismissMode="on-drag"
             keyboardShouldPersistTaps="handled"
@@ -402,31 +458,36 @@ export default function DayDetailsModal({
                 : "Log what changed today"}
             </Text>
 
-            <SectionTitle title="Symptoms" icon="pulse-outline" />
-            <View style={styles.optionWrap}>
-              {symptomOptions.map((symptom) =>
-                renderOption({
-                  ...symptom,
-                  isSelected: selectedSymptoms.includes(symptom.value),
-                  onPress: () => toggleSymptom(symptom.value),
-                }),
-              )}
+            <View onLayout={(e) => recordSection("symptoms", e.nativeEvent.layout.y)}>
+              <SectionTitle title="Symptoms" icon="pulse-outline" />
+              <View style={styles.optionWrap}>
+                {symptomOptions.map((symptom) =>
+                  renderOption({
+                    ...symptom,
+                    isSelected: selectedSymptoms.includes(symptom.value),
+                    onPress: () => toggleSymptom(symptom.value),
+                  }),
+                )}
+              </View>
             </View>
 
-            <SectionTitle title="Flow" icon="water" />
-            <View style={styles.optionWrap}>
-              {flowOptions.map((flow) =>
-                renderOption({
-                  ...flow,
-                  isSelected: selectedFlow === flow.value,
-                  onPress: () =>
-                    setSelectedFlow((current) =>
-                      current === flow.value ? undefined : flow.value,
-                    ),
-                }),
-              )}
+            <View onLayout={(e) => recordSection("flow", e.nativeEvent.layout.y)}>
+              <SectionTitle title="Flow" icon="water" />
+              <View style={styles.optionWrap}>
+                {flowOptions.map((flow) =>
+                  renderOption({
+                    ...flow,
+                    isSelected: selectedFlow === flow.value,
+                    onPress: () =>
+                      setSelectedFlow((current) =>
+                        current === flow.value ? undefined : flow.value,
+                      ),
+                  }),
+                )}
+              </View>
             </View>
 
+            <View onLayout={(e) => recordSection("mood", e.nativeEvent.layout.y)}>
             <SectionTitle title="Mood" icon="happy-outline" />
             <View style={styles.optionWrap}>
               {moodOptions.map((mood) =>
@@ -436,6 +497,7 @@ export default function DayDetailsModal({
                   onPress: () => toggleInArray(setSelectedMoods, mood.value),
                 }),
               )}
+            </View>
             </View>
 
             <SectionTitle title="Energy" icon="battery-half-outline" />

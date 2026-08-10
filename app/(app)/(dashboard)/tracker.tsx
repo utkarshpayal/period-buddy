@@ -1,11 +1,12 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
   PanResponder,
   Pressable,
+  RefreshControl,
   ScrollView,
   StatusBar,
   Switch,
@@ -476,9 +477,21 @@ export default function Tracker() {
   const router = useRouter();
   // Home's "Symptoms"/"Mood" quick actions deep-link here with ?log=today to
   // auto-open today's day-log modal (that's where symptoms & mood are logged).
-  const { log: logParam } = useLocalSearchParams<{ log?: string }>();
+  const { log: logParam, focus: focusParam } = useLocalSearchParams<{
+    log?: string;
+    focus?: string;
+  }>();
+  // Which day-log section Home's quick action wants us to jump to.
+  const focusSection =
+    focusParam === "flow" || focusParam === "symptoms" || focusParam === "mood"
+      ? focusParam
+      : undefined;
   const [selectedDate, setSelectedDate] = useState<SelectedDate | null>(null);
   const [dayDetailsVisible, setDayDetailsVisible] = useState(false);
+  // Section the day-log modal should scroll to when opened via a quick action.
+  const [modalFocusSection, setModalFocusSection] = useState<
+    "flow" | "symptoms" | "mood" | undefined
+  >(undefined);
   const [selectedYear, setSelectedYear] = useState(() =>
     new Date().getFullYear(),
   );
@@ -519,37 +532,32 @@ export default function Tracker() {
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
   const [predictions, setPredictions] = useState<Predictions | null>(null);
   const [, setIsDashboardLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadDashboard = useCallback(async () => {
+    try {
+      const [dashboardSummary, cyclePredictions] = await Promise.all([
+        authApi.getDashboard(),
+        cycleApi.getPredictions(),
+      ]);
+      setDashboard(dashboardSummary);
+      setPredictions(cyclePredictions);
+      if (dashboardSummary.user) {
+        updateUser(dashboardSummary.user);
+      }
+    } catch (err) {
+      console.warn(
+        "Failed to load dashboard/predictions data in tracker:",
+        err,
+      );
+    } finally {
+      setIsDashboardLoading(false);
+    }
+  }, [updateUser]);
 
   useEffect(() => {
-    let isMounted = true;
-    async function loadDashboard() {
-      try {
-        const [dashboardSummary, cyclePredictions] = await Promise.all([
-          authApi.getDashboard(),
-          cycleApi.getPredictions(),
-        ]);
-
-        if (isMounted) {
-          setDashboard(dashboardSummary);
-          setPredictions(cyclePredictions);
-          if (dashboardSummary.user) {
-            updateUser(dashboardSummary.user);
-          }
-        }
-      } catch (err) {
-        console.warn(
-          "Failed to load dashboard/predictions data in tracker:",
-          err,
-        );
-      } finally {
-        if (isMounted) setIsDashboardLoading(false);
-      }
-    }
     loadDashboard();
-    return () => {
-      isMounted = false;
-    };
-  }, [updateUser]);
+  }, [loadDashboard]);
 
   const loggedDays = Math.max(dashboard?.trackedDays ?? 0, 0);
   const cycleDay = Math.max(
@@ -612,24 +620,18 @@ export default function Tracker() {
     activeCycleLength - 13,
   );
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadSettings() {
-      try {
-        const settings = await cycleApi.getSettings();
-        if (isMounted) setCycleSettings(settings);
-      } catch {
-        if (isMounted) setCycleSettings(null);
-      }
+  const loadSettings = useCallback(async () => {
+    try {
+      const settings = await cycleApi.getSettings();
+      setCycleSettings(settings);
+    } catch {
+      setCycleSettings(null);
     }
-
-    loadSettings();
-
-    return () => {
-      isMounted = false;
-    };
   }, []);
+
+  useEffect(() => {
+    loadSettings();
+  }, [loadSettings]);
 
   useEffect(() => {
     setLastPeriodStartDate(
@@ -645,42 +647,45 @@ export default function Tracker() {
     setTrackingGoal(cycleSettings?.trackingGoal ?? "track_period");
   }, [cycleSettings]);
 
-  useEffect(() => {
-    let isMounted = true;
-    async function loadYearLogs() {
-      try {
-        const results = await Promise.allSettled(
-          calendarMonths.map((month) =>
-            cycleApi.getMonthLogs(getMonthKey(month)),
-          ),
-        );
-        if (!isMounted) return;
+  const loadYearLogs = useCallback(async () => {
+    try {
+      const results = await Promise.allSettled(
+        calendarMonths.map((month) =>
+          cycleApi.getMonthLogs(getMonthKey(month)),
+        ),
+      );
 
-        const entries = results.reduce<Record<string, LocalDayEntry>>(
-          (acc, result) => {
-            if (result.status !== "fulfilled") return acc;
+      const entries = results.reduce<Record<string, LocalDayEntry>>(
+        (acc, result) => {
+          if (result.status !== "fulfilled") return acc;
 
-            result.value.forEach((log) => {
-              acc[log.dateKey] = mapApiDayEntry(log);
-            });
+          result.value.forEach((log) => {
+            acc[log.dateKey] = mapApiDayEntry(log);
+          });
 
-            return acc;
-          },
-          {},
-        );
+          return acc;
+        },
+        {},
+      );
 
-        setRemoteDayEntries(entries);
-      } catch {
-        if (isMounted) setRemoteDayEntries({});
-      }
+      setRemoteDayEntries(entries);
+    } catch {
+      setRemoteDayEntries({});
     }
-
-    loadYearLogs();
-
-    return () => {
-      isMounted = false;
-    };
   }, [calendarMonths]);
+
+  useEffect(() => {
+    loadYearLogs();
+  }, [loadYearLogs]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([loadDashboard(), loadSettings(), loadYearLogs()]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadDashboard, loadSettings, loadYearLogs]);
 
   // Scrolls the stacked 12-month calendar to whichever month the "Month
   // Selector" chevrons are pointing at (defaults to the real current month
@@ -820,17 +825,19 @@ export default function Tracker() {
     setDayDetailsVisible(true);
   }
 
-  function openToday() {
+  function openToday(focus?: "flow" | "symptoms" | "mood") {
+    setModalFocusSection(focus);
     const today = new Date();
     setSelectedYear(today.getFullYear());
     openDate(today);
   }
 
-  // Auto-open today's log when arriving from Home's Symptoms/Mood shortcuts.
+  // Auto-open today's log when arriving from Home's Log period/Symptoms/Mood
+  // shortcuts, jumping to the section that matches the tapped quick action.
   useEffect(() => {
-    if (logParam === "today") openToday();
+    if (logParam === "today") openToday(focusSection);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [logParam]);
+  }, [logParam, focusSection]);
 
   function openCycleSettings() {
     setSettingsError("");
@@ -1127,6 +1134,9 @@ export default function Tracker() {
           ref={mainScrollRef}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 140 }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+          }
         >
           {/* Today · Cycle day N — surface card framing the ring scrubber */}
           <View
@@ -1188,7 +1198,7 @@ export default function Tracker() {
             <View className="mt-4 w-full flex-row gap-3">
               <TouchableOpacity
                 activeOpacity={0.85}
-                onPress={openToday}
+                onPress={() => openToday("flow")}
                 className="flex-1 flex-row items-center justify-center gap-2 rounded-2xl py-3.5"
                 style={{ backgroundColor: colors.primary }}
               >
@@ -1203,7 +1213,7 @@ export default function Tracker() {
 
               <TouchableOpacity
                 activeOpacity={0.85}
-                onPress={openToday}
+                onPress={() => openToday("symptoms")}
                 className="flex-1 flex-row items-center justify-center gap-2 rounded-2xl border py-3.5"
                 style={{
                   backgroundColor: "transparent",
@@ -2379,6 +2389,7 @@ export default function Tracker() {
 
       <DayDetailsModal
         visible={dayDetailsVisible}
+        focusSection={modalFocusSection}
         onClose={() => setDayDetailsVisible(false)}
         day={selectedDate?.day}
         dateLabel={selectedDate?.dateLabel}

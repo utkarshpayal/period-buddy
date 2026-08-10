@@ -1,9 +1,10 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Linking,
   Modal,
+  RefreshControl,
   ScrollView,
   StatusBar,
   Text,
@@ -191,57 +192,57 @@ export default function SexualWellbeing() {
   const [sparkCards, setSparkCards] = useState<typeof fallbackSparkCards>([]);
   const [positionCards, setPositionCards] = useState<typeof fallbackPositionCards>([]);
   const [loadingWellbeing, setLoadingWellbeing] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const softTints = getSoftTints(colors);
   const visibleCategories =
     apiCategories.length > 0 ? apiCategories : categories;
 
-  useEffect(() => {
-    let isMounted = true;
+  const loadWellbeing = useCallback(async () => {
+    try {
+      const [resources, sparkDeck, positionsDeck] = await Promise.all([
+        wellbeingApi.getResources("sexual_wellbeing"),
+        wellbeingApi.getGameDecks("spark"),
+        wellbeingApi.getGameDecks("positions"),
+      ]);
 
-    async function loadWellbeing() {
-      try {
-        const [resources, sparkDeck, positionsDeck] = await Promise.all([
-          wellbeingApi.getResources("sexual_wellbeing"),
-          wellbeingApi.getGameDecks("spark"),
-          wellbeingApi.getGameDecks("positions"),
-        ]);
-
-        if (!isMounted) return;
-
-        if (resources.length > 0) {
-          setApiCategories(resources.map(mapWellbeingResource));
-        }
-        if (sparkDeck.cards.length > 0) {
-          setSparkCards(
-            sparkDeck.cards.map((card, index) =>
-              normalizeTextCard(
-                card,
-                fallbackSparkCards[index % fallbackSparkCards.length],
-              ),
-            ),
-          );
-        }
-        if (positionsDeck.cards.length > 0) {
-          setPositionCards(positionsDeck.cards.map(normalizePositionCard));
-        }
-      } catch {
-        if (isMounted) {
-          setApiCategories([]);
-          setSparkCards(fallbackSparkCards);
-          setPositionCards(fallbackPositionCards);
-        }
-      } finally {
-        if (isMounted) setLoadingWellbeing(false);
+      if (resources.length > 0) {
+        setApiCategories(resources.map(mapWellbeingResource));
       }
+      if (sparkDeck.cards.length > 0) {
+        setSparkCards(
+          sparkDeck.cards.map((card, index) =>
+            normalizeTextCard(
+              card,
+              fallbackSparkCards[index % fallbackSparkCards.length],
+            ),
+          ),
+        );
+      }
+      if (positionsDeck.cards.length > 0) {
+        setPositionCards(positionsDeck.cards.map(normalizePositionCard));
+      }
+    } catch {
+      setApiCategories([]);
+      setSparkCards(fallbackSparkCards);
+      setPositionCards(fallbackPositionCards);
+    } finally {
+      setLoadingWellbeing(false);
     }
-
-    loadWellbeing();
-
-    return () => {
-      isMounted = false;
-    };
   }, []);
+
+  useEffect(() => {
+    loadWellbeing();
+  }, [loadWellbeing]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await loadWellbeing();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadWellbeing]);
 
   function mapWellbeingResource(resource: WellbeingResource): ResourceCategory {
     return {
@@ -334,6 +335,9 @@ export default function SexualWellbeing() {
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 120 }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+          }
         >
           <View style={{ paddingHorizontal: 22, paddingTop: 8, paddingBottom: 14 }}>
             <Text

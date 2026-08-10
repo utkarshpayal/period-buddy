@@ -27,6 +27,7 @@ import {
   type ConsultationMessage,
   type ConsultationOrder,
   type Doctor,
+  type DoctorAvailability,
 } from "../../lib/api";
 
 function getDoctorDisplayName(doctor: Doctor) {
@@ -61,22 +62,58 @@ function to12Hour(hhmm: string): string {
   return `${hour12}:${String(m ?? 0).padStart(2, "0")} ${period}`;
 }
 
-/** Expands availability ranges into hourly bookable slot labels. */
-function slotsFromRanges(ranges: { startTime: string; endTime: string }[]): string[] {
-  const out: string[] = [];
+/** Expands availability ranges into hourly bookable slots (minutes-from-midnight). */
+function slotMinutesFromRanges(ranges: { startTime: string; endTime: string }[]): number[] {
+  const out: number[] = [];
   for (const r of ranges) {
     const [sh, sm] = r.startTime.split(":").map(Number);
     const [eh, em] = r.endTime.split(":").map(Number);
     let cur = sh * 60 + (sm || 0);
     const end = eh * 60 + (em || 0);
     while (cur < end) {
-      const hh = Math.floor(cur / 60);
-      const mm = cur % 60;
-      out.push(to12Hour(`${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`));
+      out.push(cur);
       cur += 60;
     }
   }
+  return out.sort((a, b) => a - b);
+}
+
+/** 570 (minutes) -> "9:30 AM" */
+function minutesToLabel(mins: number): string {
+  const hh = Math.floor(mins / 60);
+  const mm = mins % 60;
+  return to12Hour(`${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`);
+}
+
+/** Builds the next `count` calendar dates that have doctor availability. */
+function upcomingBookableDates(
+  availability: DoctorAvailability | null,
+  count = 14,
+): Date[] {
+  if (!availability) return [];
+  const daysWithSlots = new Set(
+    availability.days.filter((d) => d.slots?.length).map((d) => d.dayOfWeek),
+  );
+  const out: Date[] = [];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  for (let i = 0; i < count && out.length < 10; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+    if (daysWithSlots.has(d.getDay())) out.push(d);
+  }
   return out;
+}
+
+const DOW_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function isSameDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
 }
 
 export default function ConsultationScreen() {
@@ -97,12 +134,35 @@ export default function ConsultationScreen() {
   const [booking, setBooking] = useState(false);
   const [checkoutOrder, setCheckoutOrder] = useState<ConsultationOrder | null>(null);
 
-  // Slot Selection — populated from the doctor's real availability, with a
-  // sensible fallback when a doctor hasn't published a schedule yet.
-  const FALLBACK_SLOTS = ["4:00 PM", "5:30 PM", "7:00 PM"];
-  const [selectedSlot, setSelectedSlot] = useState("4:00 PM");
-  const [availableSlots, setAvailableSlots] = useState<string[]>(FALLBACK_SLOTS);
-  const [availabilityLabel, setAvailabilityLabel] = useState("SELECT A SLOT - TODAY");
+  // Slot Selection — driven by the doctor's real published availability. The
+  // user first picks a bookable date (today or any future day the gynac is
+  // available), then a time slot within that day.
+  const [availability, setAvailability] = useState<DoctorAvailability | null>(null);
+  const [loadingAvailability, setLoadingAvailability] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  // Slot stored as minutes-from-midnight; null when no slot picked yet.
+  const [selectedSlotMins, setSelectedSlotMins] = useState<number | null>(null);
+
+  const bookableDates = React.useMemo(
+    () => upcomingBookableDates(availability),
+    [availability],
+  );
+
+  // Slots for the currently selected date, hiding times already past for today.
+  const daySlots = React.useMemo(() => {
+    if (!selectedDate || !availability) return [];
+    const entry = availability.days.find((d) => d.dayOfWeek === selectedDate.getDay());
+    if (!entry?.slots?.length) return [];
+    let mins = slotMinutesFromRanges(entry.slots);
+    const now = new Date();
+    if (isSameDay(selectedDate, now)) {
+      const nowMins = now.getHours() * 60 + now.getMinutes();
+      mins = mins.filter((m) => m > nowMins);
+    }
+    return mins;
+  }, [selectedDate, availability]);
+
+  const selectedSlotLabel = selectedSlotMins != null ? minutesToLabel(selectedSlotMins) : null;
 
   // Video Call WebSocket signaling states
   const [videoCallModalVisible, setVideoCallModalVisible] = useState(false);
@@ -210,52 +270,49 @@ export default function ConsultationScreen() {
     };
   }, [chatModalVisible, activeConsultation]);
 
-  // Load the selected doctor's real weekly availability and turn today's
-  // ranges into bookable slots (falling back to defaults when none exist).
+  // Load the selected doctor's real weekly availability so the user can pick a
+  // date (today or any future day the gynac is available) and a time slot.
   useEffect(() => {
     if (!selectedDoctor?._id) return;
     let cancelled = false;
 
+    setLoadingAvailability(true);
+    setAvailability(null);
+    setSelectedDate(null);
+    setSelectedSlotMins(null);
+
     (async () => {
       try {
-        const availability = await consultationApi.getDoctorAvailability(selectedDoctor._id);
+        const data = await consultationApi.getDoctorAvailability(selectedDoctor._id);
         if (cancelled) return;
-
-        const today = new Date().getDay();
-        const todayEntry = availability.days.find((d) => d.dayOfWeek === today);
-        const upcoming =
-          todayEntry ??
-          availability.days
-            .slice()
-            .sort((a, b) => ((a.dayOfWeek - today + 7) % 7) - ((b.dayOfWeek - today + 7) % 7))[0];
-
-        const slots = upcoming ? slotsFromRanges(upcoming.slots) : [];
-        if (slots.length) {
-          setAvailableSlots(slots);
-          setSelectedSlot(slots[0]);
-          setAvailabilityLabel(
-            upcoming && upcoming.dayOfWeek === today
-              ? "SELECT A SLOT - TODAY"
-              : `SELECT A SLOT - ${upcoming?.day?.toUpperCase() ?? ""}`,
-          );
-        } else {
-          setAvailableSlots(FALLBACK_SLOTS);
-          setSelectedSlot(FALLBACK_SLOTS[0]);
-          setAvailabilityLabel("SELECT A SLOT - TODAY");
-        }
+        setAvailability(data);
       } catch {
-        if (!cancelled) {
-          setAvailableSlots(FALLBACK_SLOTS);
-          setAvailabilityLabel("SELECT A SLOT - TODAY");
-        }
+        if (!cancelled) setAvailability(null);
+      } finally {
+        if (!cancelled) setLoadingAvailability(false);
       }
     })();
 
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDoctor?._id]);
+
+  // Default to the first bookable date (and its first slot) once availability loads.
+  useEffect(() => {
+    if (bookableDates.length && !selectedDate) {
+      setSelectedDate(bookableDates[0]);
+    }
+  }, [bookableDates, selectedDate]);
+
+  // Keep the selected slot valid whenever the chosen date's slots change.
+  useEffect(() => {
+    if (daySlots.length && (selectedSlotMins == null || !daySlots.includes(selectedSlotMins))) {
+      setSelectedSlotMins(daySlots[0]);
+    } else if (!daySlots.length) {
+      setSelectedSlotMins(null);
+    }
+  }, [daySlots, selectedSlotMins]);
 
   // Video call: the shared Jitsi room (WebView) handles media directly, so the
   // old mock WebRTC signaling is gone. We just reflect status for the header.
@@ -283,7 +340,15 @@ export default function ConsultationScreen() {
     }
     setBooking(true);
     try {
-      const order = await consultationApi.createOrder(doctor._id);
+      // Combine the picked date + slot into an ISO timestamp so the booking is
+      // scheduled for the chosen (possibly future) day/time.
+      let scheduledFor: string | undefined;
+      if (selectedDate && selectedSlotMins != null) {
+        const when = new Date(selectedDate);
+        when.setHours(Math.floor(selectedSlotMins / 60), selectedSlotMins % 60, 0, 0);
+        scheduledFor = when.toISOString();
+      }
+      const order = await consultationApi.createOrder(doctor._id, scheduledFor);
       if (order.consultation) {
         // Backend found an already-paid/active session for this doctor
         // (e.g. a race with another device) — open it instead of charging.
@@ -567,43 +632,135 @@ export default function ConsultationScreen() {
               )}
             </View>
 
-            {/* SELECT A SLOT - TODAY */}
+            {/* SELECT A DATE + SLOT — from the gynac's published availability */}
             {selectedDoctor && !loadingDoctors && (
               <View className="mt-8">
                 <Text
                   className="text-[10px] font-black uppercase tracking-widest mb-3"
                   style={{ color: colors.mutedText, fontFamily: fonts.body }}
                 >
-                  {availabilityLabel}
+                  Select a date
                 </Text>
-                <View className="flex-row flex-wrap gap-2">
-                  {availableSlots.map((slot) => {
-                    const isSlotSelected = selectedSlot === slot;
-                    return (
-                      <TouchableOpacity
-                        key={slot}
-                        activeOpacity={0.82}
-                        onPress={() => setSelectedSlot(slot)}
-                        className="flex-1 rounded-xl py-3 items-center justify-center border"
-                        style={{
-                          backgroundColor: colors.surface,
-                          borderColor: isSlotSelected ? colors.foreground : colors.border,
-                          borderWidth: isSlotSelected ? 1.5 : 1,
-                        }}
+
+                {loadingAvailability ? (
+                  <SkeletonRow />
+                ) : bookableDates.length === 0 ? (
+                  <View
+                    className="rounded-2xl border px-4 py-5 items-center"
+                    style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+                  >
+                    <Feather name="calendar" size={18} color={colors.mutedText} />
+                    <Text
+                      className="text-xs font-semibold mt-2 text-center"
+                      style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                    >
+                      This specialist hasn&apos;t published their schedule yet. Book now and
+                      they&apos;ll confirm a time with you in chat.
+                    </Text>
+                  </View>
+                ) : (
+                  <>
+                    {/* Horizontal date strip */}
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={{ gap: 8, paddingRight: 8 }}
+                    >
+                      {bookableDates.map((date) => {
+                        const isDateSelected = selectedDate ? isSameDay(date, selectedDate) : false;
+                        const isToday = isSameDay(date, new Date());
+                        return (
+                          <TouchableOpacity
+                            key={date.toISOString()}
+                            activeOpacity={0.82}
+                            onPress={() => {
+                              setSelectedDate(date);
+                              setSelectedSlotMins(null);
+                            }}
+                            className="rounded-2xl px-4 py-3 items-center justify-center border"
+                            style={{
+                              backgroundColor: isDateSelected ? colors.primary : colors.surface,
+                              borderColor: isDateSelected ? colors.primary : colors.border,
+                              minWidth: 62,
+                            }}
+                          >
+                            <Text
+                              className="text-[10px] font-bold uppercase tracking-wide"
+                              style={{
+                                color: isDateSelected ? colors.buttonText : colors.mutedText,
+                                fontFamily: fonts.body,
+                              }}
+                            >
+                              {isToday ? "Today" : DOW_SHORT[date.getDay()]}
+                            </Text>
+                            <Text
+                              className="text-base font-extrabold mt-0.5"
+                              style={{
+                                color: isDateSelected ? colors.buttonText : colors.foreground,
+                                fontFamily: fonts.heading,
+                              }}
+                            >
+                              {date.getDate()}
+                            </Text>
+                            <Text
+                              className="text-[9px] font-bold uppercase"
+                              style={{
+                                color: isDateSelected ? colors.buttonText : colors.mutedText,
+                                fontFamily: fonts.body,
+                              }}
+                            >
+                              {MONTH_SHORT[date.getMonth()]}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+
+                    {/* Time slots for the chosen date */}
+                    <Text
+                      className="text-[10px] font-black uppercase tracking-widest mt-6 mb-3"
+                      style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                    >
+                      Select a time
+                    </Text>
+                    {daySlots.length === 0 ? (
+                      <Text
+                        className="text-xs font-semibold"
+                        style={{ color: colors.mutedText, fontFamily: fonts.body }}
                       >
-                        <Text
-                          className="text-xs font-bold"
-                          style={{
-                            color: colors.foreground,
-                            fontFamily: fonts.body,
-                          }}
-                        >
-                          {slot}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
+                        No time slots left for this day — try another date.
+                      </Text>
+                    ) : (
+                      <View className="flex-row flex-wrap gap-2">
+                        {daySlots.map((mins) => {
+                          const isSlotSelected = selectedSlotMins === mins;
+                          return (
+                            <TouchableOpacity
+                              key={mins}
+                              activeOpacity={0.82}
+                              onPress={() => setSelectedSlotMins(mins)}
+                              className="rounded-xl py-3 px-4 items-center justify-center border"
+                              style={{
+                                backgroundColor: colors.surface,
+                                borderColor: isSlotSelected ? colors.foreground : colors.border,
+                                borderWidth: isSlotSelected ? 1.5 : 1,
+                                minWidth: "30%",
+                                flexGrow: 1,
+                              }}
+                            >
+                              <Text
+                                className="text-xs font-bold"
+                                style={{ color: colors.foreground, fontFamily: fonts.body }}
+                              >
+                                {minutesToLabel(mins)}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    )}
+                  </>
+                )}
               </View>
             )}
 
@@ -646,7 +803,11 @@ export default function ConsultationScreen() {
                 >
                   {getConsultationForDoctor(selectedDoctor._id)
                     ? "Open Consultation Chat"
-                    : `Confirm booking - ₹${selectedDoctor.pricePerSession || 499}`}
+                    : `Book${
+                        selectedDate && selectedSlotLabel
+                          ? ` ${isSameDay(selectedDate, new Date()) ? "Today" : `${DOW_SHORT[selectedDate.getDay()]} ${selectedDate.getDate()} ${MONTH_SHORT[selectedDate.getMonth()]}`}, ${selectedSlotLabel}`
+                          : ""
+                      } - ₹${selectedDoctor.pricePerSession || 499}`}
                 </Text>
               )}
             </TouchableOpacity>
@@ -667,8 +828,12 @@ export default function ConsultationScreen() {
             <View className="flex-1" style={{ backgroundColor: colors.background }}>
               {/* Chat header */}
               <View
-                className="px-6 py-4 border-b flex-row justify-between items-center"
-                style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+                className="px-6 pb-4 border-b flex-row justify-between items-center"
+                style={{
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                  paddingTop: Math.max(16, insets.top + 8),
+                }}
               >
                 <View className="flex-row items-center gap-3">
                   <TouchableOpacity onPress={() => setChatModalVisible(false)} className="p-1 -ml-1">
@@ -763,7 +928,7 @@ export default function ConsultationScreen() {
                         className="text-xs font-semibold leading-5"
                         style={{ color: colors.foreground, fontFamily: fonts.body }}
                       >
-                        Understood. Let&apos;s go over a few options during our call at {selectedSlot} today.
+                        Understood. Let&apos;s go over a few options during our call{selectedSlotLabel ? ` at ${selectedSlotLabel}` : ""}.
                       </Text>
                     </View>
 

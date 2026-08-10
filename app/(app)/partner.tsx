@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  RefreshControl,
   ScrollView,
   StatusBar,
   Switch,
@@ -35,6 +36,7 @@ export default function Partner() {
 
   const [profile, setProfile] = useState<PartnerProfile | null>(null);
   const [, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [activeTab, setActiveTab] = useState<"info" | "invite" | "access" | "chat">("info");
 
@@ -92,6 +94,15 @@ export default function Partner() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([load(), activeTab === "chat" ? loadMessages() : Promise.resolve()]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [load, loadMessages, activeTab]);
 
   useEffect(() => {
     if (activeTab === "chat") loadMessages();
@@ -378,6 +389,12 @@ export default function Partner() {
           className="flex-1"
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
+          refreshControl={
+            // Not on the chat tab — a pull there would fight the auto-scroll.
+            activeTab === "chat" ? undefined : (
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+            )
+          }
         >
           <View className="mx-6 mt-6">
             {/* ── OVERVIEW ── */}

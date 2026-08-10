@@ -1,8 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  RefreshControl,
   ScrollView,
   StatusBar,
   Text,
@@ -139,53 +140,41 @@ export default function Home() {
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
   const [predictions, setPredictions] = useState<Predictions | null>(null);
   const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    let isMounted = true;
+  const loadHome = useCallback(async () => {
+    const [dashboardResult, notifsResult] = await Promise.allSettled([
+      Promise.all([authApi.getDashboard(), cycleApi.getPredictions()]),
+      partnerApi.getNotifications(),
+    ]);
 
-    partnerApi
-      .getNotifications()
-      .then((notifs) => {
-        if (isMounted) setHasUnreadNotifications(notifs.some((n) => !n.isRead));
-      })
-      .catch(() => {});
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadDashboard() {
-      try {
-        const [dashboardSummary, cyclePredictions] = await Promise.all([
-          authApi.getDashboard(),
-          cycleApi.getPredictions(),
-        ]);
-
-        if (isMounted) {
-          setDashboard(dashboardSummary);
-          setPredictions(cyclePredictions);
-          if (dashboardSummary.user) {
-            updateUser(dashboardSummary.user);
-          }
-        }
-      } catch {
-        if (isMounted) {
-          setDashboard(null);
-          setPredictions(null);
-        }
-      }
+    if (dashboardResult.status === "fulfilled") {
+      const [dashboardSummary, cyclePredictions] = dashboardResult.value;
+      setDashboard(dashboardSummary);
+      setPredictions(cyclePredictions);
+      if (dashboardSummary.user) updateUser(dashboardSummary.user);
+    } else {
+      setDashboard(null);
+      setPredictions(null);
     }
 
-    loadDashboard();
-
-    return () => {
-      isMounted = false;
-    };
+    if (notifsResult.status === "fulfilled") {
+      setHasUnreadNotifications(notifsResult.value.some((n) => !n.isRead));
+    }
   }, [updateUser]);
+
+  useEffect(() => {
+    loadHome();
+  }, [loadHome]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await loadHome();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadHome]);
 
   // These must reflect the signed-in account's real data only — never a
   // locally-cached demo/fallback number, which would silently show a
@@ -308,6 +297,9 @@ export default function Home() {
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 120 }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+          }
         >
           {/* STAT PILLS ROW */}
           <View className="mx-6 mt-3 mb-4 flex-row" style={{ gap: 10 }}>
@@ -438,9 +430,9 @@ export default function Home() {
           {/* QUICK ACTIONS */}
           <View className="mx-6 mb-5 flex-row justify-around">
             {[
-              { label: "Log period", icon: "water", route: "/(app)/tracker?log=today", primary: true },
-              { label: "Symptoms", icon: "pulse-outline", route: "/(app)/tracker?log=today", primary: false },
-              { label: "Mood", icon: "happy-outline", route: "/(app)/tracker?log=today", primary: false },
+              { label: "Log period", icon: "water", route: "/(app)/tracker?log=today&focus=flow", primary: true },
+              { label: "Symptoms", icon: "pulse-outline", route: "/(app)/tracker?log=today&focus=symptoms", primary: false },
+              { label: "Mood", icon: "happy-outline", route: "/(app)/tracker?log=today&focus=mood", primary: false },
             ].map((action, idx) => (
               <TouchableOpacity
                 key={idx}

@@ -5,12 +5,13 @@ import {
 } from "expo-audio";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
   Modal,
   Pressable,
+  RefreshControl,
   ScrollView,
   StatusBar,
   Text,
@@ -180,6 +181,7 @@ export default function Blogs() {
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
   const [content, setContent] = useState<ContentItem[]>([]);
   const [loadingFeed, setLoadingFeed] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [usingFallback, setUsingFallback] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
@@ -211,46 +213,47 @@ export default function Blogs() {
 
   const PAGE_SIZE = 10;
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadFeed() {
-      setLoadingFeed(true);
-      try {
-        const response = await blogsApi.getFeed({
-          limit: PAGE_SIZE,
-          page: 1,
-          type: selectedType,
-          category:
-            selectedCategory === "all" ? undefined : selectedCategory,
-        });
-        if (!isMounted) return;
-        if (response.items.length > 0) {
-          setContent(response.items.map(mapFeedItem));
-          setUsingFallback(false);
-          setPage(1);
-          setHasMore(response.pagination.page < response.pagination.pages);
-        } else {
-          setContent([]);
-          setUsingFallback(false);
-          setHasMore(false);
-        }
-      } catch {
-        if (!isMounted) return;
-        setContent(fallbackContent);
-        setUsingFallback(true);
+  const loadFeed = useCallback(async () => {
+    setLoadingFeed(true);
+    try {
+      const response = await blogsApi.getFeed({
+        limit: PAGE_SIZE,
+        page: 1,
+        type: selectedType,
+        category:
+          selectedCategory === "all" ? undefined : selectedCategory,
+      });
+      if (response.items.length > 0) {
+        setContent(response.items.map(mapFeedItem));
+        setUsingFallback(false);
+        setPage(1);
+        setHasMore(response.pagination.page < response.pagination.pages);
+      } else {
+        setContent([]);
+        setUsingFallback(false);
         setHasMore(false);
-      } finally {
-        if (isMounted) setLoadingFeed(false);
       }
+    } catch {
+      setContent(fallbackContent);
+      setUsingFallback(true);
+      setHasMore(false);
+    } finally {
+      setLoadingFeed(false);
     }
-
-    loadFeed();
-
-    return () => {
-      isMounted = false;
-    };
   }, [selectedType, selectedCategory]);
+
+  useEffect(() => {
+    loadFeed();
+  }, [loadFeed]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await loadFeed();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadFeed]);
 
   useEffect(() => {
     let isMounted = true;
@@ -524,6 +527,9 @@ export default function Blogs() {
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 60 }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+          }
         >
           {/* Segmented Controller Chips Selection */}
           {!showBookmarksOnly && (

@@ -1,9 +1,10 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
+  RefreshControl,
   ScrollView,
   StatusBar,
   Text,
@@ -178,6 +179,7 @@ export default function BuddyNomination() {
 
   const [nominees, setNominees] = useState<PeriodBuddy[]>([]);
   const [loadingNominees, setLoadingNominees] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Private live dialogue log data array container
   const [chatLog, setChatLog] = useState<BuddyMessage[]>([
@@ -189,65 +191,64 @@ export default function BuddyNomination() {
     },
   ]);
 
-  useEffect(() => {
-    let isMounted = true;
+  const loadBuddySpace = useCallback(async () => {
+    try {
+      const [matchesResponse, activeBuddy, messages] = await Promise.all([
+        buddyApi.getMatches().catch(() => ({ matches: [] })),
+        buddyApi.getActive().catch(() => null),
+        buddyApi.getMessages().catch(() => []),
+      ]);
 
-    async function loadBuddySpace() {
-      try {
-        const [matchesResponse, activeBuddy, messages] = await Promise.all([
-          buddyApi.getMatches().catch(() => ({ matches: [] })),
-          buddyApi.getActive().catch(() => null),
-          buddyApi.getMessages().catch(() => []),
-        ]);
-
-        if (!isMounted) return;
-
-        let finalNominees = [...fallbackNominees];
-        if (matchesResponse && matchesResponse.matches && matchesResponse.matches.length > 0) {
-          finalNominees = matchesResponse.matches.map(mapBuddy);
-        }
-
-        if (activeBuddy) {
-          const mappedActive = mapBuddy(activeBuddy);
-          setActiveNominatedId(mappedActive.id);
-
-          // The active match is authoritative (it has roomKey; a same-id discovery-list
-          // preview from getBuddyMatches never does), so overwrite any preview entry
-          // instead of only adding one when it's missing.
-          const exists = finalNominees.some((b) => b.id === mappedActive.id);
-          finalNominees = exists
-            ? finalNominees.map((b) => (b.id === mappedActive.id ? mappedActive : b))
-            : [mappedActive, ...finalNominees];
-          setIsChatConsoleOpen(true);
-        }
-
-        setNominees(finalNominees);
-
-        const chatMessages = (messages && messages.length > 0)
-          ? messages
-          : (activeBuddy && activeBuddy.messages && activeBuddy.messages.length > 0)
-            ? activeBuddy.messages
-            : [];
-
-        if (chatMessages.length > 0) {
-          setChatLog(chatMessages.map(mapBuddyMessage));
-        }
-      } catch (err) {
-        console.warn("Failed to load buddy space:", err);
-        if (isMounted) {
-          setNominees(fallbackNominees);
-        }
-      } finally {
-        if (isMounted) setLoadingNominees(false);
+      let finalNominees = [...fallbackNominees];
+      if (matchesResponse && matchesResponse.matches && matchesResponse.matches.length > 0) {
+        finalNominees = matchesResponse.matches.map(mapBuddy);
       }
+
+      if (activeBuddy) {
+        const mappedActive = mapBuddy(activeBuddy);
+        setActiveNominatedId(mappedActive.id);
+
+        // The active match is authoritative (it has roomKey; a same-id discovery-list
+        // preview from getBuddyMatches never does), so overwrite any preview entry
+        // instead of only adding one when it's missing.
+        const exists = finalNominees.some((b) => b.id === mappedActive.id);
+        finalNominees = exists
+          ? finalNominees.map((b) => (b.id === mappedActive.id ? mappedActive : b))
+          : [mappedActive, ...finalNominees];
+        setIsChatConsoleOpen(true);
+      }
+
+      setNominees(finalNominees);
+
+      const chatMessages = (messages && messages.length > 0)
+        ? messages
+        : (activeBuddy && activeBuddy.messages && activeBuddy.messages.length > 0)
+          ? activeBuddy.messages
+          : [];
+
+      if (chatMessages.length > 0) {
+        setChatLog(chatMessages.map(mapBuddyMessage));
+      }
+    } catch (err) {
+      console.warn("Failed to load buddy space:", err);
+      setNominees(fallbackNominees);
+    } finally {
+      setLoadingNominees(false);
     }
-
-    loadBuddySpace();
-
-    return () => {
-      isMounted = false;
-    };
   }, []);
+
+  useEffect(() => {
+    loadBuddySpace();
+  }, [loadBuddySpace]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await loadBuddySpace();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadBuddySpace]);
 
   const activeBuddyData = nominees.find((b) => b.id === activeNominatedId);
   // Unique per pairing (see roomKey on the backend BuddyMatch model) so this room can
@@ -509,6 +510,12 @@ export default function BuddyNomination() {
           }}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
+          refreshControl={
+            // Disabled while chatting so a pull doesn't reload/disrupt the thread.
+            isChatConsoleOpen ? undefined : (
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+            )
+          }
         >
           {/* Header Action Row Bar */}
           <View className="flex-row items-center gap-2 px-6 pt-6">

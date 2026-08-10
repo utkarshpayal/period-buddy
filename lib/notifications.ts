@@ -24,12 +24,24 @@ export async function registerForPushNotificationsAsync() {
 
   try {
     if (Platform.OS === 'android') {
+      // The custom sound must be referenced by its bundled filename *with*
+      // extension (expo-notifications copies ./lib/notification.wav into
+      // res/raw/notification.wav at build time). Using 'notification' without
+      // the extension makes Android silently fall back to no sound.
+      //
+      // We keep the channel id 'default' because the backend's FCM payloads
+      // target it by id; changing the id could stop background notifications
+      // from displaying. Android locks a channel's settings after first
+      // creation, so on devices that already created the old silent 'default'
+      // channel this corrected sound only applies after a reinstall (a fresh
+      // build install recreates the channel correctly).
       await Notifications.setNotificationChannelAsync('default', {
-        name: 'default',
+        name: 'General',
         importance: Notifications.AndroidImportance.MAX,
         vibrationPattern: [0, 250, 250, 250],
         lightColor: '#FF231F7C',
-        sound: 'notification',
+        sound: 'notification.wav',
+        enableVibrate: true,
       });
     }
 

@@ -1,8 +1,9 @@
   import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Linking,
+  RefreshControl,
   ScrollView,
   StatusBar,
   Text,
@@ -148,27 +149,31 @@ export default function Hygiene() {
     },
   ];
   const [apiHygieneTips, setApiHygieneTips] = useState<HygieneItem[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadHygieneResources = useCallback(async () => {
+    try {
+      const resources = await wellbeingApi.getResources("hygiene");
+      if (resources.length > 0) {
+        setApiHygieneTips(resources.map(mapHygieneResource));
+      }
+    } catch {
+      setApiHygieneTips([]);
+    }
+  }, []);
 
   useEffect(() => {
-    let isMounted = true;
-
-    async function loadHygieneResources() {
-      try {
-        const resources = await wellbeingApi.getResources("hygiene");
-        if (isMounted && resources.length > 0) {
-          setApiHygieneTips(resources.map(mapHygieneResource));
-        }
-      } catch {
-        if (isMounted) setApiHygieneTips([]);
-      }
-    }
-
     loadHygieneResources();
+  }, [loadHygieneResources]);
 
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await loadHygieneResources();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadHygieneResources]);
 
   const softTints = getSoftTints(colors);
 
@@ -258,6 +263,9 @@ export default function Hygiene() {
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 100 }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+          }
         >
           <View className="mt-5">
             {/* 2x2 TOPIC CARD GRID — tap a card to switch the active topic */}

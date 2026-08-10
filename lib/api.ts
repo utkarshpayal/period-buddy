@@ -283,6 +283,7 @@ export type Consultation = {
   messages: ConsultationMessage[];
   paymentStatus?: "failed" | "paid" | "refunded" | "unpaid";
   prescription?: string;
+  scheduledFor?: string | null;
   startedAt?: string;
   status: "active" | "cancelled" | "completed" | "paid" | "pending";
 };
@@ -991,9 +992,9 @@ export const consultationApi = {
       `/api/consultation/doctors/${doctorId}/availability`,
     ),
 
-  createOrder: (doctorId: string) =>
+  createOrder: (doctorId: string, scheduledFor?: string) =>
     apiRequest<ConsultationOrder>("/api/consultation/order", {
-      body: JSON.stringify({ doctorId }),
+      body: JSON.stringify({ doctorId, scheduledFor }),
       method: "POST",
     }),
 

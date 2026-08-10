@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   Modal,
+  RefreshControl,
   ScrollView,
   StatusBar,
   Switch,
@@ -24,6 +25,7 @@ export default function Profile() {
   const { colors, isDark, fonts } = useTheme();
   const { signOut, user, updateUser } = useAuth();
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const { streakCount, walletBalance } = useUserStats();
   const router = useRouter();
   const displayName =
@@ -102,20 +104,27 @@ export default function Profile() {
   // "Days Tracked" should reflect real cycle logs from the backend, not the
   // device-local AppState mock (which only tracks notes typed into this
   // session's local storage and resets on reinstall/new device).
-  React.useEffect(() => {
-    let isMounted = true;
-    authApi.getDashboard()
-      .then((summary) => {
-        if (isMounted) setDashboard(summary);
-      })
-      .catch((err) => {
-        console.log("Dashboard summary refresh skipped or failed:", err);
-      });
-
-    return () => {
-      isMounted = false;
-    };
+  const loadDashboard = React.useCallback(async () => {
+    try {
+      const summary = await authApi.getDashboard();
+      setDashboard(summary);
+    } catch (err) {
+      console.log("Dashboard summary refresh skipped or failed:", err);
+    }
   }, []);
+
+  React.useEffect(() => {
+    loadDashboard();
+  }, [loadDashboard]);
+
+  const onRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await loadDashboard();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadDashboard]);
 
   const softTints = getSoftTints(colors);
 
@@ -168,6 +177,9 @@ export default function Profile() {
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 140 }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+          }
         >
           {/* USER AVATAR BRAND IDENTITY SECTION */}
           <View className="items-center px-6 pt-8">
