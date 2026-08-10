@@ -334,7 +334,14 @@ export default function DashboardLayout() {
                 requestRecordingPermissionsAsync()
                   .then(({ granted }) => {
                     if (granted) {
-                      router.push("/(app)/(dashboard)/ai-chat");
+                      // Go straight to the voice screen rather than pushing the
+                      // ai-chat tab (which only <Redirect>s here) — redirecting
+                      // mid-render from a prevented tab press corrupts the nav
+                      // stack on Android and can pop the whole app.
+                      router.push({
+                        pathname: "/(app)/qa",
+                        params: { voiceMode: "1" },
+                      });
                     } else {
                       showPermissionModal({
                         title: "Microphone access needed",

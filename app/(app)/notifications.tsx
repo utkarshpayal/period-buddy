@@ -49,6 +49,7 @@ export default function NotificationsScreen() {
     loading,
     refreshing,
     error,
+    offline,
     reload,
   } = useAsyncLoad<AppNotification[]>(() => partnerApi.getNotifications());
 
@@ -91,6 +92,7 @@ export default function NotificationsScreen() {
       <LoadingErrorState
         loading={loading}
         error={error}
+        offline={offline}
         onRetry={() => reload()}
         loadingLabel="Loading notifications..."
         skeleton={<SkeletonList count={6} style={{ paddingTop: 16 }} />}

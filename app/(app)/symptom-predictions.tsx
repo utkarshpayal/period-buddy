@@ -26,7 +26,7 @@ export default function SymptomPredictionsScreen() {
   const { colors, isDark, fonts } = useTheme();
   const softTints = getSoftTints(colors);
 
-  const { data, loading, refreshing, error, reload } = useAsyncLoad<SymptomPredictionsData>(async () => {
+  const { data, loading, refreshing, error, offline, reload } = useAsyncLoad<SymptomPredictionsData>(async () => {
     const result = await cycleApi.getSymptomPredictions();
     return { nextCycleStart: result.nextCycleStart, predictions: result.predictions ?? [] };
   }, []);
@@ -74,6 +74,7 @@ export default function SymptomPredictionsScreen() {
         <LoadingErrorState
           loading={loading}
           error={error}
+          offline={offline}
           onRetry={() => reload()}
           loadingLabel="Analyzing your cycle history…"
           errorIcon="chart-line-variant"

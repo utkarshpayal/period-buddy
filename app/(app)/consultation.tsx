@@ -17,12 +17,15 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
+import { EmptyState } from "../../components/EmptyState";
 import { RazorpayCheckoutModal, type RazorpayResult } from "../../components/RazorpayCheckoutModal";
 import { useTheme } from "../../components/theme";
 import { SkeletonRow } from "../../components/Skeleton";
 import {
   consultationApi,
+  getFriendlyErrorMessage,
   getWebSocketUrl,
+  isNetworkError,
   type Consultation,
   type ConsultationMessage,
   type ConsultationOrder,
@@ -127,6 +130,7 @@ export default function ConsultationScreen() {
   const [myConsultations, setMyConsultations] = useState<Consultation[]>([]);
   const [loadingDoctors, setLoadingDoctors] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<{ message: string; offline: boolean } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
   // Booking
@@ -184,6 +188,7 @@ export default function ConsultationScreen() {
     try {
       if (isRefresh) setRefreshing(true);
       else setLoadingDoctors(true);
+      setLoadError(null);
       const [doctorList, consultList] = await Promise.all([
         consultationApi.getDoctors(searchQuery || undefined),
         consultationApi.getMyConsultations(),
@@ -193,8 +198,8 @@ export default function ConsultationScreen() {
       if (doctorList.length > 0) {
         setSelectedDoctor(doctorList[0]);
       }
-    } catch {
-      // fail silently — show empty states
+    } catch (err) {
+      setLoadError({ message: getFriendlyErrorMessage(err), offline: isNetworkError(err) });
     } finally {
       setLoadingDoctors(false);
       setRefreshing(false);
@@ -560,6 +565,26 @@ export default function ConsultationScreen() {
                   <SkeletonRow />
                   <SkeletonRow />
                 </View>
+              ) : loadError ? (
+                <EmptyState
+                  compact
+                  icon={loadError.offline ? "wifi-off" : "alert-circle-outline"}
+                  title={loadError.offline ? "You're offline" : "Couldn't load specialists"}
+                  message={loadError.message}
+                  actionLabel="Retry"
+                  onAction={() => load()}
+                />
+              ) : filteredDoctors.length === 0 ? (
+                <EmptyState
+                  compact
+                  icon="doctor"
+                  title={searchQuery ? "No matches found" : "No specialists available"}
+                  message={
+                    searchQuery
+                      ? "Try a different name or specialty."
+                      : "Please check back soon — our specialists will appear here."
+                  }
+                />
               ) : (
                 filteredDoctors.map((doctor, i) => {
                   const isSelected = selectedDoctor?._id === doctor._id;

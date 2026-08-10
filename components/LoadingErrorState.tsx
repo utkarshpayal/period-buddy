@@ -7,6 +7,7 @@ import { useTheme } from "./theme";
 export function LoadingErrorState({
   loading,
   error,
+  offline,
   onRetry,
   loadingLabel,
   errorIcon = "alert-circle-outline",
@@ -16,6 +17,8 @@ export function LoadingErrorState({
 }: {
   loading: boolean;
   error: string | null;
+  /** When true, render the error as an offline state (distinct icon/title). */
+  offline?: boolean;
   onRetry: () => void;
   loadingLabel?: string;
   errorIcon?: React.ComponentProps<typeof MaterialCommunityIcons>["name"];
@@ -38,11 +41,13 @@ export function LoadingErrorState({
   }
 
   if (error) {
+    const icon = offline ? "wifi-off" : errorIcon;
+    const title = offline ? "You're offline" : errorTitle;
     return (
       <View className="flex-1 items-center justify-center px-8">
-        <MaterialCommunityIcons name={errorIcon} size={48} color={colors.primary} />
+        <MaterialCommunityIcons name={icon} size={48} color={colors.primary} />
         <Text className="mt-4 text-base font-bold text-center" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-          {errorTitle}
+          {title}
         </Text>
         <Text className="mt-2 text-xs text-center leading-5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
           {error}

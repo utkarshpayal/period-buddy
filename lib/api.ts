@@ -52,7 +52,51 @@ type ApiEnvelope<T> = {
 
 type RequestOptions = RequestInit & {
   skipAuth?: boolean;
+  /** Abort the request after this many ms (default 20s). Pass 0 to disable. */
+  timeoutMs?: number;
 };
+
+/** How long a request waits before we give up and surface a timeout error. */
+const DEFAULT_TIMEOUT_MS = 20000;
+
+/**
+ * Typed error for every failed request so screens can react to *why* it failed
+ * (offline vs. server error vs. not-found) instead of string-matching messages.
+ */
+export type ApiErrorKind = "network" | "timeout" | "server" | "notFound" | "unauthorized" | "unknown";
+
+export class ApiError extends Error {
+  kind: ApiErrorKind;
+  status?: number;
+
+  constructor(message: string, kind: ApiErrorKind, status?: number) {
+    super(message);
+    this.name = "ApiError";
+    this.kind = kind;
+    this.status = status;
+  }
+}
+
+/** True when the failure was connectivity-related (offline or timed out). */
+export function isNetworkError(err: unknown): boolean {
+  return err instanceof ApiError && (err.kind === "network" || err.kind === "timeout");
+}
+
+/**
+ * A user-friendly message for any thrown error, mapping raw fetch/abort failures
+ * to plain language. Use this wherever an error is shown to the user.
+ */
+export function getFriendlyErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) return err.message;
+  if (err instanceof Error) {
+    // Bare fetch network failures land here (thrown before we wrap them).
+    if (/network request failed|failed to fetch|network error/i.test(err.message)) {
+      return "No internet connection. Please check your network and try again.";
+    }
+    return err.message;
+  }
+  return "Something went wrong. Please try again.";
+}
 
 export type Pagination = {
   limit: number;
@@ -755,10 +799,40 @@ export async function apiEnvelopeRequest<T>(
 
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers,
-  });
+  // Time out the request so a dropped/slow connection surfaces a clear error
+  // instead of hanging the screen's loading state forever.
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, signal: callerSignal, ...fetchOptions } = options;
+  const controller = new AbortController();
+  const timer =
+    timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null;
+  // Respect a caller-provided AbortSignal alongside our timeout one.
+  if (callerSignal) {
+    if (callerSignal.aborted) controller.abort();
+    else callerSignal.addEventListener("abort", () => controller.abort(), { once: true });
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...fetchOptions,
+      headers,
+      signal: controller.signal,
+    });
+  } catch {
+    // fetch only rejects on network failure or abort — never on HTTP status.
+    if (controller.signal.aborted && !callerSignal?.aborted) {
+      throw new ApiError(
+        "The request timed out. Please check your connection and try again.",
+        "timeout",
+      );
+    }
+    throw new ApiError(
+      "No internet connection. Please check your network and try again.",
+      "network",
+    );
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 
   const text = await response.text();
   let data: unknown = {};
@@ -767,17 +841,29 @@ export async function apiEnvelopeRequest<T>(
     data = text ? JSON.parse(text) : {};
   } catch {
     if (!response.ok) {
-      throw new Error(text || `Request failed (${response.status})`);
+      throw new ApiError(
+        text || `Request failed (${response.status})`,
+        response.status >= 500 ? "server" : "unknown",
+        response.status,
+      );
     }
 
-    throw new Error("The API returned a response the app could not read.");
+    throw new ApiError("The API returned a response the app could not read.", "unknown");
   }
 
   if (!response.ok) {
     if (response.status === 401 && !options.skipAuth) {
       onUnauthorized?.();
     }
-    throw new Error(getErrorMessage(data, response.status));
+    const kind: ApiErrorKind =
+      response.status === 401
+        ? "unauthorized"
+        : response.status === 404
+          ? "notFound"
+          : response.status >= 500
+            ? "server"
+            : "unknown";
+    throw new ApiError(getErrorMessage(data, response.status), kind, response.status);
   }
 
   return data as ApiEnvelope<T>;

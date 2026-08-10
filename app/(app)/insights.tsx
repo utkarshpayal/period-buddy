@@ -92,7 +92,7 @@ export default function DailyInsightsScreen() {
   const { colors, isDark, fonts } = useTheme();
   const softTints = getSoftTints(colors);
 
-  const { data, loading, refreshing, error, reload } = useAsyncLoad<DailyInsights>(
+  const { data, loading, refreshing, error, offline, reload } = useAsyncLoad<DailyInsights>(
     () => insightsApi.getDaily(),
     [],
   );
@@ -108,6 +108,7 @@ export default function DailyInsightsScreen() {
         <LoadingErrorState
           loading={loading}
           error={error}
+          offline={offline}
           onRetry={() => reload()}
           loadingLabel="Building today's insights…"
           errorTitle="Couldn't load insights"
