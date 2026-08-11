@@ -9,7 +9,7 @@ import { ThemeToggle, useTheme } from "../../../components/theme";
 import { getShadow, getSoftTints } from "../../../components/ui-tokens";
 import { alert } from "../../../lib/alert";
 import { authApi, partnerApi, type AuthUser } from "../../../lib/api";
-import { usePartnerViewState } from "./_state";
+import { usePartnerViewState } from "../../../components/partner-view-state";
 
 export default function PartnerViewAccount() {
   const { colors, isDark, fonts } = useTheme();

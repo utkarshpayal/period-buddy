@@ -21,7 +21,7 @@ import {
   type AppNotification,
   type PartnerSharedData,
 } from "../../../lib/api";
-import { usePartnerViewState } from "./_state";
+import { usePartnerViewState } from "../../../components/partner-view-state";
 
 const PHASE_LABEL: Record<string, string> = {
   follicular: "Follicular phase",

@@ -26,6 +26,7 @@
       "associatedDomains": ["applinks:thenura.care"]
     },
     "android": {
+        "versionCode": 7,
       "adaptiveIcon": {
         "backgroundColor": "#fff0f6",
         "foregroundImage": "./assets/images/icon-square.png"

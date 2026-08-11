@@ -592,12 +592,21 @@ export default function Tracker() {
     });
   }, []);
 
+  // Anchor the whole calendar (past AND future months) on the backend's
+  // history-aware prediction, so future period days project from the most
+  // recent *actual* logged period start — not the stale onboarding
+  // lastPeriodStartDate. This is why shifting your latest period by a day now
+  // moves next month, the month after, and so on. Falls back to the configured
+  // settings date only until predictions load / when there's no history.
   const cycleStartDate = useMemo(() => {
+    if (predictions?.currentPeriodStartDateISO) {
+      return new Date(predictions.currentPeriodStartDateISO);
+    }
     if (cycleSettings?.lastPeriodStartDate) {
       return new Date(cycleSettings.lastPeriodStartDate);
     }
     return addDays(new Date(), -(CURRENT_CYCLE_DAY - 1));
-  }, [cycleSettings]);
+  }, [predictions, cycleSettings]);
   const todayKey = getDateKey(new Date());
 
   const calendarMonths = useMemo(
@@ -610,14 +619,61 @@ export default function Tracker() {
   );
 
   const { dayEntries, dayNotes, earnTokens, saveDayEntry } = useAppState();
-  const activeCycleLength = cycleSettings?.cycleLength ?? CYCLE_LENGTH;
-  const activePeriodLength = cycleSettings?.periodLength ?? 5;
+  // Prefer the history-derived cycle length so future-month phase coloring
+  // matches the backend prediction (median/weighted length), not the raw
+  // configured value.
+  const activeCycleLength =
+    predictions?.cycleLength ?? cycleSettings?.cycleLength ?? CYCLE_LENGTH;
+  const activePeriodLength = predictions?.periodLength ?? cycleSettings?.periodLength ?? 5;
   // Same pivot as getCyclePhase's internal "ovulationDay" — reused below to
   // size the fertile window / ovulation-peak highlight to the real cycle
   // length instead of the old hardcoded 10-16 / day-14 constants.
   const ovulationDayPivot = Math.max(
     activePeriodLength + 1,
     activeCycleLength - 13,
+  );
+
+  // The calendar paints `activePeriodLength` days as "period" from the anchor,
+  // but the user's *actual* current period may be shorter than the configured
+  // length. Without this, the tail days of the configured window (after the
+  // real bleeding ended) show as dashed "predicted period" right after the last
+  // logged day — which reads as "it's predicting a period the day after my
+  // cycle ended". We use the backend's actual start/end to suppress that tail,
+  // but ONLY when the current cycle was really logged (anchor sits inside this
+  // cycle's period window). For a stale/projected current period — where
+  // nothing was logged — the full predicted highlight is still correct.
+  const currentPeriodMask = useMemo(() => {
+    const startISO = predictions?.currentPeriodStartDateISO;
+    const actualStartISO = predictions?.actualPeriodStartISO;
+    const actualEndISO = predictions?.actualPeriodEndISO;
+    if (!startISO || !actualStartISO || !actualEndISO) return null;
+    const start = startOfDay(new Date(startISO));
+    const windowEnd = addDays(start, activePeriodLength - 1);
+    const actualStart = startOfDay(new Date(actualStartISO));
+    const actualEnd = startOfDay(new Date(actualEndISO));
+    if (actualStart < start || actualStart > windowEnd) return null; // stale/projected
+    return { start, windowEnd, actualEnd };
+  }, [predictions, activePeriodLength]);
+
+  // Predictions only apply going forward. Past days must keep whatever was
+  // (or wasn't) logged — re-anchoring on a newly logged period must NOT
+  // retroactively repaint old months. So the dashed "predicted period"
+  // highlight is shown only for today and future dates.
+  const todayStart = useMemo(() => startOfDay(new Date()), []);
+
+  // True for a day inside the current cycle's configured period window that
+  // falls *after* the actually-logged bleeding ended — i.e. a phantom tail day.
+  const isPhantomPeriodTail = useCallback(
+    (date: Date) => {
+      if (!currentPeriodMask) return false;
+      const d = startOfDay(date);
+      return (
+        d > currentPeriodMask.actualEnd &&
+        d >= currentPeriodMask.start &&
+        d <= currentPeriodMask.windowEnd
+      );
+    },
+    [currentPeriodMask],
   );
 
   const loadSettings = useCallback(async () => {
@@ -1055,7 +1111,11 @@ export default function Tracker() {
                 entry?.energy ||
                 dayNotes[dateKey]?.trim(),
               );
-              const isPredictedPeriod = phase === "period" && !hasLog;
+              const isPredictedPeriod =
+                phase === "period" &&
+                !hasLog &&
+                !isPhantomPeriodTail(d) &&
+                startOfDay(d) >= todayStart;
               const isOvulationPeakDay = cDay === ovulationDayPivot;
               const isFertile =
                 cDay >= ovulationDayPivot - 5 && cDay <= ovulationDayPivot + 1;
@@ -1457,7 +1517,13 @@ export default function Tracker() {
                           // pill, and today keeps a thin primary ring.
                           const isPeriod = cell.phase === "period";
                           const isLogged = hasLog;
-                          const isPredictedPeriod = isPeriod && !isLogged;
+                          // Predicted highlight is forward-looking only, and
+                          // never pads past the actually-logged current period.
+                          const isPredictedPeriod =
+                            isPeriod &&
+                            !isLogged &&
+                            !isPhantomPeriodTail(cell.date) &&
+                            startOfDay(cell.date) >= todayStart;
                           const dayTextColor = isSelected
                             ? colors.buttonText
                             : isToday

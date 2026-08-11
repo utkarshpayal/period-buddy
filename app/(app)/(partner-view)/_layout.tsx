@@ -7,7 +7,7 @@ import { useAuth } from "../../../components/auth-context";
 import { useTheme } from "../../../components/theme";
 import { TabBarItem } from "../../../components/TabBarItem";
 import { showPermissionModal } from "../../../lib/modal-host";
-import { PartnerViewStateProvider } from "./_state";
+import { PartnerViewStateProvider } from "../../../components/partner-view-state";
 
 // Mirrors app/(app)/(dashboard)/_layout.tsx's floating tab bar 1:1 (same
 // sizes, colors, center-avatar treatment) so the partner view reads as the

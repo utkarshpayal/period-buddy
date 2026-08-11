@@ -42,6 +42,7 @@ import {
   getWebSocketUrl,
   uploadApi,
   type CommunityAttachment,
+  type CommunityPoll,
   type CommunityPost,
 } from "../../lib/api";
 
@@ -68,6 +69,7 @@ interface Post {
   avatar: string;
   content: string;
   attachment?: CommunityAttachment;
+  poll?: CommunityPoll;
   category?: string;
   likes: number;
   commentsCount: number;
@@ -79,6 +81,8 @@ interface Post {
 // Matches the filter chips in the design; posts can carry any category
 // string, but composing only ever offers these so filtering stays in sync.
 const COMMUNITY_CATEGORIES = ["PCOS", "Fitness", "Skin"];
+const POLL_MIN_OPTIONS = 2;
+const POLL_MAX_OPTIONS = 6;
 
 function mapCommunityPost(post: CommunityPost): Post {
   // Backend resolveAuthor sets isOwn:true on userId when requester is the author
@@ -90,6 +94,7 @@ function mapCommunityPost(post: CommunityPost): Post {
     avatar: isOwner ? "✨" : "NU",
     content: post.content,
     attachment: post.attachments?.[0],
+    poll: post.poll,
     category: post.category,
     likes: post.likeCount ?? post.likes,
     commentsCount: post.commentCount ?? post.commentsCount ?? post.comments?.length ?? 0,
@@ -153,6 +158,171 @@ function PostAttachmentView({ attachment }: { attachment: CommunityAttachment })
   }
 
   return <PostAudioAttachment url={attachment.url} />;
+}
+
+// Renders a post's poll. Before voting: tappable options (single-select votes
+// immediately; multi-select accumulates a local selection + a Vote button).
+// After voting (or when results should show): percentage bars with counts.
+function PostPollView({
+  poll,
+  isVoting,
+  onVote,
+}: {
+  poll: CommunityPoll;
+  isVoting: boolean;
+  onVote: (optionIds: string[]) => void;
+}) {
+  const { colors, fonts } = useTheme();
+  const [selected, setSelected] = useState<string[]>([]);
+  const hasVoted = poll.myVote.length > 0;
+  const showResults = hasVoted;
+
+  const toggleSelect = (optionId: string) => {
+    if (poll.allowMultiple) {
+      setSelected((current) =>
+        current.includes(optionId)
+          ? current.filter((id) => id !== optionId)
+          : [...current, optionId],
+      );
+    } else {
+      // Single-select: tap casts the vote right away.
+      onVote([optionId]);
+    }
+  };
+
+  return (
+    <View
+      className="mt-4 rounded-2xl border p-4"
+      style={{ borderColor: colors.border, backgroundColor: colors.surfaceSoft }}
+    >
+      <View className="flex-row items-center gap-2 mb-3">
+        <Ionicons name="stats-chart" size={15} color={colors.primary} />
+        <Text
+          className="text-[13px] font-bold flex-1"
+          style={{ color: colors.foreground, fontFamily: fonts.body }}
+        >
+          {poll.question?.trim() || "Poll"}
+        </Text>
+        {poll.allowMultiple ? (
+          <Text
+            className="text-[9px] font-black uppercase tracking-wide"
+            style={{ color: colors.mutedText, fontFamily: fonts.body }}
+          >
+            Multi
+          </Text>
+        ) : null}
+      </View>
+
+      <View style={{ gap: 8 }}>
+        {poll.options.map((option) => {
+          const pct =
+            poll.totalVotes > 0 ? Math.round((option.votes / poll.totalVotes) * 100) : 0;
+          const isMine = poll.myVote.includes(option.optionId);
+          const isSelected = selected.includes(option.optionId);
+
+          if (showResults) {
+            return (
+              <View
+                key={option.optionId}
+                className="rounded-xl overflow-hidden border"
+                style={{ borderColor: isMine ? colors.primary : colors.border }}
+              >
+                <View
+                  className="absolute top-0 left-0 bottom-0"
+                  style={{
+                    width: `${pct}%`,
+                    backgroundColor: isMine ? colors.primaryLight : colors.surface,
+                  }}
+                />
+                <View className="flex-row items-center justify-between px-3 py-2.5">
+                  <View className="flex-row items-center gap-1.5 flex-1">
+                    {isMine ? (
+                      <Ionicons name="checkmark-circle" size={14} color={colors.primary} />
+                    ) : null}
+                    <Text
+                      className="text-[13px] font-semibold"
+                      style={{ color: colors.foreground, fontFamily: fonts.body }}
+                      numberOfLines={1}
+                    >
+                      {option.topic}
+                    </Text>
+                  </View>
+                  <Text
+                    className="text-[12px] font-bold"
+                    style={{ color: colors.mutedText, fontFamily: fonts.mono }}
+                  >
+                    {pct}%
+                  </Text>
+                </View>
+              </View>
+            );
+          }
+
+          return (
+            <TouchableOpacity
+              key={option.optionId}
+              activeOpacity={0.85}
+              disabled={isVoting}
+              onPress={() => toggleSelect(option.optionId)}
+              className="flex-row items-center gap-2 rounded-xl border px-3 py-2.5"
+              style={{
+                borderColor: isSelected ? colors.primary : colors.border,
+                backgroundColor: isSelected ? colors.primaryLight : colors.surface,
+              }}
+            >
+              <Ionicons
+                name={
+                  poll.allowMultiple
+                    ? isSelected
+                      ? "checkbox"
+                      : "square-outline"
+                    : "radio-button-off"
+                }
+                size={16}
+                color={isSelected ? colors.primary : colors.mutedText}
+              />
+              <Text
+                className="text-[13px] font-semibold flex-1"
+                style={{ color: colors.foreground, fontFamily: fonts.body }}
+                numberOfLines={1}
+              >
+                {option.topic}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {poll.allowMultiple && !showResults ? (
+        <TouchableOpacity
+          activeOpacity={0.9}
+          disabled={isVoting || selected.length === 0}
+          onPress={() => onVote(selected)}
+          className="mt-3 rounded-full items-center justify-center py-2.5 flex-row gap-2"
+          style={{
+            backgroundColor: colors.primary,
+            opacity: isVoting || selected.length === 0 ? 0.5 : 1,
+          }}
+        >
+          {isVoting ? <ActivityIndicator size="small" color={colors.buttonText} /> : null}
+          <Text
+            className="text-xs font-bold"
+            style={{ color: colors.buttonText, fontFamily: fonts.body }}
+          >
+            Vote
+          </Text>
+        </TouchableOpacity>
+      ) : null}
+
+      <Text
+        className="mt-3 text-[11px] font-semibold"
+        style={{ color: colors.mutedText, fontFamily: fonts.body }}
+      >
+        {poll.totalVotes} {poll.totalVotes === 1 ? "vote" : "votes"}
+        {hasVoted ? " · You voted" : ""}
+      </Text>
+    </View>
+  );
 }
 
 function PostVideoAttachment({
@@ -555,6 +725,13 @@ export default function CommunityScreen() {
   const [newPostCategory, setNewPostCategory] = useState<string | null>(null);
   const [newCommentContent, setNewCommentContent] = useState("");
 
+  // Compose-modal poll state. `pollOptions === null` means "no poll attached";
+  // toggling the poll button seeds two empty options (up to POLL_MAX_OPTIONS).
+  const [pollOptions, setPollOptions] = useState<string[] | null>(null);
+  const [pollAllowMultiple, setPollAllowMultiple] = useState(false);
+  // Tracks polls a vote is in-flight for, so options can't be double-tapped.
+  const [votingPollIds, setVotingPollIds] = useState<Set<string>>(new Set());
+
   // Compose-modal attachment picking state
   const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
@@ -866,6 +1043,17 @@ export default function CommunityScreen() {
     }
     if (isPublishing) return;
 
+    // Validate the attached poll (if any) before uploading anything.
+    let pollPayload: { allowMultiple: boolean; options: string[] } | undefined;
+    if (pollOptions !== null) {
+      const trimmed = pollOptions.map((option) => option.trim()).filter(Boolean);
+      if (trimmed.length < POLL_MIN_OPTIONS) {
+        alert("Add poll options", `A poll needs at least ${POLL_MIN_OPTIONS} filled options.`);
+        return;
+      }
+      pollPayload = { allowMultiple: pollAllowMultiple, options: trimmed };
+    }
+
     setIsPublishing(true);
     try {
       let attachments: CommunityAttachment[] | undefined;
@@ -883,11 +1071,14 @@ export default function CommunityScreen() {
         isAnonymous: true,
         category: newPostCategory ?? undefined,
         attachments,
+        poll: pollPayload,
       });
 
       setPosts((current) => [mapCommunityPost(createdPost), ...current]);
       setNewPostContent("");
       setNewPostCategory(null);
+      setPollOptions(null);
+      setPollAllowMultiple(false);
       resetComposeAttachment();
       setCreatePostVisible(false);
       earnTokens(5);
@@ -898,6 +1089,60 @@ export default function CommunityScreen() {
       );
     } finally {
       setIsPublishing(false);
+    }
+  }
+
+  // --- Poll composer helpers ---
+  const togglePollComposer = () =>
+    setPollOptions((current) => (current === null ? ["", ""] : null));
+  const updatePollOption = (index: number, value: string) =>
+    setPollOptions((current) =>
+      current ? current.map((option, i) => (i === index ? value : option)) : current,
+    );
+  const addPollOption = () =>
+    setPollOptions((current) =>
+      current && current.length < POLL_MAX_OPTIONS ? [...current, ""] : current,
+    );
+  const removePollOption = (index: number) =>
+    setPollOptions((current) =>
+      current && current.length > POLL_MIN_OPTIONS
+        ? current.filter((_, i) => i !== index)
+        : current,
+    );
+
+  // Cast a vote on a post's poll. Optimistically reflects the new counts +
+  // myVote so the results bars render immediately, then reconciles with the
+  // server response (source of truth for totals).
+  async function handleVotePoll(post: Post, optionIds: string[]) {
+    if (
+      !post.poll ||
+      post.poll.myVote.length > 0 ||
+      optionIds.length === 0 ||
+      votingPollIds.has(post.id)
+    )
+      return;
+
+    const applyPoll = (poll: CommunityPoll) =>
+      setPosts((current) =>
+        current.map((item) => (item.id === post.id ? { ...item, poll } : item)),
+      );
+
+    setVotingPollIds((current) => new Set(current).add(post.id));
+    try {
+      const { poll, tokensAwarded } = await communityApi.votePoll(post.id, optionIds);
+      applyPoll(poll);
+      if (tokensAwarded) earnTokens(tokensAwarded);
+    } catch (error) {
+      alert(
+        "Couldn't record your vote",
+        error instanceof Error ? error.message : "Please try again.",
+      );
+    } finally {
+      setVotingPollIds((current) => {
+        const next = new Set(current);
+        next.delete(post.id);
+        return next;
+      });
     }
   }
 
@@ -1230,6 +1475,14 @@ export default function CommunityScreen() {
 
           {post.attachment && <PostAttachmentView attachment={post.attachment} />}
 
+          {post.poll && (
+            <PostPollView
+              poll={post.poll}
+              isVoting={votingPollIds.has(post.id)}
+              onVote={(optionIds) => handleVotePoll(post, optionIds)}
+            />
+          )}
+
           {/* Action Bar - all icons left side together */}
           <View
             className="mt-5 pt-3 flex-row items-center"
@@ -1518,6 +1771,8 @@ export default function CommunityScreen() {
                   setCreatePostVisible(false);
                   resetComposeAttachment();
                   setNewPostCategory(null);
+                  setPollOptions(null);
+                  setPollAllowMultiple(false);
                 }}
               >
                 <Text
@@ -1634,6 +1889,92 @@ export default function CommunityScreen() {
               </View>
             )}
 
+            {pollOptions !== null && (
+              <View
+                className="mt-4 ml-14 rounded-2xl border p-4"
+                style={{ borderColor: colors.border, backgroundColor: colors.surfaceSoft }}
+              >
+                <View className="flex-row items-center justify-between mb-3">
+                  <Text
+                    className="text-[13px] font-bold"
+                    style={{ color: colors.foreground, fontFamily: fonts.body }}
+                  >
+                    Poll
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setPollOptions(null);
+                      setPollAllowMultiple(false);
+                    }}
+                    accessibilityLabel="Remove poll"
+                  >
+                    <Ionicons name="trash-outline" size={16} color={colors.mutedText} />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={{ gap: 8 }}>
+                  {pollOptions.map((option, index) => (
+                    <View key={index} className="flex-row items-center gap-2">
+                      <TextInput
+                        placeholder={`Option ${index + 1}`}
+                        placeholderTextColor={colors.mutedText}
+                        value={option}
+                        onChangeText={(text) => updatePollOption(index, text)}
+                        className="flex-1 rounded-xl border px-3 py-2 text-sm"
+                        style={{
+                          color: colors.foreground,
+                          borderColor: colors.border,
+                          backgroundColor: colors.surface,
+                          fontFamily: fonts.body,
+                        }}
+                      />
+                      {pollOptions.length > POLL_MIN_OPTIONS && (
+                        <TouchableOpacity
+                          onPress={() => removePollOption(index)}
+                          accessibilityLabel={`Remove option ${index + 1}`}
+                        >
+                          <Ionicons name="close-circle" size={20} color={colors.mutedText} />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  ))}
+                </View>
+
+                {pollOptions.length < POLL_MAX_OPTIONS && (
+                  <TouchableOpacity
+                    onPress={addPollOption}
+                    className="flex-row items-center gap-1.5 mt-3"
+                  >
+                    <Ionicons name="add-circle-outline" size={18} color={colors.primary} />
+                    <Text
+                      className="text-xs font-bold"
+                      style={{ color: colors.primary, fontFamily: fonts.body }}
+                    >
+                      Add option
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
+                <TouchableOpacity
+                  onPress={() => setPollAllowMultiple((current) => !current)}
+                  className="flex-row items-center gap-2 mt-4 pt-3"
+                  style={{ borderTopWidth: 1, borderTopColor: colors.border }}
+                >
+                  <Ionicons
+                    name={pollAllowMultiple ? "checkbox" : "square-outline"}
+                    size={18}
+                    color={pollAllowMultiple ? colors.primary : colors.mutedText}
+                  />
+                  <Text
+                    className="text-xs font-semibold"
+                    style={{ color: colors.foreground, fontFamily: fonts.body }}
+                  >
+                    Allow selecting multiple options
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
             <View
               className="mt-4 ml-14 flex-row items-center gap-5 pt-3"
               style={{ borderTopWidth: 1, borderTopColor: colors.border }}
@@ -1649,6 +1990,13 @@ export default function CommunityScreen() {
                   name={audioRecorderState.isRecording ? "stop-circle" : "mic-outline"}
                   size={22}
                   color={audioRecorderState.isRecording ? colors.danger : colors.mutedText}
+                />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={togglePollComposer}>
+                <Ionicons
+                  name="stats-chart"
+                  size={22}
+                  color={pollOptions !== null ? colors.primary : colors.mutedText}
                 />
               </TouchableOpacity>
             </View>

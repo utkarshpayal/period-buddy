@@ -317,6 +317,25 @@ export default function Predictions() {
                 </View>
               )}
 
+              {/* Stale-data warning — the user stopped logging, so the
+                  projection has drifted far from a real anchor. */}
+              {data.isStale && (
+                <View
+                  className="flex-row items-start gap-3 p-4 border mb-5"
+                  style={{ backgroundColor: `${colors.warning}12`, borderColor: `${colors.warning}40`, borderRadius: 28 }}
+                >
+                  <Feather name="alert-triangle" size={18} color={colors.warning} />
+                  <View className="flex-1">
+                    <Text className="text-xs font-black" style={{ color: colors.warning, fontFamily: fonts.heading }}>
+                      Predictions may be off
+                    </Text>
+                    <Text className="text-[11px] mt-0.5 font-medium leading-4" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                      It&apos;s been a while since your last logged period{typeof data.daysSinceLastActualPeriod === "number" ? ` (${data.daysSinceLastActualPeriod} days)` : ""}. Log your current period to re-anchor these dates.
+                    </Text>
+                  </View>
+                </View>
+              )}
+
               {/* Hero: Next Period — circular countdown ring */}
               <View
                 className="border overflow-hidden mb-5 items-center py-6"
@@ -400,8 +419,30 @@ export default function Predictions() {
                   );
                 })()}
                 <Text className="mt-2.5 text-base font-black tracking-tight" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-                  Next period · {data.nextPeriodDate}
+                  {data.isEstimate ? "Estimated next period" : "Next period"} · {data.nextPeriodDate}
                 </Text>
+                {data.isEstimate && data.predictedWindowRange ? (
+                  <Text
+                    className="mt-1 text-[11px] font-semibold text-center px-6"
+                    style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                  >
+                    Your cycles vary — it may arrive anytime {data.predictedWindowRange}.
+                  </Text>
+                ) : null}
+                {data.confidence ? (
+                  <View
+                    className="mt-2 rounded-full px-3 py-1"
+                    style={{ backgroundColor: `${colors.primary}14` }}
+                  >
+                    <Text
+                      className="text-[10px] font-black uppercase tracking-wider"
+                      style={{ color: colors.primary, fontFamily: fonts.body }}
+                    >
+                      {data.confidence} confidence
+                      {data.cyclesAnalyzed ? ` · ${data.cyclesAnalyzed} cycles` : ""}
+                    </Text>
+                  </View>
+                ) : null}
               </View>
 
               {/* Fertile Window + Ovulation */}
@@ -448,10 +489,14 @@ export default function Predictions() {
                       Ovulation Day
                     </Text>
                     <Text className="text-lg font-black tracking-tight mt-0.5" style={{ color: colors.foreground, fontFamily: fonts.mono }}>
-                      {data.ovulationDate}
+                      {data.ovulationReliable === false ? "—" : data.ovulationDate}
                     </Text>
                     <Text className="text-[10px] font-semibold mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                      {data.ovulationDaysAway === 0 ? "Today!" : `In ${data.ovulationDaysAway} days`}
+                      {data.ovulationReliable === false
+                        ? "Less reliable for irregular cycles"
+                        : data.ovulationDaysAway === 0
+                          ? "Today!"
+                          : `In ${data.ovulationDaysAway} days`}
                     </Text>
                   </View>
                 </View>

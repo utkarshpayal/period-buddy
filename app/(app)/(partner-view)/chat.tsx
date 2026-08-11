@@ -17,7 +17,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../../../components/theme";
 import { SkeletonRow } from "../../../components/Skeleton";
 import { partnerApi } from "../../../lib/api";
-import { usePartnerViewState } from "./_state";
+import { usePartnerViewState } from "../../../components/partner-view-state";
 
 export default function PartnerViewChat() {
   const { colors, isDark, fonts } = useTheme();

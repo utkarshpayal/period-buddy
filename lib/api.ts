@@ -129,6 +129,7 @@ export type AuthUser = {
   phone?: string;
   profilePicture?: string;
   role?: string;
+  state?: string;
   streakCount?: number;
   subscriptionExpiry?: string;
   subscriptionPlan?: "basic" | "free" | "premium";
@@ -217,6 +218,11 @@ export type Predictions = {
   analyticsData: { daysLogged?: number; length: number; month: string }[];
   currentCycleDay: number;
   currentPhase: string;
+  /** ISO start of the cycle currently in progress — the history-aware anchor
+   *  the calendar should project future phases from (not the stale settings
+   *  lastPeriodStartDate). */
+  currentPeriodStartDateISO?: string;
+  currentPeriodEndDateISO?: string;
   fertileWindowDuration: string;
   fertileWindowRange: string;
   isDataHighlyAccurate: boolean;
@@ -227,8 +233,46 @@ export type Predictions = {
   ovulationDate: string;
   ovulationDateISO?: string;
   ovulationDaysAway: number;
+  /** false for highly irregular cycles, where calendar ovulation is unreliable */
+  ovulationReliable?: boolean;
+  fertileWindowReliable?: boolean;
   periodLength: number;
   cycleLength: number;
+
+  // Predicted vs. actual data model. The anchor for future predictions is the
+  // most recent *actual* logged period start, never a stale predicted date.
+  predictedPeriodStartISO?: string;
+  predictedPeriodEndISO?: string;
+  predictedPeriodStartEarliestISO?: string;
+  predictedPeriodStartLatestISO?: string;
+  predictedWindowRange?: string;
+  actualPeriodStartISO?: string | null;
+  actualPeriodEndISO?: string | null;
+
+  // Prediction quality metadata.
+  predictionMethod?:
+    | "configured_cycle"
+    | "historical_median"
+    | "historical_weighted"
+    | "irregular_range";
+  confidence?: "low" | "medium" | "high";
+  variability?: "low" | "medium" | "high" | "unknown";
+  isRegular?: boolean | null;
+  /** true when the date is a rough estimate (high variability) — show a window */
+  isEstimate?: boolean;
+  cyclesAnalyzed?: number;
+  cycleLengthHistory?: number[];
+  medianCycleLength?: number | null;
+  minCycleLength?: number | null;
+  maxCycleLength?: number | null;
+  /** count of implausible "double cycle" lengths excluded from the estimate */
+  outliersRemoved?: number;
+
+  // Staleness — set when the user has stopped logging for 2+ predicted cycles,
+  // so the projection is a guess rather than a measurement.
+  daysSinceLastActualPeriod?: number | null;
+  skippedCycles?: number;
+  isStale?: boolean;
 };
 
 export type CycleStats = {
@@ -493,9 +537,25 @@ export type CommunityAttachment = {
   url: string;
 };
 
+export type CommunityPollOption = {
+  optionId: string;
+  topic: string;
+  votes: number;
+};
+
+export type CommunityPoll = {
+  question?: string;
+  allowMultiple: boolean;
+  options: CommunityPollOption[];
+  totalVotes: number;
+  /** optionIds the requesting user has already voted for ([] if not yet voted) */
+  myVote: string[];
+};
+
 export type CommunityPost = {
   _id: string;
   attachments?: CommunityAttachment[];
+  poll?: CommunityPoll;
   category?: string;
   commentCount?: number;
   comments?: CommunityComment[];
@@ -1231,6 +1291,7 @@ export const communityApi = {
     category?: string;
     content: string;
     isAnonymous?: boolean;
+    poll?: { question?: string; allowMultiple?: boolean; options: string[] };
     tags?: string[];
     title?: string;
   }) =>
@@ -1238,6 +1299,12 @@ export const communityApi = {
       body: JSON.stringify(payload),
       method: "POST",
     }),
+
+  votePoll: (id: string, optionIds: string[]) =>
+    apiRequest<{ poll: CommunityPoll; tokensAwarded: number }>(
+      `/api/community/${id}/poll/vote`,
+      { body: JSON.stringify({ optionIds }), method: "POST" },
+    ),
 
   getPostById: (id: string) => apiRequest<CommunityPost>(`/api/community/${id}`),
 
@@ -1894,4 +1961,230 @@ export const screeningApi = {
     }),
 
   getHistory: () => apiRequest<ScreeningHistoryItem[]>("/api/screening/history"),
+};
+
+/* ──────────────────────────────────────────────────────────
+   Government Schemes & Benefits
+────────────────────────────────────────────────────────── */
+
+export type SchemeCategory =
+  | "menstrual_hygiene"
+  | "adolescent_health"
+  | "sexual_reproductive_health"
+  | "family_planning"
+  | "pregnancy_antenatal"
+  | "maternity_postpartum"
+  | "mother_newborn_care"
+  | "maternal_nutrition"
+  | "reproductive_health";
+
+export type GovernmentLevel = "central" | "state";
+
+// A benefit's primary call-to-action — not everything is an "apply" flow.
+export type SchemeActionType =
+  | "APPLY"
+  | "CHECK_ELIGIBILITY"
+  | "FIND_FACILITY"
+  | "LEARN_MORE"
+  | "EXTERNAL_APPLICATION";
+
+export type SchemeType = "scheme" | "programme" | "service" | "entitlement";
+
+export type SchemeEligibilityRule = {
+  text: string;
+  field?: string;
+  operator?: "eq" | "neq" | "gte" | "lte" | "in" | "exists";
+  value?: unknown;
+};
+
+export type SchemeApplicationStep = { title: string; detail?: string };
+
+export type GovernmentBenefit = {
+  _id: string;
+  name: string;
+  slug: string;
+  shortName?: string;
+  type: SchemeType;
+  governmentLevel: GovernmentLevel;
+  state?: string | null;
+  categories: SchemeCategory[];
+  description: string;
+  benefits: string[];
+  eligibility: SchemeEligibilityRule[];
+  documents: string[];
+  actionType: SchemeActionType;
+  applicationMethod?: string;
+  applicationSteps?: SchemeApplicationStep[];
+  whereToGet?: string;
+  officialUrl?: string;
+  source?: string;
+  helpline?: string;
+  lastVerifiedAt?: string;
+  isActive: boolean;
+};
+
+export type SchemeCategoryMeta = {
+  key: SchemeCategory;
+  label: string;
+  icon: string;
+};
+
+export type SchemeEligibilityResult = {
+  schemeId: string;
+  actionType: SchemeActionType;
+  status: "may_be_eligible" | "not_eligible";
+  message: string;
+  criteria: { text: string; result: "pass" | "fail" | "unknown" }[];
+  unmetCriteria: string[];
+};
+
+export type SchemeApplicationStatus =
+  | "draft"
+  | "submitted"
+  | "in_review"
+  | "approved"
+  | "rejected"
+  | "withdrawn";
+
+export type SchemeApplicationDocument = { name?: string; url?: string };
+
+export type SchemeApplicationUser = {
+  _id: string;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+};
+
+export type SchemeApplication = {
+  _id: string;
+  // A string id normally; populated with basic user fields on admin endpoints.
+  userId: string | SchemeApplicationUser;
+  reviewNote?: string;
+  reviewedAt?: string;
+  schemeId:
+    | string
+    | Pick<
+        GovernmentBenefit,
+        | "_id"
+        | "name"
+        | "shortName"
+        | "slug"
+        | "actionType"
+        | "governmentLevel"
+        | "state"
+        | "officialUrl"
+      >;
+  schemeName?: string;
+  formData?: Record<string, unknown>;
+  documents?: SchemeApplicationDocument[];
+  status: SchemeApplicationStatus;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SchemeListParams = {
+  search?: string;
+  category?: SchemeCategory | string;
+  state?: string;
+  governmentLevel?: GovernmentLevel;
+  page?: number;
+  limit?: number;
+};
+
+export type SchemeEligibilityAnswers = {
+  gender?: string;
+  age?: number;
+  state?: string;
+  isPregnant?: boolean;
+  hasChildren?: boolean;
+};
+
+export const schemesApi = {
+  list: (params?: SchemeListParams) =>
+    apiRequest<{ schemes: GovernmentBenefit[]; pagination: Pagination }>(
+      `/api/schemes${toQuery(params as Record<string, QueryValue>)}`,
+    ),
+
+  getById: (idOrSlug: string) =>
+    apiRequest<{ scheme: GovernmentBenefit }>(`/api/schemes/${idOrSlug}`),
+
+  getRecommended: () =>
+    apiRequest<{ schemes: GovernmentBenefit[] }>("/api/schemes/recommended"),
+
+  getCategories: () =>
+    apiRequest<{ categories: SchemeCategoryMeta[] }>("/api/schemes/categories"),
+
+  checkEligibility: (idOrSlug: string, answers?: SchemeEligibilityAnswers) =>
+    apiRequest<SchemeEligibilityResult>(
+      `/api/schemes/${idOrSlug}/eligibility${toQuery(
+        answers as Record<string, QueryValue>,
+      )}`,
+    ),
+};
+
+export const schemeApplicationsApi = {
+  create: (input: {
+    schemeId: string;
+    formData?: Record<string, unknown>;
+    documents?: SchemeApplicationDocument[];
+  }) =>
+    apiRequest<{ application: SchemeApplication; alreadyExists?: boolean }>(
+      "/api/scheme-applications",
+      {
+        body: JSON.stringify(input),
+        method: "POST",
+      },
+    ),
+
+  list: (params?: {
+    status?: SchemeApplicationStatus;
+    page?: number;
+    limit?: number;
+  }) =>
+    apiRequest<{ applications: SchemeApplication[]; pagination: Pagination }>(
+      `/api/scheme-applications${toQuery(params as Record<string, QueryValue>)}`,
+    ),
+
+  getById: (id: string) =>
+    apiRequest<{ application: SchemeApplication }>(
+      `/api/scheme-applications/${id}`,
+    ),
+
+  update: (
+    id: string,
+    updates: {
+      status?: SchemeApplicationStatus;
+      notes?: string;
+      formData?: Record<string, unknown>;
+      documents?: SchemeApplicationDocument[];
+    },
+  ) =>
+    apiRequest<{ application: SchemeApplication }>(
+      `/api/scheme-applications/${id}`,
+      { body: JSON.stringify(updates), method: "PATCH" },
+    ),
+
+  // Admin review queue (requires role: admin).
+  adminList: (params?: {
+    status?: SchemeApplicationStatus;
+    schemeId?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+  }) =>
+    apiRequest<{ applications: SchemeApplication[]; pagination: Pagination }>(
+      `/api/scheme-applications/admin/all${toQuery(
+        params as Record<string, QueryValue>,
+      )}`,
+    ),
+
+  adminReview: (
+    id: string,
+    input: { status: "in_review" | "approved" | "rejected"; reviewNote?: string },
+  ) =>
+    apiRequest<{ application: SchemeApplication }>(
+      `/api/scheme-applications/admin/${id}`,
+      { body: JSON.stringify(input), method: "PATCH" },
+    ),
 };

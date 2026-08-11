@@ -5,7 +5,7 @@ import {
   type AppNotification,
   type PartnerMessage,
   type PartnerProfile,
-} from "../../../lib/api";
+} from "../lib/api";
 
 type PartnerViewStateValue = {
   profile: PartnerProfile | null;

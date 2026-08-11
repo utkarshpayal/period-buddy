@@ -430,6 +430,28 @@ export default function Profile() {
               />
             </TouchableOpacity>
 
+            {/* Row: Government Schemes & Benefits (Route) */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => router.push("/government-schemes")}
+              className="flex-row items-center px-4 py-4 border-b"
+              style={{ borderColor: colors.border }}
+            >
+              <View
+                className="p-2.5 rounded-xl mr-4"
+                style={{ backgroundColor: softTints.pink }}
+              >
+                <Ionicons name="ribbon-outline" size={18} color={colors.primary} />
+              </View>
+              <Text
+                className="flex-1 text-sm font-bold"
+                style={{ color: colors.foreground, fontFamily: fonts.body }}
+              >
+                Government Schemes & Benefits
+              </Text>
+              <Feather name="chevron-right" size={16} color={colors.mutedText} />
+            </TouchableOpacity>
+
             {/* Row: App Lock (Route) */}
             <TouchableOpacity
               activeOpacity={0.7}
