@@ -46,3 +46,7 @@ app-example
 # EAS local credentials (secrets)
 credentials.json
 /credentials/
+
+# Firebase config (contains project keys — keep out of git)
+assets/GoogleService-Info.plist
+assets/google-services.json
