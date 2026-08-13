@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "The Nura",
-    "slug": "period-budddy",
+    "slug": "utkarsh-payal",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon-square.png",
@@ -10,7 +10,10 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "scheme": ["thenura", "com.uvin124.thenura"],
+    "scheme": [
+      "thenura",
+      "com.uvin124.thenura"
+    ],
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -23,10 +26,12 @@
         "NSMicrophoneUsageDescription": "The Nura uses your microphone for video calls with your Period Buddy.",
         "NSFaceIDUsageDescription": "The Nura uses Face ID to unlock the app and keep your data private."
       },
-      "associatedDomains": ["applinks:thenura.care"]
+      "associatedDomains": [
+        "applinks:thenura.care"
+      ]
     },
     "android": {
-        "versionCode": 7,
+      "versionCode": 7,
       "adaptiveIcon": {
         "backgroundColor": "#fff0f6",
         "foregroundImage": "./assets/images/icon-square.png"
@@ -37,7 +42,10 @@
       "googleServicesFile": "./assets/google-services.json",
       "permissions": [
         "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
       ],
       "intentFilters": [
         {
@@ -50,7 +58,10 @@
               "pathPrefix": "/app"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -117,9 +128,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "7201c23c-92e0-4c94-8ea9-a7af36d312d8"
+        "projectId": "a15b7bbc-e9bc-4b56-a30c-8c231b973058"
       }
     },
-    "owner": "uvin124"
+    "owner": "thenuracares-team"
   }
 }

@@ -16,11 +16,13 @@
     "development": {
       "extends": "base",
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "credentialsSource": "local"
     },
     "preview": {
       "extends": "base",
       "distribution": "internal",
+      "credentialsSource": "local",
       "android": {
         "buildType": "apk"
       }
@@ -28,6 +30,7 @@
     "preview_android": {
       "extends": "base",
       "distribution": "internal",
+      "credentialsSource": "local",
       "android": {
         "buildType": "apk"
       }
@@ -41,7 +44,8 @@
     },
     "production": {
       "extends": "base",
-      "autoIncrement": true
+      "autoIncrement": true,
+      "credentialsSource": "local"
     }
   }
 }
