@@ -21,7 +21,9 @@ import { SkeletonRow } from "../../components/Skeleton";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
 import {
   buddyApi,
+  getFriendlyErrorMessage,
   getWebSocketUrl,
+  isNetworkError,
   type BuddyMatch as ApiBuddyMatch,
   type BuddyMessage as ApiBuddyMessage,
 } from "../../lib/api";
@@ -423,27 +425,39 @@ export default function BuddyNomination() {
         });
       }
       if (result.tokensAwarded) earnTokens(result.tokensAwarded);
+      alert("Buddy nominated", "Your Period Buddy space is ready.");
     } catch (err) {
       console.warn("Failed to nominate buddy:", err);
-      // Keep the local buddy active for offline development.
+      if (isNetworkError(err)) {
+        // Offline: keep the optimistic buddy so development/testing works.
+        alert("Buddy nominated", "Your Period Buddy space is ready.");
+      } else {
+        // The server rejected it (e.g. this buddy just connected with someone
+        // else) — undo the optimistic pairing and surface why.
+        setActiveNominatedId(null);
+        setIsChatConsoleOpen(false);
+        earnTokens(-25);
+        alert("Couldn't connect buddy", getFriendlyErrorMessage(err));
+      }
     }
-
-    alert("Buddy nominated", "Your Period Buddy space is ready.");
   }
 
-  async function handleSendBuddyMessage() {
-    if (!typedMessage.trim()) return;
+  // `rawText` lets the in-call chat panel send without touching the chat
+  // console's own input state; the console keeps calling it with no argument.
+  async function handleSendBuddyMessage(rawText?: string) {
+    const source = rawText != null ? rawText : typedMessage;
+    if (!source.trim()) return;
 
     const myPayload: BuddyMessage = {
       id: `msg_u_${Date.now()}`,
       sender: "me",
-      text: typedMessage.trim(),
+      text: source.trim(),
       time: "Just now",
       sentAt: new Date().toISOString(),
     };
 
     setChatLog((prev) => [...prev, myPayload]);
-    setTypedMessage("");
+    if (rawText == null) setTypedMessage("");
     setTimeout(
       () => scrollViewRef.current?.scrollToEnd({ animated: true }),
       50,
@@ -816,13 +830,13 @@ export default function BuddyNomination() {
                 color: colors.foreground,
                 fontFamily: fonts.body,
               }}
-              onSubmitEditing={handleSendBuddyMessage}
+              onSubmitEditing={() => handleSendBuddyMessage()}
               submitBehavior="submit"
               returnKeyType="send"
             />
             <TouchableOpacity
               disabled={!typedMessage.trim()}
-              onPress={handleSendBuddyMessage}
+              onPress={() => handleSendBuddyMessage()}
               className="p-2.5 rounded-full items-center justify-center"
               style={{
                 backgroundColor: typedMessage.trim()
@@ -849,6 +863,8 @@ export default function BuddyNomination() {
           buddyAlias={activeBuddyData.name}
           roomId={`buddy_${activeRoomKey}`}
           socketRef={socketRef}
+          chatMessages={chatLog}
+          onSendMessage={(text) => handleSendBuddyMessage(text)}
         />
       )}
     </>

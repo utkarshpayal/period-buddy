@@ -16,7 +16,10 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { WebView } from "react-native-webview";
+import {
+  ConsultationVideoCall,
+  type ConsultationVideoCallHandle,
+} from "../../components/ConsultationVideoCall";
 import { EmptyState } from "../../components/EmptyState";
 import { RazorpayCheckoutModal, type RazorpayResult } from "../../components/RazorpayCheckoutModal";
 import { useTheme } from "../../components/theme";
@@ -41,19 +44,6 @@ function getDoctorDisplayName(doctor: Doctor) {
     [doctor.firstName, doctor.lastName].filter(Boolean).join(" ") ||
     "Clinical specialist"
   );
-}
-
-/**
- * Resolves the shared video-room URL for a consultation. Prefers the
- * server-issued meetingLink; falls back to the same deterministic Jitsi room
- * the backend uses (doctorController.meetingLinkFor), so patient and doctor
- * always land in the same room even for older bookings without a stored link.
- */
-function getMeetingUrl(consultation: Consultation | null): string | null {
-  if (!consultation) return null;
-  const base = consultation.meetingLink || `https://meet.jit.si/PeriodBuddy-Consult-${consultation._id}`;
-  // Skip the prejoin lobby and start unmuted for a 1:1 clinical call.
-  return `${base}#config.prejoinPageEnabled=false&config.startWithVideoMuted=false&config.startWithAudioMuted=false`;
 }
 
 /** "14:30" -> "2:30 PM" */
@@ -119,6 +109,24 @@ function isSameDay(a: Date, b: Date): boolean {
   );
 }
 
+/**
+ * Collapses a message list so the same message never renders twice. The server
+ * (sendMessage response) and the WebSocket broadcast both deliver the full log,
+ * so without this an echoed message shows up multiple times. Messages with an
+ * `_id` dedupe on it; optimistic messages (no `_id` yet) dedupe on sender+text.
+ */
+function dedupeMessages(messages: ConsultationMessage[]): ConsultationMessage[] {
+  const seen = new Set<string>();
+  const out: ConsultationMessage[] = [];
+  for (const msg of messages) {
+    const key = msg._id ? `id:${msg._id}` : `tmp:${msg.sender}:${msg.text}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(msg);
+  }
+  return out;
+}
+
 export default function ConsultationScreen() {
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
@@ -168,16 +176,13 @@ export default function ConsultationScreen() {
 
   const selectedSlotLabel = selectedSlotMins != null ? minutesToLabel(selectedSlotMins) : null;
 
-  // Video Call WebSocket signaling states
-  const [videoCallModalVisible, setVideoCallModalVisible] = useState(false);
-  const [videoCallLogs, setVideoCallLogs] = useState<string[]>([]);
-  const [videoCallStatus, setVideoCallStatus] = useState("Connecting...");
-  const [isMuted, setIsMuted] = useState(false);
-  const [videoOff, setVideoOff] = useState(false);
+  // Video call: WebRTC "meeting" over the shared consultation WebSocket room, so
+  // patient and doctor connect peer-to-peer instead of via a third-party room.
+  const socketRef = useRef<WebSocket | null>(null);
+  const callRef = useRef<ConsultationVideoCallHandle | null>(null);
 
   // Chat
   const [activeConsultation, setActiveConsultation] = useState<Consultation | null>(null);
-  const meetingUrl = getMeetingUrl(activeConsultation);
   const [chatMessages, setChatMessages] = useState<ConsultationMessage[]>([]);
   const [chatModalVisible, setChatModalVisible] = useState(false);
   const [typedMessage, setTypedMessage] = useState("");
@@ -222,6 +227,7 @@ export default function ConsultationScreen() {
       try {
         const wsUrl = await getWebSocketUrl();
         socket = new WebSocket(wsUrl);
+        socketRef.current = socket;
 
         socket.onopen = () => {
           if (isDisconnected) return;
@@ -236,11 +242,16 @@ export default function ConsultationScreen() {
           if (isDisconnected) return;
           try {
             const data = JSON.parse(event.data);
-            if (data.type === "message" && data.room === `consultation_${consultation!._id}`) {
+            const room = `consultation_${consultation!._id}`;
+            if (data.type === "message" && data.room === room) {
               if (data.messages && Array.isArray(data.messages)) {
-                setChatMessages(data.messages);
+                setChatMessages(dedupeMessages(data.messages));
                 setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 100);
               }
+            } else if (data.type && data.room === room) {
+              // Non-chat traffic on this room is WebRTC call signaling — the
+              // doctor ringing us shows up here as an incoming call.
+              callRef.current?.handleSignal(data);
             }
           } catch (err) {
             console.error("Error parsing WebSocket message:", err);
@@ -272,6 +283,7 @@ export default function ConsultationScreen() {
         } catch {}
         socket.close();
       }
+      if (socketRef.current === socket) socketRef.current = null;
     };
   }, [chatModalVisible, activeConsultation]);
 
@@ -318,18 +330,6 @@ export default function ConsultationScreen() {
       setSelectedSlotMins(null);
     }
   }, [daySlots, selectedSlotMins]);
-
-  // Video call: the shared Jitsi room (WebView) handles media directly, so the
-  // old mock WebRTC signaling is gone. We just reflect status for the header.
-  useEffect(() => {
-    if (!videoCallModalVisible || !activeConsultation) {
-      setVideoCallStatus("Idle");
-      return;
-    }
-    setVideoCallStatus("In consultation room");
-    setVideoCallLogs([]);
-  }, [videoCallModalVisible, activeConsultation])
-
 
   const getConsultationForDoctor = (doctorId: string) =>
     myConsultations.find((c) => {
@@ -401,19 +401,22 @@ export default function ConsultationScreen() {
     setLoadingMessages(true);
     try {
       const messages = await consultationApi.getMessages(consultation._id);
-      setChatMessages(messages);
+      setChatMessages(dedupeMessages(messages));
     } catch {
-      setChatMessages(consultation.messages ?? []);
+      setChatMessages(dedupeMessages(consultation.messages ?? []));
     } finally {
       setLoadingMessages(false);
       setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: false }), 100);
     }
   };
 
-  const handleSendMessage = async () => {
-    if (!typedMessage.trim() || !activeConsultation || sendingMessage) return;
-    const text = typedMessage.trim();
-    setTypedMessage("");
+  // `rawText` lets the in-call chat panel send without touching the chat sheet's
+  // own input state; the chat sheet keeps calling it with no argument.
+  const handleSendMessage = async (rawText?: string) => {
+    const source = rawText != null ? rawText : typedMessage;
+    const text = source.trim();
+    if (!text || !activeConsultation || sendingMessage) return;
+    if (rawText == null) setTypedMessage("");
     setSendingMessage(true);
 
     // Optimistic UI
@@ -422,8 +425,10 @@ export default function ConsultationScreen() {
     setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 50);
 
     try {
+      // sendMessage returns the full authoritative log — replace (deduped)
+      // rather than append, so the optimistic message isn't shown twice.
       const latest = await consultationApi.sendMessage(activeConsultation._id, text);
-      setChatMessages((prev) => [...prev.slice(0, -1), ...latest]);
+      setChatMessages(dedupeMessages(latest));
     } catch {
       // message stays optimistically
     } finally {
@@ -883,10 +888,10 @@ export default function ConsultationScreen() {
                   </View>
                 </View>
 
-                {/* Video camera trigger for video calling */}
+                {/* Video camera trigger — rings the doctor over WebRTC */}
                 <TouchableOpacity
                   activeOpacity={0.7}
-                  onPress={() => setVideoCallModalVisible(true)}
+                  onPress={() => callRef.current?.startCall()}
                   className="p-2 rounded-full"
                   style={{ backgroundColor: colors.surfaceSoft }}
                 >
@@ -910,53 +915,17 @@ export default function ConsultationScreen() {
                     <SkeletonRow />
                     <SkeletonRow />
                   </View>
+                ) : chatMessages.length === 0 ? (
+                  <View className="items-center pt-16 px-8">
+                    <Text
+                      className="text-xs font-semibold text-center leading-5"
+                      style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                    >
+                      No messages yet. Send a message to start the conversation with your specialist.
+                    </Text>
+                  </View>
                 ) : (
                   <View className="gap-4">
-                    {/* Hardcoded introductory messages to match mockup precisely */}
-                    <View
-                      className="max-w-[80%] p-4 rounded-2xl self-start rounded-tl-none border"
-                      style={{
-                        backgroundColor: colors.surface,
-                        borderColor: colors.border,
-                      }}
-                    >
-                      <Text
-                        className="text-xs font-semibold leading-5"
-                        style={{ color: colors.foreground, fontFamily: fonts.body }}
-                      >
-                        Hi Utkarsh, I&apos;ve reviewed your cycle history. How have symptoms been this week?
-                      </Text>
-                    </View>
-
-                    <View
-                      className="max-w-[80%] p-4 rounded-2xl self-end rounded-tr-none"
-                      style={{
-                        backgroundColor: isDark ? colors.surfaceStrong : "#17212E",
-                      }}
-                    >
-                      <Text
-                        className="text-xs font-semibold leading-5"
-                        style={{ color: "#FFFFFF", fontFamily: fonts.body }}
-                      >
-                        Cramps have been stronger than usual, mostly day 1-2.
-                      </Text>
-                    </View>
-
-                    <View
-                      className="max-w-[80%] p-4 rounded-2xl self-start rounded-tl-none border"
-                      style={{
-                        backgroundColor: colors.surface,
-                        borderColor: colors.border,
-                      }}
-                    >
-                      <Text
-                        className="text-xs font-semibold leading-5"
-                        style={{ color: colors.foreground, fontFamily: fonts.body }}
-                      >
-                        Understood. Let&apos;s go over a few options during our call{selectedSlotLabel ? ` at ${selectedSlotLabel}` : ""}.
-                      </Text>
-                    </View>
-
                     {/* Dynamic chat message log */}
                     {chatMessages.map((msg, i) => {
                       const isDoctor = msg.sender === "doctor";
@@ -1000,13 +969,13 @@ export default function ConsultationScreen() {
                   onChangeText={setTypedMessage}
                   className="flex-1 px-4 py-3 rounded-xl text-sm"
                   style={{ backgroundColor: colors.input, color: colors.foreground, fontFamily: fonts.body }}
-                  onSubmitEditing={handleSendMessage}
+                  onSubmitEditing={() => handleSendMessage()}
                   submitBehavior="submit"
                   returnKeyType="send"
                 />
                 <TouchableOpacity
                   disabled={!typedMessage.trim() || sendingMessage}
-                  onPress={handleSendMessage}
+                  onPress={() => handleSendMessage()}
                   accessibilityRole="button"
                   accessibilityLabel="Send message"
                   className="h-10 w-10 rounded-full items-center justify-center"
@@ -1023,115 +992,20 @@ export default function ConsultationScreen() {
           </KeyboardAvoidingView>
         </Modal>
 
-        {/* Video Call Modal */}
-        <Modal
-          visible={videoCallModalVisible}
-          animationType="fade"
-          presentationStyle="fullScreen"
-          onRequestClose={() => setVideoCallModalVisible(false)}
-        >
-          <SafeAreaView className="flex-1 px-6 pt-6 justify-between pb-8" style={{ backgroundColor: "#130F1A" }}>
-            {/* Header */}
-            <View className="flex-row justify-between items-center">
-              <View>
-                <Text className="text-base font-extrabold text-white" style={{ fontFamily: fonts.heading }}>
-                  Consultation Call
-                </Text>
-                <View className="flex-row items-center gap-1.5 mt-1">
-                  <View className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
-                  <Text className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                    {videoCallStatus}
-                  </Text>
-                </View>
-              </View>
-
-              <TouchableOpacity
-                onPress={() => setVideoCallModalVisible(false)}
-                className="p-2 rounded-full bg-white/10"
-              >
-                <Feather name="x" size={16} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
-
-            {/* Video Streams Display — real shared room (Jitsi) that the
-                clinician portal joins from the same meetingLink. */}
-            <View className="flex-1 my-6 rounded-3xl overflow-hidden relative bg-black/40 border border-white/5 justify-center items-center">
-              {meetingUrl ? (
-                <WebView
-                  source={{ uri: meetingUrl }}
-                  style={{ flex: 1, width: "100%", backgroundColor: "#130F1A" }}
-                  originWhitelist={["*"]}
-                  javaScriptEnabled
-                  domStorageEnabled
-                  allowsInlineMediaPlayback
-                  mediaPlaybackRequiresUserAction={false}
-                  mediaCapturePermissionGrantType="grant"
-                  allowsProtectedMedia
-                  onError={() =>
-                    setVideoCallLogs((prev) => [...prev, "[WebView] Failed to load the video room."])
-                  }
-                  startInLoadingState
-                  renderLoading={() => (
-                    <View className="absolute inset-0 items-center justify-center" style={{ backgroundColor: "#130F1A" }}>
-                      <ActivityIndicator size="large" color={colors.primary} />
-                      <Text className="text-white font-semibold text-sm mt-4">
-                        Connecting to the consultation room…
-                      </Text>
-                    </View>
-                  )}
-                />
-              ) : (
-                <View className="items-center justify-center">
-                  <ActivityIndicator size="large" color={colors.primary} />
-                  <Text className="text-white font-semibold text-sm mt-4">
-                    Preparing the consultation room…
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            {/* Controls Row */}
-            <View className="flex-row items-center justify-center gap-6">
-              {/* Mute button */}
-              <TouchableOpacity
-                onPress={() => {
-                  setIsMuted(!isMuted);
-                  setVideoCallLogs((prev) => [
-                    ...prev,
-                    isMuted ? "[Media] Microphone unmuted." : "[Media] Microphone muted.",
-                  ]);
-                }}
-                className={`p-4 rounded-full ${isMuted ? "bg-red-500" : "bg-white/10"}`}
-              >
-                <Feather name={isMuted ? "mic-off" : "mic"} size={20} color="#FFFFFF" />
-              </TouchableOpacity>
-
-              {/* End call button */}
-              <TouchableOpacity
-                onPress={() => {
-                  setVideoCallModalVisible(false);
-                }}
-                className="p-5 rounded-full bg-red-600 shadow-md"
-              >
-                <Feather name="phone-off" size={24} color="#FFFFFF" />
-              </TouchableOpacity>
-
-              {/* Video toggle button */}
-              <TouchableOpacity
-                onPress={() => {
-                  setVideoOff(!videoOff);
-                  setVideoCallLogs((prev) => [
-                    ...prev,
-                    videoOff ? "[Media] Camera stream active." : "[Media] Camera stream paused.",
-                  ]);
-                }}
-                className={`p-4 rounded-full ${videoOff ? "bg-red-500" : "bg-white/10"}`}
-              >
-                <Feather name={videoOff ? "video-off" : "video"} size={20} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
-          </SafeAreaView>
-        </Modal>
+        {/* WebRTC video meeting — renders its own full-screen Modal (so it floats
+            above the chat sheet) while joining/active. Shares the
+            consultation_<id> WebSocket room with the doctor's clinician portal. */}
+        {activeConsultation && (
+          <ConsultationVideoCall
+            key={activeConsultation._id}
+            ref={callRef}
+            peerName={selectedDoctor ? getDoctorDisplayName(selectedDoctor) : "Doctor"}
+            roomId={`consultation_${activeConsultation._id}`}
+            socketRef={socketRef}
+            chatMessages={chatMessages}
+            onSendMessage={(text) => handleSendMessage(text)}
+          />
+        )}
 
         {/* Razorpay Checkout */}
         {checkoutOrder && (

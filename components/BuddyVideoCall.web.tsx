@@ -7,23 +7,28 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Text, TouchableOpacity, View } from "react-native";
+import { Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useTheme } from "./theme";
 
 /**
- * Web counterpart of BuddyVideoCall.tsx. `react-native-webrtc` is native-only
- * (no web implementation, and its RTCView relies on a native view manager),
- * so this file — automatically picked by Metro for web builds instead of the
- * default `.tsx` — uses the browser's own built-in WebRTC APIs
- * (`navigator.mediaDevices.getUserMedia`, `window.RTCPeerConnection`) plus
- * plain DOM `<video>` elements instead. Both sides speak the same standard
- * WebRTC/SDP signaling protocol over the same buddy_<id> WebSocket room, so a
- * web caller and a native (iOS/Android) callee can call each other — this is
- * also the only way to test buddy video calling with two browser
- * tabs/windows without a native build.
+ * Web counterpart of BuddyVideoCall.tsx. `react-native-webrtc` is native-only,
+ * so this file (picked by Metro for web) uses the browser's own WebRTC APIs plus
+ * DOM <video> elements. Same "meeting" protocol over the same buddy_<roomKey>
+ * WebSocket room, so a web buddy and a native/web buddy connect to each other —
+ * and two browser tabs can test it on one machine.
+ *
+ * Feature-matches the native file: in-call chat, a default avatar when a camera
+ * is off, and mic-muted badges for both sides via the `call_media` signal.
  */
 
-type Phase = "idle" | "outgoing" | "incoming" | "connecting" | "active" | "ended";
+type Phase = "idle" | "incoming" | "waiting" | "connecting" | "active" | "ended";
+
+/** Shape the parent's buddy chat log exposes to the in-call chat panel. */
+export type BuddyCallMessage = {
+  id?: string;
+  sender: "me" | "buddy";
+  text: string;
+};
 
 export type BuddyVideoCallHandle = {
   startCall: () => void;
@@ -34,25 +39,61 @@ type Props = {
   buddyAlias: string;
   roomId: string;
   socketRef: React.RefObject<WebSocket | null>;
+  /** Shared buddy chat log (same as the buddy chat console). */
+  chatMessages?: BuddyCallMessage[];
+  /** Sends a chat message on the buddy pairing; parent persists + broadcasts it. */
+  onSendMessage?: (text: string) => void;
 };
 
 const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
 
+function initialsOf(name: string): string {
+  return (
+    name
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join("") || "PB"
+  );
+}
+
 export const BuddyVideoCall = forwardRef<BuddyVideoCallHandle, Props>(
-  function BuddyVideoCall({ buddyAlias, roomId, socketRef }, ref) {
+  function BuddyVideoCall({ buddyAlias, roomId, socketRef, chatMessages, onSendMessage }, ref) {
     const { colors, fonts } = useTheme();
 
     const [phase, setPhase] = useState<Phase>("idle");
     const [endedReason, setEndedReason] = useState("");
     const [isMuted, setIsMuted] = useState(false);
     const [isCameraOff, setIsCameraOff] = useState(false);
+    const [remoteMuted, setRemoteMuted] = useState(false);
+    const [remoteCameraOff, setRemoteCameraOff] = useState(false);
+    const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+    const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+
+    // In-call chat panel.
+    const [chatOpen, setChatOpen] = useState(false);
+    const [draft, setDraft] = useState("");
+    const [unread, setUnread] = useState(0);
+    const chatListRef = useRef<ScrollView>(null);
+    const prevMsgCountRef = useRef(0);
 
     const pcRef = useRef<RTCPeerConnection | null>(null);
     const localStreamRef = useRef<MediaStream | null>(null);
     const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
-    const isCallerRef = useRef(false);
     const localVideoRef = useRef<HTMLVideoElement | null>(null);
     const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+
+    const myIdRef = useRef<number>(Math.random());
+    const negotiatedRef = useRef(false);
+    const offererRef = useRef(false);
+    const ackedRef = useRef(false);
+    const incomingPeerIdRef = useRef<number | null>(null);
+
+    // Current local media state, kept in refs so we can echo it to a peer that
+    // (re)joins without re-creating the signal handler on every toggle.
+    const isMutedRef = useRef(false);
+    const isCameraOffRef = useRef(false);
 
     const send = useCallback(
       (type: string, extra: Record<string, unknown> = {}) => {
@@ -71,14 +112,45 @@ export const BuddyVideoCall = forwardRef<BuddyVideoCallHandle, Props>(
       localStreamRef.current?.getTracks().forEach((track) => track.stop());
       localStreamRef.current = null;
       pendingCandidatesRef.current = [];
-      isCallerRef.current = false;
-      if (localVideoRef.current) localVideoRef.current.srcObject = null;
-      if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+      negotiatedRef.current = false;
+      offererRef.current = false;
+      ackedRef.current = false;
+      incomingPeerIdRef.current = null;
+      isMutedRef.current = false;
+      isCameraOffRef.current = false;
+      setLocalStream(null);
+      setRemoteStream(null);
       setIsMuted(false);
       setIsCameraOff(false);
+      setRemoteMuted(false);
+      setRemoteCameraOff(false);
+      setChatOpen(false);
+      setDraft("");
+      setUnread(0);
     }, []);
 
     useEffect(() => cleanup, [cleanup]);
+
+    // Attach streams whenever the stream or the <video> element changes; the
+    // elements mount/unmount by phase, so inline srcObject assignment races.
+    useEffect(() => {
+      if (localVideoRef.current) localVideoRef.current.srcObject = localStream;
+    }, [localStream, phase, isCameraOff]);
+    useEffect(() => {
+      if (remoteVideoRef.current) remoteVideoRef.current.srcObject = remoteStream;
+    }, [remoteStream, phase, remoteCameraOff]);
+
+    // Unread chat badge + auto-scroll.
+    useEffect(() => {
+      const count = chatMessages?.length ?? 0;
+      if (chatOpen) {
+        setUnread(0);
+        setTimeout(() => chatListRef.current?.scrollToEnd({ animated: true }), 50);
+      } else if (phase === "active" && count > prevMsgCountRef.current) {
+        setUnread((n) => n + (count - prevMsgCountRef.current));
+      }
+      prevMsgCountRef.current = count;
+    }, [chatMessages, chatOpen, phase]);
 
     const flushPendingCandidates = useCallback(async (pc: RTCPeerConnection) => {
       const queued = pendingCandidatesRef.current;
@@ -92,13 +164,23 @@ export const BuddyVideoCall = forwardRef<BuddyVideoCallHandle, Props>(
       }
     }, []);
 
+    const endWithReason = useCallback(
+      (reason: string, notifyPeer: boolean) => {
+        if (notifyPeer) send("call_end");
+        cleanup();
+        setEndedReason(reason);
+        setPhase("ended");
+      },
+      [cleanup, send],
+    );
+
     const setupPeerConnection = useCallback(async () => {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
         video: { facingMode: "user" },
       });
       localStreamRef.current = stream;
-      if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+      setLocalStream(stream);
 
       const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
@@ -108,13 +190,13 @@ export const BuddyVideoCall = forwardRef<BuddyVideoCallHandle, Props>(
       };
 
       pc.ontrack = (event) => {
-        const remote = event.streams[0];
-        if (remote && remoteVideoRef.current) remoteVideoRef.current.srcObject = remote;
+        if (event.streams[0]) setRemoteStream(event.streams[0]);
       };
 
       pc.onconnectionstatechange = () => {
         if (pc.connectionState === "connected") {
           setPhase("active");
+          send("call_media", { audioOff: isMutedRef.current, videoOff: isCameraOffRef.current });
         } else if (["failed", "disconnected", "closed"].includes(pc.connectionState)) {
           setEndedReason("Call disconnected");
           cleanup();
@@ -126,15 +208,51 @@ export const BuddyVideoCall = forwardRef<BuddyVideoCallHandle, Props>(
       return pc;
     }, [cleanup, send]);
 
-    const endWithReason = useCallback(
-      (reason: string, notifyPeer: boolean) => {
-        if (notifyPeer) send("call_end");
-        cleanup();
-        setEndedReason(reason);
-        setPhase("ended");
+    const maybeNegotiate = useCallback(
+      async (peerId: number) => {
+        const pc = pcRef.current;
+        if (!pc || negotiatedRef.current) return;
+        negotiatedRef.current = true;
+        setPhase("connecting");
+        if (myIdRef.current > peerId) {
+          offererRef.current = true;
+          try {
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            send("webrtc_offer", { sdp: pc.localDescription });
+          } catch (err) {
+            console.warn("Failed to create offer:", err);
+            endWithReason("Connection failed", true);
+          }
+        } else {
+          offererRef.current = false;
+        }
       },
-      [cleanup, send],
+      [endWithReason, send],
     );
+
+    const enterCall = useCallback(async () => {
+      if (pcRef.current) return;
+      const knownPeer = incomingPeerIdRef.current;
+      try {
+        await setupPeerConnection();
+      } catch (err) {
+        console.warn("Failed to enter buddy call:", err);
+        endWithReason("Couldn't access camera/mic", false);
+        return;
+      }
+      setPhase(knownPeer != null ? "connecting" : "waiting");
+      ackedRef.current = true;
+      send("call_join", { callId: myIdRef.current });
+      if (knownPeer != null) maybeNegotiate(knownPeer);
+    }, [endWithReason, maybeNegotiate, send, setupPeerConnection]);
+
+    const endCall = useCallback(() => endWithReason("Call ended", true), [endWithReason]);
+
+    const dismissIncoming = useCallback(() => {
+      incomingPeerIdRef.current = null;
+      setPhase("idle");
+    }, []);
 
     useEffect(() => {
       if (phase !== "ended") return;
@@ -142,71 +260,32 @@ export const BuddyVideoCall = forwardRef<BuddyVideoCallHandle, Props>(
       return () => clearTimeout(timer);
     }, [phase]);
 
-    const startCall = useCallback(() => {
-      if (phase !== "idle") return;
-      isCallerRef.current = true;
-      setPhase("outgoing");
-      send("call_request");
-    }, [phase, send]);
-
-    const acceptCall = useCallback(async () => {
-      setPhase("connecting");
-      try {
-        await setupPeerConnection();
-        send("call_accept");
-      } catch (err) {
-        console.warn("Failed to accept buddy call:", err);
-        endWithReason("Couldn't access camera/mic", true);
-      }
-    }, [endWithReason, send, setupPeerConnection]);
-
-    const declineCall = useCallback(() => {
-      send("call_decline");
-      cleanup();
-      setPhase("idle");
-    }, [cleanup, send]);
-
-    const endCall = useCallback(() => {
-      endWithReason("Call ended", true);
-    }, [endWithReason]);
-
     const handleSignal = useCallback(
       async (data: any) => {
         switch (data?.type) {
-          case "call_request": {
-            if (phase !== "idle") {
-              send("call_decline");
+          case "call_join": {
+            const peerId = data.callId as number;
+            incomingPeerIdRef.current = peerId;
+            if (!pcRef.current) {
+              if (phase === "idle") setPhase("incoming");
               return;
             }
-            isCallerRef.current = false;
-            setPhase("incoming");
-            return;
-          }
-          case "call_decline": {
-            if (phase === "outgoing") endWithReason("Declined", false);
-            return;
-          }
-          case "call_end": {
-            if (phase !== "idle") endWithReason("Call ended", false);
-            return;
-          }
-          case "call_accept": {
-            if (!isCallerRef.current || phase !== "outgoing") return;
-            setPhase("connecting");
-            try {
-              const pc = await setupPeerConnection();
-              const offer = await pc.createOffer();
-              await pc.setLocalDescription(offer);
-              send("webrtc_offer", { sdp: pc.localDescription });
-            } catch (err) {
-              console.warn("Failed to start buddy call as caller:", err);
-              endWithReason("Couldn't access camera/mic", true);
+            if (!ackedRef.current) {
+              ackedRef.current = true;
+              send("call_join", { callId: myIdRef.current });
             }
+            maybeNegotiate(peerId);
+            send("call_media", { audioOff: isMutedRef.current, videoOff: isCameraOffRef.current });
+            return;
+          }
+          case "call_media": {
+            setRemoteMuted(!!data.audioOff);
+            setRemoteCameraOff(!!data.videoOff);
             return;
           }
           case "webrtc_offer": {
             const pc = pcRef.current;
-            if (!pc || isCallerRef.current) return;
+            if (!pc || offererRef.current) return;
             try {
               await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
               await flushPendingCandidates(pc);
@@ -214,19 +293,19 @@ export const BuddyVideoCall = forwardRef<BuddyVideoCallHandle, Props>(
               await pc.setLocalDescription(answer);
               send("webrtc_answer", { sdp: pc.localDescription });
             } catch (err) {
-              console.warn("Failed to handle buddy call offer:", err);
+              console.warn("Failed to handle offer:", err);
               endWithReason("Connection failed", true);
             }
             return;
           }
           case "webrtc_answer": {
             const pc = pcRef.current;
-            if (!pc || !isCallerRef.current) return;
+            if (!pc || !offererRef.current) return;
             try {
               await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
               await flushPendingCandidates(pc);
             } catch (err) {
-              console.warn("Failed to handle buddy call answer:", err);
+              console.warn("Failed to handle answer:", err);
               endWithReason("Connection failed", true);
             }
             return;
@@ -245,43 +324,106 @@ export const BuddyVideoCall = forwardRef<BuddyVideoCallHandle, Props>(
             }
             return;
           }
+          case "call_end": {
+            if (pcRef.current || phase === "incoming") endWithReason("Call ended", false);
+            return;
+          }
           default:
             return;
         }
       },
-      [endWithReason, flushPendingCandidates, phase, send, setupPeerConnection],
+      [endWithReason, flushPendingCandidates, maybeNegotiate, phase, send],
     );
 
-    useImperativeHandle(ref, () => ({ startCall, handleSignal }), [startCall, handleSignal]);
+    useImperativeHandle(ref, () => ({ startCall: enterCall, handleSignal }), [enterCall, handleSignal]);
 
-    if (phase === "idle") return null;
+    const toggleMute = () => {
+      const next = !isMuted;
+      setIsMuted(next);
+      isMutedRef.current = next;
+      localStreamRef.current?.getAudioTracks().forEach((track) => (track.enabled = !next));
+      send("call_media", { audioOff: next, videoOff: isCameraOffRef.current });
+    };
+    const toggleCamera = () => {
+      const next = !isCameraOff;
+      setIsCameraOff(next);
+      isCameraOffRef.current = next;
+      localStreamRef.current?.getVideoTracks().forEach((track) => (track.enabled = !next));
+      send("call_media", { audioOff: isMutedRef.current, videoOff: next });
+    };
+
+    const sendChat = () => {
+      const text = draft.trim();
+      if (!text) return;
+      onSendMessage?.(text);
+      setDraft("");
+      setTimeout(() => chatListRef.current?.scrollToEnd({ animated: true }), 80);
+    };
+
+    const peerInitials = initialsOf(buddyAlias);
+    const messages = chatMessages ?? [];
+    const controlBtn = "w-14 h-14 rounded-full items-center justify-center";
 
     return (
-      <View
-        className="absolute inset-0 z-50 items-center justify-center"
-        style={{ backgroundColor: "rgba(10, 8, 12, 0.96)" }}
-      >
-        {phase === "active" ? (
-          <>
-            <video
-              ref={remoteVideoRef}
-              autoPlay
-              playsInline
-              style={{
-                position: "absolute",
-                inset: 0,
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-              }}
-            />
-
-            {!isCameraOff && (
+      <Modal visible={phase !== "idle"} transparent animationType="fade" onRequestClose={endCall}>
+        <View
+          className="flex-1 items-center justify-center"
+          style={{ backgroundColor: "rgba(10, 8, 12, 0.96)" }}
+        >
+          {phase === "active" ? (
+            <>
+              {/* Remote main view — hidden (not unmounted) when their camera is
+                  off so the stream stays attached; avatar overlays on top. */}
               <video
-                ref={localVideoRef}
+                ref={remoteVideoRef}
                 autoPlay
-                muted
                 playsInline
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  display: remoteStream && !remoteCameraOff ? "block" : "none",
+                }}
+              />
+              {(!remoteStream || remoteCameraOff) && (
+                <View className="items-center">
+                  <View
+                    className="w-28 h-28 rounded-full items-center justify-center mb-4"
+                    style={{ backgroundColor: "rgba(255,255,255,0.14)" }}
+                  >
+                    <Text style={{ color: "#fff", fontFamily: fonts.heading }} className="text-3xl font-black">
+                      {peerInitials}
+                    </Text>
+                  </View>
+                  <Text style={{ color: "#fff", fontFamily: fonts.heading }} className="text-base font-black">
+                    {buddyAlias}
+                  </Text>
+                  <Text
+                    style={{ color: "rgba(255,255,255,0.6)", fontFamily: fonts.body }}
+                    className="text-xs mt-1"
+                  >
+                    {remoteStream ? "Camera is off" : `Waiting for ${buddyAlias}'s video…`}
+                  </Text>
+                </View>
+              )}
+
+              {/* Top bar: buddy alias + muted pill */}
+              <View className="absolute top-14 left-5 flex-row items-center gap-2">
+                <View
+                  className="px-3 py-1.5 rounded-full flex-row items-center gap-1.5"
+                  style={{ backgroundColor: "rgba(0,0,0,0.4)" }}
+                >
+                  <Text style={{ color: "#fff", fontFamily: fonts.body }} className="text-xs font-bold">
+                    {buddyAlias}
+                  </Text>
+                  {remoteMuted && <Ionicons name="mic-off" size={13} color="#fff" />}
+                </View>
+              </View>
+
+              {/* Local picture-in-picture */}
+              <View
                 style={{
                   position: "absolute",
                   top: 56,
@@ -289,131 +431,280 @@ export const BuddyVideoCall = forwardRef<BuddyVideoCallHandle, Props>(
                   width: 96,
                   height: 132,
                   borderRadius: 16,
-                  objectFit: "cover",
-                  border: "2px solid rgba(255,255,255,0.5)",
-                  transform: "scaleX(-1)",
+                  overflow: "hidden",
+                  borderWidth: 2,
+                  borderColor: "rgba(255,255,255,0.5)",
+                  backgroundColor: "rgba(255,255,255,0.1)",
                 }}
-              />
-            )}
-
-            <View className="absolute bottom-14 flex-row items-center gap-5">
-              <TouchableOpacity
-                onPress={() => {
-                  const next = !isMuted;
-                  setIsMuted(next);
-                  localStreamRef.current?.getAudioTracks().forEach((track) => (track.enabled = !next));
-                }}
-                className="w-14 h-14 rounded-full items-center justify-center"
-                style={{ backgroundColor: isMuted ? "#fff" : "rgba(255,255,255,0.18)" }}
               >
-                <Ionicons name={isMuted ? "mic-off" : "mic"} size={22} color={isMuted ? "#111" : "#fff"} />
-              </TouchableOpacity>
+                <video
+                  ref={localVideoRef}
+                  autoPlay
+                  muted
+                  playsInline
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                    transform: "scaleX(-1)",
+                    display: isCameraOff ? "none" : "block",
+                  }}
+                />
+                {isCameraOff && (
+                  <View className="flex-1 items-center justify-center">
+                    <Ionicons name="person" size={30} color="rgba(255,255,255,0.8)" />
+                    <Text
+                      style={{ color: "rgba(255,255,255,0.8)", fontFamily: fonts.body }}
+                      className="text-[10px] font-bold mt-1"
+                    >
+                      You
+                    </Text>
+                  </View>
+                )}
+                {isMuted && (
+                  <View
+                    className="absolute bottom-1 left-1 w-6 h-6 rounded-full items-center justify-center"
+                    style={{ backgroundColor: colors.danger }}
+                  >
+                    <Ionicons name="mic-off" size={12} color="#fff" />
+                  </View>
+                )}
+              </View>
 
+              {/* Controls */}
+              <View className="absolute bottom-14 flex-row items-center gap-4">
+                <TouchableOpacity
+                  onPress={toggleMute}
+                  className={controlBtn}
+                  style={{ backgroundColor: isMuted ? "#fff" : "rgba(255,255,255,0.18)" }}
+                >
+                  <Ionicons name={isMuted ? "mic-off" : "mic"} size={22} color={isMuted ? "#111" : "#fff"} />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={toggleCamera}
+                  className={controlBtn}
+                  style={{ backgroundColor: isCameraOff ? "#fff" : "rgba(255,255,255,0.18)" }}
+                >
+                  <Ionicons
+                    name={isCameraOff ? "videocam-off" : "videocam"}
+                    size={22}
+                    color={isCameraOff ? "#111" : "#fff"}
+                  />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => setChatOpen(true)}
+                  className={controlBtn}
+                  style={{ backgroundColor: "rgba(255,255,255,0.18)" }}
+                >
+                  <Ionicons name="chatbubble-ellipses" size={22} color="#fff" />
+                  {unread > 0 && (
+                    <View
+                      className="absolute -top-0.5 -right-0.5 min-w-5 h-5 px-1 rounded-full items-center justify-center"
+                      style={{ backgroundColor: colors.danger }}
+                    >
+                      <Text style={{ color: "#fff", fontFamily: fonts.body }} className="text-[10px] font-black">
+                        {unread > 9 ? "9+" : unread}
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={endCall}
+                  className="w-16 h-16 rounded-full items-center justify-center"
+                  style={{ backgroundColor: colors.danger }}
+                >
+                  <Ionicons name="call" size={26} color="#fff" style={{ transform: [{ rotate: "135deg" }] }} />
+                </TouchableOpacity>
+              </View>
+
+              {/* In-call chat panel */}
+              {chatOpen && (
+                <View
+                  style={{ position: "absolute", left: 0, right: 0, bottom: 0, top: 0, justifyContent: "flex-end" }}
+                >
+                  <TouchableOpacity activeOpacity={1} onPress={() => setChatOpen(false)} style={{ flex: 1 }} />
+                  <View
+                    style={{
+                      height: "62%",
+                      backgroundColor: colors.background,
+                      borderTopLeftRadius: 24,
+                      borderTopRightRadius: 24,
+                      overflow: "hidden",
+                    }}
+                  >
+                    <View
+                      className="px-5 py-4 border-b flex-row items-center justify-between"
+                      style={{ borderColor: colors.border }}
+                    >
+                      <Text
+                        style={{ color: colors.foreground, fontFamily: fonts.heading }}
+                        className="text-base font-black"
+                      >
+                        In-call chat
+                      </Text>
+                      <TouchableOpacity onPress={() => setChatOpen(false)} className="p-1">
+                        <Ionicons name="chevron-down" size={22} color={colors.foreground} />
+                      </TouchableOpacity>
+                    </View>
+
+                    <ScrollView
+                      ref={chatListRef}
+                      className="flex-1 px-4 pt-4"
+                      contentContainerStyle={{ paddingBottom: 16, gap: 8 }}
+                      keyboardShouldPersistTaps="handled"
+                    >
+                      {messages.length === 0 ? (
+                        <Text
+                          style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                          className="text-xs text-center mt-6"
+                        >
+                          No messages yet. Say hello 👋
+                        </Text>
+                      ) : (
+                        messages.map((msg, i) => {
+                          const isSelf = msg.sender === "me";
+                          return (
+                            <View
+                              key={msg.id ?? i}
+                              className={`max-w-[80%] px-3.5 py-2.5 rounded-2xl ${
+                                isSelf ? "self-end rounded-tr-none" : "self-start rounded-tl-none border"
+                              }`}
+                              style={{
+                                backgroundColor: isSelf ? colors.primary : colors.surface,
+                                borderColor: isSelf ? undefined : colors.border,
+                              }}
+                            >
+                              <Text
+                                className="text-xs font-semibold leading-5"
+                                style={{
+                                  color: isSelf ? colors.buttonText : colors.foreground,
+                                  fontFamily: fonts.body,
+                                }}
+                              >
+                                {msg.text}
+                              </Text>
+                            </View>
+                          );
+                        })
+                      )}
+                    </ScrollView>
+
+                    <View
+                      className="px-3 py-3 border-t flex-row items-center gap-2"
+                      style={{ borderColor: colors.border, backgroundColor: colors.surface }}
+                    >
+                      <TextInput
+                        placeholder="Type a message…"
+                        placeholderTextColor={colors.mutedText}
+                        value={draft}
+                        onChangeText={setDraft}
+                        onSubmitEditing={sendChat}
+                        submitBehavior="submit"
+                        returnKeyType="send"
+                        className="flex-1 px-4 py-3 rounded-xl text-sm outline-none"
+                        style={{ backgroundColor: colors.input, color: colors.foreground, fontFamily: fonts.body }}
+                      />
+                      <TouchableOpacity
+                        disabled={!draft.trim()}
+                        onPress={sendChat}
+                        className="h-10 w-10 rounded-full items-center justify-center"
+                        style={{ backgroundColor: draft.trim() ? colors.primary : colors.surfaceSoft }}
+                      >
+                        <Ionicons
+                          name="arrow-forward"
+                          size={18}
+                          color={draft.trim() ? colors.buttonText : colors.mutedText}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              )}
+            </>
+          ) : phase === "incoming" ? (
+            <View className="items-center px-8">
+              <View
+                className="w-20 h-20 rounded-full items-center justify-center mb-5"
+                style={{ backgroundColor: "rgba(255,255,255,0.12)" }}
+              >
+                <Ionicons name="videocam" size={30} color="#fff" />
+              </View>
+              <Text style={{ color: "#fff", fontFamily: fonts.heading }} className="text-lg font-black mb-1.5">
+                {buddyAlias} is in the call
+              </Text>
+              <Text style={{ color: "rgba(255,255,255,0.7)", fontFamily: fonts.body }} className="text-xs mb-8">
+                Join to connect your camera and mic.
+              </Text>
+              <View className="flex-row items-center gap-6">
+                <TouchableOpacity
+                  onPress={dismissIncoming}
+                  className="w-16 h-16 rounded-full items-center justify-center"
+                  style={{ backgroundColor: colors.danger }}
+                >
+                  <Ionicons name="close" size={26} color="#fff" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={enterCall}
+                  className="w-16 h-16 rounded-full items-center justify-center"
+                  style={{ backgroundColor: colors.success }}
+                >
+                  <Ionicons name="videocam" size={26} color="#fff" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : phase === "ended" ? (
+            <Text style={{ color: "#fff", fontFamily: fonts.body }} className="text-sm font-semibold">
+              {endedReason}
+            </Text>
+          ) : (
+            <View className="items-center px-8">
+              <View
+                style={{
+                  width: 120,
+                  height: 160,
+                  borderRadius: 18,
+                  marginBottom: 20,
+                  overflow: "hidden",
+                  backgroundColor: "rgba(255,255,255,0.12)",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <video
+                  ref={localVideoRef}
+                  autoPlay
+                  muted
+                  playsInline
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                    transform: "scaleX(-1)",
+                    display: isCameraOff ? "none" : "block",
+                  }}
+                />
+                {isCameraOff && <Ionicons name="person" size={44} color="rgba(255,255,255,0.8)" />}
+              </View>
+              <Text style={{ color: "#fff", fontFamily: fonts.heading }} className="text-base font-black mb-1.5">
+                {phase === "waiting" ? `Waiting for ${buddyAlias} to join…` : "Connecting…"}
+              </Text>
+              <Text style={{ color: "rgba(255,255,255,0.7)", fontFamily: fonts.body }} className="text-xs mb-8">
+                Your camera is on. They&apos;ll appear when connected.
+              </Text>
               <TouchableOpacity
                 onPress={endCall}
-                className="w-16 h-16 rounded-full items-center justify-center"
-                style={{ backgroundColor: colors.danger }}
-              >
-                <Ionicons name="call" size={26} color="#fff" style={{ transform: [{ rotate: "135deg" }] }} />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => {
-                  const next = !isCameraOff;
-                  setIsCameraOff(next);
-                  localStreamRef.current?.getVideoTracks().forEach((track) => (track.enabled = !next));
-                }}
                 className="w-14 h-14 rounded-full items-center justify-center"
-                style={{ backgroundColor: isCameraOff ? "#fff" : "rgba(255,255,255,0.18)" }}
-              >
-                <Ionicons
-                  name={isCameraOff ? "videocam-off" : "videocam"}
-                  size={22}
-                  color={isCameraOff ? "#111" : "#fff"}
-                />
-              </TouchableOpacity>
-            </View>
-          </>
-        ) : phase === "incoming" ? (
-          <View className="items-center px-8">
-            <View
-              className="w-20 h-20 rounded-full items-center justify-center mb-5"
-              style={{ backgroundColor: "rgba(255,255,255,0.12)" }}
-            >
-              <Ionicons name="videocam" size={30} color="#fff" />
-            </View>
-            <Text style={{ color: "#fff", fontFamily: fonts.heading }} className="text-lg font-black mb-1.5">
-              {buddyAlias} is calling
-            </Text>
-            <Text style={{ color: "rgba(255,255,255,0.7)", fontFamily: fonts.body }} className="text-xs mb-8">
-              Video and audio start only after you accept.
-            </Text>
-            <View className="flex-row items-center gap-6">
-              <TouchableOpacity
-                onPress={declineCall}
-                className="w-16 h-16 rounded-full items-center justify-center"
                 style={{ backgroundColor: colors.danger }}
               >
-                <Ionicons name="close" size={26} color="#fff" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={acceptCall}
-                className="w-16 h-16 rounded-full items-center justify-center"
-                style={{ backgroundColor: colors.success }}
-              >
-                <Ionicons name="videocam" size={26} color="#fff" />
+                <Ionicons name="close" size={22} color="#fff" />
               </TouchableOpacity>
             </View>
-          </View>
-        ) : phase === "outgoing" ? (
-          <View className="items-center px-8">
-            <Text style={{ color: "#fff", fontFamily: fonts.heading }} className="text-lg font-black mb-1.5">
-              Calling {buddyAlias}…
-            </Text>
-            <Text style={{ color: "rgba(255,255,255,0.7)", fontFamily: fonts.body }} className="text-xs mb-8">
-              Waiting for them to accept
-            </Text>
-            <TouchableOpacity
-              onPress={() => endWithReason("Call canceled", true)}
-              className="w-16 h-16 rounded-full items-center justify-center"
-              style={{ backgroundColor: colors.danger }}
-            >
-              <Ionicons name="close" size={26} color="#fff" />
-            </TouchableOpacity>
-          </View>
-        ) : phase === "connecting" ? (
-          <View className="items-center px-8">
-            <video
-              ref={localVideoRef}
-              autoPlay
-              muted
-              playsInline
-              style={{
-                width: 120,
-                height: 160,
-                borderRadius: 18,
-                marginBottom: 20,
-                objectFit: "cover",
-                transform: "scaleX(-1)",
-              }}
-            />
-            <Text style={{ color: "#fff", fontFamily: fonts.heading }} className="text-sm font-black mb-6">
-              Connecting…
-            </Text>
-            <TouchableOpacity
-              onPress={endCall}
-              className="w-14 h-14 rounded-full items-center justify-center"
-              style={{ backgroundColor: colors.danger }}
-            >
-              <Ionicons name="close" size={22} color="#fff" />
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <Text style={{ color: "#fff", fontFamily: fonts.body }} className="text-sm font-semibold">
-            {endedReason}
-          </Text>
-        )}
-      </View>
+          )}
+        </View>
+      </Modal>
     );
   },
 );
