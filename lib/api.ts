@@ -479,6 +479,8 @@ export type BuddyMatch = {
   activeLimit?: number;
   /** Real display name for a genuine matched user, or a demo alias when backfilled from fallback content. */
   alias: string;
+  /** False for the backend's demo discovery cards used to pad a thin match list — these are display-only and can't actually be nominated. Absent (undefined) on older responses means real. */
+  isRealUser?: boolean;
   avatarSeed: string;
   compatibility: number;
   cycleOverlapDays: number;
@@ -1806,7 +1808,12 @@ export const speechApi = {
       formData.append("file", {
         uri: localUri,
         name: fileName,
-        type: "audio/m4a",
+        // "audio/m4a" isn't a real IANA media type — the backend forwards this
+        // string verbatim as the Content-Type on the multipart part it sends to
+        // Sarvam's speech-to-text API, which rejects it as an invalid type.
+        // audio/mp4 is the correct type for .m4a (AAC-in-MP4) and matches what
+        // the backend itself uses for .m4a elsewhere (mediaUpload.js, contentRoutes.js).
+        type: "audio/mp4",
       } as unknown as Blob);
     }
 

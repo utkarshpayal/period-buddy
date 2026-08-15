@@ -831,11 +831,15 @@ export default function Blogs() {
           onRequestClose={handleClosePreview}
         >
           {selectedItem && (
-            <View
+            <SafeAreaView
               className="flex-1"
               style={{ backgroundColor: colors.background }}
             >
-              {/* Overlay Navigation Sticky Upper Bar segment */}
+              {/* Overlay Navigation Sticky Upper Bar segment.
+                  Android ignores presentationStyle="pageSheet" and renders
+                  this Modal truly fullscreen under the status bar, so
+                  SafeAreaView (not a plain View) is required here to keep
+                  this bar — and the reading content below it — on screen. */}
               <View
                 className="px-6 py-4 border-b border-neutral-100 dark:border-neutral-900/60 flex-row justify-between items-center"
                 style={{ backgroundColor: colors.surface }}
@@ -1121,7 +1125,7 @@ export default function Blogs() {
                   </View>
                 </View>
               </ScrollView>
-            </View>
+            </SafeAreaView>
           )}
         </Modal>
 

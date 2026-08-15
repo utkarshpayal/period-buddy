@@ -146,6 +146,13 @@ export function useVoiceInput({ language, voiceMode, onTranscript }: UseVoiceInp
       await stopAndTranscribe();
       return;
     }
+    // A still-in-flight transcribe (from the previous recording) hasn't
+    // released the recorder yet — starting a new one here races the native
+    // module into "already recording"/"no active recording" errors. This
+    // was reachable via a fast double-tap, and also once the caller's own
+    // voice-mode re-arm effect saw isRecording flip false at the same
+    // moment the user tapped again.
+    if (isTranscribing) return;
 
     const { granted } = await requestRecordingPermissionsAsync();
     if (!granted) {
@@ -167,7 +174,7 @@ export function useVoiceInput({ language, voiceMode, onTranscript }: UseVoiceInp
         stopAndTranscribe();
       }, MAX_RECORDING_MS);
     }
-  }, [clearMaxDurationTimer, recorder, recorderState.isRecording, stopAndTranscribe, voiceMode]);
+  }, [clearMaxDurationTimer, isTranscribing, recorder, recorderState.isRecording, stopAndTranscribe, voiceMode]);
 
   return {
     handleMicPress,

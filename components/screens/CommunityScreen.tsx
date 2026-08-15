@@ -167,17 +167,23 @@ function PostPollView({
   poll,
   isVoting,
   onVote,
+  readOnly,
 }: {
   poll: CommunityPoll;
   isVoting: boolean;
   onVote: (optionIds: string[]) => void;
+  // A partner viewer can see community content but, like posting/commenting,
+  // shouldn't be able to cast a vote on someone else's poll — only see the
+  // current results.
+  readOnly?: boolean;
 }) {
   const { colors, fonts } = useTheme();
   const [selected, setSelected] = useState<string[]>([]);
   const hasVoted = poll.myVote.length > 0;
-  const showResults = hasVoted;
+  const showResults = hasVoted || readOnly;
 
   const toggleSelect = (optionId: string) => {
+    if (readOnly) return;
     if (poll.allowMultiple) {
       setSelected((current) =>
         current.includes(optionId)
@@ -731,6 +737,17 @@ export default function CommunityScreen() {
   const [pollAllowMultiple, setPollAllowMultiple] = useState(false);
   // Tracks polls a vote is in-flight for, so options can't be double-tapped.
   const [votingPollIds, setVotingPollIds] = useState<Set<string>>(new Set());
+  // Long post bodies render uncapped by default, pushing the rest of the
+  // card (and feed) way down — cap them and let the reader expand in place.
+  const [expandedPostIds, setExpandedPostIds] = useState<Set<string>>(new Set());
+  const LONG_POST_CHAR_THRESHOLD = 240;
+  const toggleExpandedPost = (postId: string) =>
+    setExpandedPostIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(postId)) next.delete(postId);
+      else next.add(postId);
+      return next;
+    });
 
   // Compose-modal attachment picking state
   const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null);
@@ -1115,6 +1132,7 @@ export default function CommunityScreen() {
   // server response (source of truth for totals).
   async function handleVotePoll(post: Post, optionIds: string[]) {
     if (
+      !canPost || // partner viewers are read-only here too, see PostPollView's readOnly
       !post.poll ||
       post.poll.myVote.length > 0 ||
       optionIds.length === 0 ||
@@ -1469,9 +1487,24 @@ export default function CommunityScreen() {
           <Text
             className="mt-4 text-sm font-medium leading-5"
             style={{ color: colors.foreground, fontFamily: fonts.body }}
+            numberOfLines={
+              post.content.length > LONG_POST_CHAR_THRESHOLD && !expandedPostIds.has(post.id) ? 6 : undefined
+            }
           >
             {post.content}
           </Text>
+          {post.content.length > LONG_POST_CHAR_THRESHOLD && (
+            <TouchableOpacity
+              onPress={() => toggleExpandedPost(post.id)}
+              activeOpacity={0.7}
+              className="mt-1"
+              accessibilityRole="button"
+            >
+              <Text className="text-xs font-bold" style={{ color: colors.primary, fontFamily: fonts.body }}>
+                {expandedPostIds.has(post.id) ? "Show less" : "Read more"}
+              </Text>
+            </TouchableOpacity>
+          )}
 
           {post.attachment && <PostAttachmentView attachment={post.attachment} />}
 
@@ -1480,6 +1513,7 @@ export default function CommunityScreen() {
               poll={post.poll}
               isVoting={votingPollIds.has(post.id)}
               onVote={(optionIds) => handleVotePoll(post, optionIds)}
+              readOnly={!canPost}
             />
           )}
 
@@ -1759,9 +1793,14 @@ export default function CommunityScreen() {
           style={{ flex: 1 }}
         >
           <View
-            className="flex-1 px-6 pt-6"
+            className="flex-1 px-6"
             style={{
               backgroundColor: colors.background,
+              // Modal on Android ignores `presentationStyle="pageSheet"` and
+              // always renders truly fullscreen under the status bar, so the
+              // header row needs an explicit safe-area top inset here — the
+              // outer screen's SafeAreaView doesn't wrap this Modal's content.
+              paddingTop: Math.max(18, insets.top + 10),
               paddingBottom: Math.max(18, insets.bottom + 10),
             }}
           >
@@ -2016,10 +2055,12 @@ export default function CommunityScreen() {
           style={{ flex: 1 }}
         >
           <View className="flex-1" style={{ backgroundColor: colors.background }}>
-            {/* Sheet Header navigation panel bar */}
+            {/* Sheet Header navigation panel bar — Android Modal ignores
+                presentationStyle="pageSheet" and renders fullscreen under the
+                status bar, so this needs its own top inset. */}
             <View
               className="px-6 py-4 flex-row justify-between items-center"
-              style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}
+              style={{ paddingTop: insets.top + 16, borderBottomWidth: 1, borderBottomColor: colors.border }}
             >
               <TouchableOpacity onPress={closeCommentsSheet}>
                 <Feather name="x" size={20} color={colors.foreground} />

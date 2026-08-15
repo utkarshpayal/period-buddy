@@ -569,7 +569,10 @@ export default function Profile() {
         presentationStyle="pageSheet"
         onRequestClose={() => setAchievementsModalVisible(false)}
       >
-        <View
+        {/* Android ignores presentationStyle="pageSheet" and renders this
+            Modal truly fullscreen under the status bar — SafeAreaView (not
+            a plain View) keeps the header from being clipped at the top. */}
+        <SafeAreaView
           className="flex-1 px-6 pt-6"
           style={{ backgroundColor: colors.background }}
         >
@@ -614,7 +617,7 @@ export default function Profile() {
               recent cycle.
             </Text>
           </View>
-        </View>
+        </SafeAreaView>
       </Modal>
 
       {/* Modals 2: Support Ticket Desk */}
@@ -624,7 +627,7 @@ export default function Profile() {
         presentationStyle="pageSheet"
         onRequestClose={() => setSupportModalVisible(false)}
       >
-        <View
+        <SafeAreaView
           className="flex-1 px-6 pt-6"
           style={{ backgroundColor: colors.background }}
         >
@@ -668,7 +671,7 @@ export default function Profile() {
               Create Support Ticket
             </Text>
           </TouchableOpacity>
-        </View>
+        </SafeAreaView>
       </Modal>
 
       {/* Modals 3: Local Privacy Framework */}
@@ -678,7 +681,7 @@ export default function Profile() {
         presentationStyle="pageSheet"
         onRequestClose={() => setPrivacyModalVisible(false)}
       >
-        <View
+        <SafeAreaView
           className="flex-1 px-6 pt-6"
           style={{ backgroundColor: colors.background }}
         >
@@ -706,7 +709,7 @@ export default function Profile() {
               sensitive records should only be sent with clear permission.
             </Text>
           </View>
-        </View>
+        </SafeAreaView>
       </Modal>
     </>
   );

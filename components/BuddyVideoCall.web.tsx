@@ -177,7 +177,12 @@ export const BuddyVideoCall = forwardRef<BuddyVideoCallHandle, Props>(
     const setupPeerConnection = useCallback(async () => {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
-        video: { facingMode: "user" },
+        // Ask for a capture aspect ratio close to the portrait preview box
+        // (~3:4) the stream is rendered into with objectFit="cover" below.
+        // Without this the camera defaults to a wide (e.g. 16:9) frame that
+        // "cover" then crops hard to fit the portrait box — the visible
+        // slice ends up zoomed in tight on the face.
+        video: { facingMode: "user", aspectRatio: 0.75 },
       });
       localStreamRef.current = stream;
       setLocalStream(stream);
@@ -445,7 +450,9 @@ export const BuddyVideoCall = forwardRef<BuddyVideoCallHandle, Props>(
                   style={{
                     width: "100%",
                     height: "100%",
-                    objectFit: "cover",
+                    // "contain" (not "cover") so the self-preview shows the
+                    // whole camera frame instead of cropping in tight on the face.
+                    objectFit: "contain",
                     transform: "scaleX(-1)",
                     display: isCameraOff ? "none" : "block",
                   }}
@@ -681,7 +688,9 @@ export const BuddyVideoCall = forwardRef<BuddyVideoCallHandle, Props>(
                   style={{
                     width: "100%",
                     height: "100%",
-                    objectFit: "cover",
+                    // "contain" (not "cover") so the self-preview shows the
+                    // whole camera frame instead of cropping in tight on the face.
+                    objectFit: "contain",
                     transform: "scaleX(-1)",
                     display: isCameraOff ? "none" : "block",
                   }}

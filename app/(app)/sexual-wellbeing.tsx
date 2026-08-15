@@ -689,11 +689,15 @@ export default function SexualWellbeing() {
           onRequestClose={handleCloseArticleModal}
         >
           {selectedCategory && (
-            <View
+            <SafeAreaView
               className="flex-1"
               style={{ backgroundColor: colors.background }}
             >
-              {/* Sheet Control Header section */}
+              {/* Sheet Control Header section.
+                  Android ignores presentationStyle="pageSheet" and renders
+                  this Modal truly fullscreen under the status bar, so
+                  SafeAreaView (not a plain View) is required to keep this
+                  header — and the content below it — on screen. */}
               <View
                 className="px-6 py-4 flex-row justify-between items-center"
                 style={{ backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border }}
@@ -825,7 +829,7 @@ export default function SexualWellbeing() {
                   ))}
                 </View>
               </ScrollView>
-            </View>
+            </SafeAreaView>
           )}
         </Modal>
       </SafeAreaView>

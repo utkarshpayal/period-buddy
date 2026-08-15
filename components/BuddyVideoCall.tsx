@@ -222,7 +222,14 @@ export const BuddyVideoCall = forwardRef<BuddyVideoCallHandle, Props>(
 
       const stream = await mediaDevices.getUserMedia({
         audio: true,
-        video: { facingMode: "user" },
+        // Ask for a capture size close to the portrait preview box (~3:4)
+        // the stream is rendered into with objectFit="cover" below.
+        // react-native-webrtc's MediaTrackConstraints has no `aspectRatio`
+        // field, so width/height ideals are the only way to steer this —
+        // without them the camera defaults to a wide (e.g. 16:9) frame that
+        // "cover" then crops hard to fit the portrait box, and the visible
+        // slice ends up zoomed in tight on the face.
+        video: { facingMode: "user", width: { ideal: 480 }, height: { ideal: 640 } },
       });
       localStreamObjRef.current = stream;
       setLocalStreamUrl(stream.toURL());
@@ -485,7 +492,10 @@ export const BuddyVideoCall = forwardRef<BuddyVideoCallHandle, Props>(
                 }}
               >
                 {localStreamUrl && !isCameraOff ? (
-                  <RTCView streamURL={localStreamUrl} mirror objectFit="cover" style={{ flex: 1 }} />
+                  // "contain" (not "cover") so the self-preview shows the
+                  // whole camera frame instead of cropping in — "cover" was
+                  // reading as an aggressive, tight zoom on the face.
+                  <RTCView streamURL={localStreamUrl} mirror objectFit="contain" style={{ flex: 1 }} />
                 ) : (
                   <View className="flex-1 items-center justify-center">
                     <Ionicons name="person" size={30} color="rgba(255,255,255,0.8)" />
@@ -704,11 +714,19 @@ export const BuddyVideoCall = forwardRef<BuddyVideoCallHandle, Props>(
             // waiting / connecting
             <View className="items-center px-8">
               {localStreamUrl && !isCameraOff ? (
+                // "contain" (not "cover") so the self-preview shows the
+                // whole camera frame instead of cropping in tight on the face.
                 <RTCView
                   streamURL={localStreamUrl}
                   mirror
-                  objectFit="cover"
-                  style={{ width: 120, height: 160, borderRadius: 18, marginBottom: 20 }}
+                  objectFit="contain"
+                  style={{
+                    width: 120,
+                    height: 160,
+                    borderRadius: 18,
+                    marginBottom: 20,
+                    backgroundColor: "rgba(255,255,255,0.12)",
+                  }}
                 />
               ) : (
                 <View

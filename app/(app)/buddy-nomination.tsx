@@ -15,6 +15,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppState } from "../../components/AppState";
 import { BuddyVideoCall, type BuddyVideoCallHandle } from "../../components/BuddyVideoCall";
+import { EmptyState } from "../../components/EmptyState";
 import { alert } from "../../lib/alert";
 import { useTheme } from "../../components/theme";
 import { SkeletonRow } from "../../components/Skeleton";
@@ -59,41 +60,6 @@ interface BuddyMessage {
 const PRESENCE_PING_INTERVAL_MS = 8000;
 const PRESENCE_TIMEOUT_MS = 20000;
 
-const fallbackNominees: PeriodBuddy[] = [
-  {
-    id: "b_1",
-    name: "Priya Malhotra",
-    avatarSeed: "PM",
-    cyclePhase: "Ovulation Phase",
-    cycleOverlapDays: 26,
-    lastUpdate: "Updated today",
-    compatibility: 95,
-    similarities: ["28-Day Cycle", "PMDD Fatigue", "Craves Dark Chocolate"],
-  },
-  {
-    id: "b_2",
-    name: "Ananya Kapoor",
-    avatarSeed: "AK",
-    cyclePhase: "Luteal Phase",
-    cycleOverlapDays: 22,
-    lastUpdate: "Updated today",
-    compatibility: 88,
-    similarities: ["31-Day Cycle", "Insomnia Spikes", "Hot Yoga Routine"],
-  },
-  {
-    id: "b_3",
-    name: "Riya Sharma",
-    avatarSeed: "RS",
-    cyclePhase: "Follicular Phase",
-    cycleOverlapDays: 19,
-    lastUpdate: "Updated 2 days ago",
-    compatibility: 85,
-    similarities: ["26-Day Cycle", "Anxiety Spikes", "Chamomile Tea Log"],
-  },
-];
-
-
-
 function mapBuddy(match: ApiBuddyMatch): PeriodBuddy {
   return {
     id: match.matchKey ?? match.buddyUserId ?? match.id ?? match._id ?? match.alias,
@@ -106,6 +72,15 @@ function mapBuddy(match: ApiBuddyMatch): PeriodBuddy {
     compatibility: match.compatibility,
     similarities: match.similarities,
   };
+}
+
+/** The backend pads a thin discovery list with fictional demo cards (e.g.
+ * "Mystic Peony") so the screen isn't empty for a brand-new install — but
+ * they can't actually be nominated and read as random strangers/dummy data
+ * to a real user, so they're filtered out here rather than shown at all.
+ * `isRealUser` is only absent on older cached shapes, which we treat as real. */
+function isRealMatch(match: ApiBuddyMatch): boolean {
+  return match.isRealUser !== false;
 }
 
 function mapBuddyMessage(message: ApiBuddyMessage): BuddyMessage {
@@ -201,9 +176,9 @@ export default function BuddyNomination() {
         buddyApi.getMessages().catch(() => []),
       ]);
 
-      let finalNominees = [...fallbackNominees];
+      let finalNominees: PeriodBuddy[] = [];
       if (matchesResponse && matchesResponse.matches && matchesResponse.matches.length > 0) {
-        finalNominees = matchesResponse.matches.map(mapBuddy);
+        finalNominees = matchesResponse.matches.filter(isRealMatch).map(mapBuddy);
       }
 
       if (activeBuddy) {
@@ -233,7 +208,7 @@ export default function BuddyNomination() {
       }
     } catch (err) {
       console.warn("Failed to load buddy space:", err);
-      setNominees(fallbackNominees);
+      setNominees([]);
     } finally {
       setLoadingNominees(false);
     }
@@ -603,6 +578,13 @@ export default function BuddyNomination() {
                     <SkeletonRow />
                     <SkeletonRow />
                   </View>
+                ) : sortedNominees.length === 0 ? (
+                  <EmptyState
+                    icon="account-search-outline"
+                    title="No matches yet"
+                    message="We haven't found another tracker with an overlapping cycle to pair you with yet — check back soon."
+                    compact
+                  />
                 ) : (
                 <View className="gap-2.5">
                   {sortedNominees.map((buddy) => {

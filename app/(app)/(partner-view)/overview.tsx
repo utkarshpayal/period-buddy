@@ -179,24 +179,36 @@ export default function PartnerViewOverview() {
                 </Text>
               </View>
             )}
-            {/* Notification Bell */}
+            {/* Notification Bell — previously plain-surface + foreground-tinted
+                at 15px, which read as inert chrome rather than a tappable
+                button next to the equally-quiet streak pill. Bumped size and
+                switched to a primary-tinted treatment (stronger still, and
+                unmissable, once there's something unread) so it actually
+                reads as its own actionable control in the header. */}
             <TouchableOpacity
               onPress={() => setIsNotifModalVisible(true)}
-              className="flex-row items-center justify-center w-9 h-9 rounded-full border relative"
-              style={{ borderColor: colors.border, backgroundColor: colors.surface }}
+              accessibilityRole="button"
+              accessibilityLabel="Notifications"
+              className="flex-row items-center justify-center w-10 h-10 rounded-full border relative"
+              style={{
+                borderColor: unreadCount > 0 ? colors.primary : colors.border,
+                backgroundColor: unreadCount > 0 ? colors.primaryLight : colors.surface,
+              }}
             >
-              <Ionicons name="notifications-outline" size={15} color={colors.foreground} />
+              <Ionicons name="notifications-outline" size={18} color={colors.primary} />
               {unreadCount > 0 && (
                 <View
-                  className="absolute -top-1.5 -right-1.5 rounded-full items-center justify-center"
+                  className="absolute -top-1.5 -right-1.5 rounded-full items-center justify-center border"
                   style={{
                     backgroundColor: colors.danger,
-                    minWidth: 14,
-                    height: 14,
-                    paddingHorizontal: 2,
+                    borderColor: colors.surface,
+                    borderWidth: 1.5,
+                    minWidth: 16,
+                    height: 16,
+                    paddingHorizontal: 3,
                   }}
                 >
-                  <Text style={{ color: "#fff", fontSize: 8.5, fontWeight: "900" }}>
+                  <Text style={{ color: "#fff", fontSize: 9, fontWeight: "900" }}>
                     {unreadCount}
                   </Text>
                 </View>
