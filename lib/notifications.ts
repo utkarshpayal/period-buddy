@@ -66,12 +66,10 @@ export async function registerForPushNotificationsAsync() {
     // Get the native device push token (FCM for Android, APNs for iOS)
     const tokenData = await Notifications.getDevicePushTokenAsync();
     const token = tokenData.data;
-    console.log('DEBUG: Native Push Token =', token);
 
     // Update the token on the backend
     await authApi.updateFcmToken(token);
-    console.log('DEBUG: Push Token updated on backend successfully');
-    
+
     return token;
   } catch (error) {
     console.error('Failed to register for push notifications:', error);

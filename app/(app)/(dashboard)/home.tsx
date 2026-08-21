@@ -25,6 +25,7 @@ import {
   type DashboardSummary,
   type Predictions,
 } from "../../../lib/api";
+import { getCyclePhase } from "../../../lib/cycle";
 
 type AnalyticsBar = {
   length: number;
@@ -89,23 +90,15 @@ function buildFiveMonthAnalytics(
   });
 }
 
-// Mirrors the backend's getCyclePhase (src/utils/cycle.js) so the fallback
-// (used only before predictions load) scales with the user's actual cycle
-// length instead of the fixed 28-day 11/16-day thresholds.
 function getGreeting(hour: number) {
   if (hour < 12) return "Good morning";
   if (hour < 17) return "Good afternoon";
   return "Good evening";
 }
 
-function getCyclePhase(cycleDay: number, periodLength = 5, cycleLength = 28) {
-  if (cycleDay <= periodLength) return "Menstrual";
-  const ovulationDay = Math.max(periodLength + 1, cycleLength - 13);
-  if (cycleDay < ovulationDay - 5) return "Follicular";
-  if (cycleDay <= ovulationDay + 1) return "Ovulatory";
-  return "Luteal";
-}
-
+// lib/cycle.ts's getCyclePhase returns the lowercase enum ("period" etc);
+// this maps it (and the backend's identical vocabulary) to the capitalized
+// label this screen displays.
 const PHASE_LABELS: Record<string, string> = {
   period: "Menstrual",
   follicular: "Follicular",
@@ -236,7 +229,7 @@ export default function Home() {
   // settings/logs); only fall back to a local estimate before it loads.
   const phaseLabel =
     (predictions?.currentPhase && PHASE_LABELS[predictions.currentPhase]) ??
-    getCyclePhase(cycleDay, periodLength, predictions?.cycleLength ?? 28);
+    PHASE_LABELS[getCyclePhase(cycleDay, periodLength, predictions?.cycleLength ?? 28)];
 
   const analyticGraphData = useMemo(
     () => buildFiveMonthAnalytics(predictions?.analyticsData),
@@ -275,7 +268,10 @@ export default function Home() {
     [cycleStartDate, cycleLength, periodLength, ovulationDayPivot],
   );
   const heroGradient = getHeroGradient(colors, isDark);
-  const greeting = useMemo(() => getGreeting(new Date().getHours()), []);
+  // Cheap pure function of the current hour — recompute every render rather
+  // than memoizing with an empty dep array, which would freeze it at
+  // whatever greeting was correct the moment this screen first mounted.
+  const greeting = getGreeting(new Date().getHours());
   const { width: screenWidth } = useWindowDimensions();
   // Leaves the next card peeking in at the right edge — the standard
   // "there's more, swipe" affordance instead of two full-width blocks

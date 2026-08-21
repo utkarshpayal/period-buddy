@@ -208,6 +208,12 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
         setErrorMessage("Period length should be between 1 and 10 days.");
         return;
       }
+
+      const cycle = Number(cycleLength);
+      if (!cycle || cycle < 20 || cycle > 45) {
+        setErrorMessage("Cycle length should be between 20 and 45 days.");
+        return;
+      }
     }
 
     if (currentStep.id === "trackingGoal" && trackingGoals.length === 0) {

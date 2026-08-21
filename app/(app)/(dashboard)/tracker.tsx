@@ -32,6 +32,7 @@ import {
   type Predictions,
 } from "../../../lib/api";
 import { getCyclePhase, type CyclePhase } from "../../../lib/cycle";
+import { getDateKey, getMonthKey } from "../../../lib/format";
 
 const CYCLE_LENGTH = 28;
 const CURRENT_CYCLE_DAY = 14;
@@ -70,23 +71,12 @@ function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
-function getDateKey(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
 function getDateLabel(date: Date) {
   return date.toLocaleDateString("en-US", {
     day: "numeric",
     month: "long",
     year: "numeric",
   });
-}
-
-function getMonthKey(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
 function getCycleDay(

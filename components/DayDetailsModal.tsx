@@ -223,10 +223,23 @@ export default function DayDetailsModal({
     setStressLevel(entry?.stressLevel);
     setMedText(entry?.medication ? entry.medication.join(", ") : "");
     setIsIntimate(entry?.isIntimate ?? false);
-    setSelectedDigestions(entry?.digestions ?? (entry?.digestion ? [entry.digestion] : []));
+    // "normal" has no chip (an empty selection *means* normal — see the
+    // filter in the render below), so strip it out here too; otherwise it
+    // sits invisibly in the array and `handleSave`'s `selectedDigestions[0]`
+    // can silently resave "normal" instead of whatever the user just picked.
+    setSelectedDigestions(
+      (entry?.digestions ?? (entry?.digestion ? [entry.digestion] : [])).filter(
+        (digestion) => digestion !== "normal",
+      ),
+    );
     setSelectedSkins(entry?.skins ?? (entry?.skin ? [entry.skin] : []));
     setSelectedDischarge(entry?.discharge);
-    setSelectedExercise(entry?.exercise ?? []);
+    // Drop any previously-saved values that no longer have a matching chip
+    // (exerciseOptions was replaced wholesale) — otherwise a stale value like
+    // "walking" sits invisibly selected with no chip to toggle it off, and
+    // silently resaves on every future edit of that day.
+    const knownExerciseValues = new Set(exerciseOptions.map((option) => option.value));
+    setSelectedExercise((entry?.exercise ?? []).filter((value) => knownExerciseValues.has(value)));
   }, [visible, details, entry]);
 
   // Section a Home / tracker quick action asked us to jump to, still pending a
@@ -512,7 +525,7 @@ export default function DayDetailsModal({
               <SectionTitle title="Menstrual flow" icon="water" tint={tints.flow} />
               <View style={styles.optionWrap}>
                 {flowOptions
-                  .filter((flow) => flow.value !== "none" && flow.value !== "spotting")
+                  .filter((flow) => flow.value !== "none")
                   .map((flow) =>
                     renderOption({
                       ...flow,

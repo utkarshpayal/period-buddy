@@ -11,17 +11,7 @@ import { useTheme, type ThemeColors } from "../../components/theme";
 import { getShadow } from "../../components/ui-tokens";
 import { useAsyncLoad } from "../../hooks/useAsyncLoad";
 import { cycleApi, reportApi, type DayEntry, type HealthReportCycleStats, type Predictions } from "../../lib/api";
-
-function getDateKey(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function getMonthKey(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-}
+import { getDateKey, getMonthKey } from "../../lib/format";
 
 type GraphsData = {
   cycleLengths: number[];
@@ -333,10 +323,10 @@ export default function GraphsAndReportsScreen() {
                   icon={<Ionicons name="water" size={50} color={cardTints.water.accent} />}
                 >
                   <Text style={{ color: cardTints.water.accent, fontSize: 22, fontWeight: "900", fontFamily: fonts.mono }}>
-                    {avgWater ? `${Math.round(avgWater)} ml` : "No data yet"}
+                    {avgWater != null ? `${Math.round(avgWater)} ml` : "No data yet"}
                   </Text>
                   <Text style={{ color: cardTints.water.accent, fontSize: 11, marginTop: 2, opacity: 0.8, fontFamily: fonts.body }}>
-                    {avgWater ? "90-day daily average" : "Log water intake in a day entry"}
+                    {avgWater != null ? "90-day daily average" : "Log water intake in a day entry"}
                   </Text>
                 </StatCard>
 
@@ -346,10 +336,10 @@ export default function GraphsAndReportsScreen() {
                   icon={<Ionicons name="moon" size={50} color={cardTints.sleep.accent} />}
                 >
                   <Text style={{ color: cardTints.sleep.accent, fontSize: 22, fontWeight: "900", fontFamily: fonts.mono }}>
-                    {avgSleep ? `${avgSleep.toFixed(1)} hrs` : "No data yet"}
+                    {avgSleep != null ? `${avgSleep.toFixed(1)} hrs` : "No data yet"}
                   </Text>
                   <Text style={{ color: cardTints.sleep.accent, fontSize: 11, marginTop: 2, opacity: 0.8, fontFamily: fonts.body }}>
-                    {avgSleep ? "90-day nightly average" : "Log sleep hours in a day entry"}
+                    {avgSleep != null ? "90-day nightly average" : "Log sleep hours in a day entry"}
                   </Text>
                 </StatCard>
 

@@ -5,20 +5,22 @@
 // and EAS Build only uploads git-tracked files, so without this the cloud
 // build can't find them. Falls back to the local gitignored files for
 // `npx expo start` / local builds where the env vars aren't set.
-const { expo } = require("./app.json");
-
+//
+// `config` below is Expo's own resolved static config (app.json + defaults),
+// passed in for exactly this purpose -- extend it, don't re-require app.json,
+// or `expo-doctor` can't tell the static config was actually used.
 module.exports = ({ config }) => {
   return {
-    ...expo,
+    ...config,
     android: {
-      ...expo.android,
+      ...config.android,
       googleServicesFile:
-        process.env.GOOGLE_SERVICES_JSON ?? expo.android.googleServicesFile,
+        process.env.GOOGLE_SERVICES_JSON ?? config.android.googleServicesFile,
     },
     ios: {
-      ...expo.ios,
+      ...config.ios,
       googleServicesFile:
-        process.env.GOOGLE_SERVICES_INFO_PLIST ?? expo.ios.googleServicesFile,
+        process.env.GOOGLE_SERVICES_INFO_PLIST ?? config.ios.googleServicesFile,
     },
   };
 };

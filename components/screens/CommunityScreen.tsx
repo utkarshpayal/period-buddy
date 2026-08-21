@@ -2169,10 +2169,8 @@ export default function CommunityScreen() {
                           </Text>
                           {comment.isOwner && activePost && (
                             <TouchableOpacity
-                              onPress={() => {
-                                console.log(activePost.id, comment.id)
+                              onPress={() =>
                                 handleDeleteComment(activePost.id, comment.id)
-                              }
                               }
                               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                             >

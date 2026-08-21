@@ -31,7 +31,6 @@
       ]
     },
     "android": {
-      "versionCode": 12,
       "adaptiveIcon": {
         "backgroundColor": "#fff0f6",
         "foregroundImage": "./assets/images/icon-square.png"
@@ -72,6 +71,8 @@
     },
     "plugins": [
       "expo-router",
+      "expo-font",
+      "expo-asset",
       [
         "expo-build-properties",
         {

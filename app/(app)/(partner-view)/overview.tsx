@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   RefreshControl,
@@ -93,9 +93,17 @@ export default function PartnerViewOverview() {
   // state, but the notifications screen it now pushes to (same shared route
   // the owner's home screen uses) manages its own local copy — re-syncing on
   // focus is what keeps the badge count accurate after reading/marking
-  // notifications there and coming back.
+  // notifications there and coming back. Skip the very first focus: the
+  // provider's own mount effect and this screen's `load()` already fetch the
+  // same profile/notifications on initial mount, so refreshing here too
+  // would just be a redundant third concurrent request.
+  const isInitialFocus = useRef(true);
   useFocusEffect(
     useCallback(() => {
+      if (isInitialFocus.current) {
+        isInitialFocus.current = false;
+        return;
+      }
       refreshProfile();
     }, [refreshProfile]),
   );

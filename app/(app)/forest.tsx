@@ -14,6 +14,7 @@ import { ForestScene, type ForestPhase } from "../../components/ForestScene";
 import { GROWTH_STAGE_LABEL, GROWTH_STAGE_MOTIVATION, GrowthTree, getGrowthStage } from "../../components/GrowthTree";
 import { ThemeColors, useTheme } from "../../components/theme";
 import { getShadow } from "../../components/ui-tokens";
+import { alert } from "../../lib/alert";
 import { cycleApi, forestApi, type ForestStatus } from "../../lib/api";
 
 // Vitality color follows the same red→amber→green read as any health meter
@@ -136,7 +137,6 @@ export default function Forest() {
   const growthStage = getGrowthStage(currentHealth);
 
   async function handleLogCare() {
-    setIsNourished(true);
     try {
       const today = new Date().toISOString().slice(0, 10);
       const result = await forestApi.logCare({
@@ -145,10 +145,19 @@ export default function Forest() {
         note: "Logged care from the app",
       });
       setForestStatus(result.status);
-    } catch {
-      // Keep the visual confirmation when developing without the backend.
-    } finally {
+      setIsNourished(true);
       setTimeout(() => setIsNourished(false), 2500);
+    } catch (error) {
+      if (__DEV__) {
+        // Keep the visual confirmation when developing without the backend.
+        setIsNourished(true);
+        setTimeout(() => setIsNourished(false), 2500);
+        return;
+      }
+      alert(
+        "Couldn't log care",
+        error instanceof Error ? error.message : "Please try again.",
+      );
     }
   }
 
