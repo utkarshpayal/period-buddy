@@ -1,12 +1,7 @@
-import {
-  Ionicons,
-  MaterialCommunityIcons,
-} from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
-  Animated,
-  Easing,
   RefreshControl,
   ScrollView,
   StatusBar,
@@ -16,9 +11,19 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ForestScene, type ForestPhase } from "../../components/ForestScene";
-import { useTheme } from "../../components/theme";
+import { GROWTH_STAGE_LABEL, GROWTH_STAGE_MOTIVATION, GrowthTree, getGrowthStage } from "../../components/GrowthTree";
+import { ThemeColors, useTheme } from "../../components/theme";
 import { getShadow } from "../../components/ui-tokens";
 import { cycleApi, forestApi, type ForestStatus } from "../../lib/api";
+
+// Vitality color follows the same red→amber→green read as any health meter
+// in the app — high health is good here, so this is deliberately the
+// inverse of getSeverityColor (which assumes higher = worse).
+function vitalityColor(health: number, colors: ThemeColors) {
+  if (health >= 70) return colors.success;
+  if (health >= 35) return colors.warning;
+  return colors.danger;
+}
 
 function toForestPhase(currentPhase: string | undefined, averageHealth: number): ForestPhase {
   const normalized = currentPhase?.toLowerCase();
@@ -42,35 +47,11 @@ interface Tree {
 export default function Forest() {
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
-  const sparkleAnim = useRef(new Animated.Value(0)).current;
 
   const [isNourished, setIsNourished] = useState(false);
   const [forestStatus, setForestStatus] = useState<ForestStatus | null>(null);
   const [currentPhase, setCurrentPhase] = useState<string | undefined>(undefined);
   const [refreshing, setRefreshing] = useState(false);
-
-  useEffect(() => {
-    const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(sparkleAnim, {
-          duration: 1200,
-          easing: Easing.inOut(Easing.ease),
-          toValue: 1,
-          useNativeDriver: true,
-        }),
-        Animated.timing(sparkleAnim, {
-          duration: 1200,
-          easing: Easing.inOut(Easing.ease),
-          toValue: 0,
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-
-    animation.start();
-
-    return () => animation.stop();
-  }, [sparkleAnim]);
 
   const loadForest = useCallback(async () => {
     const [status, predictions] = await Promise.allSettled([
@@ -152,10 +133,7 @@ export default function Forest() {
 
   const forestTier = forestStatus?.forestTier ?? fallbackTier;
   const tierColor = TIER_COLORS[forestTier] ?? colors.primary;
-  const sparkleOpacity = sparkleAnim.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: [0.45, 1, 0.45],
-  });
+  const growthStage = getGrowthStage(currentHealth);
 
   async function handleLogCare() {
     setIsNourished(true);
@@ -252,7 +230,9 @@ export default function Forest() {
             </View>
           </View>
 
-          {/* Forest scene card — soft surface card wrapping the scenery */}
+          {/* Forest scene card — the personal GrowthTree stands as the
+              scene's centerpiece, growing/drying with real care data instead
+              of the fixed 4-species decoration. */}
           <View
             className="mx-[22px] mt-6 rounded-[22px] overflow-hidden"
             style={{ backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
@@ -261,7 +241,18 @@ export default function Forest() {
                 website's forest simulator (Home.jsx) so the app and site
                 share the same sky/hills/tree scene. */}
             <View style={{ position: "relative", width: "100%" }}>
-              <ForestScene height={236} phase={toForestPhase(currentPhase, averageHealth)} />
+              <ForestScene
+                height={236}
+                phase={toForestPhase(currentPhase, averageHealth)}
+                centerpiece={
+                  <GrowthTree
+                    health={currentHealth}
+                    isThirsty={!forestStatus?.todayCareLogged}
+                    isWatering={isNourished}
+                    size={108}
+                  />
+                }
+              />
 
               <View
                 className="absolute left-4 top-4 rounded-2xl border px-3 py-1.5 shadow-sm"
@@ -277,72 +268,45 @@ export default function Forest() {
                   {forestTier}
                 </Text>
               </View>
-
-              {isNourished && (
-                <Animated.View
-                  className="absolute inset-0 items-center justify-center"
-                  style={{
-                    backgroundColor: colors.infoLight,
-                    opacity: sparkleOpacity,
-                  }}
-                >
-                  <View
-                    className="flex-row items-center gap-2 rounded-full border px-4 py-2"
-                    style={{
-                      backgroundColor: colors.surface,
-                      borderColor: colors.info,
-                    }}
-                  >
-                    <Ionicons name="water" size={16} color={colors.info} />
-                    <Text
-                      className="text-xs font-black"
-                      style={{ color: colors.foreground, fontFamily: fonts.body }}
-                    >
-                      Forest hydrated +5% vitality
-                    </Text>
-                  </View>
-                </Animated.View>
-              )}
             </View>
 
-            {/* Stats Dashboard Under Canopy */}
+            {/* Growth stage + vitality meter — the tree's own "how it's
+                doing" story, replacing the old generic Forest Size/Health
+                pair (that count is already shown in the stat tile above). */}
             <View
               className="px-5 py-4 border-t border-dashed"
               style={{ borderColor: colors.border }}
             >
-              <View className="flex-row justify-between items-center">
-                <View>
-                  <Text
-                    className="text-xs font-medium"
-                    style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                  >
-                    Forest Size
-                  </Text>
-                  <Text
-                    className="text-lg font-bold mt-0.5"
-                    style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                  >
-                    {healthyTreeCount} Active Trees
-                  </Text>
-                </View>
-
-                <View className="items-end">
-                  <Text
-                    className="text-xs font-medium"
-                    style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                  >
-                    Forest Health
-                  </Text>
-                  <Text
-                    className="text-lg font-bold mt-0.5"
-                    style={{
-                      color: averageHealth >= 70 ? colors.success : colors.primary,
-                      fontFamily: fonts.mono,
-                    }}
-                  >
-                    {averageHealth}%
-                  </Text>
-                </View>
+              <View className="flex-row items-center justify-between mb-1">
+                <Text
+                  className="text-base font-bold"
+                  style={{ color: colors.foreground, fontFamily: fonts.heading }}
+                >
+                  {GROWTH_STAGE_LABEL[growthStage]}
+                </Text>
+                <Text
+                  className="text-sm font-bold"
+                  style={{ color: vitalityColor(currentHealth, colors), fontFamily: fonts.mono }}
+                >
+                  {currentHealth}%
+                </Text>
+              </View>
+              <Text
+                className="text-xs leading-4"
+                style={{ color: colors.mutedText, fontFamily: fonts.body }}
+              >
+                {!forestStatus?.todayCareLogged
+                  ? "Thirsty — water it today to keep it growing."
+                  : GROWTH_STAGE_MOTIVATION[growthStage]}
+              </Text>
+              <View
+                className="mt-3 h-2 overflow-hidden rounded-full"
+                style={{ backgroundColor: colors.border }}
+              >
+                <View
+                  className="h-full rounded-full"
+                  style={{ width: `${currentHealth}%`, backgroundColor: vitalityColor(currentHealth, colors) }}
+                />
               </View>
             </View>
           </View>
@@ -352,8 +316,8 @@ export default function Forest() {
             className="mt-4 px-8 text-center text-xs font-semibold leading-5"
             style={{ color: colors.mutedText, fontFamily: fonts.body }}
           >
-            Every logged day plants a new sapling. Keep your streak alive to
-            grow your forest.
+            Every day you log care, your tree grows a little more. Skip a few
+            days and it&apos;ll start to dry out — keep watering to bring it back.
           </Text>
 
           {/* Primary CTA — pinned pill button, preserves existing handleLogCare action/label */}
@@ -418,8 +382,7 @@ export default function Forest() {
                           className="h-full"
                           style={{
                             width: `${tree.health}%`,
-                            backgroundColor:
-                              tree.status === "healthy" ? colors.success : colors.primary,
+                            backgroundColor: vitalityColor(tree.health, colors),
                           }}
                         />
                       </View>
@@ -431,115 +394,26 @@ export default function Forest() {
                       </Text>
                     </View>
 
-                    {/* Right side individual tree render item */}
+                    {/* Right side individual tree render item — the same
+                        growth-stage art as the live tree above, at the
+                        health that cycle actually reached, instead of a
+                        binary healthy/wilted icon swap. */}
                     <View
-                      className="items-center justify-center p-3 rounded-2xl min-w-[76px] h-20"
+                      className="items-center justify-center rounded-2xl min-w-[84px] px-1.5 py-2"
                       style={{ backgroundColor: colors.input }}
                     >
-                      {tree.status === "healthy" ? (
-                        <MaterialCommunityIcons
-                          name="tree"
-                          size={36}
-                          color={colors.success}
-                        />
-                      ) : (
-                        <MaterialCommunityIcons
-                          name="sprout-outline"
-                          size={32}
-                          color={colors.primary}
-                        />
-                      )}
+                      <GrowthTree health={tree.health} size={48} />
                       <Text
-                        className="text-[9px] font-bold uppercase tracking-wider mt-1.5"
-                        style={{
-                          color:
-                            tree.status === "healthy" ? colors.success : colors.primary,
-                          fontFamily: fonts.body,
-                        }}
+                        numberOfLines={2}
+                        className="text-[8.5px] font-bold uppercase tracking-wider text-center -mt-1"
+                        style={{ color: vitalityColor(tree.health, colors), fontFamily: fonts.body, lineHeight: 11 }}
                       >
-                        {tree.status === "healthy" ? "Thriving" : "Wilted"}
+                        {GROWTH_STAGE_LABEL[getGrowthStage(tree.health)]}
                       </Text>
                     </View>
                   </View>
                 </View>
               ))}
-            </View>
-
-            {/* Ranking Board */}
-            <Text
-              className="mb-4 mt-8 text-lg font-bold"
-              style={{ color: colors.foreground, fontFamily: fonts.heading }}
-            >
-              Canopy Leaderboard
-            </Text>
-
-            <View className="gap-2">
-              {[
-                { name: "Emma_Wellness", trees: 24, tier: "Ancient Canopy" },
-                { name: "Sarah_Health", trees: 22, tier: "Ancient Canopy" },
-                { name: "You", trees: healthyTreeCount, tier: forestTier },
-              ]
-                .sort((a, b) => b.trees - a.trees)
-                .map((user, idx) => {
-                  const isMe = user.name === "You";
-                  return (
-                    <View
-                      key={idx}
-                      className="flex-row items-center justify-between rounded-xl border p-4"
-                      style={{
-                        backgroundColor: isMe
-                          ? `${colors.primary}12`
-                          : colors.surface,
-                        borderColor: isMe ? colors.primary : colors.border,
-                      }}
-                    >
-                      <View className="flex-row items-center gap-3">
-                        <Text
-                          className="font-bold text-sm w-4"
-                          style={{
-                            color: isMe ? colors.primary : colors.mutedText,
-                            fontFamily: fonts.mono,
-                          }}
-                        >
-                          #{idx + 1}
-                        </Text>
-                        <View>
-                          <Text
-                            className="font-bold text-sm"
-                            style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                          >
-                          {isMe ? `${user.name} (you)` : user.name}
-                          </Text>
-                          <Text
-                            className="text-[11px]"
-                            style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                          >
-                            {user.tier}
-                          </Text>
-                        </View>
-                      </View>
-                      <View
-                        className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-lg border"
-                        style={{
-                          backgroundColor: colors.input,
-                          borderColor: colors.border,
-                        }}
-                      >
-                        <MaterialCommunityIcons
-                          name="tree-outline"
-                          size={14}
-                          color={colors.primary}
-                        />
-                        <Text
-                          className="font-bold text-xs"
-                          style={{ color: colors.foreground, fontFamily: fonts.mono }}
-                        >
-                          {user.trees} Trees
-                        </Text>
-                      </View>
-                    </View>
-                  );
-                })}
             </View>
           </View>
         </ScrollView>

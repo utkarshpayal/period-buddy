@@ -10,7 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../../components/auth-context";
 import { BearMascot } from "../../components/BearMascot";
 import {
@@ -24,6 +24,7 @@ export default function Home() {
   const router = useRouter();
   const { isAuthenticated, signIn, signOut, token, user } = useAuth();
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const name = [user?.firstName, user?.lastName].filter(Boolean).join(" ");
   const [showOnboardingForm, setShowOnboardingForm] = React.useState(false);
 
@@ -87,7 +88,7 @@ export default function Home() {
             className="flex-1"
             style={{ backgroundColor: colors.background }}
           >
-            <View className="absolute right-6 top-8 z-10">
+            <View className="absolute right-6 z-10" style={{ top: insets.top + 12 }}>
               <ThemeToggle />
             </View>
 
@@ -172,7 +173,7 @@ export default function Home() {
             className="flex-1"
             keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
           >
-          <View className="absolute right-6 top-4 z-10">
+          <View className="absolute right-6 z-10" style={{ top: insets.top + 12 }}>
             <ThemeToggle />
           </View>
 
@@ -200,7 +201,7 @@ export default function Home() {
         className="flex-1"
         style={{ backgroundColor: colors.background }}
       >
-        <View className="absolute right-6 top-8 z-10">
+        <View className="absolute right-6 z-10" style={{ top: insets.top + 12 }}>
           <ThemeToggle />
         </View>
 

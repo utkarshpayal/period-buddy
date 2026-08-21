@@ -157,14 +157,29 @@ export type DashboardSummary = {
 
 export type MoodValue =
   | "anxious"
+  | "apathetic"
   | "calm"
+  | "confused"
+  | "depressed"
   | "emotional"
   | "energetic"
+  | "frisky"
+  | "guilty"
   | "happy"
   | "irritable"
+  | "lowEnergy"
+  | "moodSwings"
   | "neutral"
+  | "obsessive"
   | "sad"
+  | "selfCritical"
   | "tired";
+// NOTE: "apathetic" | "confused" | "depressed" | "frisky" | "guilty" |
+// "lowEnergy" | "moodSwings" | "obsessive" | "selfCritical" are new — the
+// day-log modal now offers the reference app's full mood grid. `mood`/`moods`
+// are backend-owned enum fields (period-buddy-be, a separate repo not present
+// here), so if that service validates this union strictly, it needs the same
+// values added server-side or it will reject these new logs.
 
 export type DayEntry = {
   _id?: string;

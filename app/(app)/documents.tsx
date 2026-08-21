@@ -1,7 +1,7 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -54,6 +54,13 @@ function formatDateLabel(dateString: string) {
   });
 }
 
+function toDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function formatFileSize(bytes?: number) {
   if (!bytes) return "";
   if (bytes < 1024) return `${bytes} B`;
@@ -72,8 +79,20 @@ function googleViewerUrl(fileUrl: string) {
 export default function DocumentsScreen() {
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
+  const { openReport } = useLocalSearchParams<{ openReport?: string }>();
   const { user } = useAuth();
   const softTints = getSoftTints(colors);
+  // Per-document-type accent — every list card previously used the same pink
+  // icon badge regardless of type, so prescriptions/labs/bills/scans all
+  // blurred together. Distinct colors make type scannable at a glance and
+  // double as the small type chip on each card below.
+  const DOC_TYPE_ACCENTS: Record<DocType, { color: string; bg: string }> = {
+    prescription: { color: colors.primary, bg: colors.primaryLight },
+    lab_report: { color: colors.info, bg: colors.infoLight },
+    bill: { color: colors.warning, bg: colors.warningLight },
+    scan: { color: colors.accent, bg: colors.accentLight },
+    other: { color: colors.secondary, bg: colors.secondaryLight },
+  };
 
   const [documents, setDocuments] = useState<MedicalDocument[]>([]);
   const [loading, setLoading] = useState(true);
@@ -284,6 +303,22 @@ export default function DocumentsScreen() {
   const [generatingReport, setGeneratingReport] = useState(false);
   const [reportLanguage, setReportLanguage] = useState<LanguageCode>("en-IN");
 
+  // "Download doctor report" on the Graphs & Reports screen deep-links here
+  // (?openReport=1) instead of duplicating this whole flow — open the modal
+  // pre-filled to the last 90 days so a first-time visitor isn't stuck
+  // picking dates blind.
+  useEffect(() => {
+    if (openReport !== "1") return;
+    const today = new Date();
+    const start = new Date(today);
+    start.setDate(start.getDate() - 90);
+    setReportStartKey(toDateKey(start));
+    setReportEndKey(toDateKey(today));
+    setReportVisible(true);
+    router.setParams({ openReport: undefined });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openReport]);
+
   function closeReportModal() {
     if (generatingReport) return;
     setReportVisible(false);
@@ -354,9 +389,14 @@ export default function DocumentsScreen() {
           >
             <Feather name="arrow-left" size={18} color={colors.foreground} />
           </TouchableOpacity>
-          <Text className="flex-1 text-2xl font-black tracking-tight ml-2" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-            Documents
-          </Text>
+          <View className="flex-1 ml-2">
+            <Text className="text-2xl font-black tracking-tight" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
+              Documents
+            </Text>
+            <Text className="text-xs font-semibold mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+              Prescriptions, reports & bills — all in one place
+            </Text>
+          </View>
         </View>
 
         <ScrollView
@@ -364,19 +404,22 @@ export default function DocumentsScreen() {
           contentContainerStyle={{ paddingBottom: 40 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
         >
-          {/* Quick actions */}
-          <View className="flex-row gap-2.5 px-6 pt-5">
+          {/* Quick actions — icon-on-top, label-below tiles instead of a
+              cramped inline icon+label row, so each label gets the tile's
+              full width and always renders on one line instead of squeezing
+              next to the icon. */}
+          <View className="flex-row gap-3 px-6 pt-5">
             <TouchableOpacity
               activeOpacity={0.85}
               onPress={() => setSummarizeVisible(true)}
-              className="flex-1 flex-row items-center justify-center gap-1.5 rounded-2xl border py-2.5"
-              style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+              className="flex-1 items-center rounded-2xl border py-4"
+              style={{ backgroundColor: colors.surface, borderColor: colors.border, ...getShadow(colors, isDark) }}
             >
               <View
-                className="w-6 h-6 rounded-lg items-center justify-center"
+                className="w-9 h-9 rounded-full items-center justify-center mb-2"
                 style={{ backgroundColor: softTints.purple }}
               >
-                <MaterialCommunityIcons name="text-box-search-outline" size={13} color={colors.accent} />
+                <MaterialCommunityIcons name="text-box-search-outline" size={17} color={colors.accent} />
               </View>
               <Text
                 className="text-[11px] font-bold"
@@ -389,14 +432,14 @@ export default function DocumentsScreen() {
             <TouchableOpacity
               activeOpacity={0.85}
               onPress={() => router.push("/document-chat")}
-              className="flex-1 flex-row items-center justify-center gap-1.5 rounded-2xl border py-2.5"
-              style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+              className="flex-1 items-center rounded-2xl border py-4"
+              style={{ backgroundColor: colors.surface, borderColor: colors.border, ...getShadow(colors, isDark) }}
             >
               <View
-                className="w-6 h-6 rounded-lg items-center justify-center"
+                className="w-9 h-9 rounded-full items-center justify-center mb-2"
                 style={{ backgroundColor: softTints.pink }}
               >
-                <Ionicons name="sparkles-outline" size={13} color={colors.primary} />
+                <Ionicons name="sparkles-outline" size={16} color={colors.primary} />
               </View>
               <Text
                 className="text-[11px] font-bold"
@@ -409,14 +452,14 @@ export default function DocumentsScreen() {
             <TouchableOpacity
               activeOpacity={0.85}
               onPress={() => setReportVisible(true)}
-              className="flex-1 flex-row items-center justify-center gap-1.5 rounded-2xl border py-2.5"
-              style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+              className="flex-1 items-center rounded-2xl border py-4"
+              style={{ backgroundColor: colors.surface, borderColor: colors.border, ...getShadow(colors, isDark) }}
             >
               <View
-                className="w-6 h-6 rounded-lg items-center justify-center"
+                className="w-9 h-9 rounded-full items-center justify-center mb-2"
                 style={{ backgroundColor: softTints.mint }}
               >
-                <Feather name="download" size={13} color={colors.secondary} />
+                <Feather name="download" size={16} color={colors.secondary} />
               </View>
               <Text
                 className="text-[11px] font-bold"
@@ -442,17 +485,19 @@ export default function DocumentsScreen() {
 
           {/* Count + sort toggle */}
           <View className="mt-4 px-6 flex-row items-center justify-between">
-            <Text className="text-[11px] font-bold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-              {documents.length} document{documents.length === 1 ? "" : "s"}
+            <Text className="text-xs font-semibold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+              <Text style={{ color: colors.foreground, fontFamily: fonts.heading, fontWeight: "800" }}>
+                {documents.length}
+              </Text>
+              {" "}document{documents.length === 1 ? "" : "s"}
             </Text>
             <TouchableOpacity
-              activeOpacity={0.8}
+              activeOpacity={0.7}
               onPress={() => setSortOrder((prev) => (prev === "desc" ? "asc" : "desc"))}
-              className="flex-row items-center gap-1.5 rounded-full border px-3 py-1.5"
-              style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+              className="flex-row items-center gap-1.5"
             >
               <Feather name={sortOrder === "desc" ? "arrow-down" : "arrow-up"} size={12} color={colors.primary} />
-              <Text className="text-[10px] font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
+              <Text className="text-xs font-bold" style={{ color: colors.primary, fontFamily: fonts.body }}>
                 {sortOrder === "desc" ? "Newest first" : "Oldest first"}
               </Text>
             </TouchableOpacity>
@@ -469,39 +514,70 @@ export default function DocumentsScreen() {
                 <SkeletonRow />
               </View>
             ) : documents.length === 0 ? (
-              <View className="items-center rounded-2xl border p-8 mt-4" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
-                <Ionicons name="folder-open-outline" size={40} color={colors.mutedText} />
-                <Text className="text-sm font-black mt-4" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
+              <View
+                className="items-center rounded-2xl border p-8 mt-4"
+                style={{ backgroundColor: colors.surface, borderColor: colors.border, ...getShadow(colors, isDark) }}
+              >
+                <View
+                  className="w-16 h-16 rounded-full items-center justify-center mb-4"
+                  style={{ backgroundColor: softTints.pink }}
+                >
+                  <Ionicons name="folder-open-outline" size={28} color={colors.primary} />
+                </View>
+                <Text className="text-sm font-black" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
                   No documents yet
                 </Text>
-                <Text className="text-xs text-center mt-1.5 leading-4" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                <Text
+                  className="text-xs text-center mt-1.5 leading-4"
+                  style={{ color: colors.mutedText, fontFamily: fonts.body, maxWidth: 240 }}
+                >
                   Upload prescriptions, lab reports, and bills to keep them all in one place.
                 </Text>
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => setUploadVisible(true)}
+                  className="mt-5 flex-row items-center gap-2 rounded-full px-5 py-3"
+                  style={{ backgroundColor: colors.primary }}
+                >
+                  <Feather name="plus" size={14} color={colors.buttonText} />
+                  <Text className="text-xs font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
+                    Upload a document
+                  </Text>
+                </TouchableOpacity>
               </View>
             ) : (
               documents.map((doc) => {
                 const meta = DOC_TYPE_META[doc.docType];
+                const accent = DOC_TYPE_ACCENTS[doc.docType];
                 const isPdf = doc.mimeType === "application/pdf";
+                const hasIssue = doc.extractionStatus === "limited" || doc.extractionStatus === "failed";
                 return (
                   <TouchableOpacity
                     key={doc._id}
                     activeOpacity={0.8}
                     onPress={() => setPreviewDoc(doc)}
                     className="flex-row items-center rounded-2xl border p-4"
-                    style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+                    style={{ backgroundColor: colors.surface, borderColor: colors.border, ...getShadow(colors, isDark) }}
                   >
-                    <View className="p-3 rounded-xl mr-3.5" style={{ backgroundColor: softTints.pink }}>
-                      <Ionicons name={meta.icon} size={18} color={colors.primary} />
+                    <View className="p-3 rounded-xl mr-3.5" style={{ backgroundColor: accent.bg }}>
+                      <Ionicons name={meta.icon} size={18} color={accent.color} />
                     </View>
-                    <View className="flex-1">
+                    <View className="flex-1" style={{ minWidth: 0 }}>
                       <Text numberOfLines={1} className="text-sm font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
                         {doc.title}
                       </Text>
-                      <Text className="text-[11px] font-semibold mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                        {formatDateLabel(doc.documentDate)} · {meta.label} · {isPdf ? "PDF" : "Image"}
-                      </Text>
-                      {doc.extractionStatus === "limited" || doc.extractionStatus === "failed" ? (
-                        <Text className="text-[10px] font-bold mt-1" style={{ color: colors.warning, fontFamily: fonts.body }}>
+                      <View className="flex-row items-center flex-wrap mt-1.5" style={{ gap: 6 }}>
+                        <View className="px-2 py-0.5 rounded-full" style={{ backgroundColor: accent.bg }}>
+                          <Text className="text-[9.5px] font-bold" style={{ color: accent.color, fontFamily: fonts.body }}>
+                            {meta.label}
+                          </Text>
+                        </View>
+                        <Text className="text-[10.5px] font-semibold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                          {formatDateLabel(doc.documentDate)} · {isPdf ? "PDF" : "Image"}
+                        </Text>
+                      </View>
+                      {hasIssue ? (
+                        <Text className="text-[10px] font-bold mt-1.5" style={{ color: colors.warning, fontFamily: fonts.body }}>
                           {doc.extractionStatus === "failed" ? "Couldn't read this file" : "Limited text found in this file"}
                         </Text>
                       ) : null}

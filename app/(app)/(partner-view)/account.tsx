@@ -2,7 +2,7 @@ import { Feather, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
 import { RefreshControl, ScrollView, StatusBar, Switch, Text, TouchableOpacity, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Avatar from "../../../components/Avatar";
 import { useAuth } from "../../../components/auth-context";
 import { ThemeToggle, useTheme } from "../../../components/theme";
@@ -13,6 +13,7 @@ import { usePartnerViewState } from "../../../components/partner-view-state";
 
 export default function PartnerViewAccount() {
   const { colors, isDark, fonts } = useTheme();
+  const insets = useSafeAreaInsets();
   const { user, signOut, updateUser } = useAuth();
   const router = useRouter();
   const { profile, refreshProfile } = usePartnerViewState();
@@ -107,7 +108,11 @@ export default function PartnerViewAccount() {
     <>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
       <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
-        <View className="absolute right-6 top-6 z-10">
+        {/* Anchored to the real device safe-area inset, not a fixed
+            className offset, so it clears the status bar/notch/rounded
+            corner on curved-screen phones — same fix as the owner profile
+            screen's identical toggle. */}
+        <View className="absolute right-6 z-10" style={{ top: insets.top + 12 }}>
           <ThemeToggle />
         </View>
 

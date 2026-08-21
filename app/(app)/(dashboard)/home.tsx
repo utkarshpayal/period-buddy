@@ -8,16 +8,16 @@ import {
   StatusBar,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle } from "react-native-svg";
 import { useAuth } from "../../../components/auth-context";
+import StatCard from "../../../components/StatCard";
 import { useTheme } from "../../../components/theme";
 import { getHeroGradient, getShadow } from "../../../components/ui-tokens";
-import StatCard from "../../../components/StatCard";
 import { useUserStats } from "../../../hooks/useUserStats";
-import { formatShortDate } from "../../../lib/format";
 import {
   authApi,
   cycleApi,
@@ -92,6 +92,12 @@ function buildFiveMonthAnalytics(
 // Mirrors the backend's getCyclePhase (src/utils/cycle.js) so the fallback
 // (used only before predictions load) scales with the user's actual cycle
 // length instead of the fixed 28-day 11/16-day thresholds.
+function getGreeting(hour: number) {
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
 function getCyclePhase(cycleDay: number, periodLength = 5, cycleLength = 28) {
   if (cycleDay <= periodLength) return "Menstrual";
   const ovulationDay = Math.max(periodLength + 1, cycleLength - 13);
@@ -108,10 +114,39 @@ const PHASE_LABELS: Record<string, string> = {
 };
 
 const WEEKDAY_LETTERS = ["M", "T", "W", "T", "F", "S", "S"];
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-// Builds the current Mon–Sun week (day letter + date number) purely for the
-// week-strip decoration below the header — presentational only, no data/state.
-function buildCurrentWeekStrip(today: Date) {
+function startOfDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+// Mirrors tracker.tsx's getCycleDay so the home week-strip's period/fertile
+// dots agree with the full calendar instead of drifting from a second,
+// slightly different definition.
+function getCycleDayForDate(date: Date, cycleStartDate: Date, cycleLength: number) {
+  const diff = Math.floor(
+    (startOfDay(date).getTime() - startOfDay(cycleStartDate).getTime()) / MS_PER_DAY,
+  );
+  return (((diff % cycleLength) + cycleLength) % cycleLength) + 1;
+}
+
+// Builds the current Mon–Sun week (day letter + date number), plus, for each
+// day, whether it falls in the period or fertile window — same thresholds
+// tracker.tsx's calendar uses — so the strip reads as real cycle context
+// instead of a plain date picker.
+function buildCurrentWeekStrip(
+  today: Date,
+  cycleStartDate: Date,
+  cycleLength: number,
+  periodLength: number,
+  ovulationDayPivot: number,
+) {
   const jsDay = today.getDay(); // 0 = Sun ... 6 = Sat
   const mondayOffset = jsDay === 0 ? -6 : 1 - jsDay;
   const monday = new Date(today);
@@ -123,11 +158,16 @@ function buildCurrentWeekStrip(today: Date) {
   return Array.from({ length: 7 }, (_, i) => {
     const date = new Date(monday);
     date.setDate(monday.getDate() + i);
+    const cycleDayForDate = getCycleDayForDate(date, cycleStartDate, cycleLength);
     return {
       letter: WEEKDAY_LETTERS[i],
       dayNumber: date.getDate(),
       isToday: date.getTime() === todayStart.getTime(),
       isFuture: date.getTime() > todayStart.getTime(),
+      isPeriod: cycleDayForDate <= periodLength,
+      isFertile:
+        cycleDayForDate >= ovulationDayPivot - 5 &&
+        cycleDayForDate <= ovulationDayPivot + 1,
     };
   });
 }
@@ -211,8 +251,36 @@ export default function Home() {
   const treeHealth =
     dashboard?.forestHealth ?? Math.min(100, Math.max(45, 55 + loggedDays * 6));
 
-  const weekStrip = useMemo(() => buildCurrentWeekStrip(new Date()), []);
+  // Same fertile-window pivot tracker.tsx's calendar uses, so the week strip
+  // below agrees with the rest of the app instead of eyeballing its own
+  // definition of "fertile".
+  const cycleLength = predictions?.cycleLength ?? 28;
+  const ovulationDayPivot = Math.max(periodLength + 1, cycleLength - 13);
+  const cycleStartDate = useMemo(
+    () =>
+      predictions?.currentPeriodStartDateISO
+        ? new Date(predictions.currentPeriodStartDateISO)
+        : addDays(new Date(), -(cycleDay - 1)),
+    [predictions?.currentPeriodStartDateISO, cycleDay],
+  );
+  const weekStrip = useMemo(
+    () =>
+      buildCurrentWeekStrip(
+        new Date(),
+        cycleStartDate,
+        cycleLength,
+        periodLength,
+        ovulationDayPivot,
+      ),
+    [cycleStartDate, cycleLength, periodLength, ovulationDayPivot],
+  );
   const heroGradient = getHeroGradient(colors, isDark);
+  const greeting = useMemo(() => getGreeting(new Date().getHours()), []);
+  const { width: screenWidth } = useWindowDimensions();
+  // Leaves the next card peeking in at the right edge — the standard
+  // "there's more, swipe" affordance instead of two full-width blocks
+  // stacked back to back.
+  const insightCardWidth = Math.min(300, screenWidth - 92);
 
   return (
     <>
@@ -247,8 +315,7 @@ export default function Home() {
                 style={{ fontSize: 16, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}
                 numberOfLines={1}
               >
-                {isDark ? "Good evening, " : "Hi "}
-                {user?.firstName || "Utkarsh"} 👋
+                {greeting}, {user?.firstName || "there"} 👋
               </Text>
               <Text
                 style={{ fontSize: 12, color: colors.mutedText, fontFamily: fonts.body, marginTop: 1 }}
@@ -365,6 +432,17 @@ export default function Home() {
                     {day.dayNumber}
                   </Text>
                 </View>
+                {/* Fixed-height slot so the dot (or its absence) never
+                    shifts the row — period days in rose, fertile days in
+                    a soft green, matching the same thresholds as the
+                    tracker's full calendar. */}
+                <View style={{ height: 8, marginTop: 5, alignItems: "center", justifyContent: "center" }}>
+                  {day.isPeriod ? (
+                    <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: colors.danger }} />
+                  ) : day.isFertile ? (
+                    <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: colors.success }} />
+                  ) : null}
+                </View>
               </View>
             ))}
           </View>
@@ -411,10 +489,14 @@ export default function Home() {
                     className="mt-1.5"
                     style={{ fontSize: 12, color: "#fff", opacity: 0.9, fontFamily: fonts.body, lineHeight: 17 }}
                   >
-                    Expected period {expectedEndDate !== "soon" ? formatShortDate(expectedEndDate) : "soon"} · Fertile window {fertileWindow}
+                    Expected period {expectedEndDate} · Fertile window {fertileWindow}
                   </Text>
                 </View>
-                <View
+                <TouchableOpacity
+                  activeOpacity={0.75}
+                  onPress={() => router.push("/(app)/tracker?log=today&focus=flow" as any)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Log today's flow"
                   style={{
                     width: 40, height: 40, borderRadius: 20,
                     backgroundColor: "rgba(255,255,255,0.25)",
@@ -422,7 +504,7 @@ export default function Home() {
                   }}
                 >
                   <Ionicons name="water" size={18} color="#fff" />
-                </View>
+                </TouchableOpacity>
               </View>
             </LinearGradient>
           </View>
@@ -466,190 +548,234 @@ export default function Home() {
             ))}
           </View>
 
-          {/* CYCLE HEALTH STAT CARD */}
-          <View className="mx-6 mb-3.5">
-            <View className="border p-5" style={{ backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 22, ...getShadow(colors, isDark) }}>
-              <View className="flex-row items-center justify-between">
-                <View className="flex-1 pr-4">
-                  <Text style={{ fontSize: 10, fontWeight: "800", color: colors.primary, letterSpacing: 0.6, fontFamily: fonts.body, textTransform: "uppercase" }}>
-                    CYCLE HEALTH
-                  </Text>
-                  <View className="flex-row items-baseline mt-1" style={{ gap: 6 }}>
-                    <Text style={{ fontSize: 24, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
-                      {treeHealth}
-                    </Text>
-                    <Text style={{ fontSize: 12, fontWeight: "700", color: treeHealth > 75 ? colors.success : treeHealth > 50 ? colors.primary : colors.warning, fontFamily: fonts.body }}>
-                      {treeHealth > 75 ? "Great" : treeHealth > 50 ? "Healthy" : "Needs Logging"}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={{ position: "relative", width: 56, height: 56 }}>
-                  <Svg width={56} height={56} viewBox="0 0 64 64">
-                    <Circle cx="32" cy="32" r="27" fill="none" stroke={isDark ? colors.surfaceStrong : "#E3E7ED"} strokeWidth={6} />
-                    <Circle cx="32" cy="32" r="27" fill="none" stroke={colors.primary} strokeWidth={6} strokeLinecap="round" strokeDasharray={`${(treeHealth / 100) * 170} 170`} transform="rotate(-90 32 32)" />
-                  </Svg>
-                  <View style={{ position: "absolute", inset: 0, justifyContent: "center", alignItems: "center" }}>
-                    <Text style={{ fontSize: 11, fontWeight: "600", color: colors.foreground, fontFamily: fonts.mono }}>
-                      {treeHealth}%
-                    </Text>
-                  </View>
-                </View>
-              </View>
-
-              <View className="my-4 h-[1px] w-full" style={{ backgroundColor: colors.border }} />
-
-              <View className="flex-row justify-between items-center">
-                {[
-                  { value: loggedDays, label: "Days logged" },
-                  { value: periodLength || 5, label: "Period length" },
-                  { value: typeof fertileWindow === "number" ? fertileWindow : 6, label: "Fertile window" },
-                ].map((stat, i) => (
-                  <View key={i} className="flex-1 items-center">
-                    <Text style={{ fontSize: 18, fontWeight: "800", color: colors.foreground, fontFamily: fonts.mono }}>
-                      {stat.value}
-                    </Text>
-                    <Text style={{ fontSize: 10, color: colors.mutedText, fontFamily: fonts.body, marginTop: 2, textAlign: "center" }}>
-                      {stat.label}
-                    </Text>
-                  </View>
-                ))}
-              </View>
+          {/* INSIGHTS — cycle health + length trend as a swipeable, peeking
+              carousel instead of two identical full-width bordered blocks
+              stacked back to back; a "See all" link hands off to the full
+              predictions screen for anyone who wants more than a glance. */}
+          <View className="mb-3.5">
+            <View className="mx-6 mb-2.5 flex-row items-center justify-between">
+              <Text style={{ fontSize: 14.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
+                Insights
+              </Text>
+              <TouchableOpacity activeOpacity={0.7} onPress={() => router.push("/(app)/predictions")}>
+                <Text style={{ fontSize: 12, fontWeight: "700", color: colors.primary, fontFamily: fonts.body }}>
+                  See all
+                </Text>
+              </TouchableOpacity>
             </View>
-          </View>
 
-          {/* CYCLE LENGTH TREND — ALWAYS VISIBLE */}
-          <View className="mx-6 mb-3.5">
-            <View className="border p-5" style={{ backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 22, ...getShadow(colors, isDark) }}>
-              <View className="flex-row justify-between items-center mb-5">
-                <Text style={{ fontSize: 14, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
-                  Cycle length trend
-                </Text>
-                <Text style={{ fontSize: 11.5, color: colors.mutedText, fontFamily: fonts.body }}>
-                  Avg {predictions?.cycleLength ?? 28} days
-                </Text>
-              </View>
-
-              <View className="flex-row justify-around items-end" style={{ height: 120 }}>
-                {analyticGraphData.map((data, idx) => {
-                  const barHeight = Math.max(12, (data.length / maxBarLength) * 80);
-                  const isLatest = idx === analyticGraphData.length - 1;
-                  return (
-                    <View key={`${data.month}-${idx}`} className="items-center" style={{ width: 44 }}>
-                      <Text style={{ fontSize: 9.5, fontWeight: "600", color: isLatest ? colors.primary : colors.mutedText, fontFamily: fonts.mono, marginBottom: 6 }}>
-                        {data.length > 0 ? `${data.length}d` : "—"}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              decelerationRate="fast"
+              snapToInterval={insightCardWidth + 12}
+              snapToAlignment="start"
+              contentContainerStyle={{ paddingLeft: 24, paddingRight: 24, gap: 12 }}
+            >
+              {/* Cycle health */}
+              <View className="border p-5" style={{ width: insightCardWidth, backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 22, ...getShadow(colors, isDark) }}>
+                <View className="flex-row items-center justify-between">
+                  <View className="flex-1 pr-4">
+                    <Text style={{ fontSize: 10, fontWeight: "800", color: colors.primary, letterSpacing: 0.6, fontFamily: fonts.body, textTransform: "uppercase" }}>
+                      CYCLE HEALTH
+                    </Text>
+                    <View className="flex-row items-baseline mt-1" style={{ gap: 6 }}>
+                      <Text style={{ fontSize: 24, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
+                        {treeHealth}
                       </Text>
-                      <View style={{ height: 80, width: 14, backgroundColor: isDark ? colors.surfaceStrong : "#E8EDF3", borderRadius: 99, justifyContent: "flex-end", overflow: "hidden" }}>
-                        <View style={{ height: barHeight, width: "100%", backgroundColor: colors.primary, opacity: isLatest ? 1 : 0.5, borderRadius: 99 }} />
-                      </View>
-                      <Text style={{ fontSize: 10, fontWeight: "600", color: isLatest ? colors.foreground : colors.mutedText, fontFamily: fonts.body, marginTop: 8 }}>
-                        {data.month}
+                      <Text style={{ fontSize: 12, fontWeight: "700", color: treeHealth > 75 ? colors.success : treeHealth > 50 ? colors.primary : colors.warning, fontFamily: fonts.body }}>
+                        {treeHealth > 75 ? "Great" : treeHealth > 50 ? "Healthy" : "Needs Logging"}
                       </Text>
                     </View>
-                  );
-                })}
+                  </View>
+
+                  <View style={{ position: "relative", width: 56, height: 56 }}>
+                    <Svg width={56} height={56} viewBox="0 0 64 64">
+                      <Circle cx="32" cy="32" r="27" fill="none" stroke={isDark ? colors.surfaceStrong : "#E3E7ED"} strokeWidth={6} />
+                      <Circle cx="32" cy="32" r="27" fill="none" stroke={colors.primary} strokeWidth={6} strokeLinecap="round" strokeDasharray={`${(treeHealth / 100) * 170} 170`} transform="rotate(-90 32 32)" />
+                    </Svg>
+                    <View style={{ position: "absolute", inset: 0, justifyContent: "center", alignItems: "center" }}>
+                      <Text style={{ fontSize: 11, fontWeight: "600", color: colors.foreground, fontFamily: fonts.mono }}>
+                        {treeHealth}%
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+
+                <View className="my-4 h-[1px] w-full" style={{ backgroundColor: colors.border }} />
+
+                <View className="flex-row justify-between items-center">
+                  {[
+                    { value: loggedDays, label: "Days logged" },
+                    { value: periodLength || 5, label: "Period length" },
+                    { value: typeof fertileWindow === "number" ? fertileWindow : 6, label: "Fertile window" },
+                  ].map((stat, i) => (
+                    <View key={i} className="flex-1 items-center">
+                      <Text style={{ fontSize: 18, fontWeight: "800", color: colors.foreground, fontFamily: fonts.mono }}>
+                        {stat.value}
+                      </Text>
+                      <Text style={{ fontSize: 10, color: colors.mutedText, fontFamily: fonts.body, marginTop: 2, textAlign: "center" }}>
+                        {stat.label}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
               </View>
-            </View>
+
+              {/* Cycle length trend */}
+              <View className="border p-5" style={{ width: insightCardWidth, backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 22, ...getShadow(colors, isDark) }}>
+                <View className="flex-row justify-between items-center mb-5">
+                  <Text style={{ fontSize: 14, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
+                    Cycle length trend
+                  </Text>
+                  <Text style={{ fontSize: 11.5, color: colors.mutedText, fontFamily: fonts.body }}>
+                    Avg {predictions?.cycleLength ?? 28} days
+                  </Text>
+                </View>
+
+                <View className="flex-row justify-around items-end" style={{ height: 120 }}>
+                  {analyticGraphData.map((data, idx) => {
+                    const barHeight = Math.max(12, (data.length / maxBarLength) * 80);
+                    const isLatest = idx === analyticGraphData.length - 1;
+                    return (
+                      <View key={`${data.month}-${idx}`} className="items-center" style={{ width: 44 }}>
+                        <Text style={{ fontSize: 9.5, fontWeight: "600", color: isLatest ? colors.primary : colors.mutedText, fontFamily: fonts.mono, marginBottom: 6 }}>
+                          {data.length > 0 ? `${data.length}d` : "—"}
+                        </Text>
+                        <View style={{ height: 80, width: 14, backgroundColor: isDark ? colors.surfaceStrong : "#E8EDF3", borderRadius: 99, justifyContent: "flex-end", overflow: "hidden" }}>
+                          <View style={{ height: barHeight, width: "100%", backgroundColor: colors.primary, opacity: isLatest ? 1 : 0.5, borderRadius: 99 }} />
+                        </View>
+                        <Text style={{ fontSize: 10, fontWeight: "600", color: isLatest ? colors.foreground : colors.mutedText, fontFamily: fonts.body, marginTop: 8 }}>
+                          {data.month}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            </ScrollView>
           </View>
 
-          {/* YOUR CARE LIST */}
+          {/* YOUR CARE — a compact 2-up tile grid (icon, title, one-line tag)
+              instead of a stacked list of sentence-length rows, plus a single
+              featured CTA for the one genuinely high-intent action (booking a
+              consult) so it doesn't blend into the grid as just another tile. */}
           <View className="mx-6 mb-5">
             <Text className="mb-2.5" style={{ fontSize: 14.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
               Your care
             </Text>
 
-            <View style={{ gap: 9 }}>
+            <View className="flex-row flex-wrap" style={{ gap: 10 }}>
               {[
-                { title: "Smart Predictions", desc: "Cycle forecasts, windows, and trends", icon: "trending-up-outline", route: "/(app)/predictions" },
-                { title: "Daily Insights", desc: "Personalized hormone, mood & energy tips", icon: "sparkles-outline", route: "/(app)/insights" },
-                { title: "Symptom Predictions", desc: "Likely symptoms by cycle phase", icon: "pulse-outline", route: "/(app)/symptom-predictions" },
-                { title: "Symptom Checker", desc: "PCOS, endometriosis, fibroid & thyroid screening", icon: "clipboard-outline", route: "/(app)/symptom-checker" },
-                { title: "Gynecologist Consultation", desc: "Private specialist booking, secure chat", icon: "chatbubbles-outline", route: "/(app)/consultation" },
+                { title: "Predictions", tag: "Cycle forecasts & trends", icon: "trending-up-outline", route: "/(app)/predictions", color: colors.primary, bg: colors.primaryLight },
+                { title: "Daily Insights", tag: "Mood, hormone & energy", icon: "sparkles-outline", route: "/(app)/insights", color: colors.secondary, bg: colors.secondaryLight },
+                { title: "Symptom Trends", tag: "Likely by cycle phase", icon: "pulse-outline", route: "/(app)/symptom-predictions", color: colors.accent, bg: colors.accentLight },
+                { title: "Symptom Checker", tag: "PCOS, thyroid & more", icon: "clipboard-outline", route: "/(app)/symptom-checker", color: colors.info, bg: colors.infoLight },
               ].map((careItem, i) => (
                 <TouchableOpacity
                   key={i}
                   onPress={() => router.push(careItem.route as any)}
-                  activeOpacity={0.7}
-                  className="flex-row items-center border"
-                  style={{ backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 18, padding: 14 }}
+                  activeOpacity={0.75}
+                  className="border"
+                  style={{ width: "48%", backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 18, padding: 14 }}
                 >
-                  <View style={{ width: 38, height: 38, borderRadius: 11, backgroundColor: colors.primaryLight, alignItems: "center", justifyContent: "center", marginRight: 12 }}>
-                    <Ionicons name={careItem.icon as any} size={17} color={colors.primary} />
+                  <View style={{ width: 36, height: 36, borderRadius: 11, backgroundColor: careItem.bg, alignItems: "center", justifyContent: "center", marginBottom: 10 }}>
+                    <Ionicons name={careItem.icon as any} size={17} color={careItem.color} />
                   </View>
-                  <View className="flex-1">
-                    <Text style={{ fontSize: 13, fontWeight: "800", color: colors.foreground, fontFamily: fonts.body }}>{careItem.title}</Text>
-                    <Text style={{ fontSize: 11, color: colors.mutedText, marginTop: 1, fontFamily: fonts.body }}>{careItem.desc}</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={14} color={colors.mutedText} />
+                  <Text style={{ fontSize: 12.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.body }}>{careItem.title}</Text>
+                  <Text style={{ fontSize: 10.5, color: colors.mutedText, marginTop: 2, fontFamily: fonts.body }} numberOfLines={1}>{careItem.tag}</Text>
                 </TouchableOpacity>
               ))}
             </View>
+
+            <TouchableOpacity
+              onPress={() => router.push("/(app)/consultation")}
+              activeOpacity={0.85}
+              className="flex-row items-center mt-2.5"
+              style={{ backgroundColor: colors.primaryLight, borderRadius: 18, padding: 14 }}
+            >
+              <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center", marginRight: 12 }}>
+                <Ionicons name="chatbubbles-outline" size={18} color={colors.primary} />
+              </View>
+              <View className="flex-1">
+                <Text style={{ fontSize: 13, fontWeight: "800", color: colors.foreground, fontFamily: fonts.body }}>Talk to a gynecologist</Text>
+                <Text style={{ fontSize: 10.5, color: colors.mutedText, marginTop: 1, fontFamily: fonts.body }} numberOfLines={1}>Private consult, secure chat</Text>
+              </View>
+              <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" }}>
+                <Ionicons name="arrow-forward" size={14} color={colors.buttonText} />
+              </View>
+            </TouchableOpacity>
           </View>
 
-          {/* WELLNESS & SUPPORT GRID */}
+          {/* WELLNESS & SUPPORT — same tile grid, but each icon gets its own
+              accent instead of repeating the same primary tint on every
+              card, so the row is scannable at a glance rather than a
+              monotone block. */}
           <View className="mx-6 mb-5">
             <Text className="mb-2.5" style={{ fontSize: 14.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
               Wellness & support
             </Text>
 
-            <View className="flex-row flex-wrap justify-between" style={{ gap: 10 }}>
+            <View className="flex-row flex-wrap" style={{ gap: 10 }}>
               {[
-                { title: "Health Concerns", desc: "Irregularities & symptoms", icon: "alert-circle-outline", route: "/(app)/health-issues" },
-                { title: "Nura AI", desc: "Ask privately, expert-answered", icon: "help-circle-outline", route: "/(app)/qa" },
-                { title: "Hygiene & Care", desc: "Product guidance & comfort", icon: "leaf-outline", route: "/(app)/hygiene" },
-                { title: "Sexual Wellbeing", desc: "Consent, intimacy & safety", icon: "heart-outline", route: "/(app)/sexual-wellbeing" },
+                { title: "Health Concerns", desc: "Irregularities & symptoms", icon: "alert-circle-outline", route: "/(app)/health-issues", color: colors.warning, bg: colors.warningLight },
+                { title: "Nura AI", desc: "Ask privately, anytime", icon: "help-circle-outline", route: "/(app)/qa", color: colors.info, bg: colors.infoLight },
+                { title: "Hygiene & Care", desc: "Product guidance & comfort", icon: "leaf-outline", route: "/(app)/hygiene", color: colors.accent, bg: colors.accentLight },
+                { title: "Sexual Wellbeing", desc: "Consent, intimacy & safety", icon: "heart-outline", route: "/(app)/sexual-wellbeing", color: colors.secondary, bg: colors.secondaryLight },
               ].map((wellness, idx) => (
                 <TouchableOpacity
                   key={idx}
                   onPress={() => router.push(wellness.route as any)}
-                  activeOpacity={0.7}
+                  activeOpacity={0.75}
                   className="border"
                   style={{ width: "48%", backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 18, padding: 14 }}
                 >
-                  <View style={{ alignSelf: "flex-start", padding: 8, borderRadius: 10, backgroundColor: colors.primaryLight, marginBottom: 10 }}>
-                    <Ionicons name={wellness.icon as any} size={16} color={colors.primary} />
+                  <View style={{ width: 36, height: 36, borderRadius: 11, backgroundColor: wellness.bg, alignItems: "center", justifyContent: "center", marginBottom: 10 }}>
+                    <Ionicons name={wellness.icon as any} size={16} color={wellness.color} />
                   </View>
-                  <Text style={{ fontSize: 12, fontWeight: "800", color: colors.foreground, fontFamily: fonts.body }}>{wellness.title}</Text>
-                  <Text style={{ fontSize: 10, color: colors.mutedText, marginTop: 2, fontFamily: fonts.body }} numberOfLines={1}>{wellness.desc}</Text>
+                  <Text style={{ fontSize: 12.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.body }}>{wellness.title}</Text>
+                  <Text style={{ fontSize: 10.5, color: colors.mutedText, marginTop: 2, fontFamily: fonts.body }} numberOfLines={1}>{wellness.desc}</Text>
                 </TouchableOpacity>
               ))}
             </View>
           </View>
 
-          {/* EXPLORE GRID */}
+          {/* EXPLORE — icon-first, label-only tiles (no descriptions at
+              this density); kept as 3-up since these are lighter-weight,
+              browse-anytime destinations rather than care actions. */}
           <View className="mx-6 mb-8">
             <Text className="mb-2.5" style={{ fontSize: 14.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
               Explore
             </Text>
 
-            <View className="flex-row flex-wrap" style={{ gap: 8 }}>
+            <View className="flex-row flex-wrap" style={{ gap: 10 }}>
               {[
                 { title: "Forest", icon: "leaf-outline", route: "/(app)/forest", color: colors.success, bg: colors.successLight },
                 { title: "Blogs", icon: "book-outline", route: "/(app)/blogs", color: colors.info, bg: colors.infoLight },
                 { title: "Videos", icon: "play-circle-outline", route: "/(app)/reels", color: colors.primary, bg: colors.primaryLight },
                 { title: "Partner sync", icon: "git-merge-outline", route: "/(app)/partner", color: colors.accent, bg: colors.accentLight },
-                { title: "Habits", icon: "checkmark-done-outline", route: "/(app)/habits", color: colors.success, bg: colors.successLight },
-                { title: "Nominate Buddy", icon: "star-outline", route: "/(app)/buddy-nomination", color: colors.accent, bg: colors.accentLight },
+                { title: "Habits", icon: "checkmark-done-outline", route: "/(app)/habits", color: colors.warning, bg: colors.warningLight },
+                { title: "Nominate Buddy", icon: "star-outline", route: "/(app)/buddy-nomination", color: colors.secondary, bg: colors.secondaryLight },
               ].map((exp, idx) => (
                 <TouchableOpacity
                   key={idx}
                   onPress={() => router.push(exp.route as any)}
                   activeOpacity={0.8}
                   className="border items-center justify-center"
-                  style={{ width: "31%", backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 18, paddingVertical: 14, paddingHorizontal: 8 }}
+                  style={{ width: "31%", backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 18, paddingVertical: 16, paddingHorizontal: 8 }}
                 >
                   <View
                     style={{
-                      width: 34,
-                      height: 34,
-                      borderRadius: 11,
+                      width: 36,
+                      height: 36,
+                      borderRadius: 12,
                       backgroundColor: exp.bg,
                       alignItems: "center",
                       justifyContent: "center",
-                      marginBottom: 8,
+                      marginBottom: 9,
                     }}
                   >
-                    <Ionicons name={exp.icon as any} size={17} color={exp.color} />
+                    <Ionicons name={exp.icon as any} size={18} color={exp.color} />
                   </View>
                   <Text style={{ fontSize: 10.5, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }} numberOfLines={1}>
                     {exp.title}

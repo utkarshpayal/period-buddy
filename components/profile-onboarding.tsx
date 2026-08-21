@@ -204,13 +204,8 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
 
     if (currentStep.id === "cycleDetails") {
       const period = Number(periodLength);
-      const cycle = Number(cycleLength);
       if (!period || period < 1 || period > 10) {
         setErrorMessage("Period length should be between 1 and 10 days.");
-        return;
-      }
-      if (!cycle || cycle < 20 || cycle > 45) {
-        setErrorMessage("Cycle length should be between 20 and 45 days.");
         return;
       }
     }

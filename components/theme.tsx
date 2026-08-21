@@ -44,6 +44,12 @@ export type ThemeColors = {
   lavenderLight: string;
   mint: string;
   mintLight: string;
+  // Two extra category accents (log-modal option groups, gradient stat
+  // cards) — the base rose/lavender/mint trio doesn't cover blue or gold.
+  sky: string;
+  skyLight: string;
+  gold: string;
+  goldLight: string;
   shadow: string;
   overlay: string;
 };
@@ -119,6 +125,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             lavenderLight: "rgba(199, 184, 232, 0.16)",
             mint: "#8FCDBB",
             mintLight: "rgba(143, 205, 187, 0.16)",
+            sky: "#8FB3E0",
+            skyLight: "rgba(143, 179, 224, 0.16)",
+            gold: "#E0BE6F",
+            goldLight: "rgba(224, 190, 111, 0.18)",
             shadow: "rgba(0, 0, 0, 0.5)",
             overlay: "rgba(34, 26, 32, 0.72)",
           }
@@ -156,6 +166,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             lavenderLight: "#EEE6FA",
             mint: "#9FD8C9",
             mintLight: "#DDF0E2",
+            sky: "#5B8FCE",
+            skyLight: "#E1EBFA",
+            gold: "#C99A2E",
+            goldLight: "#FBF0D4",
             shadow: "rgba(230, 110, 150, 0.16)",
             overlay: "rgba(58, 42, 50, 0.4)",
           },

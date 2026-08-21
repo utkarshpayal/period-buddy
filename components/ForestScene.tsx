@@ -427,9 +427,15 @@ function FallingParticles({ phase, height, width = 320 }: { phase: ForestPhase; 
 export type ForestSceneProps = {
   height?: number;
   phase: ForestPhase;
+  /** When provided, this replaces the generic 4-species decorative row with
+   * a single centerpiece (the user's own GrowthTree) so the scene reads as
+   * "your tree in your forest" rather than stock scenery. The centerpiece is
+   * expected to manage its own sway/scale animation, so it isn't wrapped in
+   * SwayingTree here (that would compound two independent rotations). */
+  centerpiece?: React.ReactNode;
 };
 
-export function ForestScene({ height = 236, phase }: ForestSceneProps) {
+export function ForestScene({ height = 236, phase, centerpiece }: ForestSceneProps) {
   const sky = PHASE_SKY[phase];
   const hills = PHASE_HILLS[phase];
   const sun = PHASE_SUN[phase];
@@ -483,18 +489,22 @@ export function ForestScene({ height = 236, phase }: ForestSceneProps) {
           gap: 10,
         }}
       >
-        <SwayingTree delay={0} swayDeg={motion.swayDeg} swayMs={motion.swayMs}>
-          <PalmSVG size={44} />
-        </SwayingTree>
-        <SwayingTree delay={300} swayDeg={motion.swayDeg} swayMs={motion.swayMs}>
-          <MushroomSVG size={44} />
-        </SwayingTree>
-        <SwayingTree delay={150} swayDeg={motion.swayDeg + 1} swayMs={motion.swayMs}>
-          {cycleTreeForPhase(phase)}
-        </SwayingTree>
-        <SwayingTree delay={450} swayDeg={motion.swayDeg} swayMs={motion.swayMs}>
-          <PineSVG size={44} />
-        </SwayingTree>
+        {centerpiece ?? (
+          <>
+            <SwayingTree delay={0} swayDeg={motion.swayDeg} swayMs={motion.swayMs}>
+              <PalmSVG size={44} />
+            </SwayingTree>
+            <SwayingTree delay={300} swayDeg={motion.swayDeg} swayMs={motion.swayMs}>
+              <MushroomSVG size={44} />
+            </SwayingTree>
+            <SwayingTree delay={150} swayDeg={motion.swayDeg + 1} swayMs={motion.swayMs}>
+              {cycleTreeForPhase(phase)}
+            </SwayingTree>
+            <SwayingTree delay={450} swayDeg={motion.swayDeg} swayMs={motion.swayMs}>
+              <PineSVG size={44} />
+            </SwayingTree>
+          </>
+        )}
       </View>
     </View>
   );
