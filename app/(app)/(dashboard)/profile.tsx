@@ -11,7 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../../../components/auth-context";
 import { alert } from "../../../lib/alert";
 import { ThemeToggle, useTheme } from "../../../components/theme";
@@ -23,6 +23,7 @@ import { useUserStats } from "../../../hooks/useUserStats";
 
 export default function Profile() {
   const { colors, isDark, fonts } = useTheme();
+  const insets = useSafeAreaInsets();
   const { signOut, user, updateUser } = useAuth();
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -169,8 +170,14 @@ export default function Profile() {
         className="flex-1"
         style={{ backgroundColor: colors.background }}
       >
-        {/* Absolute Top Toggle Bar */}
-        <View className="absolute right-6 top-6 z-10">
+        {/* Absolute Top Toggle Bar — anchored to the actual device safe-area
+            inset (not a fixed className offset) so it clears the status bar
+            / notch / rounded-corner cutout on curved-screen phones instead
+            of sitting under it. */}
+        <View
+          className="absolute right-6 z-10"
+          style={{ top: insets.top + 12 }}
+        >
           <ThemeToggle />
         </View>
 
@@ -428,6 +435,28 @@ export default function Profile() {
                 size={16}
                 color={colors.mutedText}
               />
+            </TouchableOpacity>
+
+            {/* Row: Graphs & Reports (Route) */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => router.push("/graphs-reports")}
+              className="flex-row items-center px-4 py-4 border-b"
+              style={{ borderColor: colors.border }}
+            >
+              <View
+                className="p-2.5 rounded-xl mr-4"
+                style={{ backgroundColor: softTints.sky }}
+              >
+                <Ionicons name="bar-chart-outline" size={18} color={colors.sky} />
+              </View>
+              <Text
+                className="flex-1 text-sm font-bold"
+                style={{ color: colors.foreground, fontFamily: fonts.body }}
+              >
+                Graphs & Reports
+              </Text>
+              <Feather name="chevron-right" size={16} color={colors.mutedText} />
             </TouchableOpacity>
 
             {/* Row: Government Schemes & Benefits (Route) */}

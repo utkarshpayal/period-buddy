@@ -1004,7 +1004,7 @@ export default function Tracker() {
                     fontFamily: fonts.heading,
                   }}
                 >
-                  {user?.firstName || "Utkarsh"}
+                  {user?.firstName || "there"}
                 </Text>
               </View>
             </View>

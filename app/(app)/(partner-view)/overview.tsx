@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -16,11 +16,7 @@ import { useAuth } from "../../../components/auth-context";
 import { useTheme } from "../../../components/theme";
 import { getShadow, getScreenGradient } from "../../../components/ui-tokens";
 import { formatShortDate } from "../../../lib/format";
-import {
-  partnerApi,
-  type AppNotification,
-  type PartnerSharedData,
-} from "../../../lib/api";
+import { partnerApi, type PartnerSharedData } from "../../../lib/api";
 import { usePartnerViewState } from "../../../components/partner-view-state";
 
 const PHASE_LABEL: Record<string, string> = {
@@ -56,13 +52,12 @@ export default function PartnerViewOverview() {
   const { colors, isDark, fonts } = useTheme();
   const { user } = useAuth();
   const router = useRouter();
-  const { profile, setProfile, notifications, setNotifications } = usePartnerViewState();
+  const { profile, setProfile, notifications, setNotifications, refreshProfile } = usePartnerViewState();
 
   const [expandedLogs, setExpandedLogs] = useState<Record<string, boolean>>({});
   const [data, setData] = useState<PartnerSharedData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isNotifModalVisible, setIsNotifModalVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
   const load = useCallback(async () => {
@@ -93,6 +88,17 @@ export default function PartnerViewOverview() {
     await load();
     setIsRefreshing(false);
   }
+
+  // The bell's unread badge reads from the shared partner-view notifications
+  // state, but the notifications screen it now pushes to (same shared route
+  // the owner's home screen uses) manages its own local copy — re-syncing on
+  // focus is what keeps the badge count accurate after reading/marking
+  // notifications there and coming back.
+  useFocusEffect(
+    useCallback(() => {
+      refreshProfile();
+    }, [refreshProfile]),
+  );
 
   const screenGradient = getScreenGradient(colors, isDark) as [
     string,
@@ -186,7 +192,7 @@ export default function PartnerViewOverview() {
                 unmissable, once there's something unread) so it actually
                 reads as its own actionable control in the header. */}
             <TouchableOpacity
-              onPress={() => setIsNotifModalVisible(true)}
+              onPress={() => router.push("/(app)/notifications")}
               accessibilityRole="button"
               accessibilityLabel="Notifications"
               className="flex-row items-center justify-center w-10 h-10 rounded-full border relative"
@@ -798,134 +804,6 @@ export default function PartnerViewOverview() {
           )}
         </ScrollView>
       </SafeAreaView>
-
-      {/* Notification Drawer Modal */}
-      {isNotifModalVisible && (
-        <View
-          className="absolute inset-0 z-50 justify-end"
-          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
-        >
-          <TouchableOpacity
-            activeOpacity={1}
-            className="absolute inset-0"
-            onPress={() => setIsNotifModalVisible(false)}
-          />
-
-          <View
-            className="rounded-t-3xl border-t p-5"
-            style={{
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-              maxHeight: "75%",
-              ...getShadow(colors, isDark),
-            }}
-          >
-            <View className="flex-row items-center justify-between mb-4">
-              <Text
-                className="text-base font-black"
-                style={{ color: colors.foreground, fontFamily: fonts.heading }}
-              >
-                Updates & Notifications
-              </Text>
-              <TouchableOpacity
-                onPress={() => setIsNotifModalVisible(false)}
-                className="w-7 h-7 rounded-full items-center justify-center"
-                style={{ backgroundColor: colors.surfaceSoft }}
-              >
-                <Ionicons name="close" size={16} color={colors.foreground} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false} style={{ marginBottom: 20 }}>
-              {notifications.length === 0 ? (
-                <View className="items-center justify-center py-10">
-                  <Ionicons
-                    name="notifications-off-outline"
-                    size={24}
-                    color={colors.mutedText}
-                    style={{ marginBottom: 8 }}
-                  />
-                  <Text
-                    className="text-xs font-semibold text-center"
-                    style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                  >
-                    No notifications yet.
-                  </Text>
-                </View>
-              ) : (
-                <View style={{ gap: 10 }}>
-                  {notifications.map((notif) => {
-                    const formattedTime = notif.createdAt
-                      ? new Date(notif.createdAt).toLocaleDateString(undefined, {
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })
-                      : "";
-
-                    return (
-                      <TouchableOpacity
-                        key={notif._id}
-                        activeOpacity={0.8}
-                        onPress={async () => {
-                          if (!notif.isRead) {
-                            try {
-                              await partnerApi.markNotificationAsRead(notif._id);
-                              setNotifications((prev: AppNotification[]) =>
-                                prev.map((n) =>
-                                  n._id === notif._id ? { ...n, isRead: true } : n,
-                                ),
-                              );
-                            } catch (err) {
-                              console.error(err);
-                            }
-                          }
-                        }}
-                        className="p-3.5 rounded-2xl border"
-                        style={{
-                          backgroundColor: notif.isRead ? colors.surfaceSoft : colors.primaryLight,
-                          borderColor: notif.isRead ? colors.border : colors.primary,
-                          borderWidth: notif.isRead ? 1 : 1.5,
-                        }}
-                      >
-                        <View className="flex-row items-start justify-between mb-1">
-                          <Text
-                            className="text-xs font-black flex-1 mr-2"
-                            style={{ color: colors.foreground, fontFamily: fonts.body }}
-                          >
-                            {notif.title}
-                          </Text>
-                          {!notif.isRead && (
-                            <View
-                              className="w-1.5 h-1.5 rounded-full animate-pulse"
-                              style={{ backgroundColor: colors.primary }}
-                            />
-                          )}
-                        </View>
-                        {notif.body && (
-                          <Text
-                            className="text-[11.5px] leading-5 font-semibold mb-1.5"
-                            style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                          >
-                            {notif.body}
-                          </Text>
-                        )}
-                        <Text
-                          className="text-[9px] font-bold"
-                          style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                        >
-                          {formattedTime}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              )}
-            </ScrollView>
-          </View>
-        </View>
-      )}
     </LinearGradient>
   );
 }

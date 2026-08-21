@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../components/auth-context";
+import { Loader } from "../components/Loader";
 import { ThemeToggle, useTheme } from "../components/theme";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -43,6 +44,15 @@ export default function Index() {
       hasNavigated.current = false;
     }
   }, [isAuthenticated, router, user?.partnerRole]);
+
+  // AuthProvider withholds this whole tree until session hydration from
+  // AsyncStorage finishes, so `isAuthenticated` is already accurate on first
+  // render here — a logged-in user should never see the logged-out landing
+  // page (Log In / Create Account) flash by. Show the branded loader instead
+  // while the redirect effect above sends them into the app.
+  if (isAuthenticated) {
+    return <Loader fullscreen label="Getting things ready…" />;
+  }
 
   return (
     <LinearGradient

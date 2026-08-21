@@ -15,7 +15,12 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { DayEntry } from "./AppState";
 import { useTheme } from "./theme";
-import { getShadow, MOOD_OPTIONS } from "./ui-tokens";
+import {
+  getLogCategoryTints,
+  getShadow,
+  MOOD_OPTIONS,
+  type LogCategoryTint,
+} from "./ui-tokens";
 
 type LogOption<Value extends string> = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -23,26 +28,82 @@ type LogOption<Value extends string> = {
   value: Value;
 };
 
+// Physical symptoms — the catch-all tag list. "Nausea" also renders again
+// under Digestion & stool (same tag, same toggle) since it belongs to both
+// groupings in the reference app; everything else here is symptoms-only.
 const symptomOptions: LogOption<string>[] = [
+  { icon: "gift-outline", label: "Everything is fine", value: "everything-is-fine" },
   { icon: "pulse-outline", label: "Cramps", value: "cramps" },
-  { icon: "water-outline", label: "Bloating", value: "bloating" },
+  { icon: "heart-half-outline", label: "Tender breasts", value: "tender-breasts" },
   { icon: "flash-outline", label: "Headache", value: "headache" },
+  { icon: "sparkles-outline", label: "Acne", value: "acne" },
+  { icon: "body-outline", label: "Backache", value: "backache" },
   { icon: "bed-outline", label: "Fatigue", value: "fatigue" },
   { icon: "restaurant-outline", label: "Cravings", value: "cravings" },
-  { icon: "happy-outline", label: "Mood swing", value: "mood-swing" },
-  { icon: "warning-outline", label: "Nausea", value: "nausea" },
-  { icon: "body-outline", label: "Backache", value: "backache" },
-  { icon: "sparkles-outline", label: "Acne", value: "acne" },
-  { icon: "heart-half-outline", label: "Tender breasts", value: "tender-breasts" },
-  { icon: "flag-outline", label: "Constipation", value: "constipation" },
   { icon: "moon-outline", label: "Insomnia", value: "insomnia" },
+  { icon: "medkit-outline", label: "Abdominal pain", value: "abdominal-pain" },
+  { icon: "flame-outline", label: "Vaginal itching", value: "vaginal-itching" },
+  { icon: "water-outline", label: "Vaginal dryness", value: "vaginal-dryness" },
+];
+
+// Free-form tags stored in DayEntry.symptoms (no backend enum, so these are
+// safe to ship without a server change) for categories the typed fields
+// (flow/discharge/digestion) don't have dedicated slots for.
+const bloodClotOption: LogOption<string> = {
+  icon: "disc-outline",
+  label: "Blood clots",
+  value: "blood-clots",
+};
+
+const ovulationOptions: LogOption<string>[] = [
+  { icon: "help-circle-outline", label: "Not tested", value: "ovulation-not-tested" },
+  { icon: "checkmark-circle-outline", label: "Test: positive", value: "ovulation-test-positive" },
+  { icon: "remove-circle-outline", label: "Test: negative", value: "ovulation-test-negative" },
+  { icon: "create-outline", label: "Ovulation: my method", value: "ovulation-my-method" },
+];
+
+const sexOptions: LogOption<string>[] = [
+  { icon: "heart-dislike-outline", label: "Didn't have sex", value: "sex-none" },
+  { icon: "shield-checkmark-outline", label: "Protected sex", value: "sex-protected" },
+  { icon: "shield-outline", label: "Unprotected sex", value: "sex-unprotected" },
+  { icon: "happy-outline", label: "Oral sex", value: "sex-oral" },
+  { icon: "ellipse-outline", label: "Anal sex", value: "sex-anal" },
+  { icon: "hand-left-outline", label: "Masturbation", value: "sex-masturbation" },
+  { icon: "people-outline", label: "Sensual touch", value: "sex-sensual-touch" },
+  { icon: "cube-outline", label: "Sex toys", value: "sex-toys" },
+  { icon: "sparkles-outline", label: "Orgasm", value: "sex-orgasm" },
+  { icon: "flame-outline", label: "High sex drive", value: "sex-drive-high" },
+  { icon: "heart-outline", label: "Natural sex drive", value: "sex-drive-natural" },
+  { icon: "heart-half-outline", label: "Low sex drive", value: "sex-drive-low" },
+];
+
+// Extra discharge descriptors beyond the typed `discharge` enum's five values
+// — logged as tags so they don't need a backend enum change either.
+const extraDischargeOptions: LogOption<string>[] = [
+  { icon: "ellipse-outline", label: "Spotting", value: "discharge-spotting" },
+  { icon: "help-circle-outline", label: "Unusual", value: "discharge-unusual" },
+  { icon: "snow-outline", label: "Clumpy white", value: "discharge-clumpy-white" },
+  { icon: "cloud-outline", label: "Gray", value: "discharge-gray" },
+];
+
+const nauseaOption: LogOption<string> = {
+  icon: "warning-outline",
+  label: "Nausea",
+  value: "nausea",
+};
+
+const pregnancyTestOptions: LogOption<string>[] = [
+  { icon: "help-circle-outline", label: "Didn't take tests", value: "pregnancy-not-tested" },
+  { icon: "add-circle-outline", label: "Positive", value: "pregnancy-positive" },
+  { icon: "close-circle-outline", label: "Negative", value: "pregnancy-negative" },
+  { icon: "contrast-outline", label: "Faint line", value: "pregnancy-faint-line" },
 ];
 
 const digestionOptions: LogOption<NonNullable<DayEntry["digestion"]>>[] = [
   { icon: "checkmark-circle-outline", label: "Normal", value: "normal" },
-  { icon: "swap-vertical-outline", label: "Constipated", value: "constipated" },
+  { icon: "swap-vertical-outline", label: "Constipation", value: "constipated" },
   { icon: "thunderstorm-outline", label: "Diarrhea", value: "diarrhea" },
-  { icon: "water-outline", label: "Bloated", value: "bloated" },
+  { icon: "water-outline", label: "Bloating", value: "bloated" },
 ];
 
 const skinOptions: LogOption<NonNullable<DayEntry["skin"]>>[] = [
@@ -53,19 +114,22 @@ const skinOptions: LogOption<NonNullable<DayEntry["skin"]>>[] = [
 ];
 
 const dischargeOptions: LogOption<NonNullable<DayEntry["discharge"]>>[] = [
-  { icon: "remove-circle-outline", label: "None", value: "none" },
+  { icon: "remove-circle-outline", label: "No discharge", value: "none" },
   { icon: "ellipse-outline", label: "Sticky", value: "sticky" },
   { icon: "water-outline", label: "Creamy", value: "creamy" },
   { icon: "rainy-outline", label: "Watery", value: "watery" },
-  { icon: "egg-outline", label: "Egg-white", value: "egg-white" },
+  { icon: "egg-outline", label: "Egg white", value: "egg-white" },
 ];
 
 const exerciseOptions: LogOption<string>[] = [
-  { icon: "walk-outline", label: "Walking", value: "walking" },
-  { icon: "bicycle-outline", label: "Cardio", value: "cardio" },
-  { icon: "barbell-outline", label: "Strength", value: "strength" },
-  { icon: "body-outline", label: "Yoga", value: "yoga" },
-  { icon: "fitness-outline", label: "Stretching", value: "stretching" },
+  { icon: "close-circle-outline", label: "Didn't exercise", value: "didnt-exercise" },
+  { icon: "leaf-outline", label: "Yoga", value: "yoga" },
+  { icon: "barbell-outline", label: "Gym", value: "gym" },
+  { icon: "musical-notes-outline", label: "Aerobics & dancing", value: "aerobics-dancing" },
+  { icon: "water-outline", label: "Swimming", value: "swimming" },
+  { icon: "people-outline", label: "Team sports", value: "team-sports" },
+  { icon: "walk-outline", label: "Running", value: "running" },
+  { icon: "bicycle-outline", label: "Cycling", value: "cycling" },
 ];
 
 const flowOptions: LogOption<NonNullable<DayEntry["flow"]>>[] = [
@@ -112,6 +176,7 @@ export default function DayDetailsModal({
   focusSection?: "symptoms" | "flow" | "mood";
 }) {
   const { colors, fonts, isDark } = useTheme();
+  const tints = getLogCategoryTints(colors);
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
   // Y offset of each focusable section within the scroll content, recorded via
@@ -123,6 +188,11 @@ export default function DayDetailsModal({
   // Mood/skin/digestion are multi-select (can co-occur in a day). The scalar
   // DayEntry field is still populated from the first choice on save.
   const [selectedMoods, setSelectedMoods] = useState<NonNullable<DayEntry["mood"]>[]>([]);
+  // Every category without its own typed field (ovulation, sex & sex drive,
+  // pregnancy test, blood clots, extra discharge descriptors, nausea, plus
+  // the classic physical symptoms) lives together in this one tag array —
+  // it maps straight onto DayEntry.symptoms, so none of it needs a backend
+  // schema change.
   const [selectedSymptoms, setSelectedSymptoms] = useState<string[]>([]);
   const [sleepHours, setSleepHours] = useState<number | undefined>();
   const [waterIntake, setWaterIntake] = useState<number | undefined>();
@@ -287,78 +357,57 @@ export default function DayDetailsModal({
     label,
     onPress,
     value,
+    tint,
   }: LogOption<Value> & {
     isSelected: boolean;
     onPress: () => void;
+    tint: LogCategoryTint;
   }) {
     return (
       <TouchableOpacity
         key={value}
         accessibilityRole="button"
+        accessibilityState={{ selected: isSelected }}
         activeOpacity={0.85}
         onPress={onPress}
         style={{
-          borderRadius: 12,
-          borderWidth: 1,
-          borderColor: isSelected ? "transparent" : colors.border,
-          overflow: "hidden",
+          alignItems: "center",
+          backgroundColor: isSelected ? tint.light : colors.input,
+          borderColor: isSelected ? tint.color : colors.border,
+          borderRadius: 30,
+          borderWidth: isSelected ? 1.5 : 1,
+          flexDirection: "row",
+          gap: 8,
+          paddingHorizontal: 10,
+          paddingVertical: 6,
         }}
       >
-        {isSelected ? (
-          <View
-            style={{
-              alignItems: "center",
-              backgroundColor: colors.primary,
-              flexDirection: "row",
-              gap: 6,
-              paddingHorizontal: 12,
-              paddingVertical: 8,
-            }}
-          >
-            <Ionicons
-              name={icon}
-              size={16}
-              color={colors.buttonText}
-            />
-            <Text
-              style={{
-                color: colors.buttonText,
-                fontSize: 12,
-                fontWeight: "700",
-                fontFamily: fonts.body,
-              }}
-            >
-              {label}
-            </Text>
-          </View>
-        ) : (
-          <View
-            style={{
-              alignItems: "center",
-              backgroundColor: colors.input,
-              flexDirection: "row",
-              gap: 6,
-              paddingHorizontal: 12,
-              paddingVertical: 8,
-            }}
-          >
-            <Ionicons
-              name={icon}
-              size={16}
-              color={colors.foreground}
-            />
-            <Text
-              style={{
-                color: colors.foreground,
-                fontSize: 12,
-                fontWeight: "700",
-                fontFamily: fonts.body,
-              }}
-            >
-              {label}
-            </Text>
-          </View>
-        )}
+        <View
+          style={{
+            alignItems: "center",
+            backgroundColor: isSelected ? tint.color : tint.light,
+            borderRadius: 999,
+            height: 28,
+            justifyContent: "center",
+            width: 28,
+          }}
+        >
+          <Ionicons
+            name={icon}
+            size={14}
+            color={isSelected ? colors.buttonText : tint.color}
+          />
+        </View>
+        <Text
+          style={{
+            color: isSelected ? tint.color : colors.foreground,
+            fontSize: 12.5,
+            fontWeight: isSelected ? "800" : "700",
+            fontFamily: fonts.body,
+          }}
+        >
+          {label}
+        </Text>
       </TouchableOpacity>
     );
   }
@@ -458,85 +507,90 @@ export default function DayDetailsModal({
                 : "Log what changed today"}
             </Text>
 
+            {/* Menstrual flow */}
+            <View onLayout={(e) => recordSection("flow", e.nativeEvent.layout.y)}>
+              <SectionTitle title="Menstrual flow" icon="water" tint={tints.flow} />
+              <View style={styles.optionWrap}>
+                {flowOptions
+                  .filter((flow) => flow.value !== "none" && flow.value !== "spotting")
+                  .map((flow) =>
+                    renderOption({
+                      ...flow,
+                      isSelected: selectedFlow === flow.value,
+                      onPress: () =>
+                        setSelectedFlow((current) =>
+                          current === flow.value ? undefined : flow.value,
+                        ),
+                      tint: tints.flow,
+                    }),
+                  )}
+                {renderOption({
+                  ...bloodClotOption,
+                  isSelected: selectedSymptoms.includes(bloodClotOption.value),
+                  onPress: () => toggleSymptom(bloodClotOption.value),
+                  tint: tints.flow,
+                })}
+              </View>
+            </View>
+
+            {/* Ovulation symptoms */}
+            <SectionTitle title="Ovulation symptoms" icon="analytics-outline" tint={tints.ovulation} />
+            <View style={styles.optionWrap}>
+              {ovulationOptions.map((option) =>
+                renderOption({
+                  ...option,
+                  isSelected: selectedSymptoms.includes(option.value),
+                  onPress: () => toggleSymptom(option.value),
+                  tint: tints.ovulation,
+                }),
+              )}
+            </View>
+
+            {/* Sex and sex drive */}
+            <SectionTitle title="Sex and sex drive" icon="heart-outline" tint={tints.sex} />
+            <View style={styles.optionWrap}>
+              {sexOptions.map((option) =>
+                renderOption({
+                  ...option,
+                  isSelected: selectedSymptoms.includes(option.value),
+                  onPress: () => toggleSymptom(option.value),
+                  tint: tints.sex,
+                }),
+              )}
+            </View>
+
+            {/* Mood */}
+            <View onLayout={(e) => recordSection("mood", e.nativeEvent.layout.y)}>
+              <SectionTitle title="Mood" icon="happy-outline" tint={tints.mood} />
+              <View style={styles.optionWrap}>
+                {moodOptions.map((mood) =>
+                  renderOption({
+                    ...mood,
+                    isSelected: selectedMoods.includes(mood.value),
+                    onPress: () => toggleInArray(setSelectedMoods, mood.value),
+                    tint: tints.mood,
+                  }),
+                )}
+              </View>
+            </View>
+
+            {/* Physical symptoms */}
             <View onLayout={(e) => recordSection("symptoms", e.nativeEvent.layout.y)}>
-              <SectionTitle title="Symptoms" icon="pulse-outline" />
+              <SectionTitle title="Physical symptoms" icon="pulse-outline" tint={tints.symptoms} />
               <View style={styles.optionWrap}>
                 {symptomOptions.map((symptom) =>
                   renderOption({
                     ...symptom,
                     isSelected: selectedSymptoms.includes(symptom.value),
                     onPress: () => toggleSymptom(symptom.value),
+                    tint: tints.symptoms,
                   }),
                 )}
               </View>
             </View>
 
-            <View onLayout={(e) => recordSection("flow", e.nativeEvent.layout.y)}>
-              <SectionTitle title="Flow" icon="water" />
-              <View style={styles.optionWrap}>
-                {flowOptions.map((flow) =>
-                  renderOption({
-                    ...flow,
-                    isSelected: selectedFlow === flow.value,
-                    onPress: () =>
-                      setSelectedFlow((current) =>
-                        current === flow.value ? undefined : flow.value,
-                      ),
-                  }),
-                )}
-              </View>
-            </View>
-
-            <View onLayout={(e) => recordSection("mood", e.nativeEvent.layout.y)}>
-            <SectionTitle title="Mood" icon="happy-outline" />
-            <View style={styles.optionWrap}>
-              {moodOptions.map((mood) =>
-                renderOption({
-                  ...mood,
-                  isSelected: selectedMoods.includes(mood.value),
-                  onPress: () => toggleInArray(setSelectedMoods, mood.value),
-                }),
-              )}
-            </View>
-            </View>
-
-            <SectionTitle title="Energy" icon="battery-half-outline" />
-            <View style={styles.optionWrap}>
-              {energyOptions.map((energy) =>
-                renderOption({
-                  ...energy,
-                  isSelected: selectedEnergy === energy.value,
-                  onPress: () =>
-                    setSelectedEnergy((current) =>
-                      current === energy.value ? undefined : energy.value,
-                    ),
-                }),
-              )}
-            </View>
-
-            <SectionTitle title="Digestion" icon="nutrition-outline" />
-            <View style={styles.optionWrap}>
-              {digestionOptions.map((option) =>
-                renderOption({
-                  ...option,
-                  isSelected: selectedDigestions.includes(option.value),
-                  onPress: () => toggleInArray(setSelectedDigestions, option.value),
-                }),
-              )}
-            </View>
-
-            <SectionTitle title="Skin" icon="sparkles-outline" />
-            <View style={styles.optionWrap}>
-              {skinOptions.map((option) =>
-                renderOption({
-                  ...option,
-                  isSelected: selectedSkins.includes(option.value),
-                  onPress: () => toggleInArray(setSelectedSkins, option.value),
-                }),
-              )}
-            </View>
-
-            <SectionTitle title="Discharge" icon="water-outline" />
+            {/* Vaginal discharge */}
+            <SectionTitle title="Vaginal discharge" icon="water-outline" tint={tints.discharge} />
             <View style={styles.optionWrap}>
               {dischargeOptions.map((option) =>
                 renderOption({
@@ -546,17 +600,89 @@ export default function DayDetailsModal({
                     setSelectedDischarge((current) =>
                       current === option.value ? undefined : option.value,
                     ),
+                  tint: tints.discharge,
+                }),
+              )}
+              {extraDischargeOptions.map((option) =>
+                renderOption({
+                  ...option,
+                  isSelected: selectedSymptoms.includes(option.value),
+                  onPress: () => toggleSymptom(option.value),
+                  tint: tints.discharge,
                 }),
               )}
             </View>
 
-            <SectionTitle title="Exercise" icon="fitness-outline" />
+            {/* Digestion and stool */}
+            <SectionTitle title="Digestion and stool" icon="nutrition-outline" tint={tints.digestion} />
+            <View style={styles.optionWrap}>
+              {renderOption({
+                ...nauseaOption,
+                isSelected: selectedSymptoms.includes(nauseaOption.value),
+                onPress: () => toggleSymptom(nauseaOption.value),
+                tint: tints.digestion,
+              })}
+              {digestionOptions
+                .filter((option) => option.value !== "normal")
+                .map((option) =>
+                  renderOption({
+                    ...option,
+                    isSelected: selectedDigestions.includes(option.value),
+                    onPress: () => toggleInArray(setSelectedDigestions, option.value),
+                    tint: tints.digestion,
+                  }),
+                )}
+            </View>
+
+            {/* Pregnancy test */}
+            <SectionTitle title="Pregnancy test" icon="flask-outline" tint={tints.pregnancy} />
+            <View style={styles.optionWrap}>
+              {pregnancyTestOptions.map((option) =>
+                renderOption({
+                  ...option,
+                  isSelected: selectedSymptoms.includes(option.value),
+                  onPress: () => toggleSymptom(option.value),
+                  tint: tints.pregnancy,
+                }),
+              )}
+            </View>
+
+            {/* Physical activity */}
+            <SectionTitle title="Physical activity" icon="fitness-outline" tint={tints.activity} />
             <View style={styles.optionWrap}>
               {exerciseOptions.map((option) =>
                 renderOption({
                   ...option,
                   isSelected: selectedExercise.includes(option.value),
                   onPress: () => toggleExercise(option.value),
+                  tint: tints.activity,
+                }),
+              )}
+            </View>
+
+            <SectionTitle title="Energy" icon="battery-half-outline" tint={tints.energy} />
+            <View style={styles.optionWrap}>
+              {energyOptions.map((energy) =>
+                renderOption({
+                  ...energy,
+                  isSelected: selectedEnergy === energy.value,
+                  onPress: () =>
+                    setSelectedEnergy((current) =>
+                      current === energy.value ? undefined : energy.value,
+                    ),
+                  tint: tints.energy,
+                }),
+              )}
+            </View>
+
+            <SectionTitle title="Skin" icon="sparkles-outline" tint={tints.skin} />
+            <View style={styles.optionWrap}>
+              {skinOptions.map((option) =>
+                renderOption({
+                  ...option,
+                  isSelected: selectedSkins.includes(option.value),
+                  onPress: () => toggleInArray(setSelectedSkins, option.value),
+                  tint: tints.skin,
                 }),
               )}
             </View>
@@ -868,12 +994,22 @@ export default function DayDetailsModal({
   );
 }
 
-function SectionTitle({ title, icon }: { title: string; icon?: keyof typeof Ionicons.glyphMap }) {
+function SectionTitle({
+  title,
+  icon,
+  tint,
+}: {
+  title: string;
+  icon?: keyof typeof Ionicons.glyphMap;
+  /** Colors this section's header icon+dot to match its option chips below. */
+  tint?: LogCategoryTint;
+}) {
   const { colors, fonts } = useTheme();
+  const accentColor = tint?.color ?? colors.primary;
 
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 18 }}>
-      {icon ? <Ionicons name={icon} size={15} color={colors.primary} /> : null}
+      {icon ? <Ionicons name={icon} size={15} color={accentColor} /> : null}
       <Text
         style={{
           color: colors.foreground,

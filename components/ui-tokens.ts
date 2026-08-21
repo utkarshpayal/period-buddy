@@ -28,20 +28,30 @@ export const FOREST_PHASE_COLORS = {
   } as Record<CyclePhase, { color: string; glow: string | null }>,
 };
 
+// Full mood taxonomy shown in the day-log modal's Mood section. Order matches
+// the reference tracker app's grid. "emotional"/"tired"/"neutral" stay valid
+// MoodValues (older logs may hold them) but aren't offered as chips anymore —
+// their closest replacements ("moodSwings"/"lowEnergy"/"apathetic") are.
 export const MOOD_OPTIONS: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   value: MoodValue;
 }[] = [
-  { icon: "happy-outline", label: "Happy", value: "happy" },
   { icon: "leaf-outline", label: "Calm", value: "calm" },
-  { icon: "cloud-outline", label: "Emotional", value: "emotional" },
-  { icon: "moon-outline", label: "Tired", value: "tired" },
+  { icon: "happy-outline", label: "Happy", value: "happy" },
+  { icon: "sunny-outline", label: "Energetic", value: "energetic" },
+  { icon: "flame-outline", label: "Frisky", value: "frisky" },
+  { icon: "shuffle-outline", label: "Mood swings", value: "moodSwings" },
+  { icon: "flash-outline", label: "Irritated", value: "irritable" },
   { icon: "sad-outline", label: "Sad", value: "sad" },
   { icon: "alert-circle-outline", label: "Anxious", value: "anxious" },
-  { icon: "flash-outline", label: "Irritable", value: "irritable" },
-  { icon: "remove-circle-outline", label: "Neutral", value: "neutral" },
-  { icon: "sunny-outline", label: "Energetic", value: "energetic" },
+  { icon: "rainy-outline", label: "Depressed", value: "depressed" },
+  { icon: "cloudy-outline", label: "Feeling guilty", value: "guilty" },
+  { icon: "repeat-outline", label: "Obsessive thoughts", value: "obsessive" },
+  { icon: "battery-dead-outline", label: "Low energy", value: "lowEnergy" },
+  { icon: "remove-circle-outline", label: "Apathetic", value: "apathetic" },
+  { icon: "help-circle-outline", label: "Confused", value: "confused" },
+  { icon: "thumbs-down-outline", label: "Very self-critical", value: "selfCritical" },
 ];
 
 // Health issue accent-color source hexes (health-issues.tsx) — maps a fixed
@@ -99,8 +109,32 @@ export function getSoftTints(colors: ThemeColors) {
     amber: colors.warningLight,
     blue: colors.infoLight,
     danger: colors.dangerLight,
+    sky: colors.skyLight,
+    gold: colors.goldLight,
   };
 }
+
+// Colorful category accents for the day-log modal's option groups (Flow,
+// Mood, Physical symptoms, ...) — each pairs a solid icon/text color with its
+// pale background wash so every symptom category reads as its own color,
+// mirroring how the reference tracker app color-codes its logging chips.
+export function getLogCategoryTints(colors: ThemeColors) {
+  return {
+    flow: { color: colors.rose, light: colors.roseLight },
+    ovulation: { color: colors.success, light: colors.successLight },
+    sex: { color: colors.danger, light: colors.dangerLight },
+    mood: { color: colors.accent, light: colors.accentLight },
+    symptoms: { color: colors.warning, light: colors.warningLight },
+    discharge: { color: colors.sky, light: colors.skyLight },
+    digestion: { color: colors.secondary, light: colors.secondaryLight },
+    pregnancy: { color: colors.gold, light: colors.goldLight },
+    activity: { color: colors.success, light: colors.successLight },
+    energy: { color: colors.secondary, light: colors.secondaryLight },
+    skin: { color: colors.accent, light: colors.accentLight },
+  };
+}
+
+export type LogCategoryTint = ReturnType<typeof getLogCategoryTints>[keyof ReturnType<typeof getLogCategoryTints>];
 
 export function getSeverityColor(
   value: number,
