@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "The Nura",
-    "slug": "utkarsh-payal",
+    "slug": "thenuracare",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon-square.png",
@@ -31,7 +31,7 @@
       ]
     },
     "android": {
-      "versionCode": 7,
+      "versionCode": 12,
       "adaptiveIcon": {
         "backgroundColor": "#fff0f6",
         "foregroundImage": "./assets/images/icon-square.png"
@@ -128,9 +128,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "a15b7bbc-e9bc-4b56-a30c-8c231b973058"
+        "projectId": "b1582d15-6e00-455c-b5d9-97d0435c04af"
       }
     },
-    "owner": "thenuracares-team"
+    "owner": "utkarsh-payal"
   }
 }
