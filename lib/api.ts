@@ -744,6 +744,49 @@ export type AskQuestionResponse = {
   tokensAwarded?: number;
 };
 
+/** Mirrors the backend's CHAT_TOPICS ids (period-buddy-be's
+ * utils/companionChat.js) — a chat session pinned to one of these gets a
+ * topic-scoped AI system prompt; "general" is unscoped. Keep in sync with
+ * `lib/chatTopics.ts`'s CHAT_TOPICS ids. */
+export type ChatTopicId = "cycle" | "symptoms" | "hygiene" | "mood" | "partner" | "nutrition" | "general";
+
+export type QaChatSessionSummary = {
+  id: string;
+  topicId: ChatTopicId;
+  topicLabel: string;
+  title: string;
+  messageCount: number;
+  lastMessageAt: string;
+  createdAt: string;
+};
+
+export type QaChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+  source?: string;
+  personalized?: boolean;
+  disclaimer?: string;
+  suggestedQuestions?: string[];
+  createdAt: string;
+};
+
+export type QaChatSessionDetail = QaChatSessionSummary & {
+  messages: QaChatMessage[];
+};
+
+export type SendChatSessionMessageResponse = {
+  session: QaChatSessionSummary;
+  question: string;
+  answer: string;
+  source: string;
+  personalized?: boolean;
+  matchedQuestion?: QuestionAnswer | null;
+  suggestedQuestions?: string[];
+  disclaimer?: string;
+  tokensAwarded?: number;
+};
+
 export type RewardTransaction = {
   _id: string;
   amount: number;
@@ -1587,6 +1630,29 @@ export const questionAnswerApi = {
 
   deleteQuestion: (id: string) =>
     apiRequest<void>(`/api/questions/${id}`, { method: "DELETE" }),
+
+  // Persisted Nura Companion chat sessions — chat history the user can
+  // reopen and continue, one per topic (or "general"). Login-gated (no
+  // skipAuth), unlike ask() above.
+  createSession: (topicId?: ChatTopicId) =>
+    apiRequest<QaChatSessionSummary>("/api/questions/sessions", {
+      body: JSON.stringify({ topicId }),
+      method: "POST",
+    }),
+
+  listSessions: () => apiRequest<QaChatSessionSummary[]>("/api/questions/sessions"),
+
+  getSession: (sessionId: string) =>
+    apiRequest<QaChatSessionDetail>(`/api/questions/sessions/${sessionId}`),
+
+  sendSessionMessage: (sessionId: string, question: string, language?: LanguageCode) =>
+    apiRequest<SendChatSessionMessageResponse>(`/api/questions/sessions/${sessionId}/messages`, {
+      body: JSON.stringify({ question, language }),
+      method: "POST",
+    }),
+
+  deleteSession: (sessionId: string) =>
+    apiRequest<void>(`/api/questions/sessions/${sessionId}`, { method: "DELETE" }),
 };
 
 export type VoiceAgentPendingAction = {

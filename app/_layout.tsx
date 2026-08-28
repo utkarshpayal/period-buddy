@@ -1,7 +1,8 @@
 import * as Linking from "expo-linking";
+import * as Notifications from "expo-notifications";
 import { Stack, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { Text, TextInput } from "react-native";
+import { Platform, Text, TextInput } from "react-native";
 import { AppLockProvider, useAppLock } from "../components/AppLock";
 import { AppLockScreen } from "../components/AppLockScreen";
 import { AuthProvider } from "../components/auth-context";
@@ -12,9 +13,27 @@ import {
 } from "../components/PermissionsGate";
 import { ThemeProvider, useTheme } from "../components/theme";
 import { resolveDeepLink } from "../lib/deeplink";
+import type { AppNotification } from "../lib/api";
 import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
 import "../global.css";
+
+// Where tapping a push notification (or its in-app banner) should land,
+// keyed by Notification.type (see period-buddy-be's models/Notification.js
+// — sent through FCM as a stringified `data.type` field, see utils/fcm.js).
+// Types with no unambiguous, role-agnostic destination (buddy_message,
+// partner_message — the right chat screen depends on owner vs. partner-view
+// role, which isn't in the payload) fall back to the notifications list
+// below rather than risk navigating somewhere wrong.
+const NOTIFICATION_TAP_ROUTES: Partial<Record<AppNotification["type"], string>> = {
+  community_reply: "/(app)/(dashboard)/community",
+  consultation_update: "/(app)/consultation",
+  habit_reminder: "/(app)/habits",
+  ovulation_reminder: "/(app)/(dashboard)/tracker",
+  period_reminder: "/(app)/(dashboard)/tracker",
+  reward_earned: "/(app)/(dashboard)/home",
+  streak_bonus: "/(app)/(dashboard)/home",
+};
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -72,6 +91,31 @@ function AppShell() {
       if (url) handleUrl(url);
     });
     const subscription = Linking.addEventListener("url", ({ url }) => handleUrl(url));
+    return () => subscription.remove();
+  }, [router]);
+
+  // Tapping a push notification (banner or from the OS tray) previously did
+  // nothing beyond opening the app to wherever it happened to be — this
+  // routes to whatever that notification is actually about, falling back to
+  // the full notifications list for types without an unambiguous
+  // destination. Mirrors the deep-link effect above: check once for the tap
+  // that may have cold-launched the app, then keep listening for one
+  // received while already running.
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+
+    function handleResponse(response: Notifications.NotificationResponse) {
+      const data = response.notification.request.content.data as { type?: string } | undefined;
+      const target =
+        (data?.type && NOTIFICATION_TAP_ROUTES[data.type as AppNotification["type"]]) ||
+        "/(app)/notifications";
+      router.push(target as Parameters<typeof router.push>[0]);
+    }
+
+    Notifications.getLastNotificationResponseAsync().then((response) => {
+      if (response) handleResponse(response);
+    });
+    const subscription = Notifications.addNotificationResponseReceivedListener(handleResponse);
     return () => subscription.remove();
   }, [router]);
 

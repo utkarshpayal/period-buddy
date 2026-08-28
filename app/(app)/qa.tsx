@@ -1,9 +1,10 @@
 import { Feather } from "@expo/vector-icons";
-import { type AudioPlayer, createAudioPlayer } from "expo-audio";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { createAudioPlayer, type AudioPlayer } from "expo-audio";
+import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -17,20 +18,26 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppState } from "../../components/AppState";
+import { useAuth } from "../../components/auth-context";
+import { Loader } from "../../components/Loader";
 import { useTheme } from "../../components/theme";
-import { getShadow, getSoftTints } from "../../components/ui-tokens";
+import { getLogCategoryTints, getShadow, getSoftTints } from "../../components/ui-tokens";
 import { VoiceModeOverlay, type VoiceStatus } from "../../components/VoiceModeOverlay";
 import { useVoiceInput } from "../../hooks/useVoiceInput";
 import { alert } from "../../lib/alert";
 import {
+  ApiError,
   questionAnswerApi,
   speechApi,
   voiceAgentApi,
+  type ChatTopicId,
   type Language,
   type LanguageCode,
+  type QaChatMessage,
   type VoiceAgentPendingAction,
 } from "../../lib/api";
 import { resolveAudioUri } from "../../lib/audio";
+import { CHAT_TOPICS, composeIntakeMessage, getChatTopic, isTopicLocked } from "../../lib/chatTopics";
 import { SUPPORTED_LANGUAGES } from "../../lib/languages";
 
 // --- TELEHEALTH CONVERSATION MODEL CONTRACTS ---
@@ -58,17 +65,42 @@ export default function QA() {
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
   // The dashboard's center avatar tab links here with ?voiceMode=1 so tapping
-  // it drops straight into voice-to-voice instead of the text chat.
-  const { voiceMode: voiceModeParam } = useLocalSearchParams<{ voiceMode?: string }>();
+  // it drops straight into voice-to-voice instead of the text chat. Opening
+  // a past chat from qa-history.tsx links here with ?sessionId=... instead,
+  // which loads that session's messages and continues appending to it.
+  // qa-history.tsx's "+ New" button links here with ?new=1 to start a fresh
+  // conversation. Any other bare open of this screen (a hub card, a search
+  // result, ...) gets redirected to qa-history below, so "AI Chat" always
+  // lands on the chat list first instead of jumping straight into a blank
+  // chat/topic-picker.
+  const { voiceMode: voiceModeParam, sessionId: sessionIdParam, new: newChatParam } = useLocalSearchParams<{
+    voiceMode?: string;
+    sessionId?: string;
+    new?: string;
+  }>();
   const { earnTokens } = useAppState();
+  const { user } = useAuth();
   const scrollViewRef = useRef<ScrollView>(null);
   const insets = useSafeAreaInsets();
   const softTints = getSoftTints(colors);
+  const categoryTints = getLogCategoryTints(colors);
   const shadow = getShadow(colors, isDark);
 
   // Functional Input and Loading States
   const [typedQuestion, setTypedQuestion] = useState("");
   const [isCompanionTyping, setIsCompanionTyping] = useState(false);
+  const [activeTopicId, setActiveTopicId] = useState<ChatTopicId | null>(null);
+  // Answers to the active topic's short intake form (question id -> text),
+  // cleared whenever the topic selection changes.
+  const [intakeAnswers, setIntakeAnswers] = useState<Record<string, string>>({});
+  // The backend chat session this conversation is persisted to, once one
+  // exists — created lazily on the first message (or eagerly when resuming
+  // a past chat from history) so idle browsing never creates empty sessions.
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [isLoadingSession, setIsLoadingSession] = useState(Boolean(sessionIdParam));
+  // "general" (the "Other" topic tile) is deliberately unscoped, same as
+  // picking no topic — only a real topic id should show as "focused".
+  const isTopicScoped = Boolean(activeTopicId) && activeTopicId !== "general";
 
   const [language, setLanguage] = useState<LanguageCode>("en-IN");
   const [languages, setLanguages] = useState<Language[]>(SUPPORTED_LANGUAGES);
@@ -170,6 +202,37 @@ export default function QA() {
     },
   ]);
 
+  // Resuming a chat from history: swap the local greeting for the session's
+  // real messages and pick up its topic, so "Or pick a topic" stays hidden
+  // and any new questions get scoped/persisted the same way this chat was
+  // started.
+  useEffect(() => {
+    if (!sessionIdParam) return;
+    let isMounted = true;
+    setIsLoadingSession(true);
+    questionAnswerApi
+      .getSession(sessionIdParam)
+      .then((session) => {
+        if (!isMounted) return;
+        setActiveSessionId(session.id);
+        setActiveTopicId(session.topicId === "general" ? null : session.topicId);
+        if (session.messages.length) {
+          setChatLog(session.messages.map(toChatMessage));
+        }
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+        alert("Couldn't open that chat", error instanceof Error ? error.message : "Please try again.");
+      })
+      .finally(() => {
+        if (isMounted) setIsLoadingSession(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once per sessionIdParam identity, not on every render
+  }, [sessionIdParam]);
+
   // Knowledge base containing strict fallback patterns mapping human conversational styles
   const trainedLocalKnowledgeBase = [
     {
@@ -219,12 +282,28 @@ export default function QA() {
     },
   ];
 
-  function formatCurrentTime(): string {
-    const now = new Date();
-    return now.toLocaleTimeString("en-US", {
+  function formatTime(date: Date): string {
+    return date.toLocaleTimeString("en-US", {
       hour: "numeric",
       minute: "2-digit",
     });
+  }
+
+  function formatCurrentTime(): string {
+    return formatTime(new Date());
+  }
+
+  function toChatMessage(message: QaChatMessage): ChatMessage {
+    return {
+      disclaimer: message.disclaimer,
+      id: message.id,
+      personalized: message.personalized,
+      sender: message.role === "assistant" ? "companion" : "user",
+      source: message.source,
+      suggestedQuestions: message.suggestedQuestions,
+      text: message.text,
+      time: formatTime(new Date(message.createdAt)),
+    };
   }
 
   const AFFIRMATIVE_PATTERN = /\b(yes|yeah|yep|confirm|correct|sure|save it|do it|go ahead)\b/i;
@@ -327,8 +406,42 @@ export default function QA() {
       let suggestedQuestions = defaultSuggestedQuestions;
       let companionPersonalized = false;
 
+      // Persist through a chat session (created lazily on the first
+      // message, scoped to whichever topic — if any — is active) so this
+      // exchange shows up in chat history and follow-ups in the same
+      // conversation stay on-topic. Kept as its own try/catch: a 403 here
+      // means the topic's age restriction rejected it (see
+      // chatSessionController.js#createChatSession) — that should stop the
+      // turn with a clear message, not silently fall through to an unscoped
+      // answer below.
+      let sessionId = activeSessionId;
+      if (!sessionId) {
+        try {
+          const session = await questionAnswerApi.createSession(activeTopicId ?? undefined);
+          sessionId = session.id;
+          setActiveSessionId(sessionId);
+        } catch (createSessionError) {
+          if (createSessionError instanceof ApiError && createSessionError.status === 403) {
+            setChatLog((prev) => [
+              ...prev,
+              {
+                id: `msg_c_${Date.now()}`,
+                sender: "companion",
+                text: createSessionError.message,
+                time: formatCurrentTime(),
+              },
+            ]);
+            setIsCompanionTyping(false);
+            return;
+          }
+          // Any other failure (offline, server error, ...) — fall through to
+          // the stateless/local-fallback path below like a normal send error.
+        }
+      }
+
       try {
-        const result = await questionAnswerApi.ask(submittedQuestion, language);
+        if (!sessionId) throw new Error("No chat session available");
+        const result = await questionAnswerApi.sendSessionMessage(sessionId, submittedQuestion, language);
         foundMatchedResponse = result.answer;
         companionDisclaimer = result.disclaimer ?? companionDisclaimer;
         companionSource = result.source;
@@ -394,6 +507,14 @@ export default function QA() {
     }, 1500); // Organic typing interval lag
   }
 
+  // Bare entry (no voice, no resumed session, no explicit "new chat") — send
+  // it to the chat list first instead of dropping straight into a blank
+  // chat/topic-picker. All hooks above still run unconditionally every
+  // render; only the JSX branches here.
+  if (!voiceModeParam && !sessionIdParam && !newChatParam) {
+    return <Redirect href="/(app)/qa-history" />;
+  }
+
   return (
     <>
       <StatusBar
@@ -431,10 +552,18 @@ export default function QA() {
             {/* Robot/Companion Identity Sphere Indicator */}
             <View className="relative">
               <View
-                className="w-11 h-11 rounded-full items-center justify-center"
+                className="w-11 h-11 rounded-full items-center justify-start overflow-hidden"
                 style={{ backgroundColor: softTints.pink }}
               >
-                <Text className="text-xl">✨</Text>
+                {/* icon.png is a tall half-body illustration with the face in
+                    the top square — scale to container width and anchor to
+                    the top (instead of centering) so the circle crops off
+                    the shoulders/hands below instead of cutting the face. */}
+                <Image
+                  source={require("../../assets/images/icon.png")}
+                  style={{ width: 44, height: 44 * (1294 / 871) }}
+                  resizeMode="cover"
+                />
               </View>
               <View
                 className="absolute bottom-0 right-0 w-3 h-3 rounded-full"
@@ -455,45 +584,52 @@ export default function QA() {
                 numberOfLines={1}
                 ellipsizeMode="tail"
                 className="text-[10px] font-bold tracking-wider uppercase mt-0.5"
-                style={{ color: colors.success, fontFamily: fonts.body }}
+                style={{ color: isTopicScoped ? colors.primary : colors.success, fontFamily: fonts.body }}
               >
-                Private guidance online
+                {/* Visible confirmation that this chat is scoped — matches
+                    what the backend's topicScopeInstruction actually does.
+                    "general" (the "Other" tile) is intentionally unscoped,
+                    same as picking no topic at all. */}
+                {isTopicScoped ? `Focused on ${getChatTopic(activeTopicId)?.label}` : "Private guidance online"}
               </Text>
             </View>
           </View>
 
-          <View className="flex-row items-center gap-1.5 flex-shrink-0">
+          {/* Icon-only toggles — keeps the row to a single line even when
+              the name/status block is long, instead of squeezing two
+              labeled pills in next to the avatar. */}
+          <View className="flex-row items-center gap-2 flex-shrink-0">
+            <TouchableOpacity
+              onPress={() => router.push("/(app)/qa-history")}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Chat history"
+              className="w-9 h-9 items-center justify-center rounded-full"
+              style={{ backgroundColor: softTints.pink }}
+            >
+              <Feather name="clock" size={15} color={colors.primary} />
+            </TouchableOpacity>
+
             <TouchableOpacity
               onPress={() => setVoiceMode((prev) => !prev)}
               activeOpacity={0.7}
-              className="flex-row items-center gap-1 px-2.5 py-2 rounded-full"
+              accessibilityRole="button"
+              accessibilityLabel={voiceMode ? "Turn off voice mode" : "Turn on voice mode"}
+              className="w-9 h-9 items-center justify-center rounded-full"
               style={{ backgroundColor: voiceMode ? colors.primary : softTints.pink }}
             >
-              <Feather name="headphones" size={13} color={voiceMode ? colors.buttonText : colors.primary} />
-              <Text
-                numberOfLines={1}
-                className="text-[10px] font-black tracking-wide"
-                style={{ color: voiceMode ? colors.buttonText : colors.primary, fontFamily: fonts.body }}
-              >
-                Voice
-              </Text>
+              <Feather name="headphones" size={15} color={voiceMode ? colors.buttonText : colors.primary} />
             </TouchableOpacity>
 
             <TouchableOpacity
               onPress={() => setLanguagePickerVisible(true)}
               activeOpacity={0.7}
-              className="flex-row items-center gap-1 px-2.5 py-2 rounded-full"
-              style={{ backgroundColor: softTints.pink, maxWidth: 92 }}
+              accessibilityRole="button"
+              accessibilityLabel={`Change language, currently ${selectedLanguage.label}`}
+              className="w-9 h-9 items-center justify-center rounded-full"
+              style={{ backgroundColor: softTints.pink }}
             >
-              <Feather name="globe" size={13} color={colors.primary} />
-              <Text
-                numberOfLines={1}
-                ellipsizeMode="tail"
-                className="text-[10px] font-black tracking-wide flex-shrink"
-                style={{ color: colors.primary, fontFamily: fonts.body }}
-              >
-                {selectedLanguage.label}
-              </Text>
+              <Feather name="globe" size={15} color={colors.primary} />
             </TouchableOpacity>
           </View>
         </View>
@@ -523,6 +659,11 @@ export default function QA() {
             scrollViewRef.current?.scrollToEnd({ animated: true })
           }
         >
+          {isLoadingSession ? (
+            <View className="pt-16 items-center justify-center">
+              <Loader label="Opening chat..." />
+            </View>
+          ) : (
           <View className="gap-4">
             {chatLog.map((message) => {
               const isCompanion = message.sender === "companion";
@@ -666,6 +807,180 @@ export default function QA() {
               );
             })}
 
+            {/* TOPIC STARTER GRID — only before the first real exchange, so
+                it reads as "what would you like to talk about" rather than
+                cluttering an already-active conversation. */}
+            {chatLog.length === 1 && !isCompanionTyping ? (
+              <View className="gap-3">
+                <Text
+                  className="text-xs font-black uppercase tracking-wider"
+                  style={{ color: colors.mutedText, fontFamily: fonts.heading }}
+                >
+                  Or pick a topic
+                </Text>
+                <View className="flex-row flex-wrap gap-2.5">
+                  {CHAT_TOPICS.map((topic) => {
+                    const tint = categoryTints[topic.tint];
+                    const isActive = activeTopicId === topic.id;
+                    const locked = isTopicLocked(topic, user?.dateOfBirth);
+                    return (
+                      <TouchableOpacity
+                        key={topic.id}
+                        activeOpacity={0.75}
+                        onPress={() => {
+                          if (locked) {
+                            alert(
+                              "Age verification needed",
+                              `${topic.label} is only available once your profile shows you're ${topic.minAge}+. Update your date of birth in Profile to unlock it.`,
+                            );
+                            return;
+                          }
+                          setIntakeAnswers({});
+                          setActiveTopicId((prev) => (prev === topic.id ? null : topic.id));
+                        }}
+                        className="flex-row items-center gap-2 rounded-2xl border px-3 py-2.5"
+                        style={{
+                          backgroundColor: isActive ? tint.light : colors.surface,
+                          borderColor: isActive ? tint.color : colors.border,
+                          opacity: locked ? 0.55 : 1,
+                          width: "47%",
+                        }}
+                      >
+                        <View
+                          className="w-7 h-7 items-center justify-center rounded-full"
+                          style={{ backgroundColor: tint.light }}
+                        >
+                          <Feather name={locked ? "lock" : topic.icon} size={13} color={tint.color} />
+                        </View>
+                        <Text
+                          numberOfLines={2}
+                          className="text-[11px] font-bold flex-1 flex-shrink leading-4"
+                          style={{ color: colors.foreground, fontFamily: fonts.body }}
+                        >
+                          {topic.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                {activeTopicId
+                  ? (() => {
+                      const topic = getChatTopic(activeTopicId);
+                      if (!topic) return null;
+
+                      // Topics with an intake form (everything but "Other")
+                      // collect a couple of quick answers first, so the
+                      // AI's first reply is already grounded — the form
+                      // itself is never sent to the backend, just the
+                      // composed sentence it produces.
+                      if (topic.intake?.length) {
+                        const requiredUnanswered = topic.intake.some(
+                          (question) => !question.optional && !intakeAnswers[question.id]?.trim(),
+                        );
+                        return (
+                          <View
+                            className="gap-3 mt-1 p-3.5 rounded-2xl border"
+                            style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+                          >
+                            {topic.intake.map((question) => (
+                              <View key={question.id} className="gap-2">
+                                <Text
+                                  className="text-[11px] font-bold"
+                                  style={{ color: colors.foreground, fontFamily: fonts.body }}
+                                >
+                                  {question.label}
+                                  {question.optional ? (
+                                    <Text style={{ color: colors.mutedText }}> (optional)</Text>
+                                  ) : null}
+                                </Text>
+                                {question.type === "choice" ? (
+                                  <View className="flex-row flex-wrap gap-2">
+                                    {question.options?.map((option) => {
+                                      const selected = intakeAnswers[question.id] === option;
+                                      return (
+                                        <TouchableOpacity
+                                          key={option}
+                                          activeOpacity={0.75}
+                                          onPress={() =>
+                                            setIntakeAnswers((prev) => ({ ...prev, [question.id]: option }))
+                                          }
+                                          className="rounded-full border px-3 py-1.5"
+                                          style={{
+                                            backgroundColor: selected ? colors.primary : colors.input,
+                                            borderColor: selected ? colors.primary : colors.border,
+                                          }}
+                                        >
+                                          <Text
+                                            className="text-[10px] font-bold"
+                                            style={{ color: selected ? colors.buttonText : colors.foreground, fontFamily: fonts.body }}
+                                          >
+                                            {option}
+                                          </Text>
+                                        </TouchableOpacity>
+                                      );
+                                    })}
+                                  </View>
+                                ) : (
+                                  <TextInput
+                                    value={intakeAnswers[question.id] ?? ""}
+                                    onChangeText={(text) =>
+                                      setIntakeAnswers((prev) => ({ ...prev, [question.id]: text }))
+                                    }
+                                    placeholder={question.placeholder}
+                                    placeholderTextColor={colors.mutedText}
+                                    maxLength={200}
+                                    className="px-3 py-2.5 rounded-xl text-xs"
+                                    style={{ backgroundColor: colors.input, color: colors.foreground, fontFamily: fonts.body }}
+                                  />
+                                )}
+                              </View>
+                            ))}
+                            <TouchableOpacity
+                              activeOpacity={0.85}
+                              disabled={requiredUnanswered || isCompanionTyping}
+                              onPress={() => handleTriggerConversation(composeIntakeMessage(topic, intakeAnswers))}
+                              className="items-center py-3 rounded-xl mt-1"
+                              style={{ backgroundColor: requiredUnanswered ? colors.input : colors.primary }}
+                            >
+                              <Text
+                                className="text-xs font-black"
+                                style={{ color: requiredUnanswered ? colors.mutedText : colors.buttonText, fontFamily: fonts.body }}
+                              >
+                                Start chat
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        );
+                      }
+
+                      // No intake form (just "Other") — keep the simple
+                      // tap-a-question chips.
+                      return (
+                        <View className="flex-row flex-wrap gap-2 mt-1">
+                          {topic.questions.map((question) => (
+                            <TouchableOpacity
+                              key={question}
+                              activeOpacity={0.75}
+                              onPress={() => handleTriggerConversation(question)}
+                              className="rounded-full border px-3 py-1.5"
+                              style={{ backgroundColor: colors.input, borderColor: colors.border }}
+                            >
+                              <Text
+                                className="text-[10px] font-bold"
+                                style={{ color: colors.foreground, fontFamily: fonts.body }}
+                              >
+                                {question}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      );
+                    })()
+                  : null}
+              </View>
+            ) : null}
+
             {/* HUMANIZED ACTIVE TYPING STATUS DOTS SIMULATION */}
             {isCompanionTyping && (
               <View
@@ -687,6 +1002,7 @@ export default function QA() {
               </View>
             )}
           </View>
+          )}
         </ScrollView>
 
         {/* PERSISTENT FIXED FOOTER MESSAGE CONSOLE BAR ROW */}
