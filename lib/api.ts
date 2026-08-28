@@ -1606,6 +1606,19 @@ export type VoiceAgentReply =
       tokensEarned: number;
     });
 
+export type CheckinCallResult = {
+  expectedPeriodDate: string;
+};
+
+export type CheckinCallSchedule = {
+  enabled: boolean;
+  /** Days relative to the predicted period start: 0 = on period day,
+   * negative = N days before, positive = N days after. */
+  dayOffset: number;
+  /** Local time of day, "HH:mm" (24h), or null if never set. */
+  time: string | null;
+};
+
 export const voiceAgentApi = {
   converse: (
     transcript: string,
@@ -1616,6 +1629,32 @@ export const voiceAgentApi = {
     apiRequest<VoiceAgentReply>("/api/voice-agent/converse", {
       body: JSON.stringify({ transcript, language, pendingAction, confirmed }),
       method: "POST",
+    }),
+
+  /** Triggers an outbound "call me now" cycle check-in call (via Samvaad)
+   * to the logged-in user's own phone number on file. */
+  checkinCall: () =>
+    apiRequest<CheckinCallResult>("/api/voice-agent/checkin-call", {
+      method: "POST",
+    }),
+
+  /** This user's recurring check-in call preference (fired automatically by
+   * the backend's cron scheduler, not by the app). */
+  getCheckinCallSchedule: () =>
+    apiRequest<CheckinCallSchedule>("/api/voice-agent/checkin-call/schedule"),
+
+  /** timezoneOffsetMinutes must be Date.prototype.getTimezoneOffset() from
+   * the client — required whenever enabled is true, so the server can
+   * resolve "time" to this user's actual local moment. */
+  saveCheckinCallSchedule: (payload: {
+    enabled: boolean;
+    dayOffset: number;
+    time?: string;
+    timezoneOffsetMinutes?: number;
+  }) =>
+    apiRequest<CheckinCallSchedule>("/api/voice-agent/checkin-call/schedule", {
+      body: JSON.stringify(payload),
+      method: "PUT",
     }),
 };
 

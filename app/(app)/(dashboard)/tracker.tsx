@@ -1,8 +1,9 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   Modal,
   PanResponder,
   Pressable,
@@ -21,6 +22,7 @@ import type { DayEntry as LocalDayEntry } from "../../../components/AppState";
 import { useAppState } from "../../../components/AppState";
 import { useAuth } from "../../../components/auth-context";
 import DayDetailsModal from "../../../components/DayDetailsModal";
+import { Loader } from "../../../components/Loader";
 import { useTheme } from "../../../components/theme";
 import { getShadow, getSoftTints } from "../../../components/ui-tokens";
 import {
@@ -37,6 +39,11 @@ import { getDateKey, getMonthKey } from "../../../lib/format";
 const CYCLE_LENGTH = 28;
 const CURRENT_CYCLE_DAY = 14;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+// Placeholder height for the calendar card while it's settling onto the
+// current month — roughly one month's grid (weekday row + up to 6 rows of
+// day cells), so the loader sits in a normal-looking card instead of a tall
+// blank void or a cramped sliver.
+const CALENDAR_LOADING_HEIGHT = 360;
 const WEEKDAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
 
 type CalendarCell =
@@ -491,8 +498,27 @@ export default function Tracker() {
   const [yearPickerVisible, setYearPickerVisible] = useState(false);
   const [searchVisible, setSearchVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const mainScrollRef = React.useRef<ScrollView>(null);
+  const mainScrollRef = useRef<ScrollView>(null);
   const [monthLayouts, setMonthLayouts] = useState<Record<number, number>>({});
+  // The calendar's month list is kept invisible until the very first
+  // (instant, unanimated) scroll to the current month has landed, so opening
+  // the tracker never shows a flash of January before jumping — it just
+  // fades in already positioned on today's month. Chevron/"Today" navigation
+  // after that first landing scrolls smoothly instead.
+  const hasInitialScrolled = useRef(false);
+  const calendarRevealAnim = useRef(new Animated.Value(0)).current;
+  // Until the initial scroll lands, the (still-mounted, just invisible)
+  // 12-month list is clamped to a single month's height with a loader over
+  // it — otherwise its true full-year height would sit there as a tall
+  // blank void instead of a normal-looking, loading calendar card.
+  const [isCalendarRevealed, setIsCalendarRevealed] = useState(false);
+  // Position (in the outer page ScrollView's content coordinates) of the top
+  // of the Calendar card — compared against live scroll offset to decide
+  // when the floating phase legend should take over from the in-card one.
+  const [calendarSectionY, setCalendarSectionY] = useState<number | null>(
+    null,
+  );
+  const [pageScrollY, setPageScrollY] = useState(0);
   const [cycleSettings, setCycleSettings] = useState<CycleSettings | null>(
     null,
   );
@@ -733,20 +759,30 @@ export default function Tracker() {
     }
   }, [loadDashboard, loadSettings, loadYearLogs]);
 
-  // Scrolls the stacked 12-month calendar to whichever month the "Month
-  // Selector" chevrons are pointing at (defaults to the real current month
-  // on first load).
+  // Scrolls the stacked 12-month calendar to whichever month is selected.
+  // The very first time (on mount, landing on today's month) jumps instantly
+  // with no animation — the month list stays hidden (calendarRevealAnim)
+  // until that jump has landed, then fades in already in the right place,
+  // so opening the tracker never shows a visible "scrolling to current
+  // month" motion. Any later change (chevrons, "Today") scrolls smoothly,
+  // since by then it's a deliberate, visible user action.
   useEffect(() => {
-    if (monthLayouts[selectedMonthIndex] !== undefined) {
-      const timer = setTimeout(() => {
-        mainScrollRef.current?.scrollTo({
-          y: monthLayouts[selectedMonthIndex] + 280, // Offset to account for top headers
-          animated: true,
-        });
-      }, 400);
-      return () => clearTimeout(timer);
+    if (monthLayouts[selectedMonthIndex] === undefined) return;
+    const y = monthLayouts[selectedMonthIndex] + 280; // Offset to account for top headers
+
+    if (!hasInitialScrolled.current) {
+      mainScrollRef.current?.scrollTo({ y, animated: false });
+      hasInitialScrolled.current = true;
+      setIsCalendarRevealed(true);
+      Animated.timing(calendarRevealAnim, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      mainScrollRef.current?.scrollTo({ y, animated: true });
     }
-  }, [selectedMonthIndex, selectedYear, monthLayouts]);
+  }, [selectedMonthIndex, selectedYear, monthLayouts, calendarRevealAnim]);
 
   function changeSelectedMonth(direction: 1 | -1) {
     setSelectedMonthIndex((prevMonth) => {
@@ -761,6 +797,24 @@ export default function Tracker() {
       return nextMonth;
     });
   }
+
+  const today = new Date();
+  const isViewingCurrentMonth =
+    selectedYear === today.getFullYear() &&
+    selectedMonthIndex === today.getMonth();
+
+  function jumpToToday() {
+    setSelectedYear(today.getFullYear());
+    setSelectedMonthIndex(today.getMonth());
+  }
+
+  // The in-card phase legend scrolls away with the rest of the calendar
+  // header once you're deep into later months — this floating copy (shown
+  // in the fixed header block below) takes over once that point has
+  // scrolled past, so the legend is always reachable without scrolling back
+  // to the top of the page.
+  const showFloatingLegend =
+    calendarSectionY !== null && pageScrollY > calendarSectionY + 70;
 
   function mapApiDayEntry(log: ApiDayEntry): LocalDayEntry {
     return {
@@ -816,6 +870,37 @@ export default function Tracker() {
       },
     }),
     [colors, softTints],
+  );
+
+  // One chip per cycle phase, colored from phaseStyles so it always matches
+  // the day cells — rendered both in the calendar card and, once that
+  // scrolls out of view, in the floating copy above the month list.
+  const phaseLegendRow = (
+    <View className="flex-row items-center flex-wrap gap-x-4 gap-y-1.5">
+      {(
+        [
+          { phase: "period", icon: "water" },
+          { phase: "follicular", icon: "sprout" },
+          { phase: "ovulation", icon: "egg" },
+          { phase: "luteal", icon: "moon-waning-crescent" },
+        ] as const
+      ).map(({ phase, icon }) => (
+        <View key={phase} className="flex-row items-center gap-1.5">
+          <View
+            className="h-4 w-4 rounded-full items-center justify-center"
+            style={{ backgroundColor: phaseStyles[phase].color }}
+          >
+            <MaterialCommunityIcons name={icon} size={9} color={colors.buttonText} />
+          </View>
+          <Text
+            className="text-[10px] font-bold"
+            style={{ color: colors.mutedText, fontFamily: fonts.body }}
+          >
+            {phaseStyles[phase].label}
+          </Text>
+        </View>
+      ))}
+    </View>
   );
 
   function buildCalendarDays(monthDate: Date): CalendarCell[] {
@@ -1177,12 +1262,26 @@ export default function Tracker() {
               );
             })}
           </View>
+
+          {/* Floating phase legend — takes over once the in-card legend has
+              scrolled out of view, so the 4 phase colors stay reachable
+              without scrolling back up to the top of the calendar. */}
+          {showFloatingLegend && (
+            <View
+              className="px-6 pt-2.5 pb-2.5 border-b"
+              style={{ backgroundColor: colors.background, borderColor: colors.border }}
+            >
+              {phaseLegendRow}
+            </View>
+          )}
         </View>
 
         {/* SCROLLABLE BODY */}
         <ScrollView
           ref={mainScrollRef}
           showsVerticalScrollIndicator={false}
+          scrollEventThrottle={32}
+          onScroll={(e) => setPageScrollY(e.nativeEvent.contentOffset.y)}
           contentContainerStyle={{ paddingBottom: 140 }}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
@@ -1313,7 +1412,10 @@ export default function Tracker() {
           </View>
 
           {/* Calendar Body Area */}
-          <View className="mx-4 mt-6">
+          <View
+            className="mx-4 mt-6"
+            onLayout={(e) => setCalendarSectionY(e.nativeEvent.layout.y)}
+          >
             <View
               className="overflow-hidden rounded-[28px] border"
               style={{
@@ -1334,63 +1436,54 @@ export default function Tracker() {
                     Calendar
                   </Text>
 
-                  {/* Year Dropdown Picker Button */}
-                  <TouchableOpacity
-                    activeOpacity={0.7}
-                    onPress={() => setYearPickerVisible(true)}
-                    className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-full border"
-                    style={{
-                      backgroundColor: colors.surfaceSoft,
-                      borderColor: colors.border,
-                    }}
-                  >
-                    <Text
-                      className="text-xs font-black"
+                  <View className="flex-row items-center gap-2">
+                    {/* Jump straight back to the current month — only shown
+                        once the user has actually navigated away from it. */}
+                    {!isViewingCurrentMonth && (
+                      <TouchableOpacity
+                        activeOpacity={0.7}
+                        onPress={jumpToToday}
+                        className="flex-row items-center gap-1 px-3 py-1.5 rounded-full"
+                        style={{ backgroundColor: colors.primaryLight }}
+                      >
+                        <Feather name="calendar" size={11} color={colors.primary} />
+                        <Text
+                          className="text-xs font-black"
+                          style={{ color: colors.primary, fontFamily: fonts.body }}
+                        >
+                          Today
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+
+                    {/* Year Dropdown Picker Button */}
+                    <TouchableOpacity
+                      activeOpacity={0.7}
+                      onPress={() => setYearPickerVisible(true)}
+                      className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-full border"
                       style={{
-                        color: colors.foreground,
-                        fontFamily: fonts.body,
+                        backgroundColor: colors.surfaceSoft,
+                        borderColor: colors.border,
                       }}
                     >
-                      {selectedYear}
-                    </Text>
-                    <Feather
-                      name="chevron-down"
-                      size={12}
-                      color={colors.mutedText}
-                    />
-                  </TouchableOpacity>
-                </View>
-                {/* The single calendar legend — one chip per cycle phase,
-                    colored from phaseStyles so it always matches the day cells. */}
-                <View className="mt-2 flex-row items-center flex-wrap gap-x-4 gap-y-1.5">
-                  {(
-                    [
-                      { phase: "period", icon: "water" },
-                      { phase: "follicular", icon: "sprout" },
-                      { phase: "ovulation", icon: "egg" },
-                      { phase: "luteal", icon: "moon-waning-crescent" },
-                    ] as const
-                  ).map(({ phase, icon }) => (
-                    <View key={phase} className="flex-row items-center gap-1.5">
-                      <View
-                        className="h-4 w-4 rounded-full items-center justify-center"
-                        style={{ backgroundColor: phaseStyles[phase].color }}
-                      >
-                        <MaterialCommunityIcons
-                          name={icon}
-                          size={9}
-                          color={colors.buttonText}
-                        />
-                      </View>
                       <Text
-                        className="text-[10px] font-bold"
-                        style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                        className="text-xs font-black"
+                        style={{
+                          color: colors.foreground,
+                          fontFamily: fonts.body,
+                        }}
                       >
-                        {phaseStyles[phase].label}
+                        {selectedYear}
                       </Text>
-                    </View>
-                  ))}
+                      <Feather
+                        name="chevron-down"
+                        size={12}
+                        color={colors.mutedText}
+                      />
+                    </TouchableOpacity>
+                  </View>
                 </View>
+                <View className="mt-2">{phaseLegendRow}</View>
               </View>
 
               <View
@@ -1414,8 +1507,40 @@ export default function Tracker() {
                 </View>
               </View>
 
-              <View className="px-4 pb-6">
-                {calendarMonths.map((monthDate, monthIndex) => {
+              {/* All 12 months of the selected year, stacked and scrollable.
+                  Hidden until the initial instant scroll-to-current-month has
+                  landed (see the effect above), then fades in already
+                  positioned there — so opening the tracker never shows a
+                  visible jump. Clamped to one month's height with a loader
+                  over it while hidden, so the (still-mounted) full 12-month
+                  content doesn't sit there as a tall blank void. */}
+              <View
+                style={{
+                  height: isCalendarRevealed ? undefined : CALENDAR_LOADING_HEIGHT,
+                  overflow: isCalendarRevealed ? "visible" : "hidden",
+                }}
+              >
+                {!isCalendarRevealed && (
+                  <View
+                    pointerEvents="none"
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      height: CALENDAR_LOADING_HEIGHT,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Loader size={44} label="Loading your calendar…" />
+                  </View>
+                )}
+                <Animated.View
+                  className="px-4 pb-6"
+                  style={{ opacity: calendarRevealAnim }}
+                >
+                  {calendarMonths.map((monthDate, monthIndex) => {
                   const monthDays = buildCalendarDays(monthDate);
                   const monthKey = getMonthKey(monthDate);
 
@@ -1587,6 +1712,7 @@ export default function Tracker() {
                     </View>
                   );
                 })}
+                </Animated.View>
               </View>
             </View>
           </View>

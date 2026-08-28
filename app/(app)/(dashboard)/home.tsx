@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle } from "react-native-svg";
 import { useAuth } from "../../../components/auth-context";
+import HubEntryCard from "../../../components/HubEntryCard";
 import StatCard from "../../../components/StatCard";
 import { useTheme } from "../../../components/theme";
 import { getHeroGradient, getShadow } from "../../../components/ui-tokens";
@@ -104,6 +105,16 @@ const PHASE_LABELS: Record<string, string> = {
   follicular: "Follicular",
   ovulation: "Ovulatory",
   luteal: "Luteal",
+};
+
+// Large faint watermark glyph behind the hero card's text — a small touch of
+// depth so the card reads as "designed" per-phase rather than a flat gradient
+// box that never changes shape.
+const PHASE_WATERMARK_ICONS: Record<string, React.ComponentProps<typeof Ionicons>["name"]> = {
+  period: "water",
+  follicular: "leaf",
+  ovulation: "sunny",
+  luteal: "moon",
 };
 
 const WEEKDAY_LETTERS = ["M", "T", "W", "T", "F", "S", "S"];
@@ -227,9 +238,10 @@ export default function Home() {
   const fertileWindow = predictions?.fertileWindowDuration ?? "6 days";
   // Prefer the backend's authoritative phase (already computed from real
   // settings/logs); only fall back to a local estimate before it loads.
-  const phaseLabel =
-    (predictions?.currentPhase && PHASE_LABELS[predictions.currentPhase]) ??
-    PHASE_LABELS[getCyclePhase(cycleDay, periodLength, predictions?.cycleLength ?? 28)];
+  const phaseKey =
+    predictions?.currentPhase ??
+    getCyclePhase(cycleDay, periodLength, predictions?.cycleLength ?? 28);
+  const phaseLabel = PHASE_LABELS[phaseKey];
 
   const analyticGraphData = useMemo(
     () => buildFiveMonthAnalytics(predictions?.analyticsData),
@@ -452,9 +464,16 @@ export default function Home() {
               style={{
                 borderRadius: 22,
                 padding: 20,
+                overflow: "hidden",
                 ...getShadow(colors, isDark),
               }}
             >
+              <Ionicons
+                name={PHASE_WATERMARK_ICONS[phaseKey] ?? "water"}
+                size={120}
+                color="#fff"
+                style={{ position: "absolute", right: -26, bottom: -30, opacity: 0.12 }}
+              />
               <View className="flex-row items-start justify-between">
                 <View className="flex-1 pr-3">
                   <Text
@@ -550,13 +569,17 @@ export default function Home() {
               predictions screen for anyone who wants more than a glance. */}
           <View className="mb-3.5">
             <View className="mx-6 mb-2.5 flex-row items-center justify-between">
-              <Text style={{ fontSize: 14.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
-                Insights
-              </Text>
-              <TouchableOpacity activeOpacity={0.7} onPress={() => router.push("/(app)/predictions")}>
+              <View className="flex-row items-center" style={{ gap: 7 }}>
+                <View style={{ width: 5, height: 14, borderRadius: 3, backgroundColor: colors.secondary }} />
+                <Text style={{ fontSize: 14.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
+                  Insights
+                </Text>
+              </View>
+              <TouchableOpacity activeOpacity={0.7} onPress={() => router.push("/(app)/predictions")} className="flex-row items-center" style={{ gap: 2 }}>
                 <Text style={{ fontSize: 12, fontWeight: "700", color: colors.primary, fontFamily: fonts.body }}>
                   See all
                 </Text>
+                <Ionicons name="chevron-forward" size={13} color={colors.primary} />
               </TouchableOpacity>
             </View>
 
@@ -652,132 +675,45 @@ export default function Home() {
             </ScrollView>
           </View>
 
-          {/* YOUR CARE — a compact 2-up tile grid (icon, title, one-line tag)
-              instead of a stacked list of sentence-length rows, plus a single
-              featured CTA for the one genuinely high-intent action (booking a
-              consult) so it doesn't blend into the grid as just another tile. */}
-          <View className="mx-6 mb-5">
-            <Text className="mb-2.5" style={{ fontSize: 14.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
-              Your care
-            </Text>
-
-            <View className="flex-row flex-wrap" style={{ gap: 10 }}>
-              {[
-                { title: "Predictions", tag: "Cycle forecasts & trends", icon: "trending-up-outline", route: "/(app)/predictions", color: colors.primary, bg: colors.primaryLight },
-                { title: "Daily Insights", tag: "Mood, hormone & energy", icon: "sparkles-outline", route: "/(app)/insights", color: colors.secondary, bg: colors.secondaryLight },
-                { title: "Symptom Trends", tag: "Likely by cycle phase", icon: "pulse-outline", route: "/(app)/symptom-predictions", color: colors.accent, bg: colors.accentLight },
-                { title: "Symptom Checker", tag: "PCOS, thyroid & more", icon: "clipboard-outline", route: "/(app)/symptom-checker", color: colors.info, bg: colors.infoLight },
-              ].map((careItem, i) => (
-                <TouchableOpacity
-                  key={i}
-                  onPress={() => router.push(careItem.route as any)}
-                  activeOpacity={0.75}
-                  className="border"
-                  style={{ width: "48%", backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 18, padding: 14 }}
-                >
-                  <View style={{ width: 36, height: 36, borderRadius: 11, backgroundColor: careItem.bg, alignItems: "center", justifyContent: "center", marginBottom: 10 }}>
-                    <Ionicons name={careItem.icon as any} size={17} color={careItem.color} />
-                  </View>
-                  <Text style={{ fontSize: 12.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.body }}>{careItem.title}</Text>
-                  <Text style={{ fontSize: 10.5, color: colors.mutedText, marginTop: 2, fontFamily: fonts.body }} numberOfLines={1}>{careItem.tag}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <TouchableOpacity
-              onPress={() => router.push("/(app)/consultation")}
-              activeOpacity={0.85}
-              className="flex-row items-center mt-2.5"
-              style={{ backgroundColor: colors.primaryLight, borderRadius: 18, padding: 14 }}
-            >
-              <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center", marginRight: 12 }}>
-                <Ionicons name="chatbubbles-outline" size={18} color={colors.primary} />
-              </View>
-              <View className="flex-1">
-                <Text style={{ fontSize: 13, fontWeight: "800", color: colors.foreground, fontFamily: fonts.body }}>Talk to a gynecologist</Text>
-                <Text style={{ fontSize: 10.5, color: colors.mutedText, marginTop: 1, fontFamily: fonts.body }} numberOfLines={1}>Private consult, secure chat</Text>
-              </View>
-              <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" }}>
-                <Ionicons name="arrow-forward" size={14} color={colors.buttonText} />
-              </View>
-            </TouchableOpacity>
-          </View>
-
-          {/* WELLNESS & SUPPORT — same tile grid, but each icon gets its own
-              accent instead of repeating the same primary tint on every
-              card, so the row is scannable at a glance rather than a
-              monotone block. */}
-          <View className="mx-6 mb-5">
-            <Text className="mb-2.5" style={{ fontSize: 14.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
-              Wellness & support
-            </Text>
-
-            <View className="flex-row flex-wrap" style={{ gap: 10 }}>
-              {[
-                { title: "Health Concerns", desc: "Irregularities & symptoms", icon: "alert-circle-outline", route: "/(app)/health-issues", color: colors.warning, bg: colors.warningLight },
-                { title: "Nura AI", desc: "Ask privately, anytime", icon: "help-circle-outline", route: "/(app)/qa", color: colors.info, bg: colors.infoLight },
-                { title: "Hygiene & Care", desc: "Product guidance & comfort", icon: "leaf-outline", route: "/(app)/hygiene", color: colors.accent, bg: colors.accentLight },
-                { title: "Sexual Wellbeing", desc: "Consent, intimacy & safety", icon: "heart-outline", route: "/(app)/sexual-wellbeing", color: colors.secondary, bg: colors.secondaryLight },
-              ].map((wellness, idx) => (
-                <TouchableOpacity
-                  key={idx}
-                  onPress={() => router.push(wellness.route as any)}
-                  activeOpacity={0.75}
-                  className="border"
-                  style={{ width: "48%", backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 18, padding: 14 }}
-                >
-                  <View style={{ width: 36, height: 36, borderRadius: 11, backgroundColor: wellness.bg, alignItems: "center", justifyContent: "center", marginBottom: 10 }}>
-                    <Ionicons name={wellness.icon as any} size={16} color={wellness.color} />
-                  </View>
-                  <Text style={{ fontSize: 12.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.body }}>{wellness.title}</Text>
-                  <Text style={{ fontSize: 10.5, color: colors.mutedText, marginTop: 2, fontFamily: fonts.body }} numberOfLines={1}>{wellness.desc}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          {/* EXPLORE — icon-first, label-only tiles (no descriptions at
-              this density); kept as 3-up since these are lighter-weight,
-              browse-anytime destinations rather than care actions. */}
+          {/* MORE FOR YOU — three nested "hub" entry points instead of three
+              stacked grids of 4-6 tiles each. Home stays a short, glanceable
+              dashboard; the full destination list for each area lives one
+              tap away on its own screen (care-hub / wellness-hub /
+              explore-hub), which is also where new destinations should be
+              added going forward rather than growing this list further. */}
           <View className="mx-6 mb-8">
-            <Text className="mb-2.5" style={{ fontSize: 14.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
-              Explore
-            </Text>
+            <View className="mb-2.5 flex-row items-center" style={{ gap: 7 }}>
+              <View style={{ width: 5, height: 14, borderRadius: 3, backgroundColor: colors.primary }} />
+              <Text style={{ fontSize: 14.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
+                More for you
+              </Text>
+            </View>
 
-            <View className="flex-row flex-wrap" style={{ gap: 10 }}>
-              {[
-                { title: "Forest", icon: "leaf-outline", route: "/(app)/forest", color: colors.success, bg: colors.successLight },
-                { title: "Blogs", icon: "book-outline", route: "/(app)/blogs", color: colors.info, bg: colors.infoLight },
-                { title: "Videos", icon: "play-circle-outline", route: "/(app)/reels", color: colors.primary, bg: colors.primaryLight },
-                { title: "Partner sync", icon: "git-merge-outline", route: "/(app)/partner", color: colors.accent, bg: colors.accentLight },
-                { title: "Habits", icon: "checkmark-done-outline", route: "/(app)/habits", color: colors.warning, bg: colors.warningLight },
-                { title: "Nominate Buddy", icon: "star-outline", route: "/(app)/buddy-nomination", color: colors.secondary, bg: colors.secondaryLight },
-              ].map((exp, idx) => (
-                <TouchableOpacity
-                  key={idx}
-                  onPress={() => router.push(exp.route as any)}
-                  activeOpacity={0.8}
-                  className="border items-center justify-center"
-                  style={{ width: "31%", backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 18, paddingVertical: 16, paddingHorizontal: 8 }}
-                >
-                  <View
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 12,
-                      backgroundColor: exp.bg,
-                      alignItems: "center",
-                      justifyContent: "center",
-                      marginBottom: 9,
-                    }}
-                  >
-                    <Ionicons name={exp.icon as any} size={18} color={exp.color} />
-                  </View>
-                  <Text style={{ fontSize: 10.5, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }} numberOfLines={1}>
-                    {exp.title}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+            <View style={{ gap: 10 }}>
+              <HubEntryCard
+                icon="pulse-outline"
+                iconColor={colors.primary}
+                iconBg={colors.primaryLight}
+                title="Care & Insights"
+                description="Predictions, insights, symptom trends & consults"
+                onPress={() => router.push("/(app)/care-hub")}
+              />
+              <HubEntryCard
+                icon="heart-outline"
+                iconColor={colors.secondary}
+                iconBg={colors.secondaryLight}
+                title="Wellness & Support"
+                description="Health concerns, private Q&A, hygiene & more"
+                onPress={() => router.push("/(app)/wellness-hub")}
+              />
+              <HubEntryCard
+                icon="compass-outline"
+                iconColor={colors.accent}
+                iconBg={colors.accentLight}
+                title="Explore"
+                description="Forest, blogs, videos, habits & your buddy"
+                onPress={() => router.push("/(app)/explore-hub")}
+              />
             </View>
           </View>
         </ScrollView>

@@ -24,6 +24,11 @@ const IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
 const ANDROID_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
 const EXPO_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_EXPO_CLIENT_ID;
 
+// See the comment at its use below: a non-undefined stand-in fed to
+// Google.useAuthRequest so it doesn't throw during render when the real
+// client id for the current platform isn't configured.
+const PLACEHOLDER_CLIENT_ID = "google-oauth-not-configured";
+
 export function GoogleSignInButton({
   disabled,
   label = "Continue with Google",
@@ -36,6 +41,17 @@ export function GoogleSignInButton({
 
   const isConfigured = Boolean(WEB_CLIENT_ID || IOS_CLIENT_ID || ANDROID_CLIENT_ID || EXPO_CLIENT_ID);
 
+  // expo-auth-session's Google provider throws synchronously — during
+  // render, crashing the whole screen this button is on, not just this
+  // component — if the client-id property for the current platform is
+  // `undefined` (see invariantClientId in expo-auth-session/providers/
+  // ProviderUtils). That's the normal state in local dev without Google
+  // OAuth env vars filled in (.env.example ships them blank), so feed it the
+  // harmless placeholder above instead of a real id; `isConfigured` below
+  // (driven by the real env vars, not the placeholder) hides the button
+  // whenever none are set, so the placeholder is never actually used to
+  // prompt.
+
   // On mobile expo-auth-session actually runs a code + PKCE flow (despite the
   // "IdToken" hook name) and auto-exchanges the code for a token internally —
   // but that internal exchange has no .catch, so if it fails (wrong client
@@ -44,10 +60,13 @@ export function GoogleSignInButton({
   // nothing happens, with no error shown. We do the exchange ourselves below
   // instead of relying on that, so failures actually reach onError.
   const [request, , promptAsync] = Google.useAuthRequest({
-    androidClientId: ANDROID_CLIENT_ID,
-    clientId: Platform.OS === "web" ? WEB_CLIENT_ID : (EXPO_CLIENT_ID || WEB_CLIENT_ID),
-    iosClientId: IOS_CLIENT_ID,
-    webClientId: WEB_CLIENT_ID,
+    androidClientId: ANDROID_CLIENT_ID || PLACEHOLDER_CLIENT_ID,
+    clientId:
+      Platform.OS === "web"
+        ? WEB_CLIENT_ID || PLACEHOLDER_CLIENT_ID
+        : EXPO_CLIENT_ID || WEB_CLIENT_ID || PLACEHOLDER_CLIENT_ID,
+    iosClientId: IOS_CLIENT_ID || PLACEHOLDER_CLIENT_ID,
+    webClientId: WEB_CLIENT_ID || PLACEHOLDER_CLIENT_ID,
     responseType: Platform.OS === "web" ? AuthSession.ResponseType.IdToken : AuthSession.ResponseType.Code,
     shouldAutoExchangeCode: false,
     // Google's Android-type OAuth client only accepts the default
