@@ -20,10 +20,13 @@ import { alert } from "../../lib/alert";
 import { useTheme } from "../../components/theme";
 import { SkeletonRow } from "../../components/Skeleton";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
+import { useSubscriptionAccess } from "../../hooks/useSubscriptionAccess";
+import { PaywallModal } from "../../components/subscription/PaywallModal";
 import {
   buddyApi,
   getFriendlyErrorMessage,
   getWebSocketUrl,
+  isFeatureLockedError,
   isNetworkError,
   type BuddyMatch as ApiBuddyMatch,
   type BuddyMessage as ApiBuddyMessage,
@@ -135,7 +138,7 @@ function mergeBuddyMessages(prev: BuddyMessage[], newMsgs: ApiBuddyMessage[]): B
   return next;
 }
 
-export default function BuddyNomination() {
+function BuddyNomination() {
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
   const { earnTokens } = useAppState();
@@ -152,6 +155,8 @@ export default function BuddyNomination() {
     null,
   );
   const [isChatConsoleOpen, setIsChatConsoleOpen] = useState(false);
+  const [paywallVisible, setPaywallVisible] = useState(false);
+  const { hasAccess, refresh: refreshSubscriptionAccess } = useSubscriptionAccess();
   const [typedMessage, setTypedMessage] = useState("");
 
   const [nominees, setNominees] = useState<PeriodBuddy[]>([]);
@@ -379,6 +384,13 @@ export default function BuddyNomination() {
       );
       return;
     }
+    // Checked before any optimistic state change below — a locked user
+    // should never see the chat console open only to be reverted a moment
+    // later; browsing candidates and an already-active buddy stay free.
+    if (!hasAccess("period_buddy")) {
+      setPaywallVisible(true);
+      return;
+    }
 
     setActiveNominatedId(id);
     earnTokens(25);
@@ -408,11 +420,16 @@ export default function BuddyNomination() {
         alert("Buddy nominated", "Your Period Buddy space is ready.");
       } else {
         // The server rejected it (e.g. this buddy just connected with someone
-        // else) — undo the optimistic pairing and surface why.
+        // else, or — see isFeatureLockedError below — access lapsed since
+        // the hasAccess() check above ran) — undo the optimistic pairing.
         setActiveNominatedId(null);
         setIsChatConsoleOpen(false);
         earnTokens(-25);
-        alert("Couldn't connect buddy", getFriendlyErrorMessage(err));
+        if (isFeatureLockedError(err)) {
+          setPaywallVisible(true);
+        } else {
+          alert("Couldn't connect buddy", getFriendlyErrorMessage(err));
+        }
       }
     }
   }
@@ -849,6 +866,15 @@ export default function BuddyNomination() {
           onSendMessage={(text) => handleSendBuddyMessage(text)}
         />
       )}
+
+      <PaywallModal
+        visible={paywallVisible}
+        onClose={() => setPaywallVisible(false)}
+        featureKey="period_buddy"
+        onUnlocked={refreshSubscriptionAccess}
+      />
     </>
   );
 }
+
+export default BuddyNomination;

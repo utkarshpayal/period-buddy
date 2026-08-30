@@ -21,11 +21,21 @@ import { WebView } from "react-native-webview";
 import { CalendarModal } from "../../components/CalendarModal";
 import { useAuth } from "../../components/auth-context";
 import { useTheme } from "../../components/theme";
+import { Loader } from "../../components/Loader";
 import { SkeletonRow } from "../../components/Skeleton";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
 import { alert } from "../../lib/alert";
 import { showPermissionModal } from "../../lib/modal-host";
-import { documentApi, type DocType, type LanguageCode, type MedicalDocument } from "../../lib/api";
+import { useSubscriptionAccess } from "../../hooks/useSubscriptionAccess";
+import { LockedFeatureCard } from "../../components/subscription/LockedFeatureCard";
+import { PaywallModal } from "../../components/subscription/PaywallModal";
+import {
+  documentApi,
+  isFeatureLockedError,
+  type DocType,
+  type LanguageCode,
+  type MedicalDocument,
+} from "../../lib/api";
 import { generateAndShareHealthReport } from "../../lib/healthReport";
 import { SUPPORTED_LANGUAGES as LANGUAGE_OPTIONS } from "../../lib/languages";
 
@@ -100,6 +110,26 @@ export default function DocumentsScreen() {
   const [typeFilter, setTypeFilter] = useState<DocType | null>(null);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
+  // Upload/chat gated behind 'document_chat'; "Download doctor report" gated
+  // client-side only behind 'health_reports' — GET /api/reports/health-report
+  // also backs the free Graphs & Reports dashboard, so it's intentionally
+  // not gated on the server (see period-buddy-be's reportRoutes.js).
+  const [paywallFeature, setPaywallFeature] = useState<"document_chat" | "health_reports" | null>(null);
+  const {
+    hasAccess,
+    isLoading: subscriptionLoading,
+    refresh: refreshSubscriptionAccess,
+  } = useSubscriptionAccess();
+  // Whole-screen gate: block entry only if the user has neither premium
+  // capability this screen offers (upload/chat via 'document_chat', PDF
+  // report via 'health_reports') — someone who's unlocked just one still
+  // needs to reach this screen to use it, so this isn't a per-key gate.
+  const locked = !subscriptionLoading && !hasAccess("document_chat") && !hasAccess("health_reports");
+
+  useEffect(() => {
+    if (locked) setPaywallFeature("health_reports");
+  }, [locked]);
+
   const fetchDocuments = useCallback(async () => {
     try {
       const result = await documentApi.list({
@@ -117,9 +147,10 @@ export default function DocumentsScreen() {
   }, [typeFilter, sortOrder]);
 
   useEffect(() => {
+    if (locked) return;
     setLoading(true);
     fetchDocuments();
-  }, [fetchDocuments]);
+  }, [fetchDocuments, locked]);
 
   function handleRefresh() {
     setRefreshing(true);
@@ -142,6 +173,17 @@ export default function DocumentsScreen() {
     setFormTitle("");
     setFormDocType("other");
     setFormDateKey("");
+  }
+
+  // Checked right at the tap that opens the upload sheet — not after the
+  // user has already picked a file and filled out the form — so a locked
+  // user sees the paywall immediately instead of at the end of the flow.
+  function openUpload() {
+    if (!hasAccess("document_chat")) {
+      setPaywallFeature("document_chat");
+      return;
+    }
+    setUploadVisible(true);
   }
 
   function closeUploadModal() {
@@ -210,6 +252,10 @@ export default function DocumentsScreen() {
 
   async function handleUpload() {
     if (!pickedFile || !formTitle.trim() || !formDateKey || uploading) return;
+    if (!hasAccess("document_chat")) {
+      setPaywallFeature("document_chat");
+      return;
+    }
 
     try {
       setUploading(true);
@@ -225,7 +271,11 @@ export default function DocumentsScreen() {
       setLoading(true);
       fetchDocuments();
     } catch (error) {
-      alert("Upload failed", error instanceof Error ? error.message : "Please try again.");
+      if (isFeatureLockedError(error)) {
+        setPaywallFeature("document_chat");
+      } else {
+        alert("Upload failed", error instanceof Error ? error.message : "Please try again.");
+      }
     } finally {
       setUploading(false);
     }
@@ -309,13 +359,17 @@ export default function DocumentsScreen() {
   // picking dates blind.
   useEffect(() => {
     if (openReport !== "1") return;
+    router.setParams({ openReport: undefined });
+    if (!hasAccess("health_reports")) {
+      setPaywallFeature("health_reports");
+      return;
+    }
     const today = new Date();
     const start = new Date(today);
     start.setDate(start.getDate() - 90);
     setReportStartKey(toDateKey(start));
     setReportEndKey(toDateKey(today));
     setReportVisible(true);
-    router.setParams({ openReport: undefined });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openReport]);
 
@@ -375,29 +429,68 @@ export default function DocumentsScreen() {
     </ScrollView>
   );
 
+  const documentsHeader = (
+    <View className="flex-row items-center gap-2 px-6 pt-6">
+      <TouchableOpacity
+        onPress={() => router.back()}
+        activeOpacity={0.7}
+        className="p-2.5 -ml-2 rounded-full border"
+        style={{ backgroundColor: colors.surface, borderColor: colors.border, ...getShadow(colors, isDark) }}
+      >
+        <Feather name="arrow-left" size={18} color={colors.foreground} />
+      </TouchableOpacity>
+      <View className="flex-1 ml-2">
+        <Text className="text-2xl font-black tracking-tight" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
+          Documents
+        </Text>
+        <Text className="text-xs font-semibold mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+          Prescriptions, reports & bills — all in one place
+        </Text>
+      </View>
+    </View>
+  );
+
+  if (subscriptionLoading) {
+    return (
+      <>
+        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
+        <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
+          {documentsHeader}
+          <Loader fullscreen />
+        </SafeAreaView>
+      </>
+    );
+  }
+
+  if (locked) {
+    return (
+      <>
+        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
+        <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
+          {documentsHeader}
+          <View className="flex-1 items-center justify-center px-6">
+            <LockedFeatureCard
+              title="Documents & Health Reports"
+              description="Unlock document uploads, AI chat over your reports, and downloadable PDF health reports."
+              onPress={() => setPaywallFeature("health_reports")}
+            />
+          </View>
+        </SafeAreaView>
+        <PaywallModal
+          visible={paywallFeature !== null}
+          onClose={() => setPaywallFeature(null)}
+          featureKey={paywallFeature ?? "health_reports"}
+          onUnlocked={refreshSubscriptionAccess}
+        />
+      </>
+    );
+  }
+
   return (
     <>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
       <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
-        {/* Header */}
-        <View className="flex-row items-center gap-2 px-6 pt-6">
-          <TouchableOpacity
-            onPress={() => router.back()}
-            activeOpacity={0.7}
-            className="p-2.5 -ml-2 rounded-full border"
-            style={{ backgroundColor: colors.surface, borderColor: colors.border, ...getShadow(colors, isDark) }}
-          >
-            <Feather name="arrow-left" size={18} color={colors.foreground} />
-          </TouchableOpacity>
-          <View className="flex-1 ml-2">
-            <Text className="text-2xl font-black tracking-tight" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-              Documents
-            </Text>
-            <Text className="text-xs font-semibold mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-              Prescriptions, reports & bills — all in one place
-            </Text>
-          </View>
-        </View>
+        {documentsHeader}
 
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -451,7 +544,13 @@ export default function DocumentsScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               activeOpacity={0.85}
-              onPress={() => setReportVisible(true)}
+              onPress={() => {
+                if (!hasAccess("health_reports")) {
+                  setPaywallFeature("health_reports");
+                  return;
+                }
+                setReportVisible(true);
+              }}
               className="flex-1 items-center rounded-2xl border py-4"
               style={{ backgroundColor: colors.surface, borderColor: colors.border, ...getShadow(colors, isDark) }}
             >
@@ -535,7 +634,7 @@ export default function DocumentsScreen() {
                 </Text>
                 <TouchableOpacity
                   activeOpacity={0.85}
-                  onPress={() => setUploadVisible(true)}
+                  onPress={openUpload}
                   className="mt-5 flex-row items-center gap-2 rounded-full px-5 py-3"
                   style={{ backgroundColor: colors.primary }}
                 >
@@ -592,7 +691,7 @@ export default function DocumentsScreen() {
 
         {/* Floating add button */}
         <TouchableOpacity
-          onPress={() => setUploadVisible(true)}
+          onPress={openUpload}
           activeOpacity={0.85}
           className="absolute right-6 bottom-8 w-14 h-14 rounded-full items-center justify-center"
           style={{ backgroundColor: colors.primary, ...getShadow(colors, isDark) }}
@@ -1049,6 +1148,13 @@ export default function DocumentsScreen() {
           visible={reportEndCalendarVisible}
         />
       </Modal>
+
+      <PaywallModal
+        visible={paywallFeature !== null}
+        onClose={() => setPaywallFeature(null)}
+        featureKey={paywallFeature ?? "document_chat"}
+        onUnlocked={refreshSubscriptionAccess}
+      />
     </>
   );
 }

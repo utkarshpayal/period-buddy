@@ -13,9 +13,13 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { EmptyState } from "../../components/EmptyState";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
+import { Loader } from "../../components/Loader";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { useTheme } from "../../components/theme";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
+import { useSubscriptionAccess } from "../../hooks/useSubscriptionAccess";
+import { LockedFeatureCard } from "../../components/subscription/LockedFeatureCard";
+import { PaywallModal } from "../../components/subscription/PaywallModal";
 import {
   getFriendlyErrorMessage,
   isNetworkError,
@@ -25,6 +29,13 @@ import {
   type SchemeCategoryMeta,
 } from "../../lib/api";
 import { SCHEME_ACTION_LABELS } from "../../lib/schemeHelpers";
+
+// Government Schemes is a whole-screen premium feature — an admin can price
+// it as locked, in which case browsing the list itself (not just applying)
+// requires access. Reuses the same 'government_scheme_applications' key the
+// detail screen already gates the apply action on, so no separate admin
+// pricing entry is needed.
+const SCHEMES_FEATURE_KEY = "government_scheme_applications";
 
 const LEVEL_FILTERS: { key: "all" | GovernmentLevel; label: string }[] = [
   { key: "all", label: "All" },
@@ -133,6 +144,16 @@ export default function GovernmentSchemes() {
   const [error, setError] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
 
+  const [paywallVisible, setPaywallVisible] = useState(false);
+  const { hasAccess, isLoading: subscriptionLoading, refresh: refreshSubscriptionAccess } = useSubscriptionAccess();
+  const locked = !subscriptionLoading && !hasAccess(SCHEMES_FEATURE_KEY);
+
+  // Show the paywall the moment it's clear the user can't browse schemes at
+  // all — don't wait for them to tap into a scheme first.
+  useEffect(() => {
+    if (locked) setPaywallVisible(true);
+  }, [locked]);
+
   // Page-based pagination with a "Load More" button (mirrors blogs.tsx).
   const PAGE_SIZE = 10;
   const [page, setPage] = useState(1);
@@ -209,9 +230,10 @@ export default function GovernmentSchemes() {
   }, [loadingMore, hasMore, page, listParams]);
 
   useEffect(() => {
+    if (locked) return;
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, activeCategory, level]);
+  }, [debouncedSearch, activeCategory, level, locked]);
 
   const hasFilters = Boolean(debouncedSearch || activeCategory || level !== "all");
   const showRecommended = recommended.length > 0 && !hasFilters;
@@ -243,6 +265,36 @@ export default function GovernmentSchemes() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [colors, softTints],
   );
+
+  if (subscriptionLoading) {
+    return (
+      <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
+        <ScreenHeader title="Govt. Schemes" />
+        <Loader fullscreen />
+      </SafeAreaView>
+    );
+  }
+
+  if (locked) {
+    return (
+      <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
+        <ScreenHeader title="Govt. Schemes" />
+        <View className="flex-1 items-center justify-center px-6">
+          <LockedFeatureCard
+            title="Government Schemes & Benefits"
+            description="Unlock access to browse and apply for women's reproductive & menstrual health schemes."
+            onPress={() => setPaywallVisible(true)}
+          />
+        </View>
+        <PaywallModal
+          visible={paywallVisible}
+          onClose={() => setPaywallVisible(false)}
+          featureKey={SCHEMES_FEATURE_KEY}
+          onUnlocked={refreshSubscriptionAccess}
+        />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>

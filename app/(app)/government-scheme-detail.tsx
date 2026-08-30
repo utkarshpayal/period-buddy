@@ -18,11 +18,15 @@ import { useAuth } from "../../components/auth-context";
 import { useTheme } from "../../components/theme";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
 import { useAsyncLoad } from "../../hooks/useAsyncLoad";
+import { useSubscriptionAccess } from "../../hooks/useSubscriptionAccess";
+import { LockedFeatureCard } from "../../components/subscription/LockedFeatureCard";
+import { PaywallModal } from "../../components/subscription/PaywallModal";
 import { alert } from "../../lib/alert";
 import { formatShortDate } from "../../lib/format";
 import {
   authApi,
   getFriendlyErrorMessage,
+  isFeatureLockedError,
   schemeApplicationsApi,
   schemesApi,
   type GovernmentBenefit,
@@ -96,6 +100,26 @@ export default function GovernmentSchemeDetail() {
   const [checking, setChecking] = useState(false);
   const [applying, setApplying] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [paywallVisible, setPaywallVisible] = useState(false);
+  const {
+    hasAccess,
+    isLoading: subscriptionLoading,
+    refresh: refreshSubscriptionAccess,
+  } = useSubscriptionAccess();
+  // Whole-screen gate, same key the Apply action already uses — reached
+  // directly via a deep link (share, notification) can otherwise bypass the
+  // list screen's own gate, so this screen re-checks independently.
+  const locked = !subscriptionLoading && !hasAccess("government_scheme_applications");
+  // Distinguishes "paywall opened just because the screen is locked" (do
+  // nothing extra once purchased — the screen unlocks on its own once
+  // useSubscriptionAccess refreshes) from "paywall opened because Apply was
+  // tapped" (retry the apply once purchased, same as before this screen was
+  // gated on entry too).
+  const [unlockShouldApply, setUnlockShouldApply] = useState(false);
+
+  useEffect(() => {
+    if (locked) setPaywallVisible(true);
+  }, [locked]);
 
   // Interactive eligibility checker inputs (seeded from the user's profile).
   const [checkerOpen, setCheckerOpen] = useState(false);
@@ -179,7 +203,7 @@ export default function GovernmentSchemeDetail() {
     }
   };
 
-  const handleApply = async () => {
+  const submitApplication = async () => {
     if (!scheme) return;
     try {
       setApplying(true);
@@ -196,10 +220,24 @@ export default function GovernmentSchemeDetail() {
         ],
       );
     } catch (err) {
-      alert("Couldn't save", getFriendlyErrorMessage(err));
+      if (isFeatureLockedError(err)) {
+        setUnlockShouldApply(true);
+        setPaywallVisible(true);
+      } else {
+        alert("Couldn't save", getFriendlyErrorMessage(err));
+      }
     } finally {
       setApplying(false);
     }
+  };
+
+  const handleApply = () => {
+    if (!hasAccess("government_scheme_applications")) {
+      setUnlockShouldApply(true);
+      setPaywallVisible(true);
+      return;
+    }
+    submitApplication();
   };
 
   const handlePrimaryAction = () => {
@@ -231,13 +269,25 @@ export default function GovernmentSchemeDetail() {
     <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
       <ScreenHeader title="Scheme Details" />
       <LoadingErrorState
-        loading={loading}
+        // Also wait on the subscription check — otherwise the real scheme
+        // content can render for a frame before `locked` flips true and
+        // swaps it for the paywall, flashing paid data at a locked user.
+        loading={loading || subscriptionLoading}
         error={error}
         offline={offline}
         onRetry={reload}
         loadingLabel="Loading scheme…"
       >
         {scheme ? (
+          locked ? (
+            <View className="flex-1 items-center justify-center px-6">
+              <LockedFeatureCard
+                title={scheme.name}
+                description="Unlock Government Schemes & Benefits to view full details and apply."
+                onPress={() => setPaywallVisible(true)}
+              />
+            </View>
+          ) : (
           <>
             <ScrollView
               className="flex-1 mt-4"
@@ -564,6 +614,7 @@ export default function GovernmentSchemeDetail() {
               </View>
             ) : null}
           </>
+          )
         ) : (
           <View className="flex-1 items-center justify-center">
             <Feather name="alert-circle" size={28} color={colors.mutedText} />
@@ -704,6 +755,22 @@ export default function GovernmentSchemeDetail() {
           </View>
         </View>
       </Modal>
+
+      <PaywallModal
+        visible={paywallVisible}
+        onClose={() => {
+          setPaywallVisible(false);
+          setUnlockShouldApply(false);
+        }}
+        featureKey="government_scheme_applications"
+        onUnlocked={() => {
+          refreshSubscriptionAccess();
+          if (unlockShouldApply) {
+            setUnlockShouldApply(false);
+            submitApplication();
+          }
+        }}
+      />
     </SafeAreaView>
   );
 }

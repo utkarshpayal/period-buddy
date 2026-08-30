@@ -20,7 +20,10 @@ import { alert } from "../../lib/alert";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { useTheme } from "../../components/theme";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
+import { useSubscriptionAccess } from "../../hooks/useSubscriptionAccess";
+import { PaywallModal } from "../../components/subscription/PaywallModal";
 import {
+  isFeatureLockedError,
   partnerApi,
   getWebSocketUrl,
   type PartnerMessage,
@@ -42,6 +45,8 @@ export default function Partner() {
 
   // Invite
   const [generatingCode, setGeneratingCode] = useState(false);
+  const [paywallVisible, setPaywallVisible] = useState(false);
+  const { hasAccess, refresh: refreshSubscriptionAccess } = useSubscriptionAccess();
   const [inviteCode, setInviteCode] = useState("");
 
   // Permissions (local mirrors, saved on toggle)
@@ -226,7 +231,7 @@ export default function Partner() {
   }, [activeTab, profile?._id, profile?.isConnected]);
 
 
-  const handleGenerateCode = async () => {
+  const generateCode = async () => {
     setGeneratingCode(true);
     try {
       const result = await partnerApi.generateInviteCode();
@@ -234,10 +239,22 @@ export default function Partner() {
       setProfile((p) => p ? { ...p, inviteCode: result.inviteCode } : p);
       alert("Code Generated 🎉", `Your private sync key is:\n${result.inviteCode}\n\nShare this with your partner to connect.`);
     } catch (err) {
-      alert("Error", err instanceof Error ? err.message : "Failed to generate code");
+      if (isFeatureLockedError(err)) {
+        setPaywallVisible(true);
+      } else {
+        alert("Error", err instanceof Error ? err.message : "Failed to generate code");
+      }
     } finally {
       setGeneratingCode(false);
     }
+  };
+
+  const handleGenerateCode = () => {
+    if (!hasAccess("partner_connect")) {
+      setPaywallVisible(true);
+      return;
+    }
+    generateCode();
   };
 
   const handleNativeShare = async () => {
@@ -694,6 +711,16 @@ export default function Partner() {
         )}
         </KeyboardAvoidingView>
       </SafeAreaView>
+
+      <PaywallModal
+        visible={paywallVisible}
+        onClose={() => setPaywallVisible(false)}
+        featureKey="partner_connect"
+        onUnlocked={() => {
+          refreshSubscriptionAccess();
+          generateCode();
+        }}
+      />
     </>
   );
 }

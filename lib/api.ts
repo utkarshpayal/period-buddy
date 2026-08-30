@@ -63,18 +63,55 @@ const DEFAULT_TIMEOUT_MS = 20000;
  * Typed error for every failed request so screens can react to *why* it failed
  * (offline vs. server error vs. not-found) instead of string-matching messages.
  */
-export type ApiErrorKind = "network" | "timeout" | "server" | "notFound" | "unauthorized" | "unknown";
+export type ApiErrorKind =
+  | "network"
+  | "timeout"
+  | "server"
+  | "notFound"
+  | "unauthorized"
+  | "featureLocked"
+  | "unknown";
+
+/** The 402 FEATURE_LOCKED body's payload — see
+ * period-buddy-be's subscriptionMiddleware.requireFeatureAccess(). Carries
+ * everything PaywallModal needs to render without a second round trip. */
+export type FeatureLockInfo = {
+  feature: {
+    key: string;
+    name: string;
+    description?: string;
+    price: number;
+    billingCycle: "monthly" | "yearly" | "one_time";
+  };
+  plans: {
+    _id: string;
+    name: string;
+    slug: string;
+    price: number;
+    billingCycle: "monthly" | "yearly" | "one_time";
+    badge?: string;
+  }[];
+};
 
 export class ApiError extends Error {
   kind: ApiErrorKind;
   status?: number;
+  /** Only set when kind === "featureLocked". */
+  lock?: FeatureLockInfo;
 
-  constructor(message: string, kind: ApiErrorKind, status?: number) {
+  constructor(message: string, kind: ApiErrorKind, status?: number, lock?: FeatureLockInfo) {
     super(message);
     this.name = "ApiError";
     this.kind = kind;
     this.status = status;
+    this.lock = lock;
   }
+}
+
+/** True when a request was blocked by the subscription paywall. Screens can
+ * catch this specifically to open PaywallModal instead of a generic error. */
+export function isFeatureLockedError(err: unknown): err is ApiError & { lock: FeatureLockInfo } {
+  return err instanceof ApiError && err.kind === "featureLocked" && !!err.lock;
 }
 
 /** True when the failure was connectivity-related (offline or timed out). */
@@ -975,6 +1012,15 @@ export async function apiEnvelopeRequest<T>(
     if (response.status === 401 && !options.skipAuth) {
       onUnauthorized?.();
     }
+    if (response.status === 402) {
+      const body = data as { code?: string } & Partial<FeatureLockInfo>;
+      if (body?.code === "FEATURE_LOCKED" && body.feature) {
+        throw new ApiError(getErrorMessage(data, response.status), "featureLocked", response.status, {
+          feature: body.feature,
+          plans: body.plans ?? [],
+        });
+      }
+    }
     const kind: ApiErrorKind =
       response.status === 401
         ? "unauthorized"
@@ -1239,6 +1285,130 @@ export const consultationApi = {
   cancelConsultation: (consultationId: string) =>
     apiRequest<Consultation>(`/api/consultation/${consultationId}/cancel`, {
       method: "PATCH",
+    }),
+};
+
+/* ------------------------------ Subscriptions ------------------------------ */
+// Feature-wise + plan-wise paid access. Same order->RazorpayCheckoutModal->
+// verify flow as consultationApi above; see period-buddy-be's
+// subscriptionController.js for the server side.
+
+export type BillingCycle = "monthly" | "yearly" | "one_time";
+
+export type SubscriptionFeature = {
+  _id: string;
+  key: string;
+  name: string;
+  description?: string;
+  category: string;
+  icon?: string;
+  isPremium: boolean;
+  price: number;
+  billingCycle: BillingCycle;
+  isActive: boolean;
+  sortOrder: number;
+};
+
+export type SubscriptionPlan = {
+  _id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  price: number;
+  billingCycle: BillingCycle;
+  features: string[];
+  isDefault: boolean;
+  isActive: boolean;
+  badge?: string;
+};
+
+export type Entitlement = {
+  _id: string;
+  source: "plan" | "feature";
+  plan?: SubscriptionPlan | string | null;
+  featureKey?: string;
+  status: "pending" | "active" | "expired" | "cancelled" | "failed";
+  amount: number;
+  currency: string;
+  billingCycle: BillingCycle;
+  startedAt?: string;
+  expiresAt?: string | null;
+  createdAt: string;
+};
+
+export type MySubscription = {
+  subscriptionEnabled: boolean;
+  currency: string;
+  entitlements: Entitlement[];
+  unlockedFeatureKeys: "ALL" | string[];
+};
+
+// `orderId`/`keyId` are absent when `free` is true — a 100%-off coupon
+// activates the entitlement immediately server-side, with no Razorpay order
+// created at all. Always check `free` before touching either field.
+export type SubscriptionOrder = {
+  entitlementId: string;
+  free: boolean;
+  orderId?: string;
+  amount: number;
+  currency: string;
+  keyId?: string;
+};
+
+export type DiscountType = "percentage" | "flat";
+
+export type CouponPreview = {
+  code: string;
+  discountType: DiscountType;
+  discountValue: number;
+  originalAmount: number;
+  discountAmount: number;
+  finalAmount: number;
+  currency: string;
+  /** True when this coupon brings the price to ₹0 — purchasing skips
+   * Razorpay checkout entirely (see createOrder's `free` response field). */
+  free: boolean;
+};
+
+type PurchasePayload =
+  | { source: "plan"; planId: string }
+  | { source: "feature"; featureKey: string };
+
+export const subscriptionApi = {
+  getPlans: () => apiRequest<SubscriptionPlan[]>("/api/subscriptions/plans", { skipAuth: true }),
+
+  getFeatures: () =>
+    apiRequest<SubscriptionFeature[]>("/api/subscriptions/features", { skipAuth: true }),
+
+  getMe: () => apiRequest<MySubscription>("/api/subscriptions/me"),
+
+  getHistory: () => apiRequest<Entitlement[]>("/api/subscriptions/history"),
+
+  /** Preview a coupon's discount against a specific plan/feature before
+   * buying — creates nothing. The actual purchase (createOrder below) still
+   * re-validates the code itself, so this is just for showing the
+   * discounted price / "Free!" state before the user commits. */
+  applyCoupon: (payload: { code: string } & PurchasePayload) =>
+    apiRequest<CouponPreview>("/api/subscriptions/coupons/apply", {
+      body: JSON.stringify(payload),
+      method: "POST",
+    }),
+
+  createOrder: (payload: PurchasePayload & { couponCode?: string }) =>
+    apiRequest<SubscriptionOrder>("/api/subscriptions/order", {
+      body: JSON.stringify(payload),
+      method: "POST",
+    }),
+
+  verifyPayment: (payload: {
+    entitlementId: string;
+    razorpay_order_id: string;
+    razorpay_payment_id: string;
+    razorpay_signature: string;
+  }) =>
+    apiRequest<Entitlement>("/api/subscriptions/verify", {
+      body: JSON.stringify(payload),
+      method: "POST",
     }),
 };
 

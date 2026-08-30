@@ -17,7 +17,15 @@ import { getShadow } from "../../components/ui-tokens";
 import { useAuth } from "../../components/auth-context";
 import { alert } from "../../lib/alert";
 import { formatShortDate } from "../../lib/format";
-import { ApiError, authApi, getFriendlyErrorMessage, voiceAgentApi } from "../../lib/api";
+import { useSubscriptionAccess } from "../../hooks/useSubscriptionAccess";
+import { PaywallModal } from "../../components/subscription/PaywallModal";
+import {
+  ApiError,
+  authApi,
+  getFriendlyErrorMessage,
+  isFeatureLockedError,
+  voiceAgentApi,
+} from "../../lib/api";
 
 const DAY_OFFSET_MIN = -5;
 const DAY_OFFSET_MAX = 5;
@@ -73,6 +81,19 @@ export default function CheckinCallScreen() {
   const [dayOffset, setDayOffset] = useState(0);
   const [timeMinutes, setTimeMinutes] = useState(9 * 60); // default 9:00 AM
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
+  const [paywallVisible, setPaywallVisible] = useState(false);
+  const { hasAccess, isLoading: subscriptionLoading, refresh: refreshSubscriptionAccess } =
+    useSubscriptionAccess();
+
+  // This whole screen is the premium feature (both "call me now" and the
+  // auto-schedule toggle) — show the paywall as soon as it's clear the user
+  // can't use it, not after they've typed a phone number and tapped Call.
+  useEffect(() => {
+    if (!subscriptionLoading && !hasAccess("voice_checkin_calls")) {
+      setPaywallVisible(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subscriptionLoading]);
 
   useEffect(() => {
     let cancelled = false;
@@ -106,6 +127,10 @@ export default function CheckinCallScreen() {
       alert("Add a phone number", "We need a number to reach you on before Buddy can call.");
       return;
     }
+    if (!hasAccess("voice_checkin_calls")) {
+      setPaywallVisible(true);
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -123,13 +148,22 @@ export default function CheckinCallScreen() {
         `Buddy is calling ${trimmedPhone} — pick up to log today's check-in. Your next expected period is around ${formatShortDate(result.expectedPeriodDate)}.`,
       );
     } catch (err) {
-      alert("Couldn't start the call", getFriendlyErrorMessage(err));
+      if (isFeatureLockedError(err)) {
+        setPaywallVisible(true);
+      } else {
+        alert("Couldn't start the call", getFriendlyErrorMessage(err));
+      }
     } finally {
       setIsSubmitting(false);
     }
   }
 
   async function saveSchedule(nextEnabled: boolean) {
+    if (nextEnabled && !hasAccess("voice_checkin_calls")) {
+      setScheduleEnabled(false);
+      setPaywallVisible(true);
+      return;
+    }
     setIsSavingSchedule(true);
     try {
       const result = await voiceAgentApi.saveCheckinCallSchedule({
@@ -146,7 +180,12 @@ export default function CheckinCallScreen() {
         );
       }
     } catch (err) {
-      alert("Couldn't save schedule", getFriendlyErrorMessage(err));
+      if (isFeatureLockedError(err)) {
+        setScheduleEnabled(false);
+        setPaywallVisible(true);
+      } else {
+        alert("Couldn't save schedule", getFriendlyErrorMessage(err));
+      }
     } finally {
       setIsSavingSchedule(false);
     }
@@ -384,6 +423,13 @@ export default function CheckinCallScreen() {
           </View>
         </ScrollView>
       </SafeAreaView>
+
+      <PaywallModal
+        visible={paywallVisible}
+        onClose={() => setPaywallVisible(false)}
+        featureKey="voice_checkin_calls"
+        onUnlocked={refreshSubscriptionAccess}
+      />
     </>
   );
 }

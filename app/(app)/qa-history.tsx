@@ -1,14 +1,18 @@
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { RefreshControl, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { EmptyState } from "../../components/EmptyState";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
+import { Loader } from "../../components/Loader";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { useTheme } from "../../components/theme";
 import { getLogCategoryTints, getShadow, getSoftTints } from "../../components/ui-tokens";
 import { useAsyncLoad } from "../../hooks/useAsyncLoad";
+import { useSubscriptionAccess } from "../../hooks/useSubscriptionAccess";
+import { LockedFeatureCard } from "../../components/subscription/LockedFeatureCard";
+import { PaywallModal } from "../../components/subscription/PaywallModal";
 import { alert } from "../../lib/alert";
 import { formatShortDate } from "../../lib/format";
 import { questionAnswerApi, type QaChatSessionSummary } from "../../lib/api";
@@ -25,10 +29,36 @@ export default function QaHistory() {
   const categoryTints = getLogCategoryTints(colors);
   const shadow = getShadow(colors, isDark);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [paywallVisible, setPaywallVisible] = useState(false);
+  const {
+    hasAccess,
+    isLoading: subscriptionLoading,
+    refresh: refreshSubscriptionAccess,
+  } = useSubscriptionAccess();
+  // Whole-screen gate — Nura AI (persisted chat) is the premium part of Ask
+  // Nura AI, so block reaching the history list at all when locked, not
+  // just starting a new chat.
+  const locked = !subscriptionLoading && !hasAccess("ai_assistant");
+
+  useEffect(() => {
+    if (locked) setPaywallVisible(true);
+  }, [locked]);
 
   const { data: sessions, loading, refreshing, error, offline, reload } = useAsyncLoad<QaChatSessionSummary[]>(
     () => questionAnswerApi.listSessions(),
   );
+
+  // Gated right here, before ever navigating into qa.tsx — "New chat" is an
+  // explicit request to start a *persisted* AI session (the premium part of
+  // Ask Nura AI), so this is the earliest point to show the paywall instead
+  // of letting the user open the topic picker and type a message first.
+  function startNewChat() {
+    if (!hasAccess("ai_assistant")) {
+      setPaywallVisible(true);
+      return;
+    }
+    router.push({ pathname: "/(app)/qa", params: { new: "1" } });
+  }
 
   function handleDelete(session: QaChatSessionSummary) {
     alert("Delete this chat?", `"${session.title}" will be removed from your history.`, [
@@ -51,13 +81,43 @@ export default function QaHistory() {
     ]);
   }
 
+  if (subscriptionLoading) {
+    return (
+      <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
+        <ScreenHeader title="Chat History" />
+        <Loader fullscreen />
+      </SafeAreaView>
+    );
+  }
+
+  if (locked) {
+    return (
+      <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
+        <ScreenHeader title="Chat History" />
+        <View className="flex-1 items-center justify-center px-6">
+          <LockedFeatureCard
+            title="Nura AI Chat"
+            description="Unlock persisted, topic-scoped chats with Nura AI, saved so you can pick up any conversation later."
+            onPress={() => setPaywallVisible(true)}
+          />
+        </View>
+        <PaywallModal
+          visible={paywallVisible}
+          onClose={() => setPaywallVisible(false)}
+          featureKey="ai_assistant"
+          onUnlocked={refreshSubscriptionAccess}
+        />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
       <ScreenHeader
         title="Chat History"
         right={
           <TouchableOpacity
-            onPress={() => router.push({ pathname: "/(app)/qa", params: { new: "1" } })}
+            onPress={startNewChat}
             activeOpacity={0.8}
             className="flex-row items-center gap-1.5 px-3.5 py-2 rounded-full"
             style={{ backgroundColor: colors.primary }}
@@ -77,7 +137,7 @@ export default function QaHistory() {
             title="No chats yet"
             message="Start a conversation with Nura AI and it'll show up here so you can pick it back up any time."
             actionLabel="Start a chat"
-            onAction={() => router.push({ pathname: "/(app)/qa", params: { new: "1" } })}
+            onAction={startNewChat}
           />
         ) : (
           <ScrollView
@@ -142,6 +202,16 @@ export default function QaHistory() {
           </ScrollView>
         )}
       </LoadingErrorState>
+
+      <PaywallModal
+        visible={paywallVisible}
+        onClose={() => setPaywallVisible(false)}
+        featureKey="ai_assistant"
+        onUnlocked={() => {
+          refreshSubscriptionAccess();
+          router.push({ pathname: "/(app)/qa", params: { new: "1" } });
+        }}
+      />
     </SafeAreaView>
   );
 }

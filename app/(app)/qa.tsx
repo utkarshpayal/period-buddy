@@ -25,8 +25,11 @@ import { getLogCategoryTints, getShadow, getSoftTints } from "../../components/u
 import { VoiceModeOverlay, type VoiceStatus } from "../../components/VoiceModeOverlay";
 import { useVoiceInput } from "../../hooks/useVoiceInput";
 import { alert } from "../../lib/alert";
+import { useSubscriptionAccess } from "../../hooks/useSubscriptionAccess";
+import { PaywallModal } from "../../components/subscription/PaywallModal";
 import {
   ApiError,
+  isFeatureLockedError,
   questionAnswerApi,
   speechApi,
   voiceAgentApi,
@@ -98,6 +101,8 @@ export default function QA() {
   // a past chat from history) so idle browsing never creates empty sessions.
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [isLoadingSession, setIsLoadingSession] = useState(Boolean(sessionIdParam));
+  const [paywallVisible, setPaywallVisible] = useState(false);
+  const { refresh: refreshSubscriptionAccess } = useSubscriptionAccess();
   // "general" (the "Other" topic tile) is deliberately unscoped, same as
   // picking no topic — only a real topic id should show as "focused".
   const isTopicScoped = Boolean(activeTopicId) && activeTopicId !== "general";
@@ -434,6 +439,16 @@ export default function QA() {
             setIsCompanionTyping(false);
             return;
           }
+          if (isFeatureLockedError(createSessionError)) {
+            // Same hard-stop shape as the age-gate above, but the recovery
+            // path is "buy access" rather than "nothing to do" — surface the
+            // paywall instead of silently falling through to the free
+            // stateless answer, or the premium saved-history feature would
+            // never actually get seen/sold.
+            setIsCompanionTyping(false);
+            setPaywallVisible(true);
+            return;
+          }
           // Any other failure (offline, server error, ...) — fall through to
           // the stateless/local-fallback path below like a normal send error.
         }
@@ -450,6 +465,11 @@ export default function QA() {
           ? result.suggestedQuestions
           : suggestedQuestions;
       } catch (askError) {
+        if (isFeatureLockedError(askError)) {
+          setIsCompanionTyping(false);
+          setPaywallVisible(true);
+          return;
+        }
         try {
           const result = await questionAnswerApi.getQuestions({
             search: cleanQuery,
@@ -1128,6 +1148,13 @@ export default function QA() {
           status={voiceStatus}
         />
       ) : null}
+
+      <PaywallModal
+        visible={paywallVisible}
+        onClose={() => setPaywallVisible(false)}
+        featureKey="ai_assistant"
+        onUnlocked={refreshSubscriptionAccess}
+      />
     </>
   );
 }

@@ -1,6 +1,6 @@
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   ScrollView,
@@ -10,11 +10,16 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Loader } from "../../components/Loader";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { useTheme } from "../../components/theme";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
 import { shareWithAppLink } from "../../lib/share";
+import { useSubscriptionAccess } from "../../hooks/useSubscriptionAccess";
+import { LockedFeatureCard } from "../../components/subscription/LockedFeatureCard";
+import { PaywallModal } from "../../components/subscription/PaywallModal";
 import {
+  isFeatureLockedError,
   screeningApi,
   type ScreeningAssessmentResponse,
   type ScreeningCondition,
@@ -80,8 +85,22 @@ export default function SymptomCheckerScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ScreeningAssessmentResponse | null>(null);
+  const [paywallVisible, setPaywallVisible] = useState(false);
+  const {
+    hasAccess,
+    isLoading: subscriptionLoading,
+    refresh: refreshSubscriptionAccess,
+  } = useSubscriptionAccess();
+  // Whole-screen gate — don't even let the user land on the condition
+  // picker if they can't use the checker at all, instead of gating just the
+  // pick/submit actions.
+  const locked = !subscriptionLoading && !hasAccess("symptom_checker");
 
-  async function handlePickCondition(pick: ScreeningCondition) {
+  useEffect(() => {
+    if (locked) setPaywallVisible(true);
+  }, [locked]);
+
+  async function loadCondition(pick: ScreeningCondition) {
     setCondition(pick);
     setError(null);
     setLoadingQuestions(true);
@@ -96,6 +115,16 @@ export default function SymptomCheckerScreen() {
     } finally {
       setLoadingQuestions(false);
     }
+  }
+
+  async function handlePickCondition(pick: ScreeningCondition) {
+    // Gated upfront (before the questionnaire) rather than at submit time —
+    // no point answering a dozen questions only to hit a paywall at the end.
+    if (!hasAccess("symptom_checker")) {
+      setPaywallVisible(true);
+      return;
+    }
+    await loadCondition(pick);
   }
 
   function handleAnswer(question: ScreeningQuestion, value: number | boolean) {
@@ -115,7 +144,11 @@ export default function SymptomCheckerScreen() {
       setResult(assessment);
       setStep("results");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to submit assessment");
+      if (isFeatureLockedError(err)) {
+        setPaywallVisible(true);
+      } else {
+        setError(err instanceof Error ? err.message : "Failed to submit assessment");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -161,6 +194,18 @@ export default function SymptomCheckerScreen() {
   const currentQuestion = questions[questionIndex];
   const canProceed = currentQuestion ? answers[currentQuestion.id] !== undefined : false;
 
+  // Wait on the subscription check before rendering the condition picker —
+  // otherwise it can flash for a frame before `locked` flips true and swaps
+  // it for the paywall.
+  if (subscriptionLoading) {
+    return (
+      <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
+        <ScreenHeader title="Symptom Checker" />
+        <Loader fullscreen />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
@@ -172,7 +217,15 @@ export default function SymptomCheckerScreen() {
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }}>
           <View className="mx-6 mt-5">
-            {step === "pick" && (
+            {locked ? (
+              <LockedFeatureCard
+                title="Symptom Checker"
+                description="Unlock a short questionnaire that screens for PCOS, endometriosis, fibroids, and thyroid signs."
+                onPress={() => setPaywallVisible(true)}
+              />
+            ) : null}
+
+            {!locked && step === "pick" && (
               <>
                 <Text className="text-sm font-semibold leading-5 mb-5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                   Pick a condition to answer a short set of questions. This is an educational screening tool, not a
@@ -215,7 +268,7 @@ export default function SymptomCheckerScreen() {
               </>
             )}
 
-            {step === "questions" && currentQuestion && (
+            {!locked && step === "questions" && currentQuestion && (
               <>
                 <View className="flex-row items-center justify-between mb-2">
                   <Text className="text-[11px] font-black uppercase tracking-widest" style={{ color: colors.primary, fontFamily: fonts.heading }}>
@@ -345,7 +398,7 @@ export default function SymptomCheckerScreen() {
               </>
             )}
 
-            {step === "results" && result && (
+            {!locked && step === "results" && result && (
               <>
                 {/* Progress header, matching mockup's "Screening complete" bar */}
                 <Text className="text-[11px] font-bold mb-1.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
@@ -441,6 +494,20 @@ export default function SymptomCheckerScreen() {
           </View>
         </ScrollView>
       </SafeAreaView>
+
+      <PaywallModal
+        visible={paywallVisible}
+        onClose={() => setPaywallVisible(false)}
+        featureKey="symptom_checker"
+        onUnlocked={() => {
+          refreshSubscriptionAccess();
+          // Go straight to loadCondition (skips the hasAccess() re-check) —
+          // the hook's cached summary won't reflect the purchase yet even
+          // though refresh() is in flight, so re-checking here would bounce
+          // straight back to the paywall.
+          if (condition) loadCondition(condition);
+        }}
+      />
     </>
   );
 }

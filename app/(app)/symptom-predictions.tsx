@@ -8,6 +8,7 @@ import { SkeletonCard } from "../../components/Skeleton";
 import { useTheme } from "../../components/theme";
 import { getSeverityColor, getShadow, getSoftTints } from "../../components/ui-tokens";
 import { useAsyncLoad } from "../../hooks/useAsyncLoad";
+import { FeatureGate } from "../../components/subscription/FeatureGate";
 import { cycleApi, type SymptomPrediction } from "../../lib/api";
 import { formatShortDate } from "../../lib/format";
 
@@ -23,6 +24,18 @@ const PHASE_ORDER = ["period", "follicular", "ovulation", "luteal"];
 type SymptomPredictionsData = { nextCycleStart: string | null; predictions: SymptomPrediction[] };
 
 export default function SymptomPredictionsScreen() {
+  return (
+    <FeatureGate
+      featureKey="symptom_predictions"
+      title="Symptom Predictions"
+      description="Per-symptom likelihood by cycle phase, based on your own logged history."
+    >
+      <SymptomPredictionsContent />
+    </FeatureGate>
+  );
+}
+
+function SymptomPredictionsContent() {
   const { colors, isDark, fonts } = useTheme();
   const softTints = getSoftTints(colors);
 

@@ -37,6 +37,9 @@ import { showPermissionModal } from "../../lib/modal-host";
 import { useTheme } from "../../components/theme";
 import { SkeletonPostList, SkeletonRow } from "../../components/Skeleton";
 import { getShadow } from "../../components/ui-tokens";
+import { useSubscriptionAccess } from "../../hooks/useSubscriptionAccess";
+import { PaywallModal } from "../subscription/PaywallModal";
+import { isFeatureLockedError } from "../../lib/api";
 import {
   communityApi,
   getWebSocketUrl,
@@ -723,6 +726,8 @@ export default function CommunityScreen() {
   const [optionsVisible, setOptionsVisible] = useState(false);
   const [createPostVisible, setCreatePostVisible] = useState(false);
   const [commentsModalVisible, setCommentsModalVisible] = useState(false);
+  const [paywallVisible, setPaywallVisible] = useState(false);
+  const { hasAccess, refresh: refreshSubscriptionAccess } = useSubscriptionAccess();
 
   // Selected Context Holders
   const [activePost, setActivePost] = useState<Post | null>(null);
@@ -1100,6 +1105,14 @@ export default function CommunityScreen() {
       setCreatePostVisible(false);
       earnTokens(5);
     } catch (error) {
+      // The client-side hasAccess() check above is optimistic (cached), so
+      // the server's own gate can still fire here if access lapsed since —
+      // route that case to the paywall instead of a generic error.
+      if (isFeatureLockedError(error)) {
+        setCreatePostVisible(false);
+        setPaywallVisible(true);
+        return;
+      }
       alert(
         "Couldn't publish post",
         error instanceof Error ? error.message : "Please try again.",
@@ -1765,7 +1778,13 @@ export default function CommunityScreen() {
           {canPost && (
             <TouchableOpacity
               activeOpacity={0.9}
-              onPress={() => setCreatePostVisible(true)}
+              onPress={() => {
+                if (!hasAccess("community_posting")) {
+                  setPaywallVisible(true);
+                  return;
+                }
+                setCreatePostVisible(true);
+              }}
               accessibilityRole="button"
               accessibilityLabel="Create a new post"
               className="absolute bottom-28 right-6 w-14 h-14 rounded-full items-center justify-center border"
@@ -1780,6 +1799,16 @@ export default function CommunityScreen() {
           )}
         </View>
       </SafeAreaView>
+
+      <PaywallModal
+        visible={paywallVisible}
+        onClose={() => setPaywallVisible(false)}
+        featureKey="community_posting"
+        onUnlocked={() => {
+          refreshSubscriptionAccess();
+          setCreatePostVisible(true);
+        }}
+      />
 
       {/* --- MODAL FEATURE 1: COMPOSE FRESH POST SHEET --- */}
       <Modal

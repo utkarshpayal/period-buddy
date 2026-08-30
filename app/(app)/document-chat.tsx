@@ -22,7 +22,16 @@ import { getSoftTints } from "../../components/ui-tokens";
 import { VoiceModeOverlay, type VoiceStatus } from "../../components/VoiceModeOverlay";
 import { useVoiceInput } from "../../hooks/useVoiceInput";
 import { alert } from "../../lib/alert";
-import { documentApi, speechApi, type DocumentChatMessage, type Language, type LanguageCode } from "../../lib/api";
+import { useSubscriptionAccess } from "../../hooks/useSubscriptionAccess";
+import { PaywallModal } from "../../components/subscription/PaywallModal";
+import {
+  documentApi,
+  isFeatureLockedError,
+  speechApi,
+  type DocumentChatMessage,
+  type Language,
+  type LanguageCode,
+} from "../../lib/api";
 import { resolveAudioUri } from "../../lib/audio";
 import { SUPPORTED_LANGUAGES } from "../../lib/languages";
 
@@ -49,6 +58,20 @@ export default function DocumentChatScreen() {
   const [synthesizingMessageId, setSynthesizingMessageId] = useState<string | null>(null);
   const [voiceMode, setVoiceMode] = useState(false);
   const playerRef = useRef<AudioPlayer | null>(null);
+  const [paywallVisible, setPaywallVisible] = useState(false);
+  const { hasAccess, isLoading: subscriptionLoading, refresh: refreshSubscriptionAccess } =
+    useSubscriptionAccess();
+
+  // This whole screen is the premium feature — show the paywall the moment
+  // it's clear the user can't use it, not after they've typed and sent a
+  // message. Waits for subscriptionLoading to resolve first so a locked
+  // user doesn't see the chat UI flash before the paywall takes over.
+  useEffect(() => {
+    if (!subscriptionLoading && !hasAccess("document_chat")) {
+      setPaywallVisible(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subscriptionLoading]);
 
   const { handleMicPress, isRecording, isTranscribing, level } = useVoiceInput({
     language,
@@ -147,6 +170,10 @@ export default function DocumentChatScreen() {
   async function handleSend(overrideText?: string) {
     const text = (overrideText ?? typedMessage).trim();
     if (!text || isReplying) return;
+    if (!hasAccess("document_chat")) {
+      setPaywallVisible(true);
+      return;
+    }
 
     setTypedMessage("");
     setIsReplying(true);
@@ -171,7 +198,11 @@ export default function DocumentChatScreen() {
     } catch (error) {
       setMessages((prev) => prev.filter((m) => m._id !== optimisticId));
       setTypedMessage(text);
-      alert("Message failed", error instanceof Error ? error.message : "Please try again.");
+      if (isFeatureLockedError(error)) {
+        setPaywallVisible(true);
+      } else {
+        alert("Message failed", error instanceof Error ? error.message : "Please try again.");
+      }
     } finally {
       setIsReplying(false);
       scrollToEnd();
@@ -499,6 +530,13 @@ export default function DocumentChatScreen() {
           status={voiceStatus}
         />
       ) : null}
+
+      <PaywallModal
+        visible={paywallVisible}
+        onClose={() => setPaywallVisible(false)}
+        featureKey="document_chat"
+        onUnlocked={refreshSubscriptionAccess}
+      />
     </>
   );
 }
