@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { ActivityIndicator, Modal, View } from "react-native";
 import { WebView } from "react-native-webview";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "./theme";
 
 export type CashfreeResult =
@@ -29,6 +30,7 @@ type Props = {
  */
 export function CashfreeCheckoutModal({ visible, mode, orderId, paymentSessionId, onResult }: Props) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const html = useMemo(() => {
     return `<!DOCTYPE html>
@@ -67,7 +69,14 @@ export function CashfreeCheckoutModal({ visible, mode, orderId, paymentSessionId
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={() => onResult({ type: "dismiss" })}>
-      <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)" }}>
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: "rgba(0,0,0,0.45)",
+          paddingTop: insets.top,
+          paddingBottom: insets.bottom,
+        }}
+      >
         <WebView
           originWhitelist={["*"]}
           source={{ html }}

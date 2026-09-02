@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import React, { useEffect, useRef, useState } from "react";
 import { KeyboardAvoidingView, Modal, Platform, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Loader } from "./Loader";
 import { useTheme } from "./theme";
 import { getSoftTints } from "./ui-tokens";
@@ -44,6 +45,7 @@ export function CashfreeUpiCollectModal({
 }) {
   const { colors, fonts } = useTheme();
   const softTints = getSoftTints(colors);
+  const insets = useSafeAreaInsets();
 
   const [step, setStep] = useState<Step>("enter");
   const [upiId, setUpiId] = useState("");
@@ -116,8 +118,8 @@ export function CashfreeUpiCollectModal({
       <View className="flex-1 justify-end" style={{ backgroundColor: "rgba(0,0,0,0.45)" }}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
           <View
-            className="rounded-t-3xl px-6 pt-6 pb-8"
-            style={{ backgroundColor: colors.background }}
+            className="rounded-t-3xl px-6 pt-6"
+            style={{ backgroundColor: colors.background, paddingBottom: insets.bottom + 32 }}
           >
             <View className="flex-row items-center justify-between mb-5">
               <Text className="text-lg font-bold" style={{ color: colors.foreground, fontFamily: fonts.heading }}>

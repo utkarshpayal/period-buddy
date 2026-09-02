@@ -21,6 +21,7 @@ import {
   type ConsultationVideoCallHandle,
 } from "../../components/ConsultationVideoCall";
 import { EmptyState } from "../../components/EmptyState";
+import { alert } from "../../lib/alert";
 import { CashfreeCheckoutModal, type CashfreeResult } from "../../components/CashfreeCheckoutModal";
 import { CashfreeUpiCollectModal, type UpiCollectOutcome } from "../../components/CashfreeUpiCollectModal";
 import { useTheme } from "../../components/theme";
@@ -367,7 +368,11 @@ export default function ConsultationScreen() {
       setUseHostedCheckout(false);
       setCheckoutOrder(order);
       // setBooking(false) happens once the checkout modal resolves.
-    } catch {
+    } catch (err) {
+      // Previously swallowed silently, which on a failed/timed-out
+      // createOrder call (e.g. no network reaching the backend) made
+      // tapping "Book & Pay" look like it did nothing at all.
+      alert("Couldn't start checkout", getFriendlyErrorMessage(err));
       setBooking(false);
     }
   };
