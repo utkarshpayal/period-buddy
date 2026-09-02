@@ -4,7 +4,8 @@ import { ActivityIndicator, Modal, ScrollView, Text, TouchableOpacity, View } fr
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../theme";
 import { CouponField } from "./CouponField";
-import { RazorpayCheckoutModal, type RazorpayResult } from "../RazorpayCheckoutModal";
+import { CashfreeCheckoutModal, type CashfreeResult } from "../CashfreeCheckoutModal";
+import { CashfreeUpiCollectModal, type UpiCollectOutcome } from "../CashfreeUpiCollectModal";
 import { showAlert } from "../../lib/modal-host";
 import {
   getFriendlyErrorMessage,
@@ -39,8 +40,8 @@ type Props = {
  * The paywall: shows the specific locked feature's standalone price, plus
  * any plan that would also unlock it, so the user can buy either à la
  * carte or as a bundle. Purchase flow mirrors the doctor-consultation
- * booking screen exactly: create a Razorpay order, run
- * RazorpayCheckoutModal's hosted checkout, then verify the signature.
+ * booking screen exactly: create a Cashfree order, run
+ * CashfreeCheckoutModal's hosted checkout, then verify the order.
  */
 export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }: Props) {
   const { colors, fonts } = useTheme();
@@ -48,6 +49,10 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
   const [loadingInfo, setLoadingInfo] = useState(!lock);
   const [purchasingKey, setPurchasingKey] = useState<string | null>(null);
   const [checkout, setCheckout] = useState<SubscriptionOrder | null>(null);
+  // UPI ID entry (native, in-app UI) is the default; tapping "Pay another
+  // way" switches to CashfreeCheckoutModal's hosted page for cards/
+  // netbanking/other UPI apps.
+  const [useHostedCheckout, setUseHostedCheckout] = useState(false);
 
   // Coupon is previewed against the primary "buy just this feature" item —
   // the modal's clear default action — but the same code still rides along
@@ -132,7 +137,7 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
     setCouponError(null);
   };
 
-  // Unlocked instantly by a 100%-off coupon — no Razorpay order exists to
+  // Unlocked instantly by a 100%-off coupon — no Cashfree order exists to
   // check out with, so this skips straight to the same "purchase complete"
   // handling handleCheckoutResult does after a real payment.
   const finishFreeUnlock = () => {
@@ -157,6 +162,7 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
         finishFreeUnlock();
         return;
       }
+      setUseHostedCheckout(false);
       setCheckout(order);
     } catch (err) {
       showAlert("Couldn't start checkout", getFriendlyErrorMessage(err));
@@ -165,7 +171,13 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
     }
   };
 
-  const handleCheckoutResult = async (result: RazorpayResult) => {
+  const finalizeUnlocked = () => {
+    showAlert("Unlocked!", "Your purchase is active.", undefined, { icon: "checkmark-circle" });
+    onUnlocked?.();
+    onClose();
+  };
+
+  const handleCheckoutResult = async (result: CashfreeResult) => {
     const order = checkout;
     setCheckout(null);
     if (!order) return;
@@ -179,23 +191,46 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
     try {
       await subscriptionApi.verifyPayment({
         entitlementId: order.entitlementId,
-        razorpay_order_id: result.razorpay_order_id,
-        razorpay_payment_id: result.razorpay_payment_id,
-        razorpay_signature: result.razorpay_signature,
+        orderId: result.orderId,
       });
-      showAlert("Unlocked!", "Your purchase is active.", undefined, { icon: "checkmark-circle" });
-      onUnlocked?.();
-      onClose();
+      finalizeUnlocked();
     } catch (err) {
       showAlert("Couldn't confirm payment", getFriendlyErrorMessage(err));
     }
+  };
+
+  // Polled by CashfreeUpiCollectModal every few seconds while the user
+  // approves the request in their UPI app — "pending" (a still-open
+  // Cashfree order) is distinct from "failed" so the modal keeps waiting
+  // instead of giving up on the first unapproved check.
+  const verifyUpiOnce = async (orderId: string): Promise<"paid" | "pending" | "failed"> => {
+    if (!checkout) return "failed";
+    try {
+      const result = await subscriptionApi.verifyPayment({ entitlementId: checkout.entitlementId, orderId });
+      return "pending" in result ? "pending" : "paid";
+    } catch {
+      return "failed";
+    }
+  };
+
+  const handleUpiOutcome = (result: UpiCollectOutcome) => {
+    if (result.type === "dismiss") {
+      setCheckout(null);
+      return;
+    }
+    setCheckout(null);
+    if (result.type === "failed") {
+      showAlert("Payment failed", result.message ?? "The payment didn't go through. You haven't been charged.");
+      return;
+    }
+    finalizeUnlocked();
   };
 
   return (
     <Modal
       // Two native Modals presenting at once is unreliable (iOS/Android both
       // refuse to stack a second one on top cleanly) — hide this one the
-      // instant a Razorpay order exists so RazorpayCheckoutModal's own
+      // instant a Cashfree order exists so CashfreeCheckoutModal's own
       // Modal is the only one on screen, instead of the checkout sheet
       // silently failing to appear behind this pageSheet.
       visible={visible && !checkout}
@@ -356,18 +391,27 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
       </SafeAreaView>
 
       {/* checkout is only ever set from the non-free branch of startPurchase,
-          which never reaches setCheckout without a real Razorpay order — so
-          keyId/orderId (optional on SubscriptionOrder because a free order
-          has neither) are always present here. */}
-      {checkout && checkout.orderId && checkout.keyId && (
-        <RazorpayCheckoutModal
+          which never reaches setCheckout without a real Cashfree order — so
+          orderId/paymentSessionId (optional on SubscriptionOrder because a
+          free order has neither) are always present here. UPI ID entry is
+          the default, native-UI path; "Pay another way" switches to the
+          hosted checkout for cards/netbanking/other UPI apps. */}
+      {checkout && checkout.orderId && checkout.paymentSessionId && !useHostedCheckout && (
+        <CashfreeUpiCollectModal
           visible
-          keyId={checkout.keyId}
+          mode={checkout.cashfreeMode ?? "production"}
+          paymentSessionId={checkout.paymentSessionId}
+          onVerify={() => verifyUpiOnce(checkout.orderId!)}
+          onOutcome={handleUpiOutcome}
+          onUseOtherMethod={() => setUseHostedCheckout(true)}
+        />
+      )}
+      {checkout && checkout.orderId && checkout.paymentSessionId && useHostedCheckout && (
+        <CashfreeCheckoutModal
+          visible
+          mode={checkout.cashfreeMode ?? "production"}
           orderId={checkout.orderId}
-          amount={checkout.amount}
-          currency={checkout.currency}
-          name="Nura Premium"
-          description={info?.feature.name ?? "Premium access"}
+          paymentSessionId={checkout.paymentSessionId}
           onResult={handleCheckoutResult}
         />
       )}

@@ -7,7 +7,8 @@ import { LoadingErrorState } from "../../components/LoadingErrorState";
 import { EmptyState } from "../../components/EmptyState";
 import { useTheme } from "../../components/theme";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
-import { RazorpayCheckoutModal, type RazorpayResult } from "../../components/RazorpayCheckoutModal";
+import { CashfreeCheckoutModal, type CashfreeResult } from "../../components/CashfreeCheckoutModal";
+import { CashfreeUpiCollectModal, type UpiCollectOutcome } from "../../components/CashfreeUpiCollectModal";
 import { showAlert } from "../../lib/modal-host";
 import { formatShortDate } from "../../lib/format";
 import {
@@ -47,7 +48,7 @@ export default function SubscriptionScreen() {
 
   const [purchasingKey, setPurchasingKey] = useState<string | null>(null);
   const [checkout, setCheckout] = useState<SubscriptionOrder | null>(null);
-  const [checkoutLabel, setCheckoutLabel] = useState("");
+  const [useHostedCheckout, setUseHostedCheckout] = useState(false);
 
   // This screen lists many purchasable items (several plans + features), so
   // unlike PaywallModal's single-item paywall there's no one thing to
@@ -109,7 +110,7 @@ export default function SubscriptionScreen() {
         load();
         return;
       }
-      setCheckoutLabel(label);
+      setUseHostedCheckout(false);
       setCheckout(order);
     } catch (err) {
       showAlert("Couldn't start checkout", getFriendlyErrorMessage(err));
@@ -118,7 +119,7 @@ export default function SubscriptionScreen() {
     }
   };
 
-  const handleCheckoutResult = async (result: RazorpayResult) => {
+  const handleCheckoutResult = async (result: CashfreeResult) => {
     const order = checkout;
     setCheckout(null);
     if (!order || result.type === "dismiss") return;
@@ -129,15 +130,35 @@ export default function SubscriptionScreen() {
     try {
       await subscriptionApi.verifyPayment({
         entitlementId: order.entitlementId,
-        razorpay_order_id: result.razorpay_order_id,
-        razorpay_payment_id: result.razorpay_payment_id,
-        razorpay_signature: result.razorpay_signature,
+        orderId: result.orderId,
       });
       showAlert("Unlocked!", "Your purchase is active.", undefined, { icon: "checkmark-circle" });
       load();
     } catch (err) {
       showAlert("Couldn't confirm payment", getFriendlyErrorMessage(err));
     }
+  };
+
+  // See PaywallModal's identically-shaped verifyUpiOnce/handleUpiOutcome.
+  const verifyUpiOnce = async (orderId: string): Promise<"paid" | "pending" | "failed"> => {
+    if (!checkout) return "failed";
+    try {
+      const result = await subscriptionApi.verifyPayment({ entitlementId: checkout.entitlementId, orderId });
+      return "pending" in result ? "pending" : "paid";
+    } catch {
+      return "failed";
+    }
+  };
+
+  const handleUpiOutcome = (result: UpiCollectOutcome) => {
+    setCheckout(null);
+    if (result.type === "dismiss") return;
+    if (result.type === "failed") {
+      showAlert("Payment failed", result.message ?? "The payment didn't go through. You haven't been charged.");
+      return;
+    }
+    showAlert("Unlocked!", "Your purchase is active.", undefined, { icon: "checkmark-circle" });
+    load();
   };
 
   const entitlementLabel = (e: Entitlement) => {
@@ -417,18 +438,27 @@ export default function SubscriptionScreen() {
       </SafeAreaView>
 
       {/* checkout is only ever set from startPurchase's non-free branch,
-          which never reaches setCheckout without a real Razorpay order — so
-          keyId/orderId (optional on SubscriptionOrder because a free order
-          has neither) are always present here. */}
-      {checkout && checkout.orderId && checkout.keyId && (
-        <RazorpayCheckoutModal
+          which never reaches setCheckout without a real Cashfree order — so
+          orderId/paymentSessionId (optional on SubscriptionOrder because a
+          free order has neither) are always present here. UPI ID entry is
+          the default, native-UI path; "Pay another way" switches to the
+          hosted checkout for cards/netbanking/other UPI apps. */}
+      {checkout && checkout.orderId && checkout.paymentSessionId && !useHostedCheckout && (
+        <CashfreeUpiCollectModal
           visible
-          keyId={checkout.keyId}
+          mode={checkout.cashfreeMode ?? "production"}
+          paymentSessionId={checkout.paymentSessionId}
+          onVerify={() => verifyUpiOnce(checkout.orderId!)}
+          onOutcome={handleUpiOutcome}
+          onUseOtherMethod={() => setUseHostedCheckout(true)}
+        />
+      )}
+      {checkout && checkout.orderId && checkout.paymentSessionId && useHostedCheckout && (
+        <CashfreeCheckoutModal
+          visible
+          mode={checkout.cashfreeMode ?? "production"}
           orderId={checkout.orderId}
-          amount={checkout.amount}
-          currency={checkout.currency}
-          name="Nura Premium"
-          description={checkoutLabel}
+          paymentSessionId={checkout.paymentSessionId}
           onResult={handleCheckoutResult}
         />
       )}

@@ -760,42 +760,24 @@ export default function Tracker() {
   }, [loadDashboard, loadSettings, loadYearLogs]);
 
   // Scrolls the stacked 12-month calendar to whichever month is selected.
-  // The very first time (on mount, landing on today's month) jumps instantly
-  // with no animation — the month list stays hidden (calendarRevealAnim)
-  // until that jump has landed, then fades in already in the right place,
-  // so opening the tracker never shows a visible "scrolling to current
-  // month" motion. Any later change (chevrons, "Today") scrolls smoothly,
-  // since by then it's a deliberate, visible user action.
+  // The very first time (on mount, landing on today's month) it does NOT
+  // auto-scroll the page — the calendar just reveals in place at the top,
+  // and the current month is highlighted via the "Today" circle/pill
+  // instead of the whole page jumping down to it. Any later change
+  // (chevrons, "Today") scrolls smoothly, since by then it's a deliberate,
+  // visible user action.
   useEffect(() => {
     if (monthLayouts[selectedMonthIndex] === undefined) return;
     const y = monthLayouts[selectedMonthIndex] + 280; // Offset to account for top headers
 
     if (!hasInitialScrolled.current) {
-      // Claimed immediately (not after the scroll) so a *second* onLayout
-      // arriving before the rAFs below fire can't re-enter this branch and
-      // schedule a duplicate jump.
       hasInitialScrolled.current = true;
-      // Expanding the container from its clamped loading height to its true
-      // (tall) height is itself a state update — the native side hasn't
-      // re-measured to that new height yet on this same tick. Calling
-      // scrollTo() here would target a y position beyond what the
-      // still-360px-tall scroll content currently allows, so it silently
-      // clamps short and the jump visibly fails. Reveal first, wait two
-      // frames for that re-layout to actually land (one for React to
-      // re-render, one for the native/DOM side to paint the new height —
-      // this is what makes the race reproduce identically on web and
-      // native), then scroll and fade in already in place.
       setIsCalendarRevealed(true);
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          mainScrollRef.current?.scrollTo({ y, animated: false });
-          Animated.timing(calendarRevealAnim, {
-            toValue: 1,
-            duration: 220,
-            useNativeDriver: true,
-          }).start();
-        });
-      });
+      Animated.timing(calendarRevealAnim, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true,
+      }).start();
     } else {
       mainScrollRef.current?.scrollTo({ y, animated: true });
     }

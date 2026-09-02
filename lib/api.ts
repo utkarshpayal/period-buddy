@@ -471,7 +471,11 @@ export type ConsultationOrder = {
   orderId?: string;
   amount?: number;
   currency?: string;
-  keyId?: string;
+  // Cashfree checkout session token for CashfreeCheckoutModal — absent
+  // whenever `consultation` is present (no order was created).
+  paymentSessionId?: string;
+  /** "sandbox" | "production", passed straight through to Cashfree's JS SDK. */
+  cashfreeMode?: "sandbox" | "production";
 };
 
 export type PartnerProfile = {
@@ -1250,13 +1254,12 @@ export const consultationApi = {
       method: "POST",
     }),
 
-  verifyPayment: (payload: {
-    consultationId: string;
-    razorpay_order_id: string;
-    razorpay_payment_id: string;
-    razorpay_signature: string;
-  }) =>
-    apiRequest<Consultation>("/api/consultation/verify", {
+  // A pending UPI-collect approval (or any other still-open Cashfree
+  // order) comes back as { pending: true } rather than a Consultation —
+  // callers polling this (CashfreeUpiCollectModal) must check for that
+  // shape before treating the response as a booked session.
+  verifyPayment: (payload: { consultationId: string; orderId: string }) =>
+    apiRequest<Consultation | { pending: true }>("/api/consultation/verify", {
       body: JSON.stringify(payload),
       method: "POST",
     }),
@@ -1289,7 +1292,7 @@ export const consultationApi = {
 };
 
 /* ------------------------------ Subscriptions ------------------------------ */
-// Feature-wise + plan-wise paid access. Same order->RazorpayCheckoutModal->
+// Feature-wise + plan-wise paid access. Same order->CashfreeCheckoutModal->
 // verify flow as consultationApi above; see period-buddy-be's
 // subscriptionController.js for the server side.
 
@@ -1343,16 +1346,18 @@ export type MySubscription = {
   unlockedFeatureKeys: "ALL" | string[];
 };
 
-// `orderId`/`keyId` are absent when `free` is true — a 100%-off coupon
-// activates the entitlement immediately server-side, with no Razorpay order
-// created at all. Always check `free` before touching either field.
+// `orderId`/`paymentSessionId` are absent when `free` is true — a 100%-off
+// coupon activates the entitlement immediately server-side, with no
+// Cashfree order created at all. Always check `free` before touching
+// either field.
 export type SubscriptionOrder = {
   entitlementId: string;
   free: boolean;
   orderId?: string;
   amount: number;
   currency: string;
-  keyId?: string;
+  paymentSessionId?: string;
+  cashfreeMode?: "sandbox" | "production";
 };
 
 export type DiscountType = "percentage" | "flat";
@@ -1366,7 +1371,7 @@ export type CouponPreview = {
   finalAmount: number;
   currency: string;
   /** True when this coupon brings the price to ₹0 — purchasing skips
-   * Razorpay checkout entirely (see createOrder's `free` response field). */
+   * Cashfree checkout entirely (see createOrder's `free` response field). */
   free: boolean;
 };
 
@@ -1400,13 +1405,10 @@ export const subscriptionApi = {
       method: "POST",
     }),
 
-  verifyPayment: (payload: {
-    entitlementId: string;
-    razorpay_order_id: string;
-    razorpay_payment_id: string;
-    razorpay_signature: string;
-  }) =>
-    apiRequest<Entitlement>("/api/subscriptions/verify", {
+  // See consultationApi.verifyPayment's note — a still-open Cashfree order
+  // (e.g. an unapproved UPI collect request) comes back as { pending: true }.
+  verifyPayment: (payload: { entitlementId: string; orderId: string }) =>
+    apiRequest<Entitlement | { pending: true }>("/api/subscriptions/verify", {
       body: JSON.stringify(payload),
       method: "POST",
     }),

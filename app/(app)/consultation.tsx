@@ -21,7 +21,8 @@ import {
   type ConsultationVideoCallHandle,
 } from "../../components/ConsultationVideoCall";
 import { EmptyState } from "../../components/EmptyState";
-import { RazorpayCheckoutModal, type RazorpayResult } from "../../components/RazorpayCheckoutModal";
+import { CashfreeCheckoutModal, type CashfreeResult } from "../../components/CashfreeCheckoutModal";
+import { CashfreeUpiCollectModal, type UpiCollectOutcome } from "../../components/CashfreeUpiCollectModal";
 import { useTheme } from "../../components/theme";
 import { SkeletonRow } from "../../components/Skeleton";
 import {
@@ -145,6 +146,7 @@ export default function ConsultationScreen() {
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
   const [booking, setBooking] = useState(false);
   const [checkoutOrder, setCheckoutOrder] = useState<ConsultationOrder | null>(null);
+  const [useHostedCheckout, setUseHostedCheckout] = useState(false);
 
   // Slot Selection — driven by the doctor's real published availability. The
   // user first picks a bookable date (today or any future day the gynac is
@@ -362,6 +364,7 @@ export default function ConsultationScreen() {
         setTimeout(() => openChat(order.consultation!), 400);
         return;
       }
+      setUseHostedCheckout(false);
       setCheckoutOrder(order);
       // setBooking(false) happens once the checkout modal resolves.
     } catch {
@@ -369,7 +372,7 @@ export default function ConsultationScreen() {
     }
   };
 
-  const handleCheckoutResult = async (result: RazorpayResult) => {
+  const handleCheckoutResult = async (result: CashfreeResult) => {
     const order = checkoutOrder;
     setCheckoutOrder(null);
 
@@ -379,19 +382,63 @@ export default function ConsultationScreen() {
     }
 
     try {
-      const consultation = await consultationApi.verifyPayment({
+      const verified = await consultationApi.verifyPayment({
         consultationId: order.consultationId!,
-        razorpay_order_id: result.razorpay_order_id,
-        razorpay_payment_id: result.razorpay_payment_id,
-        razorpay_signature: result.razorpay_signature,
+        orderId: result.orderId,
       });
-      setMyConsultations((prev) => [consultation, ...prev]);
-      setTimeout(() => openChat(consultation), 400);
+      // The hosted checkout only calls verify after the sheet reports a
+      // completed payment, so a "pending" Cashfree order here would be
+      // unexpected — treat it the same as a failed verification rather
+      // than granting a session.
+      if (!("pending" in verified)) {
+        setMyConsultations((prev) => [verified, ...prev]);
+        setTimeout(() => openChat(verified), 400);
+      }
     } catch {
-      // Payment succeeded on Razorpay's side but our verification failed —
+      // Payment succeeded on Cashfree's side but our verification failed —
       // don't silently grant a session; the user can retry booking.
     } finally {
       setBooking(false);
+    }
+  };
+
+  // See PaywallModal's identically-shaped verifyUpiOnce/handleUpiOutcome.
+  const verifyUpiOnce = async (orderId: string): Promise<"paid" | "pending" | "failed"> => {
+    if (!checkoutOrder) return "failed";
+    try {
+      const result = await consultationApi.verifyPayment({
+        consultationId: checkoutOrder.consultationId!,
+        orderId,
+      });
+      return "pending" in result ? "pending" : "paid";
+    } catch {
+      return "failed";
+    }
+  };
+
+  const handleUpiOutcome = async (result: UpiCollectOutcome) => {
+    const order = checkoutOrder;
+    setCheckoutOrder(null);
+    setBooking(false);
+    if (result.type === "dismiss" || !order) return;
+    if (result.type === "failed") return;
+
+    // The polling in CashfreeUpiCollectModal already confirmed the order is
+    // PAID — one more verify call both re-confirms and fetches the now-
+    // active Consultation to open.
+    try {
+      const consultation = await consultationApi.verifyPayment({
+        consultationId: order.consultationId!,
+        orderId: order.orderId!,
+      });
+      if (!("pending" in consultation)) {
+        setMyConsultations((prev) => [consultation, ...prev]);
+        setTimeout(() => openChat(consultation), 400);
+      }
+    } catch {
+      // Already paid per the poll above; a transient failure here just
+      // means the chat doesn't open immediately — the session still shows
+      // up next time "My Consultations" loads.
     }
   };
 
@@ -1007,16 +1054,25 @@ export default function ConsultationScreen() {
           />
         )}
 
-        {/* Razorpay Checkout */}
-        {checkoutOrder && (
-          <RazorpayCheckoutModal
+        {/* Cashfree Checkout — UPI ID entry is the default, native-UI path;
+            "Pay another way" switches to the hosted checkout for cards/
+            netbanking/other UPI apps. */}
+        {checkoutOrder && !useHostedCheckout && (
+          <CashfreeUpiCollectModal
             visible
-            keyId={checkoutOrder.keyId!}
+            mode={checkoutOrder.cashfreeMode ?? "production"}
+            paymentSessionId={checkoutOrder.paymentSessionId!}
+            onVerify={() => verifyUpiOnce(checkoutOrder.orderId!)}
+            onOutcome={handleUpiOutcome}
+            onUseOtherMethod={() => setUseHostedCheckout(true)}
+          />
+        )}
+        {checkoutOrder && useHostedCheckout && (
+          <CashfreeCheckoutModal
+            visible
+            mode={checkoutOrder.cashfreeMode ?? "production"}
             orderId={checkoutOrder.orderId!}
-            amount={checkoutOrder.amount!}
-            currency={checkoutOrder.currency!}
-            name="Period Buddy"
-            description={selectedDoctor ? `Consultation with ${getDoctorDisplayName(selectedDoctor)}` : "Consultation"}
+            paymentSessionId={checkoutOrder.paymentSessionId!}
             onResult={handleCheckoutResult}
           />
         )}
