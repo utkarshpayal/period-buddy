@@ -72,7 +72,7 @@ function SchemeCard({ scheme }: { scheme: GovernmentBenefit }) {
             >
               <Text
                 className="text-[10px] font-bold"
-                style={{ color: colors.accent, fontFamily: fonts.body }}
+                style={{ color: colors.accentText, fontFamily: fonts.body }}
               >
                 {scheme.governmentLevel === "central"
                   ? "Central"

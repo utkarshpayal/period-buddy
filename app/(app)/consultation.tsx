@@ -381,15 +381,28 @@ export default function ConsultationScreen() {
     const order = checkoutOrder;
     setCheckoutOrder(null);
 
-    if (!order || result.type !== "success") {
+    if (!order) {
+      setBooking(false);
+      return;
+    }
+    if (result.type !== "success" && result.type !== "dismiss") {
       setBooking(false);
       return;
     }
 
+    // A dismiss is usually a genuine cancel, but it's also what happens if
+    // the checkout is closed the instant after a redirect-based method
+    // (netbanking/wallet/other UPI app) finishes — before
+    // CashfreeCheckoutModal's own return_url interception fires. Verifying
+    // with the order's own id (rather than trusting result.orderId, which a
+    // dismiss doesn't carry) catches that case; a real cancel just resolves
+    // to "pending"/an error below and stays quiet.
+    const orderId = result.type === "success" ? result.orderId : order.orderId!;
+
     try {
       const verified = await consultationApi.verifyPayment({
         consultationId: order.consultationId!,
-        orderId: result.orderId,
+        orderId,
       });
       // The hosted checkout only calls verify after the sheet reports a
       // completed payment, so a "pending" Cashfree order here would be

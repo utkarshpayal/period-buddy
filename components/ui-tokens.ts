@@ -123,14 +123,16 @@ export function getLogCategoryTints(colors: ThemeColors) {
     flow: { color: colors.rose, light: colors.roseLight },
     ovulation: { color: colors.success, light: colors.successLight },
     sex: { color: colors.danger, light: colors.dangerLight },
-    mood: { color: colors.accent, light: colors.accentLight },
+    // color uses accentText (not accent) — accent itself is a ~1.6:1 mint
+    // wash, unreadable as the icon/text foreground this pairs with.
+    mood: { color: colors.accentText, light: colors.accentLight },
     symptoms: { color: colors.warning, light: colors.warningLight },
     discharge: { color: colors.sky, light: colors.skyLight },
     digestion: { color: colors.secondary, light: colors.secondaryLight },
     pregnancy: { color: colors.gold, light: colors.goldLight },
     activity: { color: colors.success, light: colors.successLight },
     energy: { color: colors.secondary, light: colors.secondaryLight },
-    skin: { color: colors.accent, light: colors.accentLight },
+    skin: { color: colors.accentText, light: colors.accentLight },
   };
 }
 

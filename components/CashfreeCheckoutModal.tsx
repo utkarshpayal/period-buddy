@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { ActivityIndicator, Modal, View } from "react-native";
+import { ActivityIndicator, Linking, Modal, View } from "react-native";
 import { WebView } from "react-native-webview";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "./theme";
@@ -22,11 +22,15 @@ type Props = {
  * Cashfree's JS SDK (v3) runs entirely inside a webpage — same reason
  * RazorpayCheckoutModal uses a WebView instead of a native SDK (no New
  * Architecture support to rely on for a native module here either), so this
- * mirrors that component's shape. `checkout()` resolves in-page for a
- * `_modal` target (no redirect/return URL needed), unlike Razorpay's
- * handler-callback style. Cashfree's flow surfaces UPI (intent + collect),
- * cards, netbanking, and wallets automatically — no separate UPI wiring
- * needed here, same as Razorpay's default checkout.
+ * mirrors that component's shape. `checkout()` resolves in-page via
+ * postMessage for cards/UPI Collect under a `_modal` target, unlike
+ * Razorpay's handler-callback style — but netbanking, wallets, and "other
+ * UPI app" still redirect the page itself, so `handleShouldStartLoad` below
+ * covers those: it intercepts navigation to order_meta.return_url as a
+ * second success signal, and hands off non-http(s) UPI-app URLs to the OS
+ * (a bare WebView can't launch those on its own). Cashfree's flow surfaces
+ * UPI (intent + collect), cards, netbanking, and wallets automatically — no
+ * separate UPI wiring needed here, same as Razorpay's default checkout.
  */
 export function CashfreeCheckoutModal({ visible, mode, orderId, paymentSessionId, onResult }: Props) {
   const { colors } = useTheme();
@@ -65,6 +69,40 @@ export function CashfreeCheckoutModal({ visible, mode, orderId, paymentSessionId
 </html>`;
   }, [mode, orderId, paymentSessionId]);
 
+  // Cards and UPI Collect resolve entirely inside the `_modal` iframe, so
+  // the checkout()/postMessage path above is all they need. Netbanking,
+  // wallets, and "pay via other UPI app" don't — they hand off to a real
+  // bank page or external app and only signal completion by navigating back
+  // to order_meta.return_url (see cashfreeClient.js#createOrder). Without
+  // this handler that hand-off either lands on a page whose JS context has
+  // nothing wired to postMessage (checkout looks "stuck" after a successful
+  // payment), or — for a non-http(s) UPI app scheme — never navigates the
+  // WebView at all (tapping the UPI app does nothing).
+  // Only intercept schemes we actually recognize as "hand this to a UPI
+  // app" — defaulting to "block anything non-http(s)" instead would also
+  // swallow the WebView's own internal navigations (about:blank, data:/blob:
+  // URIs some pages use for embedded receipts/images, etc.), silently
+  // breaking the checkout page itself on some platform/WebView versions.
+  // Failing open (returning true, same as before this handler existed) for
+  // anything unrecognized is a strictly smaller risk than failing closed.
+  const UPI_APP_SCHEME = /^(upi|intent|tez|phonepe|paytmmp|paytm|bhim|gpay|googlepay|whatsapp|amazonpay):/i;
+
+  const handleShouldStartLoad = (request: { url: string }): boolean => {
+    const { url } = request;
+    if (!url) return true;
+    if (url.includes("/api/payments/return") && url.includes(orderId)) {
+      onResult({ type: "success", orderId });
+      return false;
+    }
+    if (UPI_APP_SCHEME.test(url)) {
+      // Hand off to the OS so the actual UPI app launches instead of the
+      // WebView silently no-op'ing on a scheme it can't navigate to.
+      Linking.openURL(url).catch(() => {});
+      return false;
+    }
+    return true;
+  };
+
   if (!visible) return null;
 
   return (
@@ -80,6 +118,7 @@ export function CashfreeCheckoutModal({ visible, mode, orderId, paymentSessionId
         <WebView
           originWhitelist={["*"]}
           source={{ html }}
+          onShouldStartLoadWithRequest={handleShouldStartLoad}
           onMessage={(event) => {
             try {
               onResult(JSON.parse(event.nativeEvent.data));

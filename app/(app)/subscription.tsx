@@ -122,18 +122,49 @@ export default function SubscriptionScreen() {
   const handleCheckoutResult = async (result: CashfreeResult) => {
     const order = checkout;
     setCheckout(null);
-    if (!order || result.type === "dismiss") return;
+    if (!order) return;
+
+    if (result.type === "dismiss") {
+      // A dismiss is usually a genuine cancel, but it's also what happens
+      // if the user closes the checkout the instant after a redirect-based
+      // method (netbanking/wallet/other UPI app) finishes — before
+      // CashfreeCheckoutModal's own return_url interception fires. One
+      // silent verify check catches that case and unlocks anyway; a real
+      // cancel just resolves to "pending"/an error here and stays quiet.
+      // See PaywallModal.tsx's identically-shaped handling.
+      try {
+        const verified = await subscriptionApi.verifyPayment({
+          entitlementId: order.entitlementId,
+          orderId: order.orderId!,
+        });
+        if (!("pending" in verified)) {
+          showAlert("Unlocked!", "Your purchase is active.", undefined, { icon: "checkmark-circle" });
+          load();
+        }
+      } catch {
+        // Genuine cancel — nothing was charged, stay quiet.
+      }
+      return;
+    }
     if (result.type === "failed") {
       showAlert("Payment failed", "The payment didn't go through. You haven't been charged.");
       return;
     }
     try {
-      await subscriptionApi.verifyPayment({
+      const verified = await subscriptionApi.verifyPayment({
         entitlementId: order.entitlementId,
         orderId: result.orderId,
       });
-      showAlert("Unlocked!", "Your purchase is active.", undefined, { icon: "checkmark-circle" });
-      load();
+      if ("pending" in verified) {
+        // The checkout sheet just reported success, so a still-pending
+        // Cashfree order here is unexpected — say something rather than
+        // leaving the user staring at a checkout that closed with no
+        // feedback at all.
+        showAlert("Almost there", "Your payment is still processing — check My Subscription shortly.");
+      } else {
+        showAlert("Unlocked!", "Your purchase is active.", undefined, { icon: "checkmark-circle" });
+        load();
+      }
     } catch (err) {
       showAlert("Couldn't confirm payment", getFriendlyErrorMessage(err));
     }

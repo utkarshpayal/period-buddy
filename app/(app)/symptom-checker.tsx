@@ -458,7 +458,7 @@ export default function SymptomCheckerScreen() {
                   className="border p-5 mb-8"
                   style={{ backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 24, ...getShadow(colors, isDark) }}
                 >
-                  <Text className="text-xs font-black uppercase tracking-wide mb-2" style={{ color: colors.accent, fontFamily: fonts.heading }}>
+                  <Text className="text-xs font-black uppercase tracking-wide mb-2" style={{ color: colors.accentText, fontFamily: fonts.heading }}>
                     For your doctor visit
                   </Text>
                   <Text className="text-[13px] leading-5 font-medium" style={{ color: colors.foreground, fontFamily: fonts.body }}>

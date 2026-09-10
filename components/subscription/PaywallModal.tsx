@@ -182,7 +182,24 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
     setCheckout(null);
     if (!order) return;
 
-    if (result.type === "dismiss") return;
+    if (result.type === "dismiss") {
+      // A dismiss is usually a genuine cancel, but it's also what happens
+      // if the user closes the checkout the instant after a redirect-based
+      // method (netbanking/wallet/other UPI app) finishes — before
+      // CashfreeCheckoutModal's own return_url interception fires. One
+      // silent verify check catches that case and unlocks anyway; a real
+      // cancel just resolves to "pending"/an error here and stays quiet.
+      try {
+        const verified = await subscriptionApi.verifyPayment({
+          entitlementId: order.entitlementId,
+          orderId: order.orderId!,
+        });
+        if (!("pending" in verified)) finalizeUnlocked();
+      } catch {
+        // Genuine cancel — nothing was charged, stay quiet.
+      }
+      return;
+    }
     if (result.type === "failed") {
       showAlert("Payment failed", "The payment didn't go through. You haven't been charged.");
       return;

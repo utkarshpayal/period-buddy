@@ -23,6 +23,11 @@ export type ThemeColors = {
   secondaryLight: string;
   accent: string;
   accentLight: string;
+  // Darkened mint for use as TEXT/icon-foreground on a light surface —
+  // `accent` itself (~1.6:1 on white) is only safe as an icon/wash/gradient
+  // color, never as body/label text (see getLogCategoryTints's mood/skin
+  // entries and the section-header/badge text that consume this instead).
+  accentText: string;
   foreground: string;
   border: string;
   button: string;
@@ -104,6 +109,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             secondaryLight: "rgba(199, 184, 232, 0.14)",
             accent: "#8FCDBB",            // mint
             accentLight: "rgba(143, 205, 187, 0.14)",
+            // Dark-mode accent already clears ~8:1 on both surface and
+            // background as text, so no separate darkened variant is needed.
+            accentText: "#8FCDBB",
             foreground: "#F3E8ED",
             border: "#3D2E36",
             button: "#F28FB0",
@@ -145,12 +153,22 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             secondaryLight: "#EEE6FA",
             accent: "#9FD8C9",             // mint
             accentLight: "#DDF0E2",
+            // ~6.1:1 on white / ~5.1:1 on accentLight — accent itself is
+            // only ~1.6:1 as text, so this darkened mint is what actually
+            // reads as text/label color while accent stays for icon/wash use.
+            accentText: "#1F6E5B",
             foreground: "#3A2A32",
-            border: "#F3DEE6",
+            // Was #F3DEE6 (~1.3:1 vs surface/background — barely visible as
+            // an input/card outline); bumped for more definition while
+            // staying a soft, non-harsh line.
+            border: "#E3C6D2",
             button: "#E8618F",
             buttonText: "#FFFFFF",
             text: "#3A2A32",
-            mutedText: "#8B7680",
+            // Was #8B7680 (~4.2:1 on white, ~3.7:1 on background — fails or
+            // barely clears WCAG AA's 4.5:1 for normal text, and this token
+            // is used 400+ times app-wide including every placeholder).
+            mutedText: "#6E5A63",
             input: "#FCF5F7",
             success: "#3E8A5A",
             successLight: "#DDF0E2",
