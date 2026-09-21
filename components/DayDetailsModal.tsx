@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -14,6 +15,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { DayEntry } from "./AppState";
+import { alert } from "../lib/alert";
 import { useTheme } from "./theme";
 import {
   getLogCategoryTints,
@@ -169,7 +171,7 @@ export default function DayDetailsModal({
   details?: string;
   entry?: DayEntry;
   phaseLabel?: string;
-  onSaveEntry?: (entry: Omit<DayEntry, "updatedAt">) => void;
+  onSaveEntry?: (entry: Omit<DayEntry, "updatedAt">) => Promise<void> | void;
   onSaveNote?: (note: string) => void;
   onLogSymptom?: (symptom: string) => void;
   /** When set, the modal scrolls to this section on open (Home quick actions). */
@@ -205,10 +207,17 @@ export default function DayDetailsModal({
   const [selectedSkins, setSelectedSkins] = useState<NonNullable<DayEntry["skin"]>[]>([]);
   const [selectedDischarge, setSelectedDischarge] = useState<DayEntry["discharge"]>();
   const [selectedExercise, setSelectedExercise] = useState<string[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+  // Tracks whether anything has changed since this open's hydration, so an
+  // accidental backdrop tap / close doesn't silently discard real edits.
+  const [isDirty, setIsDirty] = useState(false);
+  const isHydratingRef = useRef(true);
 
   useEffect(() => {
     if (!visible) return;
 
+    isHydratingRef.current = true;
+    setIsDirty(false);
     setNoteText(entry?.note ?? details ?? "");
     setSelectedEnergy(entry?.energy);
     setSelectedFlow(entry?.flow);
@@ -241,6 +250,36 @@ export default function DayDetailsModal({
     const knownExerciseValues = new Set(exerciseOptions.map((option) => option.value));
     setSelectedExercise((entry?.exercise ?? []).filter((value) => knownExerciseValues.has(value)));
   }, [visible, details, entry]);
+
+  // Fires on every field change; the first pass after hydration (above) is
+  // just the hydration itself re-rendering, not a real edit, so it's eaten
+  // via isHydratingRef instead of marking the form dirty.
+  useEffect(() => {
+    if (!visible) return;
+    if (isHydratingRef.current) {
+      isHydratingRef.current = false;
+      return;
+    }
+    setIsDirty(true);
+  }, [
+    visible,
+    noteText,
+    selectedEnergy,
+    selectedFlow,
+    selectedMoods,
+    selectedSymptoms,
+    sleepHours,
+    waterIntake,
+    weightText,
+    tempText,
+    stressLevel,
+    medText,
+    isIntimate,
+    selectedDigestions,
+    selectedSkins,
+    selectedDischarge,
+    selectedExercise,
+  ]);
 
   // Section a Home / tracker quick action asked us to jump to, still pending a
   // scroll. Cleared once we've scrolled to it (see recordSection / the effect).
@@ -290,16 +329,63 @@ export default function DayDetailsModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, focusSection]);
 
-  function handleSave() {
-    if (onSaveEntry) {
-      const parsedWeight = parseFloat(weightText) || undefined;
-      const parsedTemp = parseFloat(tempText) || undefined;
-      const meds = medText
-        .split(",")
-        .map((m) => m.trim())
-        .filter(Boolean);
+  // Whether any section besides the symptom tags Quick Log actually saves
+  // has data in it — used to warn before Quick Log silently drops the rest.
+  function hasUnsavedByQuickLog() {
+    return (
+      selectedEnergy !== undefined ||
+      selectedFlow !== undefined ||
+      selectedMoods.length > 0 ||
+      selectedSymptoms.length > 1 ||
+      selectedDigestions.length > 0 ||
+      selectedSkins.length > 0 ||
+      selectedDischarge !== undefined ||
+      selectedExercise.length > 0 ||
+      sleepHours !== undefined ||
+      waterIntake !== undefined ||
+      weightText.trim() !== "" ||
+      tempText.trim() !== "" ||
+      stressLevel !== undefined ||
+      medText.trim() !== "" ||
+      isIntimate ||
+      noteText.trim() !== ""
+    );
+  }
 
-      onSaveEntry({
+  function confirmDiscardIfDirty(onConfirm: () => void) {
+    if (!isDirty || isSaving) {
+      onConfirm();
+      return;
+    }
+    alert(
+      "Discard changes?",
+      "You have unsaved changes to this day's log. If you close now, they'll be lost.",
+      [
+        { text: "Keep editing", style: "cancel" },
+        { text: "Discard", style: "destructive", onPress: onConfirm },
+      ],
+    );
+  }
+
+  async function handleSave() {
+    if (isSaving) return;
+
+    if (!onSaveEntry) {
+      if (onSaveNote) onSaveNote(noteText.trim());
+      onClose();
+      return;
+    }
+
+    const parsedWeight = parseFloat(weightText) || undefined;
+    const parsedTemp = parseFloat(tempText) || undefined;
+    const meds = medText
+      .split(",")
+      .map((m) => m.trim())
+      .filter(Boolean);
+
+    try {
+      setIsSaving(true);
+      await onSaveEntry({
         energy: selectedEnergy,
         flow: selectedFlow,
         // Scalar stays the primary (first) choice for backward-compat; the full
@@ -322,18 +408,42 @@ export default function DayDetailsModal({
         discharge: selectedDischarge,
         exercise: selectedExercise.length > 0 ? selectedExercise : undefined,
       });
-    } else if (onSaveNote) {
-      onSaveNote(noteText.trim());
+      onClose();
+    } catch (error) {
+      alert(
+        "Couldn't save",
+        error instanceof Error
+          ? error.message
+          : "Unable to save this day's log right now. Please try again.",
+      );
+    } finally {
+      setIsSaving(false);
     }
-
-    onClose();
   }
 
-  function handleLog() {
+  function performQuickLog() {
     const symptom = selectedSymptoms[0] ?? "general";
 
     if (onLogSymptom) onLogSymptom(symptom);
     onClose();
+  }
+
+  function handleLog() {
+    if (isSaving) return;
+
+    if (hasUnsavedByQuickLog()) {
+      alert(
+        "Quick Log skips your other entries",
+        "You've filled in other sections (mood, flow, sleep, etc.) that Quick Log won't save — only your symptom tags will be logged. Use \"Save Log\" instead to keep everything.",
+        [
+          { text: "Keep editing", style: "cancel" },
+          { text: "Quick Log anyway", style: "destructive", onPress: performQuickLog },
+        ],
+      );
+      return;
+    }
+
+    performQuickLog();
   }
 
   function toggleSymptom(symptom: string) {
@@ -371,10 +481,15 @@ export default function DayDetailsModal({
     onPress,
     value,
     tint,
+    // "single" groups (one choice replaces the last) get a radio-style dot;
+    // "multi" groups (choices co-occur) get a checkmark — so it's visible at
+    // a glance whether picking another option adds to or replaces the first.
+    selectionMode = "multi",
   }: LogOption<Value> & {
     isSelected: boolean;
     onPress: () => void;
     tint: LogCategoryTint;
+    selectionMode?: "multi" | "single";
   }) {
     return (
       <TouchableOpacity
@@ -398,7 +513,7 @@ export default function DayDetailsModal({
         <View
           style={{
             alignItems: "center",
-            backgroundColor: isSelected ? tint.color : tint.light,
+            backgroundColor: isSelected ? tint.fill : tint.light,
             borderRadius: 999,
             height: 28,
             justifyContent: "center",
@@ -421,6 +536,32 @@ export default function DayDetailsModal({
         >
           {label}
         </Text>
+        {selectionMode === "single" ? (
+          <View
+            style={{
+              alignItems: "center",
+              borderColor: isSelected ? tint.color : colors.border,
+              borderRadius: 7,
+              borderWidth: 1.5,
+              height: 14,
+              justifyContent: "center",
+              width: 14,
+            }}
+          >
+            {isSelected && (
+              <View
+                style={{
+                  backgroundColor: tint.color,
+                  borderRadius: 3.5,
+                  height: 7,
+                  width: 7,
+                }}
+              />
+            )}
+          </View>
+        ) : isSelected ? (
+          <Ionicons name="checkmark-circle" size={15} color={tint.color} />
+        ) : null}
       </TouchableOpacity>
     );
   }
@@ -430,7 +571,7 @@ export default function DayDetailsModal({
       animationType="slide"
       transparent
       visible={visible}
-      onRequestClose={onClose}
+      onRequestClose={() => confirmDiscardIfDirty(onClose)}
     >
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -439,7 +580,7 @@ export default function DayDetailsModal({
       >
         <Pressable
           accessibilityLabel="Close day details"
-          onPress={onClose}
+          onPress={() => confirmDiscardIfDirty(onClose)}
           style={{
             backgroundColor: colors.overlay,
             bottom: 0,
@@ -504,8 +645,10 @@ export default function DayDetailsModal({
               </Text>
 
               <TouchableOpacity
-                onPress={onClose}
+                onPress={() => confirmDiscardIfDirty(onClose)}
+                accessibilityRole="button"
                 accessibilityLabel="Close day details"
+                hitSlop={8}
                 style={{ padding: 8, margin: -8 }}
               >
                 <Ionicons name="close" size={22} color={colors.mutedText} />
@@ -534,6 +677,7 @@ export default function DayDetailsModal({
                         setSelectedFlow((current) =>
                           current === flow.value ? undefined : flow.value,
                         ),
+                      selectionMode: "single",
                       tint: tints.flow,
                     }),
                   )}
@@ -613,6 +757,7 @@ export default function DayDetailsModal({
                     setSelectedDischarge((current) =>
                       current === option.value ? undefined : option.value,
                     ),
+                  selectionMode: "single",
                   tint: tints.discharge,
                 }),
               )}
@@ -683,6 +828,7 @@ export default function DayDetailsModal({
                     setSelectedEnergy((current) =>
                       current === energy.value ? undefined : energy.value,
                     ),
+                  selectionMode: "single",
                   tint: tints.energy,
                 }),
               )}
@@ -704,6 +850,9 @@ export default function DayDetailsModal({
             <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 10 }}>
               <TouchableOpacity
                 onPress={() => setSleepHours((h) => Math.max(0, (h ?? 8) - 1))}
+                accessibilityRole="button"
+                accessibilityLabel="Decrease sleep hours"
+                hitSlop={6}
                 style={{
                   backgroundColor: colors.input,
                   borderColor: colors.border,
@@ -722,6 +871,9 @@ export default function DayDetailsModal({
               </Text>
               <TouchableOpacity
                 onPress={() => setSleepHours((h) => Math.min(24, (h ?? 8) + 1))}
+                accessibilityRole="button"
+                accessibilityLabel="Increase sleep hours"
+                hitSlop={6}
                 style={{
                   backgroundColor: colors.input,
                   borderColor: colors.border,
@@ -746,6 +898,9 @@ export default function DayDetailsModal({
             <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 10 }}>
               <TouchableOpacity
                 onPress={() => setWaterIntake((w) => Math.max(0, (w ?? 250) - 250))}
+                accessibilityRole="button"
+                accessibilityLabel="Decrease water intake"
+                hitSlop={6}
                 style={{
                   backgroundColor: colors.input,
                   borderColor: colors.border,
@@ -764,6 +919,9 @@ export default function DayDetailsModal({
               </Text>
               <TouchableOpacity
                 onPress={() => setWaterIntake((w) => Math.min(8000, (w ?? 0) + 250))}
+                accessibilityRole="button"
+                accessibilityLabel="Increase water intake"
+                hitSlop={6}
                 style={{
                   backgroundColor: colors.input,
                   borderColor: colors.border,
@@ -956,35 +1114,47 @@ export default function DayDetailsModal({
             <TouchableOpacity
               onPress={handleSave}
               activeOpacity={0.8}
+              disabled={isSaving}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: isSaving, busy: isSaving }}
               style={{
                 flex: 1,
                 borderRadius: 12,
                 overflow: "hidden",
                 backgroundColor: colors.primary,
+                opacity: isSaving ? 0.75 : 1,
                 paddingHorizontal: 16,
                 paddingVertical: 13,
               }}
             >
-              <Text
-                style={{
-                  color: colors.buttonText,
-                  fontWeight: "700",
-                  textAlign: "center",
-                  fontFamily: fonts.body,
-                }}
-              >
-                Save Log
-              </Text>
+              {isSaving ? (
+                <ActivityIndicator color={colors.buttonText} />
+              ) : (
+                <Text
+                  style={{
+                    color: colors.buttonText,
+                    fontWeight: "700",
+                    textAlign: "center",
+                    fontFamily: fonts.body,
+                  }}
+                >
+                  Save Log
+                </Text>
+              )}
             </TouchableOpacity>
 
             <TouchableOpacity
               onPress={handleLog}
+              disabled={isSaving}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: isSaving }}
               style={{
                 backgroundColor: colors.input,
                 borderColor: colors.border,
                 borderRadius: 12,
                 borderWidth: 1,
                 flex: 1,
+                opacity: isSaving ? 0.6 : 1,
                 paddingHorizontal: 16,
                 paddingVertical: 13,
               }}

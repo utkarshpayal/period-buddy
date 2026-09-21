@@ -6,9 +6,7 @@ import {
   ActivityIndicator,
   Image,
   KeyboardAvoidingView,
-  Modal,
   Platform,
-  Pressable,
   ScrollView,
   StatusBar,
   Text,
@@ -19,6 +17,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppState } from "../../components/AppState";
 import { useAuth } from "../../components/auth-context";
+import { LanguagePickerSheet } from "../../components/LanguagePickerSheet";
 import { Loader } from "../../components/Loader";
 import { useTheme } from "../../components/theme";
 import { getLogCategoryTints, getShadow, getSoftTints } from "../../components/ui-tokens";
@@ -116,7 +115,7 @@ export default function QA() {
   const [pendingVoiceAction, setPendingVoiceAction] = useState<VoiceAgentPendingAction | undefined>();
   const playerRef = useRef<AudioPlayer | null>(null);
 
-  const { handleMicPress, isRecording, isTranscribing, level } = useVoiceInput({
+  const { handleMicPress, isRecording, isTranscribing, level, voiceError } = useVoiceInput({
     language,
     voiceMode,
     onTranscript: (transcript) => {
@@ -132,13 +131,15 @@ export default function QA() {
   const isSpeakingReply = voiceMode && playingMessageId !== null;
 
   // Google Assistant style loop: whenever voice mode is idle, auto-arm the mic again.
+  // Paused while a voice-mode failure is showing (voiceError) so the user has
+  // time to actually read it before the mic starts listening again.
   useEffect(() => {
-    if (!voiceMode || isRecording || isTranscribing || isCompanionTyping || isSpeakingReply) return;
+    if (!voiceMode || isRecording || isTranscribing || isCompanionTyping || isSpeakingReply || voiceError) return;
     const timer = setTimeout(() => {
       handleMicPress();
     }, 450);
     return () => clearTimeout(timer);
-  }, [voiceMode, isRecording, isTranscribing, isCompanionTyping, isSpeakingReply, handleMicPress]);
+  }, [voiceMode, isRecording, isTranscribing, isCompanionTyping, isSpeakingReply, voiceError, handleMicPress]);
 
   const voiceStatus: VoiceStatus = isTranscribing
     ? "processing"
@@ -1057,6 +1058,8 @@ export default function QA() {
             disabled={isTranscribing}
             onPress={handleMicPress}
             activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={isTranscribing ? "Transcribing" : isRecording ? "Stop recording" : "Start recording"}
             className="rounded-full overflow-hidden"
           >
             <View
@@ -1097,48 +1100,20 @@ export default function QA() {
         </View>
         </KeyboardAvoidingView>
 
-        <Modal transparent animationType="fade" visible={languagePickerVisible} onRequestClose={() => setLanguagePickerVisible(false)}>
-          <View className="flex-1 justify-end">
-            <Pressable
-              onPress={() => setLanguagePickerVisible(false)}
-              style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.overlay }}
-            />
-            <View
-              className="rounded-t-3xl border p-4"
-              style={{ backgroundColor: colors.surface, borderColor: colors.border, paddingBottom: Math.max(16, insets.bottom + 10) }}
-            >
-              <View className="items-center mb-3">
-                <View className="rounded-full" style={{ backgroundColor: colors.border, height: 4, width: 42 }} />
-              </View>
-              <Text className="text-sm font-black mb-3" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-                Chat & voice language
-              </Text>
-              <ScrollView style={{ maxHeight: 340 }} showsVerticalScrollIndicator={false}>
-                {languages.map((item) => (
-                  <TouchableOpacity
-                    key={item.code}
-                    onPress={() => {
-                      setLanguage(item.code);
-                      setLanguagePickerVisible(false);
-                    }}
-                    activeOpacity={0.7}
-                    className="flex-row items-center justify-between py-3 px-1"
-                  >
-                    <Text className="text-xs font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
-                      {item.label}
-                    </Text>
-                    {item.code === language ? <Feather name="check" size={16} color={colors.primary} /> : null}
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          </View>
-        </Modal>
+        <LanguagePickerSheet
+          languages={languages}
+          onClose={() => setLanguagePickerVisible(false)}
+          onSelect={setLanguage}
+          selectedCode={language}
+          title="Chat & voice language"
+          visible={languagePickerVisible}
+        />
       </SafeAreaView>
 
       {voiceMode ? (
         <VoiceModeOverlay
           colors={colors}
+          errorMessage={voiceError}
           fonts={fonts}
           languageLabel={selectedLanguage.label}
           level={level}

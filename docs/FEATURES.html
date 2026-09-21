@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>The Nura App &mdash; Features &amp; How to Use</title>
+            <style>
+/* From extension vscode.github */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+.vscode-dark img[src$=\#gh-light-mode-only],
+.vscode-light img[src$=\#gh-dark-mode-only],
+.vscode-high-contrast:not(.vscode-high-contrast-light) img[src$=\#gh-light-mode-only],
+.vscode-high-contrast-light img[src$=\#gh-dark-mode-only] {
+	display: none;
+}
+
+</style>
+            
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Microsoft/vscode/extensions/markdown-language-features/media/markdown.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Microsoft/vscode/extensions/markdown-language-features/media/highlight.css">
+<style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe WPC', 'Segoe UI', system-ui, 'Ubuntu', 'Droid Sans', sans-serif;
+                font-size: 14px;
+                line-height: 1.6;
+            }
+        </style>
+        <style>
+.task-list-item {
+    list-style-type: none;
+}
+
+.task-list-item-checkbox {
+    margin-left: -20px;
+    vertical-align: middle;
+    pointer-events: none;
+}
+</style>
+<style>
+:root {
+  --color-note: #0969da;
+  --color-tip: #1a7f37;
+  --color-warning: #9a6700;
+  --color-severe: #bc4c00;
+  --color-caution: #d1242f;
+  --color-important: #8250df;
+}
+
+</style>
+<style>
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-note: #2f81f7;
+    --color-tip: #3fb950;
+    --color-warning: #d29922;
+    --color-severe: #db6d28;
+    --color-caution: #f85149;
+    --color-important: #a371f7;
+  }
+}
+
+</style>
+<style>
+.markdown-alert {
+  padding: 0.5rem 1rem;
+  margin-bottom: 16px;
+  color: inherit;
+  border-left: .25em solid #888;
+}
+
+.markdown-alert>:first-child {
+  margin-top: 0
+}
+
+.markdown-alert>:last-child {
+  margin-bottom: 0
+}
+
+.markdown-alert .markdown-alert-title {
+  display: flex;
+  font-weight: 500;
+  align-items: center;
+  line-height: 1
+}
+
+.markdown-alert .markdown-alert-title .octicon {
+  margin-right: 0.5rem;
+  display: inline-block;
+  overflow: visible !important;
+  vertical-align: text-bottom;
+  fill: currentColor;
+}
+
+.markdown-alert.markdown-alert-note {
+  border-left-color: var(--color-note);
+}
+
+.markdown-alert.markdown-alert-note .markdown-alert-title {
+  color: var(--color-note);
+}
+
+.markdown-alert.markdown-alert-important {
+  border-left-color: var(--color-important);
+}
+
+.markdown-alert.markdown-alert-important .markdown-alert-title {
+  color: var(--color-important);
+}
+
+.markdown-alert.markdown-alert-warning {
+  border-left-color: var(--color-warning);
+}
+
+.markdown-alert.markdown-alert-warning .markdown-alert-title {
+  color: var(--color-warning);
+}
+
+.markdown-alert.markdown-alert-tip {
+  border-left-color: var(--color-tip);
+}
+
+.markdown-alert.markdown-alert-tip .markdown-alert-title {
+  color: var(--color-tip);
+}
+
+.markdown-alert.markdown-alert-caution {
+  border-left-color: var(--color-caution);
+}
+
+.markdown-alert.markdown-alert-caution .markdown-alert-title {
+  color: var(--color-caution);
+}
+
+</style>
+        
+        </head>
+        <body class="vscode-body vscode-light">
+            <span id="markdown-mermaid" aria-hidden="true" data-config="{&quot;darkModeTheme&quot;:&quot;vscode&quot;,&quot;lightModeTheme&quot;:&quot;vscode&quot;,&quot;maxTextSize&quot;:50000,&quot;clickDrag&quot;:&quot;alt&quot;,&quot;showControls&quot;:&quot;onHoverOrFocus&quot;,&quot;resizable&quot;:true,&quot;maxHeight&quot;:&quot;&quot;}"></span>
+				<h1 id="the-nura-app--features--how-to-use">The Nura App — Features &amp; How to Use</h1>
+<p>A walkthrough of every major screen in the app, what it's for, and how to use
+it — with real screenshots captured from a running build. Screenshots with a
+real signed-in account had the name/email/avatar redacted for this doc; the
+screens themselves are otherwise unmodified.</p>
+<blockquote>
+<p>This is user-facing feature documentation. For the technical architecture,
+see <code>CLAUDE.md</code> at the project root. For everything AI/ML-related, see the
+backend's <code>AI_ML_OVERVIEW.md</code>.</p>
+</blockquote>
+<hr>
+<h2 id="getting-started">Getting started</h2>
+<h3 id="sign-up">Sign up</h3>
+<p><img src="file:////home/fiftyfive/Videos/The Nura/The-Nura-App/docs/screenshots/signup-empty.jpg" alt="Sign up screen"></p>
+<p>First name, last name, email, and a password (8+ characters) — or skip all
+of that with <strong>Continue with Google</strong> at the bottom, which is the fastest
+path in. Ticking &quot;I agree to the Terms &amp; Privacy Policy&quot; is required before
+<strong>Create account</strong> activates.</p>
+<p><img src="file:////home/fiftyfive/Videos/The Nura/The-Nura-App/docs/screenshots/signup-filled.jpg" alt="Sign up filled in"></p>
+<h3 id="verify-your-email">Verify your email</h3>
+<p><img src="file:////home/fiftyfive/Videos/The Nura/The-Nura-App/docs/screenshots/otp-verify.jpg" alt="OTP verification"></p>
+<p>Signing up with email (not Google) sends a 6-digit code that expires in 10
+minutes. If it doesn't arrive, <strong>Resend</strong> unlocks after a short cooldown.
+After verifying, you're walked through a short onboarding (cycle length,
+last period date, goals) before landing in the app.</p>
+<h3 id="log-in">Log in</h3>
+<p><img src="file:////home/fiftyfive/Videos/The Nura/The-Nura-App/docs/screenshots/login.jpg" alt="Login screen"></p>
+<p>Returning users log in with email/password or <strong>Continue with Google</strong>. If
+you're joining as someone's partner rather than tracking your own cycle,
+there's a separate &quot;partner connect&quot; link here too (enter the invite code
+your partner shares from their <strong>Explore → Partner Sync</strong> screen).</p>
+<hr>
+<h2 id="home--your-daily-dashboard">Home — your daily dashboard</h2>
+<p><img src="file:////home/fiftyfive/Videos/The Nura/The-Nura-App/docs/screenshots/home-top.jpg" alt="Home, top">
+<img src="file:////home/fiftyfive/Videos/The Nura/The-Nura-App/docs/screenshots/home-scrolled.jpg" alt="Home, scrolled down"></p>
+<p>The first thing you see after logging in. Deliberately short — a snapshot,
+not a wall of tiles:</p>
+<ul>
+<li><strong>Greeting + notification bell</strong> at the top; a red dot means there's
+something unread (a partner message, a reminder, a like/comment on your
+post).</li>
+<li><strong>Streak and Care Points pills</strong> — the streak counts consecutive days
+you've logged something; Care Points are earned by logging, completing
+habits, and caring for your Forest tree (see below), spendable toward
+premium features/coupons.</li>
+<li><strong>Week strip</strong> — tap any day to jump straight into logging for that day.</li>
+<li><strong>Cycle-phase hero card</strong> — your current cycle day, phase (Period /
+Follicular / Ovulation / Luteal), and when your next period/fertile window
+is expected, all computed from your own logged history, not a fixed
+calendar guess.</li>
+<li><strong>Quick actions</strong> — Log period / Symptoms / Mood in one tap, each opening
+the day-log sheet pre-focused on that section.</li>
+<li><strong>Insights carousel</strong> — a couple of swipeable cards (cycle trend, length
+history); <strong>See all</strong> goes to the full Predictions screen.</li>
+<li><strong>&quot;More for you&quot;</strong> — three cards that group everything else into three
+hubs, so Home never grows back into a long list of tiles:
+<ul>
+<li><strong>Care &amp; Insights</strong> — predictions, daily insights, symptom trends/checker, reports, consults.</li>
+<li><strong>Wellness &amp; Support</strong> — health concerns, Nura AI, hygiene, sexual wellbeing, check-in calls.</li>
+<li><strong>Explore</strong> — forest, blogs, videos, partner sync, habits, buddy nomination, govt. schemes.</li>
+</ul>
+</li>
+</ul>
+<hr>
+<h2 id="tracker--your-cycle-calendar">Tracker — your cycle calendar</h2>
+<p><img src="file:////home/fiftyfive/Videos/The Nura/The-Nura-App/docs/screenshots/tracker-top.jpg" alt="Tracker, cycle-day ring">
+<img src="file:////home/fiftyfive/Videos/The Nura/The-Nura-App/docs/screenshots/tracker-calendar.jpg" alt="Tracker, full calendar"></p>
+<ul>
+<li><strong>Cycle-day ring</strong> at the top shows exactly how many days until your next
+expected period, at a glance.</li>
+<li><strong>Full month calendar</strong>, color-coded by phase (the legend — Period /
+Follicular / Ovulation / Luteal — pins to the top once you scroll past it,
+so the colors stay readable no matter where you are). Small dots under a
+date mean something was logged that day.</li>
+<li><strong>Tap any date</strong> to open the day-log sheet: log flow, symptoms, mood,
+energy, sleep, water, weight, temperature, stress, medication, digestion,
+skin, discharge, exercise, or a note — pick whichever sections apply, save,
+done. Nothing is required beyond what you actually want to record.</li>
+<li><strong>The search icon</strong> (top-right, magnifier) jumps straight to any feature in
+the app by name — cycle trend, next-period prediction, Ask Nura AI, and
+more — without hunting through hubs.</li>
+<li><strong>The gear icon</strong> opens Cycle Settings: reminder toggles (days-before,
+ovulation, fertility), your cycle length/period length, and tracking goal.</li>
+</ul>
+<hr>
+<h2 id="community--anonymous-peer-support">Community — anonymous peer support</h2>
+<p><img src="file:////home/fiftyfive/Videos/The Nura/The-Nura-App/docs/screenshots/community.jpg" alt="Community feed"></p>
+<p>A forum where everything you post can be shown anonymously (masked as
+&quot;Anonymous member,&quot; never your real name) — toggle that per-post, or turn on
+<strong>Anonymous Community Mode</strong> app-wide from Profile → Preferences.</p>
+<ul>
+<li><strong>Category chips</strong> (All / PCOS / Fitness / Skin / …) filter the feed.</li>
+<li>Posts can include <strong>polls</strong> — tap an option to vote, see live percentages.</li>
+<li>The <strong>+ button</strong> (bottom-right) starts a new post: text, an optional poll,
+optional anonymity, optional photo attachment.</li>
+<li>Like, comment, or report any post from its row; report enough times and a
+post is automatically hidden pending review.</li>
+</ul>
+<hr>
+<h2 id="profile--your-account">Profile — your account</h2>
+<p><img src="file:////home/fiftyfive/Videos/The Nura/The-Nura-App/docs/screenshots/profile-top.jpg" alt="Profile, top">
+<img src="file:////home/fiftyfive/Videos/The Nura/The-Nura-App/docs/screenshots/profile-menu.jpg" alt="Profile, settings menu"></p>
+<ul>
+<li><strong>Stat tiles</strong> — Days Tracked, Care Points, and your current Day Streak.</li>
+<li><strong>Achievements</strong> — badges for tracking milestones.</li>
+<li><strong>Preferences &amp; Settings</strong> (expands in place) — Cycle Notifications toggle,
+Anonymous Community Mode toggle, and <strong>Gen Z Mode</strong> (a fun cosmetic toggle
+that swaps a handful of labels around the app into Gen Z slang — flip it
+back off any time, nothing else changes).</li>
+<li><strong>My Subscription</strong> — pricing, purchase history, and where premium
+features are unlocked (see &quot;Premium features&quot; below).</li>
+<li><strong>App Lock</strong> — PIN or biometric lock on top of your login, for extra
+privacy on a shared device.</li>
+<li><strong>Help &amp; Support</strong>, <strong>Data Privacy &amp; Security</strong>, and <strong>Log out</strong>.</li>
+</ul>
+<hr>
+<h2 id="the-three-hubs">The three hubs</h2>
+<p>Reached from Home's &quot;More for you&quot; cards. Each groups related features
+behind one entry point so Home stays short.</p>
+<h3 id="care--insights">Care &amp; Insights</h3>
+<p><img src="file:////home/fiftyfive/Videos/The Nura/The-Nura-App/docs/screenshots/care-hub.jpg" alt="Care &amp; Insights hub"></p>
+<ul>
+<li><strong>Predictions</strong> — next period/ovulation forecasts with a confidence
+indicator (widens automatically if your cycles are irregular or you've
+gone a while without logging).</li>
+<li><strong>Daily Insights</strong> — a personalized hormone/mood/energy/skin note for
+today, plus suggestions (exercise, nutrition, sleep, general wellness).</li>
+<li><strong>Symptom Trends</strong> — which symptoms tend to show up in which cycle phase,
+based purely on your own logged history (unlocks after ~2 cycles of data).</li>
+<li><strong>Symptom Checker</strong> — a short questionnaire flagging possible PCOS,
+endometriosis, thyroid issues, or fibroids as &quot;may be worth discussing with
+a clinician&quot; — never a diagnosis.</li>
+<li><strong>Graphs &amp; Reports</strong> — cycle length trend, weight/BBT, water intake and
+sleep averages, plus a downloadable doctor report.</li>
+<li><strong>Documents</strong> — your uploaded prescriptions/lab reports/bills, with AI
+summarize and chat-about-your-documents built in.</li>
+</ul>
+<h3 id="wellness--support">Wellness &amp; Support</h3>
+<p><img src="file:////home/fiftyfive/Videos/The Nura/The-Nura-App/docs/screenshots/wellness-hub.jpg" alt="Wellness &amp; Support hub"></p>
+<ul>
+<li><strong>Nura AI</strong> — a private, judgment-free chat companion. Pick a topic
+(Periods &amp; Cycle, Symptoms &amp; Pain, Hygiene &amp; Care, Mood &amp; PMS, Sex &amp;
+Intimacy — 18+ gated, Nutrition &amp; Wellness, or Other) and it stays scoped
+to that topic; skip a topic for a general open chat. Past chats are saved
+and resumable from <strong>qa-history</strong>. Works by text or voice (tap the mic).</li>
+<li><strong>Health Concerns</strong> — browse/search common conditions and their info.</li>
+<li><strong>Hygiene &amp; Care</strong> and <strong>Sexual Wellbeing</strong> — guidance content, same
+judgment-free framing.</li>
+<li><strong>Check-in Call</strong> — Buddy (the voice agent) calls your phone and walks you
+through a spoken check-in; can also be scheduled to recur automatically
+every cycle.</li>
+</ul>
+<h3 id="explore">Explore</h3>
+<p><img src="file:////home/fiftyfive/Videos/The Nura/The-Nura-App/docs/screenshots/explore-hub.jpg" alt="Explore hub"></p>
+<ul>
+<li><strong>Forest</strong> — a personal-growth visual: a tree that grows (seed → sprout →
+sapling → tree → bloom) the more consistently you check in, and visibly
+droops if you skip a day. Purely a motivational mechanic layered on top of
+your regular logging.</li>
+<li><strong>Blogs</strong> and <strong>Videos</strong> — an articles/video library, filterable by
+category, translatable into 11 Indic languages + English.</li>
+<li><strong>Partner Sync</strong> — generate an invite code so a partner can connect,
+chat with them, and control exactly what cycle info they can see.</li>
+<li><strong>Habits</strong> — daily habit tracking with its own streak and reward points.</li>
+<li><strong>Nominate Buddy</strong> — anonymously pair with a peer for mutual support.</li>
+<li><strong>Govt. Schemes</strong> — a searchable directory of government reproductive/
+menstrual-health benefit schemes, with an eligibility checker per scheme.</li>
+</ul>
+<hr>
+<h2 id="a-closer-look-predictions--graphs">A closer look: Predictions &amp; Graphs</h2>
+<p><img src="file:////home/fiftyfive/Videos/The Nura/The-Nura-App/docs/screenshots/predictions.jpg" alt="Predictions screen">
+<img src="file:////home/fiftyfive/Videos/The Nura/The-Nura-App/docs/screenshots/graphs-reports.jpg" alt="Graphs &amp; Reports screen"></p>
+<p>Predictions shows your phase, a countdown ring to your next period, and — if
+your logged periods have started drifting from what's expected — a plain-
+language warning suggesting you re-anchor your settings, rather than quietly
+showing a forecast it no longer trusts. Graphs &amp; Reports turns your last few
+months of logs into simple cards (cycle length bars, weight/BBT, water/
+sleep averages) plus one-tap access to the downloadable report.</p>
+<h2 id="a-closer-look-nura-ai-chat">A closer look: Nura AI chat</h2>
+<p><img src="file:////home/fiftyfive/Videos/The Nura/The-Nura-App/docs/screenshots/nura-ai-chat.jpg" alt="Nura AI chat"></p>
+<p>Opens with a short intro and a few suggested starter questions. Ask anything
+in your own words — it answers from a curated knowledge base first, falls
+back to AI for anything not already covered, and always points you toward a
+real clinician if something sounds urgent. Nothing here is a diagnosis.</p>
+<h2 id="a-closer-look-forest">A closer look: Forest</h2>
+<p><img src="file:////home/fiftyfive/Videos/The Nura/The-Nura-App/docs/screenshots/forest.jpg" alt="Forest screen"></p>
+<p>Shows your care streak and trees-planted count, with your current tree
+front and center — the bounce when you log something, the droop when you
+don't, and a running history of past cycles' trees below.</p>
+<hr>
+<h2 id="partner-mode">Partner mode</h2>
+<p>If someone connects to your account as a partner (via <strong>Explore → Partner
+Sync</strong>'s invite code), <em>they</em> get a different, read-only-by-default view when
+they log in: a shared overview of what you've chosen to share, a chat with
+you, the same voice assistant, the same community forum, and their own
+account settings — with its own floating tab bar so it's visually distinct
+from the owner's dashboard, but built from several of the same screens
+(Community in particular is byte-identical for both roles).</p>
+<hr>
+<h2 id="premium-features">Premium features</h2>
+<p>A few features are gated behind a paywall, priced individually or as
+bundles — checked live against your account, never assumed free. When you
+hit a locked feature you'll see a preview + unlock prompt (<code>PaywallModal</code>)
+right there, with the price and a &quot;purchase&quot; flow (card/UPI/netbanking via
+Cashfree, with optional coupon codes). <strong>Profile → My Subscription</strong> is
+always available for browsing prices and past purchases outside of hitting
+a lock organically.</p>
+<hr>
+<h2 id="notifications--reminders">Notifications &amp; reminders</h2>
+<p>The bell icon (Home and the partner-view overview) opens your notification
+list — partner messages, buddy chat, community likes/comments, and reminder
+nudges. Reminders themselves (period-coming-up, ovulation, and a daily &quot;log
+today&quot; nudge if you haven't yet) are configured from the Tracker's Cycle
+Settings sheet, and arrive as real push notifications once enabled.</p>
+<hr>
+<h2 id="accessibility--personalization">Accessibility &amp; personalization</h2>
+<ul>
+<li><strong>Light/Dark mode</strong> — toggle from the top of most screens (sun/moon icon).</li>
+<li><strong>App Lock</strong> — PIN or biometric, layered on top of your session.</li>
+<li><strong>11 languages</strong> — Nura AI, blogs, and voice mode all support English +
+10 Indic languages.</li>
+<li><strong>Gen Z Mode</strong> (Profile → Preferences) — a purely cosmetic toggle that
+swaps some labels into Gen Z slang, for fun — flip it off any time and
+everything's back to normal instantly.</li>
+</ul>
+
+            
+            
+        </body>
+        </html>

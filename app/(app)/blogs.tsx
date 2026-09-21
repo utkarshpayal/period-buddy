@@ -19,9 +19,11 @@ import {
   View,
 } from "react-native";
 import Markdown from "react-native-markdown-display";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppState } from "../../components/AppState";
 import { alert } from "../../lib/alert";
+import { LanguagePickerSheet } from "../../components/LanguagePickerSheet";
+import { Loader } from "../../components/Loader";
 import { useTheme } from "../../components/theme";
 import { SkeletonMediaGrid } from "../../components/Skeleton";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
@@ -167,7 +169,6 @@ export default function Blogs() {
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
   const { slug: deepLinkedSlug } = useLocalSearchParams<{ slug?: string }>();
-  const insets = useSafeAreaInsets();
   const { earnTokens } = useAppState();
 
   // Functional Interface States
@@ -1021,7 +1022,7 @@ export default function Blogs() {
 
                   {articleLoading ? (
                     <View className="items-center py-8">
-                      <ActivityIndicator color={colors.primary} />
+                      <Loader size={48} />
                     </View>
                   ) : translated?.content || fullBlog?.content ? (
                     <View className="mb-8">
@@ -1130,44 +1131,17 @@ export default function Blogs() {
         </Modal>
 
         {/* --- LANGUAGE PICKER FOR TRANSLATE + LISTEN --- */}
-        <Modal transparent animationType="fade" visible={languagePickerVisible} onRequestClose={() => setLanguagePickerVisible(false)}>
-          <View className="flex-1 justify-end">
-            <Pressable
-              onPress={() => setLanguagePickerVisible(false)}
-              style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.overlay }}
-            />
-            <View
-              className="rounded-t-3xl border p-4"
-              style={{ backgroundColor: colors.surface, borderColor: colors.border, paddingBottom: Math.max(16, insets.bottom + 10) }}
-            >
-              <View className="items-center mb-3">
-                <View className="rounded-full" style={{ backgroundColor: colors.border, height: 4, width: 42 }} />
-              </View>
-              <Text className="text-sm font-black mb-3" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-                Translate & listen language
-              </Text>
-              <ScrollView style={{ maxHeight: 340 }} showsVerticalScrollIndicator={false}>
-                {languages.map((item) => (
-                  <TouchableOpacity
-                    key={item.code}
-                    onPress={() => {
-                      setLanguage(item.code);
-                      setLanguagePickerVisible(false);
-                      if (item.code === "en-IN") setTranslated(null);
-                    }}
-                    activeOpacity={0.7}
-                    className="flex-row items-center justify-between py-3 px-1"
-                  >
-                    <Text className="text-xs font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
-                      {item.label}
-                    </Text>
-                    {item.code === language ? <Feather name="check" size={16} color={colors.primary} /> : null}
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          </View>
-        </Modal>
+        <LanguagePickerSheet
+          languages={languages}
+          onClose={() => setLanguagePickerVisible(false)}
+          onSelect={(code) => {
+            setLanguage(code);
+            if (code === "en-IN") setTranslated(null);
+          }}
+          selectedCode={language}
+          title="Translate & listen language"
+          visible={languagePickerVisible}
+        />
       </SafeAreaView>
     </>
   );

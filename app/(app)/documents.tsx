@@ -6,7 +6,9 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Image,
+  Linking,
   Modal,
+  Platform,
   RefreshControl,
   ScrollView,
   StatusBar,
@@ -852,12 +854,20 @@ export default function DocumentsScreen() {
               <TouchableOpacity
                 onPress={() => handleDelete(previewDoc)}
                 disabled={deleting}
+                accessibilityRole="button"
+                accessibilityLabel="Delete document"
                 className="p-2 rounded-full mr-2"
                 style={{ backgroundColor: colors.dangerLight }}
               >
                 {deleting ? <ActivityIndicator size="small" color={colors.danger} /> : <Feather name="trash-2" size={16} color={colors.danger} />}
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => setPreviewDoc(null)} className="p-1 rounded-full" style={{ backgroundColor: colors.border }}>
+              <TouchableOpacity
+                onPress={() => setPreviewDoc(null)}
+                accessibilityRole="button"
+                accessibilityLabel="Close preview"
+                className="p-1 rounded-full"
+                style={{ backgroundColor: colors.border }}
+              >
                 <Feather name="x" size={18} color={colors.foreground} />
               </TouchableOpacity>
             </View>
@@ -870,6 +880,31 @@ export default function DocumentsScreen() {
             <View className="flex-1 mx-6 mb-6 rounded-2xl overflow-hidden border" style={{ borderColor: colors.border }}>
               {previewDoc.mimeType.startsWith("image/") ? (
                 <Image source={{ uri: previewDoc.fileUrl }} style={{ flex: 1 }} resizeMode="contain" />
+              ) : Platform.OS === "web" ? (
+                <View
+                  className="flex-1 items-center justify-center gap-4 px-8"
+                  style={{ backgroundColor: colors.surfaceSoft }}
+                >
+                  <Feather name="external-link" size={28} color={colors.mutedText} />
+                  <Text
+                    className="text-center text-xs font-semibold"
+                    style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                  >
+                    In-page preview isn&apos;t supported in the browser yet — open the document in a new tab instead.
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => Linking.openURL(previewDoc.fileUrl)}
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityLabel="View document in browser"
+                    className="rounded-full px-5 py-3"
+                    style={{ backgroundColor: colors.primary }}
+                  >
+                    <Text className="text-xs font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
+                      View in Browser
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               ) : (
                 <WebView source={{ uri: googleViewerUrl(previewDoc.fileUrl) }} style={{ flex: 1 }} />
               )}

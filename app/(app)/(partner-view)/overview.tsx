@@ -3,7 +3,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   RefreshControl,
   ScrollView,
   StatusBar,
@@ -13,11 +12,13 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../../components/auth-context";
+import { Loader } from "../../../components/Loader";
 import { useTheme } from "../../../components/theme";
 import { getShadow, getScreenGradient } from "../../../components/ui-tokens";
 import { formatShortDate } from "../../../lib/format";
 import { partnerApi, type PartnerSharedData } from "../../../lib/api";
 import { usePartnerViewState } from "../../../components/partner-view-state";
+import { getSharedHubTiles } from "../../../lib/hubTiles";
 
 const PHASE_LABEL: Record<string, string> = {
   follicular: "Follicular phase",
@@ -26,14 +27,16 @@ const PHASE_LABEL: Record<string, string> = {
   period: "On her period",
 };
 
-const KNOWLEDGE_LINKS = [
-  { title: "Blogs", desc: "Articles on cycle health", icon: "book-outline", route: "/(app)/blogs" },
-  { title: "Videos", desc: "Short, expert-made reels", icon: "play-circle-outline", route: "/(app)/reels" },
-  { title: "Health Concerns", desc: "Irregularities & symptoms", icon: "alert-circle-outline", route: "/(app)/health-issues" },
-  { title: "Anonymous Q&A", desc: "Ask privately, expert-answered", icon: "help-circle-outline", route: "/(app)/qa" },
-  { title: "Hygiene & Care", desc: "Product guidance & comfort", icon: "leaf-outline", route: "/(app)/hygiene" },
-  { title: "Sexual Wellbeing", desc: "Consent, intimacy & safety", icon: "heart-outline", route: "/(app)/sexual-wellbeing" },
-] as const;
+// Same tile definitions the owner-side hubs use (fixes.md 2.8) — kept as one
+// shared source so this list can't silently drift from theirs.
+const KNOWLEDGE_LINKS = getSharedHubTiles([
+  "blogs",
+  "videos",
+  "healthConcerns",
+  "nuraAi",
+  "hygiene",
+  "sexualWellbeing",
+]).map((tile) => ({ title: tile.title === "Nura AI" ? "Anonymous Q&A" : tile.title, desc: tile.desc, icon: tile.icon, route: tile.route }));
 
 function formatDateKey(dateKey?: string) {
   if (!dateKey) return "—";
@@ -240,7 +243,7 @@ export default function PartnerViewOverview() {
         >
           {isLoading ? (
             <View className="items-center justify-center py-20">
-              <ActivityIndicator color={colors.primary} />
+              <Loader />
             </View>
           ) : errorMessage ? (
             <View

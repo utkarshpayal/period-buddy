@@ -150,6 +150,10 @@ export default function Hygiene() {
   ];
   const [apiHygieneTips, setApiHygieneTips] = useState<HygieneItem[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  // Fetch failures fall back to the bundled static tips below rather than
+  // blocking the screen (the content is still useful, just not the latest) —
+  // this only tracks that so a low-key notice can say so, not to error out.
+  const [usingOfflineTips, setUsingOfflineTips] = useState(false);
 
   const loadHygieneResources = useCallback(async () => {
     try {
@@ -157,8 +161,10 @@ export default function Hygiene() {
       if (resources.length > 0) {
         setApiHygieneTips(resources.map(mapHygieneResource));
       }
+      setUsingOfflineTips(false);
     } catch {
       setApiHygieneTips([]);
+      setUsingOfflineTips(true);
     }
   }, []);
 
@@ -259,6 +265,15 @@ export default function Hygiene() {
             Hygiene & Wellbeing
           </Text>
         </View>
+
+        {usingOfflineTips && (
+          <Text
+            className="px-[22px] pb-1.5 text-[11px] font-semibold"
+            style={{ color: colors.mutedText }}
+          >
+            Showing offline tips — couldn&apos;t reach the latest guidance right now.
+          </Text>
+        )}
 
         <ScrollView
           showsVerticalScrollIndicator={false}

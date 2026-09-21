@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../../../components/auth-context";
+import { useGenZMode } from "../../../components/genz-mode";
 import { alert } from "../../../lib/alert";
 import { ThemeToggle, useTheme } from "../../../components/theme";
 import { getShadow, getSoftTints } from "../../../components/ui-tokens";
@@ -28,6 +29,7 @@ export default function Profile() {
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const { streakCount, walletBalance } = useUserStats();
+  const { enabled: genZModeEnabled, setEnabled: setGenZModeEnabled } = useGenZMode();
   const router = useRouter();
   const displayName =
     [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Nura user";
@@ -403,61 +405,35 @@ export default function Profile() {
                       trackColor={{ true: colors.primary }}
                     />
                   </View>
+                  <View className="h-[1px] w-full" style={{ backgroundColor: colors.border }} />
+                  <View className="flex-row justify-between items-center">
+                    <View>
+                      <Text
+                        className="text-xs font-bold"
+                        style={{ color: colors.foreground, fontFamily: fonts.body }}
+                      >
+                        Gen Z Mode
+                      </Text>
+                      <Text
+                        className="text-[10px] mt-0.5"
+                        style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                      >
+                        Rename a few labels around the app to Gen Z slang, no cap
+                      </Text>
+                    </View>
+                    <Switch
+                      value={genZModeEnabled}
+                      onValueChange={setGenZModeEnabled}
+                      trackColor={{ true: colors.primary }}
+                    />
+                  </View>
                 </View>
               )}
             </View>
 
-            {/* Row: Documents (Route) */}
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => router.push("/documents")}
-              className="flex-row items-center px-4 py-4 border-b"
-              style={{ borderColor: colors.border }}
-            >
-              <View
-                className="p-2.5 rounded-xl mr-4"
-                style={{ backgroundColor: softTints.pink }}
-              >
-                <Ionicons
-                  name="document-text-outline"
-                  size={18}
-                  color={colors.primary}
-                />
-              </View>
-              <Text
-                className="flex-1 text-sm font-bold"
-                style={{ color: colors.foreground, fontFamily: fonts.body }}
-              >
-                Documents
-              </Text>
-              <Feather
-                name="chevron-right"
-                size={16}
-                color={colors.mutedText}
-              />
-            </TouchableOpacity>
-
-            {/* Row: Graphs & Reports (Route) */}
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => router.push("/graphs-reports")}
-              className="flex-row items-center px-4 py-4 border-b"
-              style={{ borderColor: colors.border }}
-            >
-              <View
-                className="p-2.5 rounded-xl mr-4"
-                style={{ backgroundColor: softTints.sky }}
-              >
-                <Ionicons name="bar-chart-outline" size={18} color={colors.sky} />
-              </View>
-              <Text
-                className="flex-1 text-sm font-bold"
-                style={{ color: colors.foreground, fontFamily: fonts.body }}
-              >
-                Graphs & Reports
-              </Text>
-              <Feather name="chevron-right" size={16} color={colors.mutedText} />
-            </TouchableOpacity>
+            {/* Documents and Graphs & Reports moved to care-hub.tsx
+                (fixes.md 2.5, 2.6) — Care & Insights is their natural home
+                and this avoids the Graphs & Reports double-listing. */}
 
             {/* Row: My Subscription (Route) */}
             <TouchableOpacity
@@ -481,27 +457,9 @@ export default function Profile() {
               <Feather name="chevron-right" size={16} color={colors.mutedText} />
             </TouchableOpacity>
 
-            {/* Row: Government Schemes & Benefits (Route) */}
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => router.push("/government-schemes")}
-              className="flex-row items-center px-4 py-4 border-b"
-              style={{ borderColor: colors.border }}
-            >
-              <View
-                className="p-2.5 rounded-xl mr-4"
-                style={{ backgroundColor: softTints.pink }}
-              >
-                <Ionicons name="ribbon-outline" size={18} color={colors.primary} />
-              </View>
-              <Text
-                className="flex-1 text-sm font-bold"
-                style={{ color: colors.foreground, fontFamily: fonts.body }}
-              >
-                Government Schemes & Benefits
-              </Text>
-              <Feather name="chevron-right" size={16} color={colors.mutedText} />
-            </TouchableOpacity>
+            {/* Government Schemes & Benefits moved to explore-hub.tsx
+                (fixes.md 2.4) — it's a browse/discovery feature, not a
+                settings row. */}
 
             {/* Row: App Lock (Route) */}
             <TouchableOpacity

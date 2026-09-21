@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Loader } from "./Loader";
 import { useTheme } from "./theme";
 import { getSoftTints } from "./ui-tokens";
+import { PaymentTrustFooter } from "./subscription/PaymentTrustFooter";
 import { isPlausibleUpiId, payWithUpiCollect } from "../lib/cashfreeUpi";
 
 export type UpiCollectOutcome = { type: "success" } | { type: "failed"; message?: string } | { type: "dismiss" };
@@ -51,14 +52,20 @@ export function CashfreeUpiCollectModal({
   const [upiId, setUpiId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [secondsLeft, setSecondsLeft] = useState(POLL_TIMEOUT_MS / 1000);
 
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const countdownTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollDeadline = useRef<number>(0);
 
   const stopPolling = () => {
     if (pollTimer.current) {
       clearInterval(pollTimer.current);
       pollTimer.current = null;
+    }
+    if (countdownTimer.current) {
+      clearInterval(countdownTimer.current);
+      countdownTimer.current = null;
     }
   };
 
@@ -71,11 +78,16 @@ export function CashfreeUpiCollectModal({
       setUpiId("");
       setSubmitting(false);
       setError(null);
+      setSecondsLeft(POLL_TIMEOUT_MS / 1000);
     }
   }, [visible]);
 
   const startPolling = () => {
     pollDeadline.current = Date.now() + POLL_TIMEOUT_MS;
+    setSecondsLeft(POLL_TIMEOUT_MS / 1000);
+    countdownTimer.current = setInterval(() => {
+      setSecondsLeft(Math.max(0, Math.round((pollDeadline.current - Date.now()) / 1000)));
+    }, 1000);
     pollTimer.current = setInterval(async () => {
       if (Date.now() > pollDeadline.current) {
         stopPolling();
@@ -179,6 +191,8 @@ export function CashfreeUpiCollectModal({
                     Pay another way (card, netbanking…)
                   </Text>
                 </TouchableOpacity>
+
+                <PaymentTrustFooter compact />
               </>
             )}
 
@@ -197,6 +211,14 @@ export function CashfreeUpiCollectModal({
                 >
                   We&apos;ve sent a payment request to {upiId}. This screen will update automatically once you approve it.
                 </Text>
+                <View
+                  className="rounded-full px-3.5 py-1.5 mt-4"
+                  style={{ backgroundColor: colors.input }}
+                >
+                  <Text className="text-[11px] font-bold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                    Waiting for your bank · up to {Math.ceil(secondsLeft / 60) || 1} min left
+                  </Text>
+                </View>
               </View>
             )}
 

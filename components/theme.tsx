@@ -57,6 +57,11 @@ export type ThemeColors = {
   goldLight: string;
   shadow: string;
   overlay: string;
+  // Neutral progress-ring/bar track color (the "unfilled" background behind
+  // a stat like Home's cycle-day ring or water/sleep bars) — distinct from
+  // surfaceStrong so a future surfaceStrong re-tint doesn't also shift every
+  // progress track's color.
+  track: string;
 };
 
 export type ThemeFonts = {
@@ -139,6 +144,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             goldLight: "rgba(224, 190, 111, 0.18)",
             shadow: "rgba(0, 0, 0, 0.5)",
             overlay: "rgba(34, 26, 32, 0.72)",
+            track: "#4A2E3A",
           }
         : {
             // Buddy light — soft rose/blush with lavender & mint accents.
@@ -190,6 +196,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             goldLight: "#FBF0D4",
             shadow: "rgba(230, 110, 150, 0.16)",
             overlay: "rgba(58, 42, 50, 0.4)",
+            track: "#E3E7ED",
           },
       fonts,
       isDark,

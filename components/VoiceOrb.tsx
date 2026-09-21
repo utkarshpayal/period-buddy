@@ -101,6 +101,8 @@ export function VoiceOrb({ colors, isRecording, isTranscribing, level, onPress, 
 
   return (
     <TouchableOpacity
+      accessibilityLabel={isTranscribing ? "Transcribing" : isRecording ? "Stop recording" : "Start recording"}
+      accessibilityRole="button"
       disabled={isTranscribing}
       onPress={onPress}
       activeOpacity={0.85}

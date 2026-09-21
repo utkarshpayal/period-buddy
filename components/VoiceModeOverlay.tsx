@@ -17,6 +17,7 @@ export type VoiceStatus = "idle" | "listening" | "processing" | "thinking" | "sp
 
 interface VoiceModeOverlayProps {
   colors: ThemeColors;
+  errorMessage?: string | null;
   fonts: { body: string; heading: string };
   languageLabel: string;
   level: number;
@@ -35,6 +36,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const OVERLAY_BG: [string, string] = ["#2A0F1D", "#150910"];
 const ORB_TINT = "#F0A8C4";
 const TRANSCRIPT_TINT = "#E8A86B";
+const ERROR_TINT = "#FF9B85";
 
 const STATUS_COPY: Record<VoiceStatus, string> = {
   idle: "Tap the mic to speak",
@@ -82,6 +84,7 @@ function SweepRing({ color, delay, size }: { color: string; delay: number; size:
 
 export function VoiceModeOverlay({
   colors,
+  errorMessage,
   fonts,
   languageLabel,
   level,
@@ -164,6 +167,19 @@ export function VoiceModeOverlay({
             >
               {STATUS_COPY[status]}
             </Text>
+
+            {errorMessage ? (
+              <View className="mt-3 flex-row items-center gap-1.5 px-10">
+                <Feather name="alert-circle" size={13} color={ERROR_TINT} />
+                <Text
+                  numberOfLines={2}
+                  className="flex-1 text-center text-[12px] font-semibold leading-4"
+                  style={{ color: ERROR_TINT, fontFamily: fonts.body }}
+                >
+                  {errorMessage}
+                </Text>
+              </View>
+            ) : null}
 
             {transcriptPreview ? (
               <Text

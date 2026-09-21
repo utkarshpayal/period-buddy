@@ -886,13 +886,33 @@ export function setUnauthorizedHandler(handler: (() => void) | null) {
   onUnauthorized = handler;
 }
 
+// In-memory cache of the parsed session token, avoiding an AsyncStorage
+// round trip + JSON.parse on every single API call (a screen can fire many
+// concurrent requests, e.g. tracker.tsx's 12 month-log calls). Invalidated
+// explicitly on a 401 below; the short TTL is a safety net for a
+// login/logout/account-switch writing AUTH_SESSION_KEY directly via
+// AsyncStorage without going through this file (auth-context.tsx) — call
+// `invalidateTokenCache()` from there on login/logout for immediate
+// correctness instead of waiting out the TTL.
+const TOKEN_CACHE_TTL_MS = 30_000;
+let cachedToken: { readAt: number; token: string | null } | null = null;
+
+export function invalidateTokenCache() {
+  cachedToken = null;
+}
+
 async function getToken(): Promise<string | null> {
+  if (cachedToken && Date.now() - cachedToken.readAt < TOKEN_CACHE_TTL_MS) {
+    return cachedToken.token;
+  }
   try {
     const raw = await AsyncStorage.getItem(AUTH_SESSION_KEY);
-    if (!raw) return null;
-    const session = JSON.parse(raw) as { token?: string };
-    return session?.token ?? null;
+    const session = raw ? (JSON.parse(raw) as { token?: string }) : null;
+    const token = session?.token ?? null;
+    cachedToken = { readAt: Date.now(), token };
+    return token;
   } catch {
+    cachedToken = { readAt: Date.now(), token: null };
     return null;
   }
 }
@@ -1014,6 +1034,7 @@ export async function apiEnvelopeRequest<T>(
 
   if (!response.ok) {
     if (response.status === 401 && !options.skipAuth) {
+      invalidateTokenCache();
       onUnauthorized?.();
     }
     if (response.status === 402) {

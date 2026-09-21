@@ -1,6 +1,6 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   Image,
   Modal,
@@ -17,8 +17,10 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 import { useTheme, type ThemeColors } from "../../components/theme";
+import { LoadingErrorState } from "../../components/LoadingErrorState";
 import { SkeletonCard } from "../../components/Skeleton";
 import { getShadow, getSoftTints, HEALTH_ISSUE_COLORS } from "../../components/ui-tokens";
+import { useAsyncLoad } from "../../hooks/useAsyncLoad";
 import { healthIssuesApi, type HealthIssue as ApiHealthIssue } from "../../lib/api";
 
 // --- BACKEND API LAYER SCHEMAS & CONTRACTS ---
@@ -165,38 +167,24 @@ export default function HealthIssues() {
   const insets = useSafeAreaInsets();
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
-  const [issues, setIssues] = useState<HealthIssue[]>([]);
-  const [loadingIssues, setLoadingIssues] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [categoryPickerVisible, setCategoryPickerVisible] = useState(false);
 
-  const loadIssues = useCallback(async () => {
-    try {
-      const response = await healthIssuesApi.getIssues();
-      if (response.length > 0) {
-        setIssues(response.map(mapHealthIssue));
-      }
-    } catch {
-      setIssues(fallbackIssues);
-    } finally {
-      setLoadingIssues(false);
-    }
+  const fetchIssues = useCallback(async () => {
+    const response = await healthIssuesApi.getIssues();
+    return response.length > 0 ? response.map(mapHealthIssue) : fallbackIssues;
   }, []);
 
-  useEffect(() => {
-    loadIssues();
-  }, [loadIssues]);
+  const {
+    data: loadedIssues,
+    loading: loadingIssues,
+    refreshing,
+    error,
+    offline,
+    reload,
+  } = useAsyncLoad<HealthIssue[]>(fetchIssues, [fetchIssues]);
 
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      await loadIssues();
-    } finally {
-      setRefreshing(false);
-    }
-  }, [loadIssues]);
-
+  const issues = loadedIssues ?? [];
   const softTints = getSoftTints(colors);
 
   const categoryOptions = [
@@ -249,11 +237,27 @@ export default function HealthIssues() {
           </Text>
         </View>
 
+        <LoadingErrorState
+          loading={loadingIssues}
+          error={error}
+          offline={offline}
+          onRetry={() => reload()}
+          loadingLabel="Loading health concerns…"
+          errorTitle="Couldn't load health concerns"
+          skeleton={
+            <View className="gap-3.5 px-6 pt-6">
+              <SkeletonCard />
+              <SkeletonCard />
+              <SkeletonCard />
+              <SkeletonCard />
+            </View>
+          }
+        >
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 100 }}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+            <RefreshControl refreshing={refreshing} onRefresh={() => reload(true)} tintColor={colors.primary} />
           }
         >
           <View className="mx-6 mt-6">
@@ -297,14 +301,6 @@ export default function HealthIssues() {
             </TouchableOpacity>
 
             {/* HIGH-FIDELITY ASYMMETRIC CLEAN LIST CARD ROWS */}
-            {loadingIssues && issues.length === 0 ? (
-              <View className="gap-3.5">
-                <SkeletonCard />
-                <SkeletonCard />
-                <SkeletonCard />
-                <SkeletonCard />
-              </View>
-            ) : (
             <View className="gap-3.5">
               {filteredIssues.map((issue, index) => {
                 // Compute matching index tints dynamically for uniform distribution
@@ -382,9 +378,9 @@ export default function HealthIssues() {
                 </View>
               )}
             </View>
-            )}
           </View>
         </ScrollView>
+        </LoadingErrorState>
 
         {/* --- CATEGORY FILTER DROPDOWN SELECT MODAL --- */}
         <Modal

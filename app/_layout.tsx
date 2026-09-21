@@ -6,6 +6,7 @@ import { Platform, Text, TextInput } from "react-native";
 import { AppLockProvider, useAppLock } from "../components/AppLock";
 import { AppLockScreen } from "../components/AppLockScreen";
 import { AuthProvider } from "../components/auth-context";
+import { GenZModeProvider } from "../components/genz-mode";
 import { AppModalHost } from "../components/modals/AppModalHost";
 import {
   hasRequestedPermissions,
@@ -159,11 +160,13 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider>
-      <AuthProvider>
-        <AppLockProvider>
-          <AppShell />
-        </AppLockProvider>
-      </AuthProvider>
+      <GenZModeProvider>
+        <AuthProvider>
+          <AppLockProvider>
+            <AppShell />
+          </AppLockProvider>
+        </AuthProvider>
+      </GenZModeProvider>
     </ThemeProvider>
   );
 }

@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { AuthUser } from "../lib/auth";
-import { setUnauthorizedHandler } from "../lib/api";
+import { invalidateTokenCache, setUnauthorizedHandler } from "../lib/api";
 
 type AuthSession = {
   token: string;
@@ -50,6 +50,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = useCallback(async () => {
     setSession(null);
+    invalidateTokenCache();
     await AsyncStorage.removeItem(AUTH_SESSION_KEY).catch(() => {});
   }, []);
 
@@ -59,6 +60,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // no Authorization header at all.
   const signIn = useCallback(async (s: AuthSession) => {
     setSession(s);
+    invalidateTokenCache();
     await AsyncStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(s)).catch(() => {});
   }, []);
 

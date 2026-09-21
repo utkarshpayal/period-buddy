@@ -119,20 +119,25 @@ export function getSoftTints(colors: ThemeColors) {
 // pale background wash so every symptom category reads as its own color,
 // mirroring how the reference tracker app color-codes its logging chips.
 export function getLogCategoryTints(colors: ThemeColors) {
+  // `fill` is the solid color for a filled shape (a selected option's icon
+  // circle) — everywhere else defaults to the same value as `color`. mood/
+  // skin are the one place `color` and `fill` diverge, and both need
+  // `accentText`: `accent` itself is a ~1.6:1 pale mint wash, unreadable
+  // either as the icon/text foreground (`color`) OR as a filled circle's
+  // background with a white icon drawn on top (`fill`) — accentText is the
+  // same mint hue darkened for contrast, so it works for both roles.
   return {
-    flow: { color: colors.rose, light: colors.roseLight },
-    ovulation: { color: colors.success, light: colors.successLight },
-    sex: { color: colors.danger, light: colors.dangerLight },
-    // color uses accentText (not accent) — accent itself is a ~1.6:1 mint
-    // wash, unreadable as the icon/text foreground this pairs with.
-    mood: { color: colors.accentText, light: colors.accentLight },
-    symptoms: { color: colors.warning, light: colors.warningLight },
-    discharge: { color: colors.sky, light: colors.skyLight },
-    digestion: { color: colors.secondary, light: colors.secondaryLight },
-    pregnancy: { color: colors.gold, light: colors.goldLight },
-    activity: { color: colors.success, light: colors.successLight },
-    energy: { color: colors.secondary, light: colors.secondaryLight },
-    skin: { color: colors.accentText, light: colors.accentLight },
+    flow: { color: colors.rose, light: colors.roseLight, fill: colors.rose },
+    ovulation: { color: colors.success, light: colors.successLight, fill: colors.success },
+    sex: { color: colors.danger, light: colors.dangerLight, fill: colors.danger },
+    mood: { color: colors.accentText, light: colors.accentLight, fill: colors.accentText },
+    symptoms: { color: colors.warning, light: colors.warningLight, fill: colors.warning },
+    discharge: { color: colors.sky, light: colors.skyLight, fill: colors.sky },
+    digestion: { color: colors.secondary, light: colors.secondaryLight, fill: colors.secondary },
+    pregnancy: { color: colors.gold, light: colors.goldLight, fill: colors.gold },
+    activity: { color: colors.success, light: colors.successLight, fill: colors.success },
+    energy: { color: colors.secondary, light: colors.secondaryLight, fill: colors.secondary },
+    skin: { color: colors.accentText, light: colors.accentLight, fill: colors.accentText },
   };
 }
 

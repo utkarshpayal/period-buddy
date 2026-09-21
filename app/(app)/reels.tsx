@@ -25,6 +25,7 @@ import {
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { useAppState } from "../../components/AppState";
 import { alert } from "../../lib/alert";
+import { Loader } from "../../components/Loader";
 import { useTheme } from "../../components/theme";
 import { getShadow } from "../../components/ui-tokens";
 import { reelsApi, type Reel as ApiReel } from "../../lib/api";
@@ -726,7 +727,7 @@ export default function Reels() {
       >
         {loadingReels && reels.length === 0 ? (
           <View className="flex-1 items-center justify-center">
-            <ActivityIndicator color="white" size="large" />
+            <Loader size={64} />
           </View>
         ) : (
         <ScrollView

@@ -1,24 +1,27 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, RefreshControl, ScrollView, StatusBar, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { RefreshControl, ScrollView, StatusBar, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
 import { EmptyState } from "../../components/EmptyState";
 import { useTheme } from "../../components/theme";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
-import { CashfreeCheckoutModal, type CashfreeResult } from "../../components/CashfreeCheckoutModal";
-import { CashfreeUpiCollectModal, type UpiCollectOutcome } from "../../components/CashfreeUpiCollectModal";
-import { showAlert } from "../../lib/modal-host";
+import { CashfreeCheckoutModal } from "../../components/CashfreeCheckoutModal";
+import { CashfreeUpiCollectModal } from "../../components/CashfreeUpiCollectModal";
+import { PaymentTrustFooter } from "../../components/subscription/PaymentTrustFooter";
+import { PurchaseConfirmSheet } from "../../components/subscription/PurchaseConfirmSheet";
+import { PurchaseResultPanel } from "../../components/subscription/PurchaseResultPanel";
+import { usePaymentCheckout } from "../../hooks/usePaymentCheckout";
 import { formatShortDate } from "../../lib/format";
 import {
   getFriendlyErrorMessage,
   subscriptionApi,
   type BillingCycle,
+  type CouponPreview,
   type Entitlement,
   type MySubscription,
   type SubscriptionFeature,
-  type SubscriptionOrder,
   type SubscriptionPlan,
 } from "../../lib/api";
 
@@ -28,11 +31,21 @@ const CYCLE_SUFFIX: Record<BillingCycle, string> = {
   one_time: " once",
 };
 
+type ConfirmTarget = {
+  key: string;
+  payload: { source: "plan"; planId: string } | { source: "feature"; featureKey: string };
+  label: string;
+  description?: string;
+  price: number;
+  cycleSuffix: string;
+};
+
 /**
  * Profile → My Subscription. Shows what's currently active, and a full
  * pricing grid (plans + individual features) to browse/upgrade any time —
  * not just when a screen hits a lock (see components/subscription/
- * PaywallModal.tsx for that flow). Purchase mechanics are identical to it.
+ * PaywallModal.tsx for that flow). Purchase mechanics are identical to it,
+ * sharing hooks/usePaymentCheckout.ts's state machine.
  */
 export default function SubscriptionScreen() {
   const { colors, isDark, fonts } = useTheme();
@@ -46,17 +59,25 @@ export default function SubscriptionScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [purchasingKey, setPurchasingKey] = useState<string | null>(null);
-  const [checkout, setCheckout] = useState<SubscriptionOrder | null>(null);
-  const [useHostedCheckout, setUseHostedCheckout] = useState(false);
-
-  // This screen lists many purchasable items (several plans + features), so
-  // unlike PaywallModal's single-item paywall there's no one thing to
-  // preview a discount against up front. The code is just carried along on
-  // whichever purchase the user actually taps — the server (createOrder)
-  // validates and prices it against that specific item, same guarantees as
-  // the preview endpoint, just without a preview step here.
   const [couponCode, setCouponCode] = useState("");
+  const [confirmTarget, setConfirmTarget] = useState<ConfirmTarget | null>(null);
+  const [couponPreview, setCouponPreview] = useState<CouponPreview | null>(null);
+  const [couponPreviewError, setCouponPreviewError] = useState<string | null>(null);
+  const [previewingCoupon, setPreviewingCoupon] = useState(false);
+
+  const {
+    purchasingKey,
+    checkout,
+    useHostedCheckout,
+    setUseHostedCheckout,
+    purchaseResult,
+    setPurchaseResult,
+    startPurchase,
+    handleCheckoutResult,
+    verifyUpiOnce,
+    handleUpiOutcome,
+    recheckPending,
+  } = usePaymentCheckout();
 
   const load = useCallback(async () => {
     setError(null);
@@ -91,106 +112,43 @@ export default function SubscriptionScreen() {
   const isUnlocked = (key: string) =>
     !me || !me.subscriptionEnabled || me.unlockedFeatureKeys === "ALL" || me.unlockedFeatureKeys.includes(key);
 
-  const startPurchase = async (
-    key: string,
-    label: string,
-    payload: { source: "plan"; planId: string } | { source: "feature"; featureKey: string },
-  ) => {
-    setPurchasingKey(key);
+  // Opening the confirm sheet previews the coupon (if one was typed) against
+  // this specific item — the same preview-then-apply flow PaywallModal uses,
+  // instead of blindly carrying an unvalidated code into checkout (fixes.md 6.3).
+  async function openConfirm(target: ConfirmTarget) {
+    setConfirmTarget(target);
+    setCouponPreview(null);
+    setCouponPreviewError(null);
+    const code = couponCode.trim();
+    if (!code) return;
+    setPreviewingCoupon(true);
     try {
-      const order = await subscriptionApi.createOrder({
-        ...payload,
-        couponCode: couponCode.trim() || undefined,
-      });
-      if (order.free) {
-        showAlert("Unlocked!", "Your coupon covered the full price — no payment needed.", undefined, {
-          icon: "checkmark-circle",
-        });
-        setCouponCode("");
-        load();
-        return;
-      }
-      setUseHostedCheckout(false);
-      setCheckout(order);
+      const preview = await subscriptionApi.applyCoupon({ code, ...target.payload });
+      setCouponPreview(preview);
     } catch (err) {
-      showAlert("Couldn't start checkout", getFriendlyErrorMessage(err));
+      setCouponPreviewError(getFriendlyErrorMessage(err));
     } finally {
-      setPurchasingKey(null);
+      setPreviewingCoupon(false);
     }
-  };
+  }
 
-  const handleCheckoutResult = async (result: CashfreeResult) => {
-    const order = checkout;
-    setCheckout(null);
-    if (!order) return;
+  async function handleConfirmPurchase(preferUpiCollect: boolean) {
+    if (!confirmTarget) return;
+    const outcome = await startPurchase(confirmTarget.key, confirmTarget.payload, {
+      couponCode: couponPreview ? couponCode.trim() : undefined,
+      preferUpiCollect,
+    });
+    setConfirmTarget(null);
+    if (outcome?.free) {
+      setCouponCode("");
+      load();
+    }
+  }
 
-    if (result.type === "dismiss") {
-      // A dismiss is usually a genuine cancel, but it's also what happens
-      // if the user closes the checkout the instant after a redirect-based
-      // method (netbanking/wallet/other UPI app) finishes — before
-      // CashfreeCheckoutModal's own return_url interception fires. One
-      // silent verify check catches that case and unlocks anyway; a real
-      // cancel just resolves to "pending"/an error here and stays quiet.
-      // See PaywallModal.tsx's identically-shaped handling.
-      try {
-        const verified = await subscriptionApi.verifyPayment({
-          entitlementId: order.entitlementId,
-          orderId: order.orderId!,
-        });
-        if (!("pending" in verified)) {
-          showAlert("Unlocked!", "Your purchase is active.", undefined, { icon: "checkmark-circle" });
-          load();
-        }
-      } catch {
-        // Genuine cancel — nothing was charged, stay quiet.
-      }
-      return;
-    }
-    if (result.type === "failed") {
-      showAlert("Payment failed", "The payment didn't go through. You haven't been charged.");
-      return;
-    }
-    try {
-      const verified = await subscriptionApi.verifyPayment({
-        entitlementId: order.entitlementId,
-        orderId: result.orderId,
-      });
-      if ("pending" in verified) {
-        // The checkout sheet just reported success, so a still-pending
-        // Cashfree order here is unexpected — say something rather than
-        // leaving the user staring at a checkout that closed with no
-        // feedback at all.
-        showAlert("Almost there", "Your payment is still processing — check My Subscription shortly.");
-      } else {
-        showAlert("Unlocked!", "Your purchase is active.", undefined, { icon: "checkmark-circle" });
-        load();
-      }
-    } catch (err) {
-      showAlert("Couldn't confirm payment", getFriendlyErrorMessage(err));
-    }
-  };
-
-  // See PaywallModal's identically-shaped verifyUpiOnce/handleUpiOutcome.
-  const verifyUpiOnce = async (orderId: string): Promise<"paid" | "pending" | "failed"> => {
-    if (!checkout) return "failed";
-    try {
-      const result = await subscriptionApi.verifyPayment({ entitlementId: checkout.entitlementId, orderId });
-      return "pending" in result ? "pending" : "paid";
-    } catch {
-      return "failed";
-    }
-  };
-
-  const handleUpiOutcome = (result: UpiCollectOutcome) => {
-    setCheckout(null);
-    if (result.type === "dismiss") return;
-    if (result.type === "failed") {
-      showAlert("Payment failed", result.message ?? "The payment didn't go through. You haven't been charged.");
-      return;
-    }
-    showAlert("Unlocked!", "Your purchase is active.", undefined, { icon: "checkmark-circle" });
+  function handleResultDone() {
+    setPurchaseResult(null);
     load();
-  };
+  }
 
   const entitlementLabel = (e: Entitlement) => {
     if (e.source === "plan") return typeof e.plan === "object" && e.plan ? e.plan.name : "Plan";
@@ -207,6 +165,14 @@ export default function SubscriptionScreen() {
         <ScreenHeader title="My Subscription" />
 
         <LoadingErrorState loading={loading} error={error} onRetry={load} loadingLabel="Loading your subscription…">
+          {purchaseResult ? (
+            <PurchaseResultPanel
+              result={purchaseResult}
+              onDone={handleResultDone}
+              onDismissFailure={() => setPurchaseResult(null)}
+              onRecheckPending={recheckPending}
+            />
+          ) : (
           <ScrollView
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 48 }}
@@ -292,7 +258,7 @@ export default function SubscriptionScreen() {
             </View>
             {couponCode.trim() ? (
               <Text className="mx-6 mt-1.5 text-[11px] font-semibold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                Applied automatically to whichever plan or feature you buy below.
+                We&apos;ll check this against whichever plan or feature you choose below.
               </Text>
             ) : null}
 
@@ -344,19 +310,23 @@ export default function SubscriptionScreen() {
                           </View>
                         ) : (
                           <TouchableOpacity
-                            onPress={() => startPurchase(plan._id, plan.name, { source: "plan", planId: plan._id })}
+                            onPress={() =>
+                              openConfirm({
+                                key: plan._id,
+                                payload: { source: "plan", planId: plan._id },
+                                label: plan.name,
+                                description: plan.description,
+                                price: plan.price,
+                                cycleSuffix: CYCLE_SUFFIX[plan.billingCycle],
+                              })
+                            }
                             activeOpacity={0.85}
-                            disabled={purchasingKey !== null}
                             className="rounded-full px-4 py-2.5"
                             style={{ backgroundColor: colors.primary }}
                           >
-                            {purchasingKey === plan._id ? (
-                              <ActivityIndicator color={colors.buttonText} size="small" />
-                            ) : (
-                              <Text className="text-xs font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-                                Choose
-                              </Text>
-                            )}
+                            <Text className="text-xs font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
+                              Choose
+                            </Text>
                           </TouchableOpacity>
                         )}
                       </View>
@@ -408,20 +378,22 @@ export default function SubscriptionScreen() {
                           ) : (
                             <TouchableOpacity
                               onPress={() =>
-                                startPurchase(feature.key, feature.name, { source: "feature", featureKey: feature.key })
+                                openConfirm({
+                                  key: feature.key,
+                                  payload: { source: "feature", featureKey: feature.key },
+                                  label: feature.name,
+                                  description: feature.description,
+                                  price: feature.price,
+                                  cycleSuffix: CYCLE_SUFFIX[feature.billingCycle],
+                                })
                               }
                               activeOpacity={0.85}
-                              disabled={purchasingKey !== null}
                               className="rounded-full px-4 py-2.5"
                               style={{ backgroundColor: colors.gold ?? colors.primary }}
                             >
-                              {purchasingKey === feature.key ? (
-                                <ActivityIndicator color={colors.buttonText} size="small" />
-                              ) : (
-                                <Text className="text-xs font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-                                  Unlock
-                                </Text>
-                              )}
+                              <Text className="text-xs font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
+                                Unlock
+                              </Text>
                             </TouchableOpacity>
                           )}
                         </View>
@@ -464,16 +436,42 @@ export default function SubscriptionScreen() {
                 </View>
               </>
             ) : null}
+
+            <PaymentTrustFooter />
           </ScrollView>
+          )}
         </LoadingErrorState>
       </SafeAreaView>
+
+      <PurchaseConfirmSheet
+        // Don't rely on handleConfirmPurchase's setConfirmTarget(null) alone
+        // to prevent a stacked-Modal frame — hide the instant checkout/
+        // purchaseResult exists too, regardless of render-batching timing.
+        visible={confirmTarget !== null && !checkout && !purchaseResult}
+        itemName={confirmTarget?.label ?? ""}
+        itemDescription={confirmTarget?.description}
+        originalAmount={confirmTarget?.price ?? 0}
+        cycleSuffix={confirmTarget?.cycleSuffix ?? ""}
+        couponPreview={couponPreview}
+        couponNote={
+          previewingCoupon
+            ? "Checking your coupon…"
+            : couponPreviewError
+              ? couponPreviewError
+              : undefined
+        }
+        confirming={confirmTarget !== null && purchasingKey === confirmTarget.key}
+        onConfirm={handleConfirmPurchase}
+        onClose={() => setConfirmTarget(null)}
+      />
 
       {/* checkout is only ever set from startPurchase's non-free branch,
           which never reaches setCheckout without a real Cashfree order — so
           orderId/paymentSessionId (optional on SubscriptionOrder because a
-          free order has neither) are always present here. UPI ID entry is
-          the default, native-UI path; "Pay another way" switches to the
-          hosted checkout for cards/netbanking/other UPI apps. */}
+          free order has neither) are always present here. Hosted checkout
+          (cards/UPI apps/netbanking/wallets) is the default; native UPI-ID
+          collect only opens when the confirm sheet's "pay with a UPI ID"
+          link was used. */}
       {checkout && checkout.orderId && checkout.paymentSessionId && !useHostedCheckout && (
         <CashfreeUpiCollectModal
           visible

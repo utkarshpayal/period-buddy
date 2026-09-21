@@ -14,16 +14,15 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle } from "react-native-svg";
 import { useAuth } from "../../../components/auth-context";
+import { genZLabel, useGenZLabel, useGenZMode } from "../../../components/genz-mode";
 import HubEntryCard from "../../../components/HubEntryCard";
 import StatCard from "../../../components/StatCard";
 import { useTheme } from "../../../components/theme";
 import { getHeroGradient, getShadow } from "../../../components/ui-tokens";
 import { useUserStats } from "../../../hooks/useUserStats";
 import {
-  authApi,
   cycleApi,
   partnerApi,
-  type DashboardSummary,
   type Predictions,
 } from "../../../lib/api";
 import { getCyclePhase } from "../../../lib/cycle";
@@ -178,34 +177,35 @@ function buildCurrentWeekStrip(
 
 export default function Home() {
   const { colors, isDark, fonts } = useTheme();
-  const { user, updateUser } = useAuth();
-  const { streakCount, walletBalance, isLoading: isStatsLoading } = useUserStats();
+  const { enabled: genZModeEnabled } = useGenZMode();
+  const insightsLabel = useGenZLabel("Insights");
+  const seeAllLabel = useGenZLabel("See all");
+  const moreForYouLabel = useGenZLabel("More for you");
+  const careInsightsLabel = useGenZLabel("Care & Insights");
+  const wellnessSupportLabel = useGenZLabel("Wellness & Support");
+  const exploreLabel = useGenZLabel("Explore");
+  const { user } = useAuth();
+  // Home reuses useUserStats()'s dashboard fetch instead of independently
+  // calling authApi.getDashboard() again on every mount (the two used to
+  // race two copies of the same request).
+  const { streakCount, walletBalance, dashboard, isLoading: isStatsLoading, refresh: refreshStats } = useUserStats();
   const router = useRouter();
-  const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
   const [predictions, setPredictions] = useState<Predictions | null>(null);
   const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const loadHome = useCallback(async () => {
-    const [dashboardResult, notifsResult] = await Promise.allSettled([
-      Promise.all([authApi.getDashboard(), cycleApi.getPredictions()]),
+    const [predictionsResult, notifsResult] = await Promise.allSettled([
+      cycleApi.getPredictions(),
       partnerApi.getNotifications(),
     ]);
 
-    if (dashboardResult.status === "fulfilled") {
-      const [dashboardSummary, cyclePredictions] = dashboardResult.value;
-      setDashboard(dashboardSummary);
-      setPredictions(cyclePredictions);
-      if (dashboardSummary.user) updateUser(dashboardSummary.user);
-    } else {
-      setDashboard(null);
-      setPredictions(null);
-    }
+    setPredictions(predictionsResult.status === "fulfilled" ? predictionsResult.value : null);
 
     if (notifsResult.status === "fulfilled") {
       setHasUnreadNotifications(notifsResult.value.some((n) => !n.isRead));
     }
-  }, [updateUser]);
+  }, []);
 
   useEffect(() => {
     loadHome();
@@ -214,11 +214,11 @@ export default function Home() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await loadHome();
+      await Promise.all([loadHome(), refreshStats()]);
     } finally {
       setRefreshing(false);
     }
-  }, [loadHome]);
+  }, [loadHome, refreshStats]);
 
   // These must reflect the signed-in account's real data only — never a
   // locally-cached demo/fallback number, which would silently show a
@@ -533,6 +533,8 @@ export default function Home() {
             ].map((action, idx) => (
               <TouchableOpacity
                 key={idx}
+                accessibilityLabel={action.label}
+                accessibilityRole="button"
                 activeOpacity={0.8}
                 onPress={() => router.push(action.route as any)}
                 className="items-center"
@@ -557,7 +559,7 @@ export default function Home() {
                 <Text
                   style={{ fontSize: 11, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body, marginTop: 6 }}
                 >
-                  {action.label}
+                  {genZLabel(action.label, genZModeEnabled)}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -572,12 +574,12 @@ export default function Home() {
               <View className="flex-row items-center" style={{ gap: 7 }}>
                 <View style={{ width: 5, height: 14, borderRadius: 3, backgroundColor: colors.secondary }} />
                 <Text style={{ fontSize: 14.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
-                  Insights
+                  {insightsLabel}
                 </Text>
               </View>
               <TouchableOpacity activeOpacity={0.7} onPress={() => router.push("/(app)/predictions")} className="flex-row items-center" style={{ gap: 2 }}>
                 <Text style={{ fontSize: 12, fontWeight: "700", color: colors.primary, fontFamily: fonts.body }}>
-                  See all
+                  {seeAllLabel}
                 </Text>
                 <Ionicons name="chevron-forward" size={13} color={colors.primary} />
               </TouchableOpacity>
@@ -610,7 +612,7 @@ export default function Home() {
 
                   <View style={{ position: "relative", width: 56, height: 56 }}>
                     <Svg width={56} height={56} viewBox="0 0 64 64">
-                      <Circle cx="32" cy="32" r="27" fill="none" stroke={isDark ? colors.surfaceStrong : "#E3E7ED"} strokeWidth={6} />
+                      <Circle cx="32" cy="32" r="27" fill="none" stroke={colors.track} strokeWidth={6} />
                       <Circle cx="32" cy="32" r="27" fill="none" stroke={colors.primary} strokeWidth={6} strokeLinecap="round" strokeDasharray={`${(treeHealth / 100) * 170} 170`} transform="rotate(-90 32 32)" />
                     </Svg>
                     <View style={{ position: "absolute", inset: 0, justifyContent: "center", alignItems: "center" }}>
@@ -661,7 +663,7 @@ export default function Home() {
                         <Text style={{ fontSize: 9.5, fontWeight: "600", color: isLatest ? colors.primary : colors.mutedText, fontFamily: fonts.mono, marginBottom: 6 }}>
                           {data.length > 0 ? `${data.length}d` : "—"}
                         </Text>
-                        <View style={{ height: 80, width: 14, backgroundColor: isDark ? colors.surfaceStrong : "#E8EDF3", borderRadius: 99, justifyContent: "flex-end", overflow: "hidden" }}>
+                        <View style={{ height: 80, width: 14, backgroundColor: colors.track, borderRadius: 99, justifyContent: "flex-end", overflow: "hidden" }}>
                           <View style={{ height: barHeight, width: "100%", backgroundColor: colors.primary, opacity: isLatest ? 1 : 0.5, borderRadius: 99 }} />
                         </View>
                         <Text style={{ fontSize: 10, fontWeight: "600", color: isLatest ? colors.foreground : colors.mutedText, fontFamily: fonts.body, marginTop: 8 }}>
@@ -685,7 +687,7 @@ export default function Home() {
             <View className="mb-2.5 flex-row items-center" style={{ gap: 7 }}>
               <View style={{ width: 5, height: 14, borderRadius: 3, backgroundColor: colors.primary }} />
               <Text style={{ fontSize: 14.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
-                More for you
+                {moreForYouLabel}
               </Text>
             </View>
 
@@ -694,7 +696,7 @@ export default function Home() {
                 icon="pulse-outline"
                 iconColor={colors.primary}
                 iconBg={colors.primaryLight}
-                title="Care & Insights"
+                title={careInsightsLabel}
                 description="Predictions, insights, symptom trends & consults"
                 onPress={() => router.push("/(app)/care-hub")}
               />
@@ -702,7 +704,7 @@ export default function Home() {
                 icon="heart-outline"
                 iconColor={colors.secondary}
                 iconBg={colors.secondaryLight}
-                title="Wellness & Support"
+                title={wellnessSupportLabel}
                 description="Health concerns, private Q&A, hygiene & more"
                 onPress={() => router.push("/(app)/wellness-hub")}
               />
@@ -710,7 +712,7 @@ export default function Home() {
                 icon="compass-outline"
                 iconColor={colors.accent}
                 iconBg={colors.accentLight}
-                title="Explore"
+                title={exploreLabel}
                 description="Forest, blogs, videos, habits & your buddy"
                 onPress={() => router.push("/(app)/explore-hub")}
               />

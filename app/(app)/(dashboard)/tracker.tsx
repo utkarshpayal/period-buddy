@@ -1952,6 +1952,7 @@ export default function Tracker() {
                   desc: "View cycle length history and averages",
                   action: () => {
                     setSearchVisible(false);
+                    router.push("/(app)/graphs-reports");
                   },
                 },
                 {
@@ -1978,6 +1979,7 @@ export default function Tracker() {
                   desc: "See when your next period is expected",
                   action: () => {
                     setSearchVisible(false);
+                    router.push("/(app)/predictions");
                   },
                 },
                 // App-wide features, so search can jump anywhere in the app,
@@ -2015,7 +2017,7 @@ export default function Tracker() {
                   desc: "Ask privately, expert-answered",
                   action: () => {
                     setSearchVisible(false);
-                    router.push("/(app)/qa");
+                    router.push({ params: { new: "1" }, pathname: "/(app)/qa" });
                   },
                 },
                 {

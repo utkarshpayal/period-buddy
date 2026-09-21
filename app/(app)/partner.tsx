@@ -25,11 +25,11 @@ import { PaywallModal } from "../../components/subscription/PaywallModal";
 import {
   isFeatureLockedError,
   partnerApi,
-  getWebSocketUrl,
   type PartnerMessage,
   type PartnerProfile,
 } from "../../lib/api";
 import { shareWithAppLink } from "../../lib/share";
+import { useRealtimeSocket, type RealtimeMessage } from "../../hooks/useRealtimeSocket";
 
 export default function Partner() {
   const { colors, isDark, fonts } = useTheme();
@@ -113,122 +113,58 @@ export default function Partner() {
     if (activeTab === "chat") loadMessages();
   }, [activeTab, loadMessages]);
 
-  // WebSocket live synchronization
-  useEffect(() => {
-    const activeProfile = profile;
-    if (activeTab !== "chat" || !activeProfile?._id || !activeProfile.isConnected) return;
+  // Realtime chat sync — only join the partner room while the chat tab is
+  // actually open and the pairing is connected.
+  const partnerChatRoom =
+    activeTab === "chat" && profile?._id && profile.isConnected ? `partner_${profile._id}` : null;
 
-    let socket: WebSocket | null = null;
-    let isDisconnected = false;
-    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
-    // Auto-reconnect with capped backoff + jitter so a dropped socket resumes
-    // live chat instead of silently going stale until the screen remounts.
-    let reconnectAttempts = 0;
-    function scheduleReconnect() {
-      if (isDisconnected) return;
-      const base = Math.min(30000, 1000 * 2 ** reconnectAttempts);
-      reconnectAttempts += 1;
-      reconnectTimeout = setTimeout(connectWS, base / 2 + Math.random() * (base / 2));
-    }
+  useRealtimeSocket({
+    enabled: Boolean(partnerChatRoom),
+    onMessage: useCallback(
+      (data: RealtimeMessage) => {
+        if (!partnerChatRoom) return;
+        if (data.type === "message" && data.room === partnerChatRoom && data.message) {
+          setChatMessages((prev) => {
+            const next = [...prev];
+            let found = false;
+            for (let i = 0; i < next.length; i++) {
+              const m = next[i];
+              if (m._id === data.message._id) {
+                found = true;
+                break;
+              }
+              const isOptimisticMatch =
+                !m._id &&
+                m.sender === data.message.sender &&
+                m.text === data.message.text;
 
-    async function connectWS() {
-      if (isDisconnected) return;
-      try {
-        const wsUrl = await getWebSocketUrl();
-        if (isDisconnected) return;
-        socket = new WebSocket(wsUrl);
+              const isTimeMatch =
+                m.sender === data.message.sender &&
+                m.text === data.message.text &&
+                m.sentAt &&
+                data.message.sentAt &&
+                Math.abs(new Date(m.sentAt).getTime() - new Date(data.message.sentAt).getTime()) < 5000;
 
-        socket.onopen = () => {
-          if (isDisconnected) return;
-          reconnectAttempts = 0;
-          console.log("WebSocket connected for partner chat");
-          socket?.send(JSON.stringify({
-            type: "join",
-            room: `partner_${activeProfile!._id}`,
-          }));
-        };
-
-        socket.onmessage = (event) => {
-          if (isDisconnected) return;
-          try {
-            const data = JSON.parse(event.data);
-            if (data.type === "message" && data.room === `partner_${activeProfile!._id}`) {
-              if (data.message) {
-                setChatMessages((prev) => {
-                  const next = [...prev];
-                  let found = false;
-                  for (let i = 0; i < next.length; i++) {
-                    const m = next[i];
-                    if (m._id === data.message._id) {
-                      found = true;
-                      break;
-                    }
-                    const isOptimisticMatch =
-                      !m._id &&
-                      m.sender === data.message.sender &&
-                      m.text === data.message.text;
-
-                    const isTimeMatch =
-                      m.sender === data.message.sender &&
-                      m.text === data.message.text &&
-                      m.sentAt &&
-                      data.message.sentAt &&
-                      Math.abs(new Date(m.sentAt).getTime() - new Date(data.message.sentAt).getTime()) < 5000;
-
-                    if (isOptimisticMatch || isTimeMatch) {
-                      next[i] = data.message;
-                      found = true;
-                      break;
-                    }
-                  }
-                  if (!found) {
-                    next.push(data.message);
-                  }
-                  return next;
-                });
-                setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 100);
+              if (isOptimisticMatch || isTimeMatch) {
+                next[i] = data.message;
+                found = true;
+                break;
               }
             }
-          } catch (err) {
-            console.error("Error parsing WebSocket message:", err);
-          }
-        };
-
-        socket.onerror = (err) => {
-          console.warn("WebSocket error:", err);
-        };
-
-        socket.onclose = () => {
-          if (isDisconnected) return;
-          console.log("Partner chat WebSocket closed, retrying with backoff…");
-          scheduleReconnect();
-        };
-      } catch (err) {
-        console.warn("Failed to setup WebSocket:", err);
-        scheduleReconnect();
-      }
-    }
-
-    connectWS();
-
-    return () => {
-      isDisconnected = true;
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
-      if (socket) {
-        try {
-          socket.send(JSON.stringify({
-            type: "leave",
-            room: `partner_${activeProfile!._id}`,
-          }));
-        } catch {}
-        socket.close();
-      }
-    };
-    // Deliberately narrow: only reconnect on identity/connection changes,
-    // not every `profile` mutation (e.g. incoming messages) which would
-    // otherwise tear down and reopen the socket on each update.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, profile?._id, profile?.isConnected]);
+            if (!found) {
+              next.push(data.message);
+            }
+            return next;
+          });
+          setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 100);
+        }
+      },
+      // Deliberately narrow: only re-bind on room identity changes, not every
+      // `profile` mutation (e.g. incoming messages).
+      [partnerChatRoom],
+    ),
+    rooms: partnerChatRoom ? [partnerChatRoom] : [],
+  });
 
 
   const generateCode = async () => {

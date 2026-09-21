@@ -5,9 +5,7 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
-  Modal,
   Platform,
-  Pressable,
   ScrollView,
   StatusBar,
   Text,
@@ -17,6 +15,7 @@ import {
 } from "react-native";
 import Markdown from "react-native-markdown-display";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { LanguagePickerSheet } from "../../components/LanguagePickerSheet";
 import { useTheme } from "../../components/theme";
 import { getSoftTints } from "../../components/ui-tokens";
 import { VoiceModeOverlay, type VoiceStatus } from "../../components/VoiceModeOverlay";
@@ -73,7 +72,7 @@ export default function DocumentChatScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subscriptionLoading]);
 
-  const { handleMicPress, isRecording, isTranscribing, level } = useVoiceInput({
+  const { handleMicPress, isRecording, isTranscribing, level, voiceError } = useVoiceInput({
     language,
     voiceMode,
     onTranscript: (transcript) => {
@@ -89,13 +88,15 @@ export default function DocumentChatScreen() {
   const isSpeakingReply = voiceMode && playingMessageId !== null;
 
   // Google Assistant style loop: whenever voice mode is idle, auto-arm the mic again.
+  // Paused while a voice-mode failure is showing (voiceError) so the user has
+  // time to actually read it before the mic starts listening again.
   useEffect(() => {
-    if (!voiceMode || isRecording || isTranscribing || isReplying || isSpeakingReply) return;
+    if (!voiceMode || isRecording || isTranscribing || isReplying || isSpeakingReply || voiceError) return;
     const timer = setTimeout(() => {
       handleMicPress();
     }, 450);
     return () => clearTimeout(timer);
-  }, [voiceMode, isRecording, isTranscribing, isReplying, isSpeakingReply, handleMicPress]);
+  }, [voiceMode, isRecording, isTranscribing, isReplying, isSpeakingReply, voiceError, handleMicPress]);
 
   const voiceStatus: VoiceStatus = isTranscribing
     ? "processing"
@@ -480,48 +481,20 @@ export default function DocumentChatScreen() {
           </View>
         </KeyboardAvoidingView>
 
-        <Modal transparent animationType="fade" visible={languagePickerVisible} onRequestClose={() => setLanguagePickerVisible(false)}>
-          <View className="flex-1 justify-end">
-            <Pressable
-              onPress={() => setLanguagePickerVisible(false)}
-              style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.overlay }}
-            />
-            <View
-              className="rounded-t-3xl border p-4"
-              style={{ backgroundColor: colors.surface, borderColor: colors.border, paddingBottom: Math.max(16, insets.bottom + 10) }}
-            >
-              <View className="items-center mb-3">
-                <View className="rounded-full" style={{ backgroundColor: colors.border, height: 4, width: 42 }} />
-              </View>
-              <Text className="text-sm font-black mb-3" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-                Chat & voice language
-              </Text>
-              <ScrollView style={{ maxHeight: 340 }} showsVerticalScrollIndicator={false}>
-                {languages.map((item) => (
-                  <TouchableOpacity
-                    key={item.code}
-                    onPress={() => {
-                      setLanguage(item.code);
-                      setLanguagePickerVisible(false);
-                    }}
-                    activeOpacity={0.7}
-                    className="flex-row items-center justify-between py-3 px-1"
-                  >
-                    <Text className="text-xs font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
-                      {item.label}
-                    </Text>
-                    {item.code === language ? <Feather name="check" size={16} color={colors.primary} /> : null}
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          </View>
-        </Modal>
+        <LanguagePickerSheet
+          languages={languages}
+          onClose={() => setLanguagePickerVisible(false)}
+          onSelect={setLanguage}
+          selectedCode={language}
+          title="Chat & voice language"
+          visible={languagePickerVisible}
+        />
       </SafeAreaView>
 
       {voiceMode ? (
         <VoiceModeOverlay
           colors={colors}
+          errorMessage={voiceError}
           fonts={fonts}
           languageLabel={selectedLanguage.label}
           level={level}

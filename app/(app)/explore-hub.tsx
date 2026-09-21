@@ -4,32 +4,40 @@ import React from "react";
 import { ScrollView, StatusBar, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader } from "../../components/ScreenHeader";
+import { genZLabel, useGenZMode } from "../../components/genz-mode";
 import { useTheme } from "../../components/theme";
 import { getShadow } from "../../components/ui-tokens";
+import { getSharedHubTiles } from "../../lib/hubTiles";
 
 /**
  * "Explore" hub — the lighter-weight, browse-anytime destinations (forest,
- * blogs, videos, partner sync, habits, buddy). Reached from Home's "Explore"
- * entry card (see (dashboard)/home.tsx).
+ * blogs, videos, partner sync, habits, buddy, government schemes). Reached
+ * from Home's "Explore" entry card (see (dashboard)/home.tsx).
  */
 export default function ExploreHub() {
   const { colors, isDark, fonts } = useTheme();
+  const { enabled: genZModeEnabled } = useGenZMode();
   const router = useRouter();
+
+  const [sharedBlogs, sharedVideos] = getSharedHubTiles(["blogs", "videos"]);
 
   const items = [
     { title: "Forest", desc: "Grow your wellness tree", icon: "leaf-outline", route: "/(app)/forest", color: colors.success, bg: colors.successLight },
-    { title: "Blogs", desc: "Articles on cycle health", icon: "book-outline", route: "/(app)/blogs", color: colors.info, bg: colors.infoLight },
-    { title: "Videos", desc: "Short videos and reels", icon: "play-circle-outline", route: "/(app)/reels", color: colors.primary, bg: colors.primaryLight },
+    { title: sharedBlogs.title, desc: sharedBlogs.desc, icon: sharedBlogs.icon, route: sharedBlogs.route, color: colors[sharedBlogs.colorKey], bg: colors[sharedBlogs.bgKey] },
+    { title: sharedVideos.title, desc: sharedVideos.desc, icon: sharedVideos.icon, route: sharedVideos.route, color: colors[sharedVideos.colorKey], bg: colors[sharedVideos.bgKey] },
     { title: "Partner Sync", desc: "Share cycle info & chat", icon: "git-merge-outline", route: "/(app)/partner", color: colors.accent, bg: colors.accentLight },
     { title: "Habits", desc: "Daily habit tracking", icon: "checkmark-done-outline", route: "/(app)/habits", color: colors.warning, bg: colors.warningLight },
     { title: "Nominate Buddy", desc: "Anonymous peer support", icon: "star-outline", route: "/(app)/buddy-nomination", color: colors.secondary, bg: colors.secondaryLight },
-  ] as const;
+    // Browse/discovery feature — moved here from a buried Profile settings
+    // row (fixes.md 2.4): it fits this hub's "browse anytime" nature.
+    { title: "Govt. Schemes", desc: "Reproductive health benefits", icon: "ribbon-outline", route: "/(app)/government-schemes", color: colors.primary, bg: colors.primaryLight },
+  ];
 
   return (
     <>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
       <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
-        <ScreenHeader title="Explore" />
+        <ScreenHeader title={genZLabel("Explore", genZModeEnabled)} />
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 48 }}>
           <Text
@@ -69,7 +77,7 @@ export default function ExploreHub() {
                   <Ionicons name={item.icon as any} size={18} color={item.color} />
                 </View>
                 <Text style={{ fontSize: 13.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.body }}>
-                  {item.title}
+                  {genZLabel(item.title, genZModeEnabled)}
                 </Text>
                 <Text
                   style={{ fontSize: 11, color: colors.mutedText, marginTop: 3, fontFamily: fonts.body }}

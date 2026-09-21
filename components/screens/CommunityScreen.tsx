@@ -42,12 +42,12 @@ import { PaywallModal } from "../subscription/PaywallModal";
 import { isFeatureLockedError } from "../../lib/api";
 import {
   communityApi,
-  getWebSocketUrl,
   uploadApi,
   type CommunityAttachment,
   type CommunityPoll,
   type CommunityPost,
 } from "../../lib/api";
+import { useRealtimeSocket, type RealtimeMessage } from "../../hooks/useRealtimeSocket";
 
 // --- BACKEND API LAYER SCHEMAS & INTERFACES ---
 type PendingAttachment = {
@@ -557,154 +557,95 @@ export default function CommunityScreen() {
   const { postId: deepLinkedPostId } = useLocalSearchParams<{ postId?: string }>();
   const [unreadCommentPostIds, setUnreadCommentPostIds] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    if (!token || !user?._id) return;
+  useRealtimeSocket({
+    enabled: Boolean(token && user?._id),
+    onMessage: useCallback(
+      (data: RealtimeMessage) => {
+        const userId = user?._id;
+        try {
+          if (data.type !== "community_notification") return;
 
-    const userId = user._id;
-    let socket: WebSocket | null = null;
-    let isDisconnected = false;
-    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+          if (data.notificationType === "post") {
+            if (data.senderId !== userId) {
+              setPosts((current) => {
+                const alreadyExists = current.some((p) => p.id === (data.post.id ?? data.post._id));
+                if (alreadyExists) return current;
+                return [mapCommunityPost(data.post), ...current];
+              });
+            }
+          } else if (data.notificationType === "comment") {
+            const { postId, comment, senderId } = data;
+            if (!postId || !comment) return;
 
-    function connectWS() {
-      if (isDisconnected) return;
+            // Ignore comment notifications sent by ourselves since they are handled locally and synced via HTTP
+            if (senderId === userId) return;
 
-      getWebSocketUrl()
-        .then((wsUrl) => {
-          if (isDisconnected) return;
+            const isCommentOwner = senderId === userId;
+            const syncedComment: Comment = {
+              id: comment.id ?? comment._id ?? `c_${Date.now()}`,
+              author: isCommentOwner
+                ? "You"
+                : comment.isAnonymous
+                  ? "Anonymous member"
+                  : "Community member",
+              avatar: isCommentOwner ? "U" : "AU",
+              content: comment.content,
+              time: formatRelativeTime(comment.createdAt),
+              isOwner: isCommentOwner,
+            };
 
-          socket = new WebSocket(wsUrl);
+            setPosts((current) =>
+              current.map((item) => {
+                if (item.id === postId) {
+                  const commentExists = item.comments.some((c) => c.id === syncedComment.id);
+                  if (commentExists) return item;
 
-          socket.onopen = () => {
-            if (isDisconnected) return;
-            console.log("WebSocket connected in community screen");
-
-            // Join community room for real-time posts and comments updates
-            socket?.send(
-              JSON.stringify({
-                type: "join",
-                room: "community",
+                  return {
+                    ...item,
+                    commentsCount: item.commentsCount + 1,
+                    comments: [...item.comments, syncedComment],
+                  };
+                }
+                return item;
               })
             );
-          };
 
-          socket.onmessage = (event) => {
-            if (isDisconnected) return;
-            try {
-              const data = JSON.parse(event.data);
-              if (data.type === "community_notification") {
-                if (data.notificationType === "post") {
-                  if (data.senderId !== userId) {
-                    setPosts((current) => {
-                      const alreadyExists = current.some((p) => p.id === (data.post.id ?? data.post._id));
-                      if (alreadyExists) return current;
-                      return [mapCommunityPost(data.post), ...current];
-                    });
-                  }
-                } else if (data.notificationType === "comment") {
-                  const { postId, comment, senderId } = data;
-                  if (!postId || !comment) return;
+            setActivePost((prevActive) => {
+              if (prevActive && prevActive.id === postId) {
+                const commentExists = prevActive.comments.some((c) => c.id === syncedComment.id);
+                if (commentExists) return prevActive;
 
-                  // Ignore comment notifications sent by ourselves since they are handled locally and synced via HTTP
-                  if (senderId === userId) return;
-
-                  const isCommentOwner = senderId === userId;
-                  const syncedComment: Comment = {
-                    id: comment.id ?? comment._id ?? `c_${Date.now()}`,
-                    author: isCommentOwner
-                      ? "You"
-                      : comment.isAnonymous
-                        ? "Anonymous member"
-                        : "Community member",
-                    avatar: isCommentOwner ? "U" : "AU",
-                    content: comment.content,
-                    time: formatRelativeTime(comment.createdAt),
-                    isOwner: isCommentOwner,
-                  };
-
-                  setPosts((current) =>
-                    current.map((item) => {
-                      if (item.id === postId) {
-                        const commentExists = item.comments.some((c) => c.id === syncedComment.id);
-                        if (commentExists) return item;
-
-                        return {
-                          ...item,
-                          commentsCount: item.commentsCount + 1,
-                          comments: [...item.comments, syncedComment],
-                        };
-                      }
-                      return item;
-                    })
-                  );
-
-                  setActivePost((prevActive) => {
-                    if (prevActive && prevActive.id === postId) {
-                      const commentExists = prevActive.comments.some((c) => c.id === syncedComment.id);
-                      if (commentExists) return prevActive;
-
-                      return {
-                        ...prevActive,
-                        commentsCount: prevActive.commentsCount + 1,
-                        comments: [...prevActive.comments, syncedComment],
-                      };
-                    }
-                    return prevActive;
-                  });
-
-                  if (senderId !== userId) {
-                    setActivePost((currentActive) => {
-                      const isSheetOpenForThisPost = currentActive && currentActive.id === postId;
-                      if (!isSheetOpenForThisPost) {
-                        setUnreadCommentPostIds((prev) => {
-                          const next = new Set(prev);
-                          next.add(postId);
-                          return next;
-                        });
-                      }
-                      return currentActive;
-                    });
-                  }
-                }
+                return {
+                  ...prevActive,
+                  commentsCount: prevActive.commentsCount + 1,
+                  comments: [...prevActive.comments, syncedComment],
+                };
               }
-            } catch (err) {
-              console.error("Error parsing WS message in community:", err);
+              return prevActive;
+            });
+
+            if (senderId !== userId) {
+              setActivePost((currentActive) => {
+                const isSheetOpenForThisPost = currentActive && currentActive.id === postId;
+                if (!isSheetOpenForThisPost) {
+                  setUnreadCommentPostIds((prev) => {
+                    const next = new Set(prev);
+                    next.add(postId);
+                    return next;
+                  });
+                }
+                return currentActive;
+              });
             }
-          };
-
-          socket.onerror = (err) => {
-            console.warn("Community screen WebSocket error:", err);
-          };
-
-          socket.onclose = () => {
-            if (isDisconnected) return;
-            console.log("Community screen WebSocket closed, retrying in 3s...");
-            reconnectTimeout = setTimeout(connectWS, 3000);
-          };
-        })
-        .catch((err) => {
-          console.warn("Failed to get WebSocket URL in community screen, retrying in 5s...", err);
-          reconnectTimeout = setTimeout(connectWS, 5000);
-        });
-    }
-
-    connectWS();
-
-    return () => {
-      isDisconnected = true;
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
-      if (socket) {
-        try {
-          socket.send(
-            JSON.stringify({
-              type: "leave",
-              room: "community",
-            })
-          );
-        } catch { }
-        socket.close();
-      }
-    };
-  }, [token, user?._id]);
+          }
+        } catch (err) {
+          console.error("Error handling realtime community message:", err);
+        }
+      },
+      [user?._id],
+    ),
+    rooms: token && user?._id ? ["community"] : [],
+  });
 
   // UI States
   const [posts, setPosts] = useState<Post[]>([]);

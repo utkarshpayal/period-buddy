@@ -9,7 +9,6 @@ export default function TabsLayout() {
         tabBarStyle: { display: "none" },
       }}
     >
-      <Tabs.Screen name="home" options={{ title: "Home" }} />
       <Tabs.Screen name="login" options={{ title: "Login" }} />
       <Tabs.Screen name="signup" options={{ title: "Sign Up" }} />
     </Tabs>

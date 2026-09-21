@@ -4,6 +4,7 @@ import React from "react";
 import { ScrollView, StatusBar, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader } from "../../components/ScreenHeader";
+import { genZLabel, useGenZMode } from "../../components/genz-mode";
 import { useTheme } from "../../components/theme";
 import { getShadow } from "../../components/ui-tokens";
 
@@ -15,6 +16,7 @@ import { getShadow } from "../../components/ui-tokens";
  */
 export default function CareHub() {
   const { colors, isDark, fonts } = useTheme();
+  const { enabled: genZModeEnabled } = useGenZMode();
   const router = useRouter();
 
   const careItems = [
@@ -58,13 +60,24 @@ export default function CareHub() {
       color: colors.gold,
       bg: colors.goldLight,
     },
+    // Moved here from a buried Profile settings row (fixes.md 2.5) — sits
+    // next to Graphs & Reports since documents.tsx already cross-links into
+    // this hub's PDF-report flow.
+    {
+      title: "Documents",
+      tag: "Reports, prescriptions & chat",
+      icon: "document-text-outline",
+      route: "/documents",
+      color: colors.primary,
+      bg: colors.primaryLight,
+    },
   ] as const;
 
   return (
     <>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
       <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
-        <ScreenHeader title="Care & Insights" />
+        <ScreenHeader title={genZLabel("Care & Insights", genZModeEnabled)} />
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 48 }}>
           <Text
@@ -104,7 +117,7 @@ export default function CareHub() {
                   <Ionicons name={item.icon as any} size={19} color={item.color} />
                 </View>
                 <Text style={{ fontSize: 13.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.body }}>
-                  {item.title}
+                  {genZLabel(item.title, genZModeEnabled)}
                 </Text>
                 <Text
                   style={{ fontSize: 11, color: colors.mutedText, marginTop: 3, fontFamily: fonts.body }}

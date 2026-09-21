@@ -14,6 +14,9 @@ const SILENCE_TIMEOUT_MS = 3000;
 const START_GRACE_MS = 1200;
 const METERING_POLL_MS = 100;
 const MAX_RECORDING_MS = 15000;
+// How long a voice-mode failure stays visible inline before the "always
+// listening" loop resumes on its own — long enough to read a short line.
+const VOICE_ERROR_DISPLAY_MS = 3500;
 
 const RECORDER_OPTIONS = {
   ...RecordingPresets.HIGH_QUALITY,
@@ -44,10 +47,35 @@ export function useVoiceInput({ language, voiceMode, onTranscript }: UseVoiceInp
   }, []);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [level, setLevel] = useState(0);
+  // In voice mode there's no native Alert/AppModalHost dialog to surface
+  // failures with — VoiceModeOverlay is already a full-screen `<Modal>`, and
+  // stacking a second native Modal on top of it is the same
+  // double-Modal-unreliability pattern documented elsewhere in this codebase
+  // (PaywallModal/CashfreeCheckoutModal). So voice-mode failures are reported
+  // here instead, for the overlay to render inline.
+  const [voiceError, setVoiceError] = useState<string | null>(null);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const maxDurationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const voiceErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const peakLevelRef = useRef(0);
   const stoppingRef = useRef(false);
+
+  const clearVoiceError = useCallback(() => {
+    if (voiceErrorTimerRef.current) {
+      clearTimeout(voiceErrorTimerRef.current);
+      voiceErrorTimerRef.current = null;
+    }
+    setVoiceError(null);
+  }, []);
+
+  const reportVoiceError = useCallback((message: string) => {
+    if (voiceErrorTimerRef.current) clearTimeout(voiceErrorTimerRef.current);
+    setVoiceError(message);
+    voiceErrorTimerRef.current = setTimeout(() => {
+      voiceErrorTimerRef.current = null;
+      setVoiceError(null);
+    }, VOICE_ERROR_DISPLAY_MS);
+  }, []);
 
   const clearSilenceTimer = useCallback(() => {
     if (silenceTimerRef.current) {
@@ -81,15 +109,22 @@ export function useVoiceInput({ language, voiceMode, onTranscript }: UseVoiceInp
       const transcript = result.transcript.trim();
       if (transcript) {
         onTranscript(transcript);
+      } else if (voiceMode) {
+        reportVoiceError("Didn't catch that — try again somewhere quieter.");
       } else {
         alert("Didn't catch that", "Try recording again somewhere quieter.");
       }
     } catch (error) {
-      alert("Voice input failed", error instanceof Error ? error.message : "Please try again.");
+      const message = error instanceof Error ? error.message : "Please try again.";
+      if (voiceMode) {
+        reportVoiceError(message);
+      } else {
+        alert("Voice input failed", message);
+      }
     } finally {
       setIsTranscribing(false);
     }
-  }, [clearSilenceTimer, clearMaxDurationTimer, language, onTranscript, recorder]);
+  }, [clearSilenceTimer, clearMaxDurationTimer, language, onTranscript, recorder, reportVoiceError, voiceMode]);
 
   // Live amplitude tracking + auto-submit after 3s of silence (voice mode only).
   // The countdown always runs and only resets while actual speech is detected, so
@@ -154,6 +189,7 @@ export function useVoiceInput({ language, voiceMode, onTranscript }: UseVoiceInp
     // moment the user tapped again.
     if (isTranscribing) return;
 
+    clearVoiceError();
     const { granted } = await requestRecordingPermissionsAsync();
     if (!granted) {
       showPermissionModal({
@@ -174,12 +210,20 @@ export function useVoiceInput({ language, voiceMode, onTranscript }: UseVoiceInp
         stopAndTranscribe();
       }, MAX_RECORDING_MS);
     }
-  }, [clearMaxDurationTimer, isTranscribing, recorder, recorderState.isRecording, stopAndTranscribe, voiceMode]);
+  }, [clearMaxDurationTimer, clearVoiceError, isTranscribing, recorder, recorderState.isRecording, stopAndTranscribe, voiceMode]);
+
+  useEffect(() => {
+    return () => {
+      if (voiceErrorTimerRef.current) clearTimeout(voiceErrorTimerRef.current);
+    };
+  }, []);
 
   return {
+    clearVoiceError,
     handleMicPress,
     isRecording: recorderState.isRecording,
     isTranscribing,
     level,
+    voiceError,
   };
 }

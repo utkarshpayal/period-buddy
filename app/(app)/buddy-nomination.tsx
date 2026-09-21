@@ -259,7 +259,7 @@ function BuddyNomination() {
 
         socket.onopen = () => {
           if (isDisconnected) return;
-          console.log("WebSocket connected for buddy chat");
+          if (__DEV__) console.log("WebSocket connected for buddy chat");
           socket?.send(JSON.stringify({ type: "join", room }));
           // Announce presence immediately, then keep pinging so the buddy's
           // client can tell "online" apart from "was online a while ago".
@@ -331,7 +331,7 @@ function BuddyNomination() {
         };
 
         socket.onclose = () => {
-          console.log("WebSocket closed");
+          if (__DEV__) console.log("WebSocket closed");
         };
       } catch (err) {
         console.warn("Failed to setup WebSocket:", err);

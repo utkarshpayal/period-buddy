@@ -9,11 +9,11 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { CalendarModal } from "./CalendarModal";
 import { alert } from "../lib/alert";
 import { uploadApi } from "../lib/api";
 import { useTheme } from "./theme";
 import { getShadow } from "./ui-tokens";
+import { WheelDatePicker } from "./WheelDatePicker";
 
 const onboardingSteps = [
   {
@@ -87,7 +87,6 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
   const { colors, isDark } = useTheme();
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [dateOfBirth, setDateOfBirth] = useState("");
-  const [isDatePickerVisible, setIsDatePickerVisible] = useState(false);
   const [phone, setPhone] = useState("");
   const [profilePicture, setProfilePicture] = useState<string | null>(null);
   const [profilePictureUrl, setProfilePictureUrl] = useState<string | null>(null);
@@ -96,7 +95,6 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const [lastPeriodStartDate, setLastPeriodStartDate] = useState("");
-  const [isPeriodDatePickerVisible, setIsPeriodDatePickerVisible] = useState(false);
   const [periodLength, setPeriodLength] = useState("5");
   const [cycleLength, setCycleLength] = useState("28");
   // Multi-select: users often have more than one reason for tracking. The
@@ -116,6 +114,9 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
   const minAdultDate = new Date();
   minAdultDate.setFullYear(minAdultDate.getFullYear() - 13);
   const earliestDate = new Date(1900, 0, 1);
+  const defaultBirthDate = new Date();
+  defaultBirthDate.setFullYear(defaultBirthDate.getFullYear() - 20);
+  const earliestPeriodDate = new Date(new Date().getFullYear() - 1, 0, 1);
 
   function formatDisplayDate(dateKey: string) {
     const date = new Date(`${dateKey}T00:00:00`);
@@ -124,12 +125,6 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
       month: "long",
       year: "numeric",
     });
-  }
-
-  function handleSelectDate(dateKey: string) {
-    setErrorMessage("");
-    setDateOfBirth(dateKey);
-    setIsDatePickerVisible(false);
   }
 
   const currentStep = onboardingSteps[currentStepIndex];
@@ -273,45 +268,28 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
   function renderOnboardingInput(stepId: OnboardingStepId) {
     if (stepId === "dateOfBirth") {
       return (
-        <View className="mb-4">
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={() => setIsDatePickerVisible(true)}
-            className="flex-row items-center rounded-2xl border px-4 h-14"
-            style={{
-              backgroundColor: colors.input,
-              borderColor: isDatePickerVisible ? colors.primary : colors.border,
-              borderWidth: isDatePickerVisible ? 1.5 : 1,
-            }}
+        <View className="mb-2">
+          <Text
+            className="mb-3 text-center text-lg font-extrabold"
+            style={{ color: colors.foreground }}
           >
-            <Ionicons
-              name="calendar-outline"
-              size={20}
-              color={isDatePickerVisible ? colors.primary : colors.mutedText}
-            />
-
-            <Text
-              className="ml-3 flex-1 text-base font-semibold"
-              style={{ color: dateOfBirth ? colors.foreground : colors.mutedText }}
-            >
-              {dateOfBirth ? formatDisplayDate(dateOfBirth) : "Select your date of birth"}
-            </Text>
-
-            <Ionicons name="chevron-down" size={16} color={colors.mutedText} />
-          </TouchableOpacity>
-
-          <Text className="mt-2 text-xs font-semibold px-1" style={{ color: colors.mutedText }}>
-            This helps us tailor cycle predictions to your age.
+            {dateOfBirth ? formatDisplayDate(dateOfBirth) : " "}
           </Text>
 
-          <CalendarModal
-            initialDateKey={dateOfBirth || undefined}
+          <WheelDatePicker
+            dateKey={dateOfBirth || undefined}
+            defaultDate={defaultBirthDate}
             maximumDate={minAdultDate}
             minimumDate={earliestDate}
-            onClose={() => setIsDatePickerVisible(false)}
-            onSelect={handleSelectDate}
-            visible={isDatePickerVisible}
+            onChange={(dateKey) => {
+              setErrorMessage("");
+              setDateOfBirth(dateKey);
+            }}
           />
+
+          <Text className="mt-3 text-xs font-semibold px-1 text-center" style={{ color: colors.mutedText }}>
+            This helps us tailor cycle predictions to your age.
+          </Text>
         </View>
       );
     }
@@ -355,46 +333,23 @@ export function ProfileOnboarding({ onSubmit }: ProfileOnboardingProps) {
 
     if (stepId === "lastPeriodStartDate") {
       return (
-        <View className="mb-4">
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={() => setIsPeriodDatePickerVisible(true)}
-            className="flex-row items-center rounded-2xl border px-4 h-14"
-            style={{
-              backgroundColor: colors.input,
-              borderColor: isPeriodDatePickerVisible ? colors.primary : colors.border,
-              borderWidth: isPeriodDatePickerVisible ? 1.5 : 1,
-            }}
+        <View className="mb-2">
+          <Text
+            className="mb-3 text-center text-lg font-extrabold"
+            style={{ color: colors.foreground }}
           >
-            <Ionicons
-              name="water-outline"
-              size={20}
-              color={isPeriodDatePickerVisible ? colors.primary : colors.mutedText}
-            />
+            {lastPeriodStartDate ? formatDisplayDate(lastPeriodStartDate) : " "}
+          </Text>
 
-            <Text
-              className="ml-3 flex-1 text-base font-semibold"
-              style={{ color: lastPeriodStartDate ? colors.foreground : colors.mutedText }}
-            >
-              {lastPeriodStartDate
-                ? formatDisplayDate(lastPeriodStartDate)
-                : "Select the start date"}
-            </Text>
-
-            <Ionicons name="chevron-down" size={16} color={colors.mutedText} />
-          </TouchableOpacity>
-
-          <CalendarModal
-            initialDateKey={lastPeriodStartDate || undefined}
+          <WheelDatePicker
+            dateKey={lastPeriodStartDate || undefined}
+            defaultDate={new Date()}
             maximumDate={new Date()}
-            minimumDate={new Date(new Date().getFullYear() - 1, 0, 1)}
-            onClose={() => setIsPeriodDatePickerVisible(false)}
-            onSelect={(dateKey) => {
+            minimumDate={earliestPeriodDate}
+            onChange={(dateKey) => {
               setErrorMessage("");
               setLastPeriodStartDate(dateKey);
-              setIsPeriodDatePickerVisible(false);
             }}
-            visible={isPeriodDatePickerVisible}
           />
         </View>
       );

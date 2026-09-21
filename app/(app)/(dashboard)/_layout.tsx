@@ -1,5 +1,5 @@
 import { Tabs, useRouter } from "expo-router";
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useState, useEffect } from "react";
 import {
   Image,
   KeyboardAvoidingView,
@@ -12,14 +12,15 @@ import {
 } from "react-native";
 import { requestRecordingPermissionsAsync } from "expo-audio";
 import { useTheme } from "../../../components/theme";
+import { genZLabel, useGenZMode } from "../../../components/genz-mode";
 import { TabBarItem } from "../../../components/TabBarItem";
 
 import { useAuth } from "../../../components/auth-context";
 import { ProfileOnboarding } from "../../../components/profile-onboarding";
 import { submitCycleSettings, submitOnboarding } from "../../../lib/auth";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { getWebSocketUrl } from "../../../lib/api";
 import { showPermissionModal } from "../../../lib/modal-host";
+import { useRealtimeSocket, type RealtimeMessage } from "../../../hooks/useRealtimeSocket";
 
 const CENTER_AVATAR_SOURCE = require("../../../assets/images/icon.png");
 
@@ -101,6 +102,7 @@ const styles = StyleSheet.create({
 
 export default function DashboardLayout() {
   const { colors, isDark } = useTheme();
+  const { enabled: genZModeEnabled } = useGenZMode();
   const { token, user, signIn } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -117,109 +119,21 @@ export default function DashboardLayout() {
     }
   }, [token, user?.partnerRole, router]);
 
-  useEffect(() => {
-    if (!token || !user?._id) return;
-
-    const userId = user._id;
-    let socket: WebSocket | null = null;
-    let isDisconnected = false;
-    let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
-    // Capped exponential backoff with jitter — a fixed 3s retry means every
-    // client reconnects in lockstep after a server restart (thundering herd).
-    let reconnectAttempts = 0;
-    function scheduleReconnect() {
-      if (isDisconnected) return;
-      const base = Math.min(30000, 1000 * 2 ** reconnectAttempts);
-      const delay = base / 2 + Math.random() * (base / 2);
-      reconnectAttempts += 1;
-      reconnectTimeout = setTimeout(connectWS, delay);
-    }
-
-    function connectWS() {
-      if (isDisconnected) return;
-
-      getWebSocketUrl()
-        .then((wsUrl) => {
-          if (isDisconnected) return;
-
-          socket = new WebSocket(wsUrl);
-
-          socket.onopen = () => {
-            if (isDisconnected) return;
-            reconnectAttempts = 0; // reset backoff on a healthy connection
-            console.log("WebSocket connected for global notifications");
-
-            // Join personal room for comment/like notifications on our posts
-            socket?.send(
-              JSON.stringify({
-                type: "join",
-                room: `user_${userId}`,
-              })
-            );
-
-            // Join general community room for new posts
-            socket?.send(
-              JSON.stringify({
-                type: "join",
-                room: "community",
-              })
-            );
-          };
-
-          socket.onmessage = (event) => {
-            if (isDisconnected) return;
-            try {
-              const data = JSON.parse(event.data);
-              if (data.type === "community_notification") {
-                if (data.senderId !== userId) {
-                  setUnreadCommunity(true);
-                }
-              }
-            } catch (err) {
-              console.error("Error parsing notification WS message:", err);
-            }
-          };
-
-          socket.onerror = (err) => {
-            console.warn("Notification WebSocket error:", err);
-          };
-
-          socket.onclose = () => {
-            if (isDisconnected) return;
-            console.log("Notification WebSocket closed, retrying with backoff…");
-            scheduleReconnect();
-          };
-        })
-        .catch((err) => {
-          console.warn("Failed to get WebSocket URL, retrying with backoff…", err);
-          scheduleReconnect();
-        });
-    }
-
-    connectWS();
-
-    return () => {
-      isDisconnected = true;
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
-      if (socket) {
-        try {
-          socket.send(
-            JSON.stringify({
-              type: "leave",
-              room: `user_${userId}`,
-            })
-          );
-          socket.send(
-            JSON.stringify({
-              type: "leave",
-              room: "community",
-            })
-          );
-        } catch {}
-        socket.close();
-      }
-    };
-  }, [token, user?._id]);
+  const userId = user?._id;
+  useRealtimeSocket({
+    enabled: Boolean(token && userId),
+    onMessage: useCallback(
+      (data: RealtimeMessage) => {
+        if (data.type === "community_notification" && data.senderId !== userId) {
+          setUnreadCommunity(true);
+        }
+      },
+      [userId],
+    ),
+    // Personal room for comment/like notifications on our posts, plus the
+    // general community room for new-post notifications.
+    rooms: token && userId ? [`user_${userId}`, "community"] : [],
+  });
 
   async function handleOnboardingSubmit(values: any) {
     if (!token) return;
@@ -381,7 +295,7 @@ export default function DashboardLayout() {
                   focused={focused}
                   iconFocused={tab.iconFocused as string}
                   iconUnfocused={tab.iconUnfocused as string}
-                  label={tab.label}
+                  label={genZLabel(tab.label, genZModeEnabled)}
                   showBadge={tab.name === "community" && unreadCommunity}
                 />
               ),

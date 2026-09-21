@@ -1,25 +1,40 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Modal, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../theme";
 import { CouponField } from "./CouponField";
-import { CashfreeCheckoutModal, type CashfreeResult } from "../CashfreeCheckoutModal";
-import { CashfreeUpiCollectModal, type UpiCollectOutcome } from "../CashfreeUpiCollectModal";
-import { showAlert } from "../../lib/modal-host";
+import { PaymentTrustFooter } from "./PaymentTrustFooter";
+import { PurchaseConfirmSheet } from "./PurchaseConfirmSheet";
+import { PurchaseResultPanel } from "./PurchaseResultPanel";
+import { CashfreeCheckoutModal } from "../CashfreeCheckoutModal";
+import { CashfreeUpiCollectModal } from "../CashfreeUpiCollectModal";
+import { usePaymentCheckout } from "../../hooks/usePaymentCheckout";
 import {
   getFriendlyErrorMessage,
   subscriptionApi,
   type BillingCycle,
   type CouponPreview,
   type FeatureLockInfo,
-  type SubscriptionOrder,
 } from "../../lib/api";
 
 const CYCLE_SUFFIX: Record<BillingCycle, string> = {
   monthly: "/mo",
   yearly: "/yr",
   one_time: " once",
+};
+
+type ConfirmTarget = {
+  key: string;
+  payload: { source: "plan"; planId: string } | { source: "feature"; featureKey: string };
+  label: string;
+  description?: string;
+  price: number;
+  cycleSuffix: string;
+  /** Only set for the primary "buy this feature" purchase — the one thing this modal previews a coupon against. */
+  couponPreview: CouponPreview | null;
+  couponNote?: string;
 };
 
 type Props = {
@@ -39,20 +54,29 @@ type Props = {
 /**
  * The paywall: shows the specific locked feature's standalone price, plus
  * any plan that would also unlock it, so the user can buy either à la
- * carte or as a bundle. Purchase flow mirrors the doctor-consultation
- * booking screen exactly: create a Cashfree order, run
- * CashfreeCheckoutModal's hosted checkout, then verify the order.
+ * carte or as a bundle. Purchase flow: confirm → create a Cashfree order →
+ * hosted checkout (or, if the user opts in, native UPI-ID collect) → verify.
  */
 export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }: Props) {
   const { colors, fonts } = useTheme();
+  const router = useRouter();
   const [info, setInfo] = useState<FeatureLockInfo | null>(lock ?? null);
   const [loadingInfo, setLoadingInfo] = useState(!lock);
-  const [purchasingKey, setPurchasingKey] = useState<string | null>(null);
-  const [checkout, setCheckout] = useState<SubscriptionOrder | null>(null);
-  // UPI ID entry (native, in-app UI) is the default; tapping "Pay another
-  // way" switches to CashfreeCheckoutModal's hosted page for cards/
-  // netbanking/other UPI apps.
-  const [useHostedCheckout, setUseHostedCheckout] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState<ConfirmTarget | null>(null);
+
+  const {
+    purchasingKey,
+    checkout,
+    useHostedCheckout,
+    setUseHostedCheckout,
+    purchaseResult,
+    setPurchaseResult,
+    startPurchase,
+    handleCheckoutResult,
+    verifyUpiOnce,
+    handleUpiOutcome,
+    recheckPending,
+  } = usePaymentCheckout();
 
   // Coupon is previewed against the primary "buy just this feature" item —
   // the modal's clear default action — but the same code still rides along
@@ -137,122 +161,36 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
     setCouponError(null);
   };
 
-  // Unlocked instantly by a 100%-off coupon — no Cashfree order exists to
-  // check out with, so this skips straight to the same "purchase complete"
-  // handling handleCheckoutResult does after a real payment.
-  const finishFreeUnlock = () => {
-    showAlert("Unlocked!", "Your coupon covered the full price — no payment needed.", undefined, {
-      icon: "checkmark-circle",
+  async function handleConfirmPurchase(preferUpiCollect: boolean) {
+    if (!confirmTarget) return;
+    await startPurchase(confirmTarget.key, confirmTarget.payload, {
+      couponCode: confirmTarget.couponPreview ? couponCode.trim() : undefined,
+      preferUpiCollect,
     });
+    setConfirmTarget(null);
+  }
+
+  function handleResultDone() {
+    setPurchaseResult(null);
     onUnlocked?.();
     onClose();
-  };
+  }
 
-  const startPurchase = async (
-    key: string,
-    payload: { source: "plan"; planId: string } | { source: "feature"; featureKey: string },
-  ) => {
-    setPurchasingKey(key);
-    try {
-      const order = await subscriptionApi.createOrder({
-        ...payload,
-        couponCode: couponPreview ? couponCode.trim() : undefined,
-      });
-      if (order.free) {
-        finishFreeUnlock();
-        return;
-      }
-      setUseHostedCheckout(false);
-      setCheckout(order);
-    } catch (err) {
-      showAlert("Couldn't start checkout", getFriendlyErrorMessage(err));
-    } finally {
-      setPurchasingKey(null);
-    }
-  };
-
-  const finalizeUnlocked = () => {
-    showAlert("Unlocked!", "Your purchase is active.", undefined, { icon: "checkmark-circle" });
-    onUnlocked?.();
+  function handleClose() {
+    if (purchaseResult?.type === "success") onUnlocked?.();
+    setPurchaseResult(null);
     onClose();
-  };
-
-  const handleCheckoutResult = async (result: CashfreeResult) => {
-    const order = checkout;
-    setCheckout(null);
-    if (!order) return;
-
-    if (result.type === "dismiss") {
-      // A dismiss is usually a genuine cancel, but it's also what happens
-      // if the user closes the checkout the instant after a redirect-based
-      // method (netbanking/wallet/other UPI app) finishes — before
-      // CashfreeCheckoutModal's own return_url interception fires. One
-      // silent verify check catches that case and unlocks anyway; a real
-      // cancel just resolves to "pending"/an error here and stays quiet.
-      try {
-        const verified = await subscriptionApi.verifyPayment({
-          entitlementId: order.entitlementId,
-          orderId: order.orderId!,
-        });
-        if (!("pending" in verified)) finalizeUnlocked();
-      } catch {
-        // Genuine cancel — nothing was charged, stay quiet.
-      }
-      return;
-    }
-    if (result.type === "failed") {
-      showAlert("Payment failed", "The payment didn't go through. You haven't been charged.");
-      return;
-    }
-
-    try {
-      await subscriptionApi.verifyPayment({
-        entitlementId: order.entitlementId,
-        orderId: result.orderId,
-      });
-      finalizeUnlocked();
-    } catch (err) {
-      showAlert("Couldn't confirm payment", getFriendlyErrorMessage(err));
-    }
-  };
-
-  // Polled by CashfreeUpiCollectModal every few seconds while the user
-  // approves the request in their UPI app — "pending" (a still-open
-  // Cashfree order) is distinct from "failed" so the modal keeps waiting
-  // instead of giving up on the first unapproved check.
-  const verifyUpiOnce = async (orderId: string): Promise<"paid" | "pending" | "failed"> => {
-    if (!checkout) return "failed";
-    try {
-      const result = await subscriptionApi.verifyPayment({ entitlementId: checkout.entitlementId, orderId });
-      return "pending" in result ? "pending" : "paid";
-    } catch {
-      return "failed";
-    }
-  };
-
-  const handleUpiOutcome = (result: UpiCollectOutcome) => {
-    if (result.type === "dismiss") {
-      setCheckout(null);
-      return;
-    }
-    setCheckout(null);
-    if (result.type === "failed") {
-      showAlert("Payment failed", result.message ?? "The payment didn't go through. You haven't been charged.");
-      return;
-    }
-    finalizeUnlocked();
-  };
+  }
 
   return (
     <Modal
       // Two native Modals presenting at once is unreliable (iOS/Android both
       // refuse to stack a second one on top cleanly) — hide this one the
-      // instant a Cashfree order exists so CashfreeCheckoutModal's own
-      // Modal is the only one on screen, instead of the checkout sheet
-      // silently failing to appear behind this pageSheet.
-      visible={visible && !checkout}
+      // instant a Cashfree order exists, or the confirm sheet is open, so
+      // only one Modal is ever on screen at a time.
+      visible={visible && !checkout && !confirmTarget}
       animationType="slide"
-      onRequestClose={onClose}
+      onRequestClose={handleClose}
       presentationStyle="pageSheet"
     >
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
@@ -261,7 +199,7 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
             Unlock Premium
           </Text>
           <TouchableOpacity
-            onPress={onClose}
+            onPress={handleClose}
             activeOpacity={0.7}
             className="h-9 w-9 items-center justify-center rounded-full"
             style={{ backgroundColor: colors.surface }}
@@ -270,7 +208,19 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
           </TouchableOpacity>
         </View>
 
-        {loadingInfo || !info ? (
+        {purchaseResult ? (
+          <PurchaseResultPanel
+            result={purchaseResult}
+            itemLabel={info?.feature.name}
+            onDone={handleResultDone}
+            onDismissFailure={() => setPurchaseResult(null)}
+            onRecheckPending={recheckPending}
+            onViewHistory={() => {
+              handleResultDone();
+              router.push("/subscription");
+            }}
+          />
+        ) : loadingInfo || !info ? (
           <View className="flex-1 items-center justify-center">
             <ActivityIndicator color={colors.primary} />
           </View>
@@ -302,15 +252,22 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
               ) : null}
 
               <TouchableOpacity
-                onPress={() => startPurchase("feature", { source: "feature", featureKey })}
+                onPress={() =>
+                  setConfirmTarget({
+                    key: "feature",
+                    payload: { source: "feature", featureKey },
+                    label: info.feature.name,
+                    description: info.feature.description,
+                    price: info.feature.price,
+                    cycleSuffix: CYCLE_SUFFIX[info.feature.billingCycle],
+                    couponPreview,
+                  })
+                }
                 activeOpacity={0.85}
-                disabled={purchasingKey !== null}
                 className="mt-5 flex-row items-center rounded-full px-6 py-3"
                 style={{ backgroundColor: colors.gold ?? colors.primary }}
               >
-                {purchasingKey === "feature" ? (
-                  <ActivityIndicator color={colors.buttonText} />
-                ) : couponPreview ? (
+                {couponPreview ? (
                   <Text className="text-sm font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
                     {couponPreview.free ? "Unlock — Free" : `Buy just this — ₹${couponPreview.finalAmount}`}
                   </Text>
@@ -381,38 +338,64 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
                         </Text>
                       </View>
                       <TouchableOpacity
-                        onPress={() => startPurchase(plan._id, { source: "plan", planId: plan._id })}
+                        onPress={() =>
+                          setConfirmTarget({
+                            key: plan._id,
+                            payload: { source: "plan", planId: plan._id },
+                            label: plan.name,
+                            price: plan.price,
+                            cycleSuffix: CYCLE_SUFFIX[plan.billingCycle],
+                            couponPreview: null,
+                            couponNote: couponCode.trim()
+                              ? `Coupon "${couponCode.trim().toUpperCase()}" will be validated at checkout.`
+                              : undefined,
+                          })
+                        }
                         activeOpacity={0.85}
-                        disabled={purchasingKey !== null}
                         className="rounded-full px-4 py-2.5"
                         style={{ backgroundColor: colors.primary }}
                       >
-                        {purchasingKey === plan._id ? (
-                          <ActivityIndicator color={colors.buttonText} size="small" />
-                        ) : (
-                          <Text
-                            className="text-xs font-bold"
-                            style={{ color: colors.buttonText, fontFamily: fonts.body }}
-                          >
-                            Choose
-                          </Text>
-                        )}
+                        <Text
+                          className="text-xs font-bold"
+                          style={{ color: colors.buttonText, fontFamily: fonts.body }}
+                        >
+                          Choose
+                        </Text>
                       </TouchableOpacity>
                     </View>
                   ))}
                 </View>
               </>
             )}
+
+            <PaymentTrustFooter />
           </ScrollView>
         )}
       </SafeAreaView>
 
+      <PurchaseConfirmSheet
+        // Don't rely on handleConfirmPurchase's setConfirmTarget(null) alone
+        // to prevent a stacked-Modal frame — hide the instant checkout/
+        // purchaseResult exists too, regardless of render-batching timing.
+        visible={confirmTarget !== null && !checkout && !purchaseResult}
+        itemName={confirmTarget?.label ?? ""}
+        itemDescription={confirmTarget?.description}
+        originalAmount={confirmTarget?.price ?? 0}
+        cycleSuffix={confirmTarget?.cycleSuffix ?? ""}
+        couponPreview={confirmTarget?.couponPreview ?? null}
+        couponNote={confirmTarget?.couponNote}
+        confirming={confirmTarget !== null && purchasingKey === confirmTarget.key}
+        onConfirm={handleConfirmPurchase}
+        onClose={() => setConfirmTarget(null)}
+      />
+
       {/* checkout is only ever set from the non-free branch of startPurchase,
           which never reaches setCheckout without a real Cashfree order — so
           orderId/paymentSessionId (optional on SubscriptionOrder because a
-          free order has neither) are always present here. UPI ID entry is
-          the default, native-UI path; "Pay another way" switches to the
-          hosted checkout for cards/netbanking/other UPI apps. */}
+          free order has neither) are always present here. Hosted checkout
+          (cards/UPI apps/netbanking/wallets) is the default; native UPI-ID
+          collect only opens when the confirm sheet's "pay with a UPI ID"
+          link was used. */}
       {checkout && checkout.orderId && checkout.paymentSessionId && !useHostedCheckout && (
         <CashfreeUpiCollectModal
           visible

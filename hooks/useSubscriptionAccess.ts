@@ -2,6 +2,11 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../components/auth-context";
 import { subscriptionApi, type MySubscription } from "../lib/api";
 
+// Mirrors useUserStats.ts's cache: consumed by ~13 stack screens, each of
+// which would otherwise refetch GET /api/subscriptions/me on every visit.
+const SUBSCRIPTION_CACHE_TTL_MS = 60_000;
+let subscriptionCache: { data: MySubscription; fetchedAt: number } | null = null;
+
 export type SubscriptionAccess = {
   /** False while the admin has the whole system switched off — every
    * hasAccess() call returns true in that state, matching the backend's
@@ -28,17 +33,19 @@ export type SubscriptionAccess = {
  */
 export function useSubscriptionAccess(): SubscriptionAccess {
   const { isAuthenticated } = useAuth();
-  const [summary, setSummary] = useState<MySubscription | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [summary, setSummary] = useState<MySubscription | null>(subscriptionCache?.data ?? null);
+  const [isLoading, setIsLoading] = useState(!subscriptionCache);
 
   const refresh = useCallback(async () => {
     if (!isAuthenticated) {
+      subscriptionCache = null;
       setSummary(null);
       setIsLoading(false);
       return null;
     }
     try {
       const result = await subscriptionApi.getMe();
+      subscriptionCache = { data: result, fetchedAt: Date.now() };
       setSummary(result);
       return result;
     } catch {
@@ -50,18 +57,28 @@ export function useSubscriptionAccess(): SubscriptionAccess {
   }, [isAuthenticated]);
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      // Logging out invalidates the cache so a new sign-in never briefly
+      // shows the previous account's cached entitlements.
+      subscriptionCache = null;
+      setSummary(null);
+      setIsLoading(false);
+      return;
+    }
+
+    const isFresh = subscriptionCache && Date.now() - subscriptionCache.fetchedAt < SUBSCRIPTION_CACHE_TTL_MS;
+    if (isFresh) {
+      setIsLoading(false);
+      return;
+    }
+
     let isMounted = true;
     (async () => {
-      if (!isAuthenticated) {
-        if (isMounted) {
-          setSummary(null);
-          setIsLoading(false);
-        }
-        return;
-      }
       try {
         const result = await subscriptionApi.getMe();
-        if (isMounted) setSummary(result);
+        if (!isMounted) return;
+        subscriptionCache = { data: result, fetchedAt: Date.now() };
+        setSummary(result);
       } catch {
         if (isMounted) setSummary(null);
       } finally {

@@ -24,6 +24,7 @@ import { EmptyState } from "../../components/EmptyState";
 import { alert } from "../../lib/alert";
 import { CashfreeCheckoutModal, type CashfreeResult } from "../../components/CashfreeCheckoutModal";
 import { CashfreeUpiCollectModal, type UpiCollectOutcome } from "../../components/CashfreeUpiCollectModal";
+import { PaymentTrustFooter } from "../../components/subscription/PaymentTrustFooter";
 import { useTheme } from "../../components/theme";
 import { SkeletonRow } from "../../components/Skeleton";
 import {
@@ -365,7 +366,11 @@ export default function ConsultationScreen() {
         setTimeout(() => openChat(order.consultation!), 400);
         return;
       }
-      setUseHostedCheckout(false);
+      // Hosted checkout (cards/UPI apps/netbanking/wallets) is the
+      // prominent, default entry — see PaywallModal.tsx's identically
+      // motivated default (fixes.md 6.1). CashfreeUpiCollectModal's own
+      // "Pay another way" link still offers the reverse switch.
+      setUseHostedCheckout(true);
       setCheckoutOrder(order);
       // setBooking(false) happens once the checkout modal resolves.
     } catch (err) {
@@ -872,7 +877,7 @@ export default function ConsultationScreen() {
         {/* Sticky Bottom booking panel */}
         {selectedDoctor && (
           <View
-            className="border-t px-6 py-4 flex-row items-center justify-between"
+            className="border-t px-6 py-4"
             style={{
               backgroundColor: colors.surface,
               borderColor: colors.border,
@@ -906,6 +911,7 @@ export default function ConsultationScreen() {
                 </Text>
               )}
             </TouchableOpacity>
+            {!getConsultationForDoctor(selectedDoctor._id) ? <PaymentTrustFooter compact /> : null}
           </View>
         )}
 
@@ -1072,9 +1078,11 @@ export default function ConsultationScreen() {
           />
         )}
 
-        {/* Cashfree Checkout — UPI ID entry is the default, native-UI path;
-            "Pay another way" switches to the hosted checkout for cards/
-            netbanking/other UPI apps. */}
+        {/* Cashfree Checkout — hosted checkout (cards/UPI apps/netbanking/
+            wallets) is the default; CashfreeUpiCollectModal's own "Pay
+            another way" link switches back to it if native UPI-ID collect
+            was ever made reachable from this screen (it currently isn't —
+            see the fixed `useHostedCheckout(true)` above). */}
         {checkoutOrder && !useHostedCheckout && (
           <CashfreeUpiCollectModal
             visible

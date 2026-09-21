@@ -184,6 +184,9 @@ export default function CheckinCallScreen() {
         setScheduleEnabled(false);
         setPaywallVisible(true);
       } else {
+        // The switch was already flipped optimistically before this call —
+        // revert it so the UI doesn't show "on" when nothing was saved.
+        setScheduleEnabled(!nextEnabled);
         alert("Couldn't save schedule", getFriendlyErrorMessage(err));
       }
     } finally {
