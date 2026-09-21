@@ -20,7 +20,7 @@ const MONTH_LABELS = [
 ];
 
 export type WheelDatePickerProps = {
-  \\\?: string;
+  dateKey?: string;
   /** Value the wheel starts on when `dateKey` isn't set yet. Defaults to today (clamped to range). */
   defaultDate?: Date;
   maximumDate: Date;
