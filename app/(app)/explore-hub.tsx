@@ -11,7 +11,7 @@ import { getSharedHubTiles } from "../../lib/hubTiles";
 
 /**
  * "Explore" hub — the lighter-weight, browse-anytime destinations (forest,
- * blogs, videos, partner sync, habits, buddy, government schemes). Reached
+ * blogs, videos, partner sync, habits, buddy). Reached
  * from Home's "Explore" entry card (see (dashboard)/home.tsx).
  */
 export default function ExploreHub() {
@@ -28,9 +28,6 @@ export default function ExploreHub() {
     { title: "Partner Sync", desc: "Share cycle info & chat", icon: "git-merge-outline", route: "/(app)/partner", color: colors.accent, bg: colors.accentLight },
     { title: "Habits", desc: "Daily habit tracking", icon: "checkmark-done-outline", route: "/(app)/habits", color: colors.warning, bg: colors.warningLight },
     { title: "Nominate Buddy", desc: "Anonymous peer support", icon: "star-outline", route: "/(app)/buddy-nomination", color: colors.secondary, bg: colors.secondaryLight },
-    // Browse/discovery feature — moved here from a buried Profile settings
-    // row (fixes.md 2.4): it fits this hub's "browse anytime" nature.
-    { title: "Govt. Schemes", desc: "Reproductive health benefits", icon: "ribbon-outline", route: "/(app)/government-schemes", color: colors.primary, bg: colors.primaryLight },
   ];
 
   return (

@@ -361,7 +361,7 @@ export default function Profile() {
                   style={{ backgroundColor: colors.background }}
                 >
                   <View className="flex-row justify-between items-center">
-                    <View>
+                    <View className="flex-1 mr-3">
                       <Text
                         className="text-xs font-bold"
                         style={{ color: colors.foreground, fontFamily: fonts.body }}
@@ -384,7 +384,7 @@ export default function Profile() {
                   </View>
                   <View className="h-[1px] w-full" style={{ backgroundColor: colors.border }} />
                   <View className="flex-row justify-between items-center">
-                    <View>
+                    <View className="flex-1 mr-3">
                       <Text
                         className="text-xs font-bold"
                         style={{ color: colors.foreground, fontFamily: fonts.body }}
@@ -407,7 +407,7 @@ export default function Profile() {
                   </View>
                   <View className="h-[1px] w-full" style={{ backgroundColor: colors.border }} />
                   <View className="flex-row justify-between items-center">
-                    <View>
+                    <View className="flex-1 mr-3">
                       <Text
                         className="text-xs font-bold"
                         style={{ color: colors.foreground, fontFamily: fonts.body }}
@@ -457,9 +457,27 @@ export default function Profile() {
               <Feather name="chevron-right" size={16} color={colors.mutedText} />
             </TouchableOpacity>
 
-            {/* Government Schemes & Benefits moved to explore-hub.tsx
-                (fixes.md 2.4) — it's a browse/discovery feature, not a
-                settings row. */}
+            {/* Row: Government Schemes & Benefits (Route) */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => router.push("/government-schemes")}
+              className="flex-row items-center px-4 py-4 border-b"
+              style={{ borderColor: colors.border }}
+            >
+              <View
+                className="p-2.5 rounded-xl mr-4"
+                style={{ backgroundColor: softTints.pink }}
+              >
+                <Ionicons name="ribbon-outline" size={18} color={colors.primary} />
+              </View>
+              <Text
+                className="flex-1 text-sm font-bold"
+                style={{ color: colors.foreground, fontFamily: fonts.body }}
+              >
+                Government Schemes & Benefits
+              </Text>
+              <Feather name="chevron-right" size={16} color={colors.mutedText} />
+            </TouchableOpacity>
 
             {/* Row: App Lock (Route) */}
             <TouchableOpacity
