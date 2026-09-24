@@ -159,7 +159,13 @@ export function AppModalHost() {
                     borderColor: buttonColors.border,
                     borderRadius: 14,
                     borderWidth: 1,
-                    flex: 1,
+                    // Only stretch buttons when they share a row. In the
+                    // single-button (column) layout the parent has no fixed
+                    // height, and RN's `flex: 1` means flexBasis 0 — the
+                    // button would collapse to just its padding, leaving a
+                    // pink pill with its label clipped away (on native only;
+                    // web resolves the basis differently, so it looked fine).
+                    flex: buttons.length > 1 ? 1 : undefined,
                     justifyContent: "center",
                     paddingVertical: 13,
                   }}

@@ -4,6 +4,7 @@ import { RefreshControl, ScrollView, StatusBar, Text, TextInput, TouchableOpacit
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
+import { SkeletonBlock, SkeletonCard } from "../../components/Skeleton";
 import { EmptyState } from "../../components/EmptyState";
 import { useTheme } from "../../components/theme";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
@@ -164,7 +165,22 @@ export default function SubscriptionScreen() {
       <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
         <ScreenHeader title="My Subscription" />
 
-        <LoadingErrorState loading={loading} error={error} onRetry={load} loadingLabel="Loading your subscription…">
+        <LoadingErrorState
+          loading={loading}
+          error={error}
+          onRetry={load}
+          loadingLabel="Loading your subscription…"
+          skeleton={
+            <View className="gap-4 px-6 pt-6">
+              <SkeletonBlock width={60} height={12} />
+              <SkeletonBlock width="100%" height={64} radius={16} />
+              <SkeletonBlock width={90} height={12} style={{ marginTop: 8 }} />
+              <SkeletonCard />
+              <SkeletonCard />
+              <SkeletonCard />
+            </View>
+          }
+        >
           {purchaseResult ? (
             <PurchaseResultPanel
               result={purchaseResult}

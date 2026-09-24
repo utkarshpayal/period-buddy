@@ -1,8 +1,10 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Modal, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { Modal, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { EmptyState } from "../EmptyState";
+import { SkeletonBlock } from "../Skeleton";
 import { useTheme } from "../theme";
 import { CouponField } from "./CouponField";
 import { PaymentTrustFooter } from "./PaymentTrustFooter";
@@ -62,6 +64,8 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
   const router = useRouter();
   const [info, setInfo] = useState<FeatureLockInfo | null>(lock ?? null);
   const [loadingInfo, setLoadingInfo] = useState(!lock);
+  // Bumped by the error state's Retry to re-run the pricing fetch below.
+  const [infoReloadKey, setInfoReloadKey] = useState(0);
   const [confirmTarget, setConfirmTarget] = useState<ConfirmTarget | null>(null);
 
   const {
@@ -134,7 +138,7 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
     return () => {
       isMounted = false;
     };
-  }, [visible, featureKey, lock]);
+  }, [visible, featureKey, lock, infoReloadKey]);
 
   const handleApplyCoupon = async () => {
     if (!couponCode.trim()) return;
@@ -220,10 +224,23 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
               router.push("/subscription");
             }}
           />
-        ) : loadingInfo || !info ? (
-          <View className="flex-1 items-center justify-center">
-            <ActivityIndicator color={colors.primary} />
+        ) : loadingInfo ? (
+          <View className="px-6 gap-4 mt-2">
+            <SkeletonBlock width="100%" height={180} radius={24} />
+            <SkeletonBlock width="100%" height={56} radius={16} />
+            <SkeletonBlock width="100%" height={72} radius={16} />
+            <SkeletonBlock width="100%" height={72} radius={16} />
           </View>
+        ) : !info ? (
+          // The pricing fetch failed — previously this fell through to the
+          // loading spinner forever, with no way out but closing the sheet.
+          <EmptyState
+            icon="wifi-off"
+            title="Couldn't load pricing"
+            message="Check your connection and try again."
+            actionLabel="Retry"
+            onAction={() => setInfoReloadKey((k) => k + 1)}
+          />
         ) : (
           <ScrollView className="px-6" contentContainerStyle={{ paddingBottom: 32 }}>
             <View

@@ -9,6 +9,10 @@ import { ThemeToggle, useTheme } from "../../../components/theme";
 import { getShadow, getSoftTints } from "../../../components/ui-tokens";
 import { alert } from "../../../lib/alert";
 import { authApi, partnerApi, type AuthUser } from "../../../lib/api";
+import {
+  enablePushOnDeviceAsync,
+  getCurrentPushTokenQuietlyAsync,
+} from "../../../lib/notifications";
 import { usePartnerViewState } from "../../../components/partner-view-state";
 
 export default function PartnerViewAccount() {
@@ -48,6 +52,7 @@ export default function PartnerViewAccount() {
     try {
       const updatedUser = await authApi.updateProfile({ notificationsEnabled: next });
       updateUser(updatedUser);
+      if (next) enablePushOnDeviceAsync();
     } catch (error) {
       setNotificationsEnabled(!next);
       alert("Couldn't save preference", error instanceof Error ? error.message : "Please try again.");
@@ -87,7 +92,7 @@ export default function PartnerViewAccount() {
     if (isLoggingOut) return;
     try {
       setIsLoggingOut(true);
-      await authApi.logoutAlias();
+      await authApi.logoutAlias(await getCurrentPushTokenQuietlyAsync());
     } catch (networkError) {
       console.log("Server verification skipped during exit:", networkError);
     } finally {

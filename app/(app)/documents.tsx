@@ -23,8 +23,7 @@ import { WebView } from "react-native-webview";
 import { CalendarModal } from "../../components/CalendarModal";
 import { useAuth } from "../../components/auth-context";
 import { useTheme } from "../../components/theme";
-import { Loader } from "../../components/Loader";
-import { SkeletonRow } from "../../components/Skeleton";
+import { SkeletonList, SkeletonRow } from "../../components/Skeleton";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
 import { alert } from "../../lib/alert";
 import { showPermissionModal } from "../../lib/modal-host";
@@ -458,7 +457,7 @@ export default function DocumentsScreen() {
         <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
         <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
           {documentsHeader}
-          <Loader fullscreen />
+          <SkeletonList count={5} style={{ paddingTop: 16 }} />
         </SafeAreaView>
       </>
     );

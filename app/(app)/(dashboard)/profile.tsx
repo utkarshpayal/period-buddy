@@ -18,6 +18,10 @@ import { alert } from "../../../lib/alert";
 import { ThemeToggle, useTheme } from "../../../components/theme";
 import { getShadow, getSoftTints } from "../../../components/ui-tokens";
 import { authApi, type DashboardSummary } from "../../../lib/api";
+import {
+  enablePushOnDeviceAsync,
+  getCurrentPushTokenQuietlyAsync,
+} from "../../../lib/notifications";
 import Avatar from "../../../components/Avatar";
 import StatCard from "../../../components/StatCard";
 import { useUserStats } from "../../../hooks/useUserStats";
@@ -93,6 +97,7 @@ export default function Profile() {
     try {
       const updatedUser = await authApi.updateProfile({ [key]: nextValue });
       updateUser(updatedUser);
+      if (key === "notificationsEnabled" && nextValue) enablePushOnDeviceAsync();
     } catch (error) {
       setLocal(previousValue);
       alert(
@@ -136,7 +141,7 @@ export default function Profile() {
 
     try {
       setIsLoggingOut(true);
-      await authApi.logoutAlias();
+      await authApi.logoutAlias(await getCurrentPushTokenQuietlyAsync());
     } catch (networkError) {
       console.log("Server verification skipped during exit:", networkError);
     } finally {

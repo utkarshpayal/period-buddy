@@ -1,6 +1,6 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useEvent } from "expo";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -25,7 +25,8 @@ import {
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { useAppState } from "../../components/AppState";
 import { alert } from "../../lib/alert";
-import { Loader } from "../../components/Loader";
+import { shareWithAppLink } from "../../lib/share";
+import { SkeletonBlock } from "../../components/Skeleton";
 import { useTheme } from "../../components/theme";
 import { getShadow } from "../../components/ui-tokens";
 import { reelsApi, type Reel as ApiReel } from "../../lib/api";
@@ -48,6 +49,8 @@ interface HealthReel {
   pollOptions: { id: string; topic: string; votes: number }[];
   votedOptionId: string | null;
 }
+
+const REEL_SKELETON_TINT = { backgroundColor: "rgba(255,255,255,0.14)" };
 
 const fallbackReels: HealthReel[] = [
   {
@@ -461,6 +464,17 @@ function YouTubePlayer({
 export default function Reels() {
   const { colors, fonts, isDark } = useTheme();
   const router = useRouter();
+  // "reels?reelId=..." deep link (shared from handleShareReel below or from
+  // a reel card in blogs.tsx) — that reel is fetched and pinned first.
+  // `openedAt` is stamped by the deep-link handler in app/_layout.tsx so the
+  // same link tapped again counts as a new link.
+  const { reelId: deepLinkedReelId, openedAt: deepLinkOpenedAt } = useLocalSearchParams<{
+    reelId?: string;
+    openedAt?: string;
+  }>();
+  // Key of the deep link already pinned, so switching back to "all" doesn't
+  // re-fetch/re-pin it (or re-show the "Couldn't open" alert).
+  const handledDeepLinkKeyRef = useRef<string | null>(null);
   const { earnTokens } = useAppState();
   const { height, width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -497,15 +511,39 @@ export default function Reels() {
     async function loadReels() {
       setLoadingReels(true);
       try {
-        const response = await reelsApi.getReels({
-          limit: REELS_PAGE_SIZE,
-          page: 1,
-          category: selectedCategory === "all" ? undefined : selectedCategory,
-        });
+        const deepLinkKey = deepLinkedReelId
+          ? `${deepLinkedReelId}|${deepLinkOpenedAt ?? ""}`
+          : null;
+        const wantsLinkedReel =
+          Boolean(deepLinkKey) &&
+          selectedCategory === "all" &&
+          handledDeepLinkKeyRef.current !== deepLinkKey;
+        const [response, linkedReel] = await Promise.all([
+          reelsApi.getReels({
+            limit: REELS_PAGE_SIZE,
+            page: 1,
+            category: selectedCategory === "all" ? undefined : selectedCategory,
+          }),
+          wantsLinkedReel
+            ? reelsApi.getReelById(String(deepLinkedReelId)).catch(() => null)
+            : Promise.resolve(null),
+        ]);
         if (!isMounted) return;
+        if (wantsLinkedReel) handledDeepLinkKeyRef.current = deepLinkKey;
+        if (wantsLinkedReel && !linkedReel) {
+          alert("Couldn't open that video", "It may have been removed.");
+        }
 
-        if (response.reels.length > 0) {
-          const mappedReels = response.reels.map(mapApiReel);
+        // A deep-linked reel goes first (so it's the one playing) and is
+        // de-duplicated out of the regular first page.
+        const linkedMapped = linkedReel ? mapApiReel(linkedReel) : null;
+        const apiReels = linkedReel ? [linkedReel, ...response.reels] : response.reels;
+
+        if (apiReels.length > 0) {
+          const pageReels = response.reels.map(mapApiReel);
+          const mappedReels = linkedMapped
+            ? [linkedMapped, ...pageReels.filter((reel) => reel.id !== linkedMapped.id)]
+            : pageReels;
           setReels(mappedReels);
           setUsingFallback(false);
           setPage(1);
@@ -516,14 +554,14 @@ export default function Reels() {
           if (mappedReels[0]) void handlePlay(mappedReels[0].id);
           setFollowingCreatorIds(
             new Set(
-              response.reels
+              apiReels
                 .filter((reel) => reel.followedByMe)
                 .map((reel) => reel.creatorId),
             ),
           );
           if (selectedCategory === "all") {
             setAvailableCategories(
-              Array.from(new Set(response.reels.map((reel) => reel.category))),
+              Array.from(new Set(apiReels.map((reel) => reel.category))),
             );
           }
         } else {
@@ -551,7 +589,19 @@ export default function Reels() {
     // handlePlay isn't memoized; including it would rerun this load effect
     // on every render instead of only when selectedCategory changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCategory]);
+  }, [selectedCategory, deepLinkedReelId, deepLinkOpenedAt]);
+
+  async function handleShareReel(reel: HealthReel) {
+    try {
+      await shareWithAppLink(
+        `Watch "${reel.title}" by ${reel.creatorName} on Nura.`,
+        // Fallback reels are local placeholders with no backend id.
+        usingFallback ? "reels" : `reels?reelId=${encodeURIComponent(reel.id)}`,
+      );
+    } catch {
+      alert("Error", "Unable to open the share sheet right now.");
+    }
+  }
 
   async function handleLoadMoreReels() {
     if (loadingMore || !hasMore) return;
@@ -563,7 +613,14 @@ export default function Reels() {
         page: nextPage,
         category: selectedCategory === "all" ? undefined : selectedCategory,
       });
-      setReels((prev) => [...prev, ...response.reels.map(mapApiReel)]);
+      // A deep-linked reel pinned first can reappear on a later page.
+      setReels((prev) => {
+        const seen = new Set(prev.map((reel) => reel.id));
+        return [
+          ...prev,
+          ...response.reels.map(mapApiReel).filter((reel) => !seen.has(reel.id)),
+        ];
+      });
       setPage(nextPage);
       setHasMore(response.pagination.page < response.pagination.pages);
     } catch {
@@ -726,8 +783,22 @@ export default function Reels() {
         style={{ backgroundColor: "#050505" }}
       >
         {loadingReels && reels.length === 0 ? (
-          <View className="flex-1 items-center justify-center">
-            <Loader size={64} />
+          // Reel-shaped skeleton (caption lines bottom-left, action rail on
+          // the right) tinted for the always-dark player background.
+          <View className="flex-1 flex-row items-end px-5 pb-10">
+            <View className="flex-1 gap-3 pr-6">
+              <View className="flex-row items-center gap-3">
+                <SkeletonBlock width={40} height={40} radius={20} style={REEL_SKELETON_TINT} />
+                <SkeletonBlock width={120} height={14} style={REEL_SKELETON_TINT} />
+              </View>
+              <SkeletonBlock width="90%" height={16} style={REEL_SKELETON_TINT} />
+              <SkeletonBlock width="65%" height={12} style={REEL_SKELETON_TINT} />
+            </View>
+            <View className="items-center gap-5">
+              <SkeletonBlock width={44} height={44} radius={22} style={REEL_SKELETON_TINT} />
+              <SkeletonBlock width={44} height={44} radius={22} style={REEL_SKELETON_TINT} />
+              <SkeletonBlock width={44} height={44} radius={22} style={REEL_SKELETON_TINT} />
+            </View>
           </View>
         ) : (
         <ScrollView
@@ -921,6 +992,21 @@ export default function Reels() {
                     </View>
                     <Text className="mt-1 text-[10px] font-black text-white" style={{ fontFamily: fonts.body }}>
                       Poll
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    activeOpacity={0.82}
+                    accessibilityRole="button"
+                    accessibilityLabel="Share reel"
+                    className="items-center"
+                    onPress={() => handleShareReel(item)}
+                  >
+                    <View className="h-11 w-11 items-center justify-center rounded-full bg-white/18">
+                      <Feather name="share-2" size={19} color="white" />
+                    </View>
+                    <Text className="mt-1 text-[10px] font-black text-white" style={{ fontFamily: fonts.body }}>
+                      Share
                     </Text>
                   </TouchableOpacity>
                 </View>

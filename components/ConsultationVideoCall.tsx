@@ -181,10 +181,10 @@ export const ConsultationVideoCall = forwardRef<ConsultationVideoCallHandle, Pro
 
     const ensureMediaPermissions = useCallback(async () => {
       if (Platform.OS !== "android" && Platform.OS !== "ios") return;
-      const [cameraGranted, micGranted] = await Promise.all([
-        permissions.request({ name: "camera" }),
-        permissions.request({ name: "microphone" }),
-      ]);
+      // Sequential on purpose: Android can only show one runtime permission
+      // dialog at a time, so a concurrent second request may be auto-denied.
+      const cameraGranted = await permissions.request({ name: "camera" });
+      const micGranted = await permissions.request({ name: "microphone" });
       if (!cameraGranted || !micGranted) {
         throw new Error("Camera and microphone permission are required for video calls.");
       }

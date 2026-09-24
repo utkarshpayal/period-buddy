@@ -888,7 +888,7 @@ export default function ConsultationScreen() {
               activeOpacity={0.85}
               disabled={booking}
               onPress={() => handleBookAndPay(selectedDoctor)}
-              className="flex-1 rounded-2xl py-4 items-center justify-center"
+              className="rounded-2xl py-4 items-center justify-center"
               style={{
                 backgroundColor: colors.primary,
                 opacity: booking ? 0.75 : 1,

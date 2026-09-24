@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { View } from "react-native";
-import { Loader } from "../Loader";
+import { SkeletonCardList } from "../Skeleton";
 import { useSubscriptionAccess } from "../../hooks/useSubscriptionAccess";
 import { LockedFeatureCard } from "./LockedFeatureCard";
 import { PaywallModal } from "./PaywallModal";
@@ -53,7 +53,7 @@ export function FeatureGate({ featureKey, title, description, children }: Props)
   }, [locked]);
 
   if (isLoading) {
-    return <Loader fullscreen />;
+    return <SkeletonCardList count={3} style={{ paddingTop: 16 }} />;
   }
 
   if (locked) {

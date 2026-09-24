@@ -37,15 +37,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .finally(() => setLoaded(true));
   }, []);
 
+  // Register this device's push token whenever a session exists — after
+  // login, and again on every launch (cheap, and it's what picks up a token
+  // that changed after an app update/reinstall). While signed in, also
+  // re-upload the token whenever FCM rotates it. Logging out drops the token
+  // server-side (POST /api/logout), so a signed-out phone stops getting pushes.
   useEffect(() => {
-    if (session?.token) {
-      // Register for push notifications after authentication
-      import("../lib/notifications")
-        .then(({ registerForPushNotificationsAsync }) => {
-          registerForPushNotificationsAsync().catch(() => {});
-        })
-        .catch(() => {});
-    }
+    if (!session?.token) return;
+    let cancelled = false;
+    let removeListener: (() => void) | null = null;
+    import("../lib/notifications")
+      .then(({ registerForPushNotificationsAsync, addPushTokenRefreshListener }) => {
+        if (cancelled) return;
+        registerForPushNotificationsAsync().catch(() => {});
+        removeListener = addPushTokenRefreshListener();
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      removeListener?.();
+    };
   }, [session?.token]);
 
   const signOut = useCallback(async () => {

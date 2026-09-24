@@ -554,7 +554,13 @@ export default function CommunityScreen() {
   // browse the community for support/knowledge, but shouldn't be able to
   // post threads or replies under the owner's connected account.
   const canPost = user?.partnerRole !== "viewer";
-  const { postId: deepLinkedPostId } = useLocalSearchParams<{ postId?: string }>();
+  // `openedAt` is stamped by the deep-link handler in app/_layout.tsx so the
+  // same shared link tapped twice re-opens the post even though this tab
+  // stays mounted (postId alone wouldn't change).
+  const { postId: deepLinkedPostId, openedAt: deepLinkOpenedAt } = useLocalSearchParams<{
+    postId?: string;
+    openedAt?: string;
+  }>();
   const [unreadCommentPostIds, setUnreadCommentPostIds] = useState<Set<string>>(new Set());
 
   useRealtimeSocket({
@@ -815,7 +821,7 @@ export default function CommunityScreen() {
     return () => {
       isMounted = false;
     };
-  }, [deepLinkedPostId]);
+  }, [deepLinkedPostId, deepLinkOpenedAt]);
 
   // --- ACTIONS HANDLERS ---
   function openOptions(post: Post) {

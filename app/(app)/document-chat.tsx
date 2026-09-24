@@ -16,6 +16,7 @@ import {
 import Markdown from "react-native-markdown-display";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { LanguagePickerSheet } from "../../components/LanguagePickerSheet";
+import { SkeletonBlock } from "../../components/Skeleton";
 import { useTheme } from "../../components/theme";
 import { getSoftTints } from "../../components/ui-tokens";
 import { VoiceModeOverlay, type VoiceStatus } from "../../components/VoiceModeOverlay";
@@ -312,6 +313,13 @@ export default function DocumentChatScreen() {
             onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
           >
             <View className="gap-4">
+              {loadingHistory && messages.length === 0 ? (
+                <>
+                  <SkeletonBlock width="70%" height={64} radius={16} />
+                  <SkeletonBlock width="55%" height={44} radius={16} style={{ alignSelf: "flex-end" }} />
+                  <SkeletonBlock width="80%" height={84} radius={16} />
+                </>
+              ) : null}
               {!loadingHistory && messages.length === 0 ? (
                 <View
                   className="max-w-[90%] p-4 rounded-2xl self-start rounded-tl-none border"

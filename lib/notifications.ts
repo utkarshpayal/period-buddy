@@ -1,9 +1,14 @@
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
-import { authApi } from './api';
+import { authApi, type AppNotification } from './api';
+import { showPermissionModal } from './modal-host';
 
-// Configure notification behavior for when the app is in the foreground
+// Configure notification behavior for when the app is in the foreground.
+// This module is imported statically (via components/PermissionsGate.tsx from
+// app/_layout.tsx), so the handler is in place before the first notification
+// can arrive — without it, pushes received while the app is open are silently
+// swallowed instead of showing a banner.
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowBanner: true,
@@ -13,66 +18,273 @@ Notifications.setNotificationHandler({
   }),
 });
 
+// Must match the channel id the backend targets in every FCM message
+// (period-buddy-be's utils/fcm.js → ANDROID_CHANNEL_ID). A notification the
+// system displays while the app is killed/backgrounded goes to this channel;
+// if it doesn't exist yet, Android falls back to a low-importance
+// "Miscellaneous" channel with no heads-up banner.
+//
+// Keep the id 'default'. Android locks a channel's settings after first
+// creation, so on devices that already created an older silent 'default'
+// channel, the sound below only applies after a reinstall.
+export const ANDROID_CHANNEL_ID = 'default';
+
+export async function ensureAndroidNotificationChannelAsync() {
+  if (Platform.OS !== 'android') return;
+  // The custom sound must be referenced by its bundled filename *with*
+  // extension (expo-notifications copies ./lib/notification.wav into
+  // res/raw/notification.wav at build time).
+  await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
+    name: 'General',
+    importance: Notifications.AndroidImportance.MAX,
+    vibrationPattern: [0, 250, 250, 250],
+    lightColor: '#FF231F7C',
+    sound: 'notification.wav',
+    enableVibrate: true,
+  });
+}
+
+export type NotificationPermissionResult = { granted: boolean; canAskAgain: boolean };
+
 /**
- * Registers the device for push notifications, retrieves the native FCM/APNs token,
- * and updates it on the backend.
+ * Asks for the OS notification permission (Android 13+ POST_NOTIFICATIONS
+ * runtime prompt / iOS alert). Safe to call before login — it never touches
+ * the backend. The Android channel is created first: on Android 13+ the
+ * permission prompt is only shown once at least one channel exists.
  */
-export async function registerForPushNotificationsAsync() {
-  if (Platform.OS === 'web') {
-    return null;
+export async function requestNotificationPermissionAsync(): Promise<NotificationPermissionResult> {
+  if (Platform.OS === 'web') return { granted: true, canAskAgain: true };
+
+  await ensureAndroidNotificationChannelAsync().catch(() => {});
+
+  const existing = await Notifications.getPermissionsAsync();
+  if (existing.granted || !existing.canAskAgain) {
+    return { granted: existing.granted, canAskAgain: existing.canAskAgain };
   }
+  const requested = await Notifications.requestPermissionsAsync();
+  return { granted: requested.granted, canAskAgain: requested.canAskAgain };
+}
+
+/**
+ * Registers this device for push for the signed-in user: makes sure the
+ * permission is granted, reads the native FCM (Android) / APNs (iOS) device
+ * token — the backend sends through firebase-admin directly, not the Expo
+ * push service, so this must be getDevicePushTokenAsync, not
+ * getExpoPushTokenAsync — and uploads it.
+ *
+ * Only call this with an authenticated session (components/auth-context.tsx
+ * does, on every launch/login — which also covers a token that changed after
+ * an app update or reinstall). Returns the token, or null if unavailable.
+ */
+export async function registerForPushNotificationsAsync(): Promise<string | null> {
+  if (Platform.OS === 'web') return null;
 
   try {
-    if (Platform.OS === 'android') {
-      // The custom sound must be referenced by its bundled filename *with*
-      // extension (expo-notifications copies ./lib/notification.wav into
-      // res/raw/notification.wav at build time). Using 'notification' without
-      // the extension makes Android silently fall back to no sound.
-      //
-      // We keep the channel id 'default' because the backend's FCM payloads
-      // target it by id; changing the id could stop background notifications
-      // from displaying. Android locks a channel's settings after first
-      // creation, so on devices that already created the old silent 'default'
-      // channel this corrected sound only applies after a reinstall (a fresh
-      // build install recreates the channel correctly).
-      await Notifications.setNotificationChannelAsync('default', {
-        name: 'General',
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#FF231F7C',
-        sound: 'notification.wav',
-        enableVibrate: true,
-      });
-    }
-
     if (!Device.isDevice) {
       console.log('Must use physical device for Push Notifications');
       return null;
     }
 
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-    
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-    
-    if (finalStatus !== 'granted') {
-      console.log('Failed to get push token for push notifications!');
-      return null;
-    }
+    const { granted } = await requestNotificationPermissionAsync();
+    if (!granted) return null;
 
-    // Get the native device push token (FCM for Android, APNs for iOS)
-    const tokenData = await Notifications.getDevicePushTokenAsync();
-    const token = tokenData.data;
+    const { data: token } = await Notifications.getDevicePushTokenAsync();
+    if (typeof token !== 'string' || !token) return null;
 
-    // Update the token on the backend
     await authApi.updateFcmToken(token);
-
     return token;
   } catch (error) {
     console.error('Failed to register for push notifications:', error);
     return null;
   }
+}
+
+/**
+ * This device's current native push token for the logout call, or null.
+ * Never prompts (only reads the token when permission is already granted),
+ * never throws, and gives up after `timeoutMs` so logout is never blocked.
+ */
+export async function getCurrentPushTokenQuietlyAsync(timeoutMs = 1500): Promise<string | null> {
+  if (Platform.OS === 'web') return null;
+  const lookup = (async () => {
+    try {
+      if (!Device.isDevice) return null;
+      const { granted } = await Notifications.getPermissionsAsync();
+      if (!granted) return null;
+      const { data: token } = await Notifications.getDevicePushTokenAsync();
+      return typeof token === 'string' && token ? token : null;
+    } catch {
+      return null;
+    }
+  })();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), timeoutMs);
+  });
+  try {
+    return await Promise.race([lookup, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/**
+ * For a Profile → Notifications toggle being switched on: the backend
+ * preference alone does nothing if the OS permission is off, so ask for it
+ * (or, once Android/iOS will no longer show the prompt, offer the app's
+ * Settings page) and make sure this device's token is registered.
+ */
+export async function enablePushOnDeviceAsync(): Promise<void> {
+  if (Platform.OS === 'web') return;
+  try {
+    const { granted, canAskAgain } = await requestNotificationPermissionAsync();
+    if (!granted) {
+      // Only point at Settings once the OS will no longer show the prompt; a
+      // user who just declined (canAskAgain still true) made their choice.
+      if (canAskAgain) return;
+      showPermissionModal({
+        title: 'Notifications are blocked',
+        message:
+          "Allow notifications for The Nura in your phone's Settings to get period, ovulation and reminder alerts.",
+        icon: 'notifications-outline',
+      });
+      return;
+    }
+    await registerForPushNotificationsAsync();
+  } catch {
+    // Never block saving the preference on a permission/registration failure.
+  }
+}
+
+/**
+ * FCM can rotate a device token at any time (restore from backup, app data
+ * cleared, Firebase-side refresh). Uploads the new one as soon as it arrives.
+ * Returns the unsubscribe function.
+ */
+export function addPushTokenRefreshListener(): () => void {
+  if (Platform.OS === 'web') return () => {};
+  const subscription = Notifications.addPushTokenListener(({ data }) => {
+    if (typeof data === 'string' && data) {
+      authApi.updateFcmToken(data).catch(() => {});
+    }
+  });
+  return () => subscription.remove();
+}
+
+// Plain in-app path, optionally with a query string: "/tracker",
+// "/blogs?slug=abc". Mirrors period-buddy-be's utils/notificationRoute.js.
+const IN_APP_ROUTE_PATTERN = /^\/[A-Za-z0-9\-_/()]*(\?[A-Za-z0-9\-_=&%.~+]*)?$/;
+
+function toInAppRoute(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  let candidate = value.trim();
+  if (!candidate) return null;
+
+  // Accept the app's own link shapes too, unwrapped to their in-app path:
+  // thenura://tracker and https://thenura.care/app?deeplink=tracker.
+  if (candidate.startsWith('thenura://')) {
+    candidate = `/${candidate.slice('thenura://'.length)}`;
+  } else if (/^https:\/\/(www\.)?thenura\.care\/app\?/i.test(candidate)) {
+    const match = candidate.match(/[?&]deeplink=([^&#]+)/);
+    if (!match) return null;
+    try {
+      candidate = `/${decodeURIComponent(match[1]).replace(/^\/+/, '')}`;
+    } catch {
+      return null;
+    }
+  }
+
+  if (candidate.length > 200 || candidate.startsWith('//') || candidate.includes('..')) return null;
+  return IN_APP_ROUTE_PATTERN.test(candidate) ? candidate : null;
+}
+
+/**
+ * The explicit destination a notification payload asks for (`data.route`, or
+ * `data.url` as an alias), validated to be an in-app path — anything else
+ * (external URLs, malformed input) is ignored so a tap can never leave the app.
+ */
+export function explicitNotificationRoute(data: Record<string, unknown>): string | null {
+  return toInAppRoute(data.route) ?? toInAppRoute(data.url);
+}
+
+// Where tapping a push notification (or its in-app banner) should land,
+// keyed by Notification.type (see period-buddy-be's models/Notification.js
+// — sent through FCM as a stringified `data.type` field, see utils/fcm.js).
+// Split by role: a partner 'viewer' can't use the owner dashboard (its layout
+// redirects viewers away), so each viewer entry points at the partner-view
+// equivalent instead. Types with no unambiguous destination for a role
+// (buddy_message, and system/admin broadcasts without an explicit route)
+// fall back to the notifications list rather than risk navigating somewhere
+// wrong.
+const NOTIFICATION_TAP_ROUTES: Partial<Record<AppNotification['type'], string>> = {
+  community_reply: '/(app)/(dashboard)/community',
+  consultation_update: '/(app)/consultation',
+  habit_reminder: '/(app)/habits',
+  ovulation_reminder: '/(app)/(dashboard)/tracker',
+  period_reminder: '/(app)/(dashboard)/tracker',
+  reward_earned: '/(app)/(dashboard)/home',
+  streak_bonus: '/(app)/(dashboard)/home',
+};
+
+const PARTNER_VIEWER_TAP_ROUTES: Partial<Record<AppNotification['type'], string>> = {
+  community_reply: '/(app)/(partner-view)/forum',
+  // Sent to the viewer when the owner updates their cycle log/settings
+  // (createPartnerNotification) — the shared overview shows that data.
+  partner_message: '/(app)/(partner-view)/overview',
+  ovulation_reminder: '/(app)/(partner-view)/overview',
+  period_reminder: '/(app)/(partner-view)/overview',
+};
+
+// Owner-dashboard screens a viewer can't open, mapped to their partner-view
+// counterpart — applied to an explicit `data.route` from an admin push.
+const VIEWER_ROUTE_EQUIVALENTS: Record<string, string> = {
+  '/home': '/(app)/(partner-view)/overview',
+  '/tracker': '/(app)/(partner-view)/overview',
+  '/community': '/(app)/(partner-view)/forum',
+  '/profile': '/(app)/(partner-view)/account',
+  '/ai-chat': '/(app)/(partner-view)/voice',
+};
+
+// Explicit routes a viewer can open as-is (partner-view tabs plus the shared
+// screens reachable from them). Any other owner screen with no equivalent
+// above falls back to the notifications list.
+const VIEWER_ALLOWED_ROUTES = new Set([
+  '/overview',
+  '/chat',
+  '/voice',
+  '/forum',
+  '/account',
+  '/notifications',
+  '/app-lock',
+]);
+
+export const NOTIFICATIONS_LIST_ROUTE = '/(app)/notifications';
+
+/**
+ * Where a tapped notification should land — a push (app/_layout.tsx, resolved
+ * when the navigation actually happens, not at tap time, so a cold-start tap
+ * uses the role of the account that ends up signed in) or a row in the in-app
+ * list (app/(app)/notifications.tsx). `data` is the push's data payload / the
+ * Notification doc's `data` plus its `type`.
+ */
+export function resolveNotificationTarget(data: Record<string, unknown>, isViewer: boolean): string {
+  // An explicit in-app route (admin pushes pick one in the Content Studio)
+  // wins; explicitNotificationRoute() rejects anything that isn't an in-app path.
+  const route = explicitNotificationRoute(data);
+  if (route) {
+    if (!isViewer) return route;
+    const bare = route.split('?')[0].replace(/\/\([^)]*\)/g, '') || '/';
+    return (
+      VIEWER_ROUTE_EQUIVALENTS[bare] ??
+      (VIEWER_ALLOWED_ROUTES.has(bare) ? route : NOTIFICATIONS_LIST_ROUTE)
+    );
+  }
+
+  const type = typeof data.type === 'string' ? (data.type as AppNotification['type']) : undefined;
+  if (!type) return NOTIFICATIONS_LIST_ROUTE;
+  if (isViewer) return PARTNER_VIEWER_TAP_ROUTES[type] ?? NOTIFICATIONS_LIST_ROUTE;
+  // The daily 'log today' nudge (period-buddy-be's dailyNotificationScheduler)
+  // is a `system` notification, but it's about the tracker.
+  if (type === 'system' && data.kind === 'daily_nudge') return '/(app)/(dashboard)/tracker';
+  return NOTIFICATION_TAP_ROUTES[type] ?? NOTIFICATIONS_LIST_ROUTE;
 }

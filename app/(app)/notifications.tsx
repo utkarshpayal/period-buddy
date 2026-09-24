@@ -10,6 +10,8 @@ import { useTheme } from "../../components/theme";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
 import { useAsyncLoad } from "../../hooks/useAsyncLoad";
 import { partnerApi, type AppNotification } from "../../lib/api";
+import { NOTIFICATIONS_LIST_ROUTE, resolveNotificationTarget } from "../../lib/notifications";
+import { useAuth } from "../../components/auth-context";
 
 const NOTIFICATION_META: Record<
   AppNotification["type"],
@@ -42,6 +44,7 @@ function timeAgo(dateStr?: string) {
 
 export default function NotificationsScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const { colors, fonts, isDark } = useTheme();
   const softTints = getSoftTints(colors);
   const {
@@ -62,6 +65,20 @@ export default function NotificationsScreen() {
       reload(true);
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  // Same destination a tap on the push itself would open (e.g. an admin
+  // broadcast's chosen screen, a period reminder → tracker). Rows whose
+  // destination is this list just get marked read.
+  const handlePress = (notif: AppNotification) => {
+    if (!notif.isRead) markAsRead(notif._id);
+    const target = resolveNotificationTarget(
+      { ...(notif.data ?? {}), type: notif.type },
+      user?.partnerRole === "viewer",
+    );
+    if (target !== NOTIFICATIONS_LIST_ROUTE) {
+      router.push(target as Parameters<typeof router.push>[0]);
     }
   };
 
@@ -134,7 +151,7 @@ export default function NotificationsScreen() {
                   <TouchableOpacity
                     key={notif._id}
                     activeOpacity={0.8}
-                    onPress={() => !notif.isRead && markAsRead(notif._id)}
+                    onPress={() => handlePress(notif)}
                     className="flex-row p-3.5 rounded-2xl"
                     style={{
                       backgroundColor: notif.isRead ? colors.surface : colors.primaryLight,

@@ -16,6 +16,7 @@ import Svg, { Circle } from "react-native-svg";
 import { useAuth } from "../../../components/auth-context";
 import { genZLabel, useGenZLabel, useGenZMode } from "../../../components/genz-mode";
 import HubEntryCard from "../../../components/HubEntryCard";
+import { SkeletonBlock, SkeletonCard } from "../../../components/Skeleton";
 import StatCard from "../../../components/StatCard";
 import { useTheme } from "../../../components/theme";
 import { getHeroGradient, getShadow } from "../../../components/ui-tokens";
@@ -193,18 +194,27 @@ export default function Home() {
   const [predictions, setPredictions] = useState<Predictions | null>(null);
   const [hasUnreadNotifications, setHasUnreadNotifications] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  // False until the first predictions fetch settles, so the hero card and
+  // insights show a skeleton instead of flashing local "Day 1" estimates.
+  const [homeLoaded, setHomeLoaded] = useState(false);
 
   const loadHome = useCallback(async () => {
-    const [predictionsResult, notifsResult] = await Promise.allSettled([
-      cycleApi.getPredictions(),
-      partnerApi.getNotifications(),
-    ]);
-
-    setPredictions(predictionsResult.status === "fulfilled" ? predictionsResult.value : null);
-
-    if (notifsResult.status === "fulfilled") {
-      setHasUnreadNotifications(notifsResult.value.some((n) => !n.isRead));
-    }
+    // Settled independently so a slow notifications call never holds the
+    // hero card / insights skeleton open.
+    const predictionsTask = cycleApi
+      .getPredictions()
+      .then(
+        (value) => setPredictions(value),
+        () => setPredictions(null),
+      )
+      .finally(() => setHomeLoaded(true));
+    const notificationsTask = partnerApi
+      .getNotifications()
+      .then(
+        (notifs) => setHasUnreadNotifications(notifs.some((n) => !n.isRead)),
+        () => {},
+      );
+    await Promise.all([predictionsTask, notificationsTask]);
   }, []);
 
   useEffect(() => {
@@ -456,6 +466,11 @@ export default function Home() {
           </View>
 
           {/* CYCLE PHASE HERO CARD */}
+          {!homeLoaded ? (
+            <View className="mx-6 mb-4">
+              <SkeletonBlock width="100%" height={140} radius={22} />
+            </View>
+          ) : (
           <View className="mx-6 mb-4">
             <LinearGradient
               colors={heroGradient as [string, string, ...string[]]}
@@ -523,6 +538,7 @@ export default function Home() {
               </View>
             </LinearGradient>
           </View>
+          )}
 
           {/* QUICK ACTIONS */}
           <View className="mx-6 mb-5 flex-row justify-around">
@@ -593,6 +609,13 @@ export default function Home() {
               snapToAlignment="start"
               contentContainerStyle={{ paddingLeft: 24, paddingRight: 24, gap: 12 }}
             >
+              {!homeLoaded ? (
+                <>
+                  <SkeletonCard style={{ width: insightCardWidth }} />
+                  <SkeletonCard style={{ width: insightCardWidth }} />
+                </>
+              ) : (
+              <>
               {/* Cycle health */}
               <View className="border p-5" style={{ width: insightCardWidth, backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 22, ...getShadow(colors, isDark) }}>
                 <View className="flex-row items-center justify-between">
@@ -674,6 +697,8 @@ export default function Home() {
                   })}
                 </View>
               </View>
+              </>
+              )}
             </ScrollView>
           </View>
 

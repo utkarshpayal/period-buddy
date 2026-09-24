@@ -18,7 +18,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useAppState } from "../../components/AppState";
 import { useAuth } from "../../components/auth-context";
 import { LanguagePickerSheet } from "../../components/LanguagePickerSheet";
-import { Loader } from "../../components/Loader";
+import { SkeletonBlock } from "../../components/Skeleton";
 import { useTheme } from "../../components/theme";
 import { getLogCategoryTints, getShadow, getSoftTints } from "../../components/ui-tokens";
 import { VoiceModeOverlay, type VoiceStatus } from "../../components/VoiceModeOverlay";
@@ -681,8 +681,11 @@ export default function QA() {
           }
         >
           {isLoadingSession ? (
-            <View className="pt-16 items-center justify-center">
-              <Loader label="Opening chat..." />
+            <View className="gap-4">
+              <SkeletonBlock width="70%" height={64} radius={20} />
+              <SkeletonBlock width="55%" height={44} radius={20} style={{ alignSelf: "flex-end" }} />
+              <SkeletonBlock width="80%" height={84} radius={20} />
+              <SkeletonBlock width="45%" height={44} radius={20} style={{ alignSelf: "flex-end" }} />
             </View>
           ) : (
           <View className="gap-4">

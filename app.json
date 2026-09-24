@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "The Nura",
+    "name": "The Nura Care",
     "slug": "thenuracare",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -22,8 +22,8 @@
       "googleServicesFile": "./assets/GoogleService-Info.plist",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSCameraUsageDescription": "The Nura uses your camera for video calls with your Period Buddy.",
-        "NSMicrophoneUsageDescription": "The Nura uses your microphone for video calls with your Period Buddy.",
+        "NSCameraUsageDescription": "The Nura uses your camera for video calls and to photograph documents you choose to upload.",
+        "NSMicrophoneUsageDescription": "The Nura uses your microphone for voice questions to Nura AI, voice notes and video calls.",
         "NSFaceIDUsageDescription": "The Nura uses Face ID to unlock the app and keep your data private."
       },
       "associatedDomains": [
@@ -45,6 +45,10 @@
         "android.permission.USE_BIOMETRIC",
         "android.permission.USE_FINGERPRINT",
         "android.permission.MODIFY_AUDIO_SETTINGS"
+      ],
+      "blockedPermissions": [
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"
       ],
       "intentFilters": [
         {
@@ -120,7 +124,12 @@
         }
       ],
       "expo-video",
-      "expo-audio"
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "The Nura uses your microphone for voice questions to Nura AI, voice notes and video calls."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

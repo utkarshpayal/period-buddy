@@ -23,9 +23,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppState } from "../../components/AppState";
 import { alert } from "../../lib/alert";
 import { LanguagePickerSheet } from "../../components/LanguagePickerSheet";
-import { Loader } from "../../components/Loader";
 import { useTheme } from "../../components/theme";
-import { SkeletonMediaGrid } from "../../components/Skeleton";
+import { SkeletonBlock, SkeletonMediaGrid } from "../../components/Skeleton";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
 import {
   blogsApi,
@@ -467,7 +466,14 @@ export default function Blogs() {
     try {
       await shareWithAppLink(
         `Check out this verified health resource on Nura: "${item.title}" by ${item.author}.`,
-        item.type === "blog" && item.slug ? `blogs?slug=${item.slug}` : undefined,
+        item.type === "blog"
+          ? item.slug
+            ? `blogs?slug=${encodeURIComponent(item.slug)}`
+            : "blogs"
+          : usingFallback
+            ? // Fallback reels are local placeholders with no backend id.
+              "reels"
+            : `reels?reelId=${encodeURIComponent(item.id)}`,
       );
       earnTokens(3);
     } catch {
@@ -1021,8 +1027,15 @@ export default function Blogs() {
                   )}
 
                   {articleLoading ? (
-                    <View className="items-center py-8">
-                      <Loader size={48} />
+                    <View className="gap-2.5 py-4 mb-8">
+                      <SkeletonBlock width="100%" height={12} />
+                      <SkeletonBlock width="96%" height={12} />
+                      <SkeletonBlock width="88%" height={12} />
+                      <SkeletonBlock width="100%" height={12} />
+                      <SkeletonBlock width="72%" height={12} />
+                      <SkeletonBlock width="94%" height={12} style={{ marginTop: 12 }} />
+                      <SkeletonBlock width="85%" height={12} />
+                      <SkeletonBlock width="60%" height={12} />
                     </View>
                   ) : translated?.content || fullBlog?.content ? (
                     <View className="mb-8">

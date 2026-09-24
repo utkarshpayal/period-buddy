@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../../components/auth-context";
-import { Loader } from "../../../components/Loader";
+import { SkeletonBlock, SkeletonCard } from "../../../components/Skeleton";
 import { useTheme } from "../../../components/theme";
 import { getShadow, getScreenGradient } from "../../../components/ui-tokens";
 import { formatShortDate } from "../../../lib/format";
@@ -242,8 +242,11 @@ export default function PartnerViewOverview() {
           showsVerticalScrollIndicator={false}
         >
           {isLoading ? (
-            <View className="items-center justify-center py-20">
-              <Loader />
+            <View className="gap-4">
+              <SkeletonBlock width="100%" height={72} radius={24} />
+              <SkeletonBlock width="100%" height={140} radius={22} />
+              <SkeletonCard />
+              <SkeletonCard />
             </View>
           ) : errorMessage ? (
             <View
