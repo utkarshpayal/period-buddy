@@ -12,7 +12,9 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { EmptyState } from "../../components/EmptyState";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
+import { SkeletonBlock, SkeletonCard } from "../../components/Skeleton";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { useAuth } from "../../components/auth-context";
 import { useTheme } from "../../components/theme";
@@ -23,6 +25,7 @@ import { LockedFeatureCard } from "../../components/subscription/LockedFeatureCa
 import { PaywallModal } from "../../components/subscription/PaywallModal";
 import { alert } from "../../lib/alert";
 import { formatShortDate } from "../../lib/format";
+import { shareWithAppLink } from "../../lib/share";
 import {
   authApi,
   getFriendlyErrorMessage,
@@ -265,9 +268,39 @@ export default function GovernmentSchemeDetail() {
 
   const actionConfig = scheme ? SCHEME_ACTION_CTA[scheme.actionType] : null;
 
+  // Deep links back to this screen ("government-scheme-detail?id=<slug>");
+  // a recipient without access still lands here and sees the paywall above.
+  const handleShare = async () => {
+    if (!scheme) return;
+    try {
+      await shareWithAppLink(
+        `Found this government health scheme on Nura: ${scheme.name}.`,
+        `government-scheme-detail?id=${encodeURIComponent(scheme.slug || scheme._id)}`,
+      );
+    } catch {
+      // user cancelled the share sheet — nothing to do
+    }
+  };
+
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
-      <ScreenHeader title="Scheme Details" />
+      <ScreenHeader
+        title="Scheme Details"
+        right={
+          scheme ? (
+            <TouchableOpacity
+              onPress={handleShare}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Share scheme"
+              className="w-9 h-9 items-center justify-center rounded-full"
+              style={{ backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
+            >
+              <Feather name="share-2" size={17} color={colors.foreground} />
+            </TouchableOpacity>
+          ) : null
+        }
+      />
       <LoadingErrorState
         // Also wait on the subscription check — otherwise the real scheme
         // content can render for a frame before `locked` flips true and
@@ -277,6 +310,19 @@ export default function GovernmentSchemeDetail() {
         offline={offline}
         onRetry={reload}
         loadingLabel="Loading scheme…"
+        skeleton={
+          <View className="gap-4 px-6 pt-4">
+            <View className="flex-row gap-2">
+              <SkeletonBlock width={72} height={22} radius={11} />
+              <SkeletonBlock width={96} height={22} radius={11} />
+            </View>
+            <SkeletonBlock width="80%" height={24} />
+            <SkeletonBlock width="60%" height={14} />
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonBlock width="100%" height={52} radius={16} />
+          </View>
+        }
       >
         {scheme ? (
           locked ? (
@@ -616,9 +662,13 @@ export default function GovernmentSchemeDetail() {
           </>
           )
         ) : (
-          <View className="flex-1 items-center justify-center">
-            <Feather name="alert-circle" size={28} color={colors.mutedText} />
-          </View>
+          <EmptyState
+            icon="file-search-outline"
+            title="Scheme not found"
+            message="This scheme may have been removed or is no longer available."
+            actionLabel="Browse schemes"
+            onAction={() => router.replace("/government-schemes")}
+          />
         )}
       </LoadingErrorState>
 

@@ -23,6 +23,7 @@ import { getShadow, getSoftTints } from "../../components/ui-tokens";
 import { useSubscriptionAccess } from "../../hooks/useSubscriptionAccess";
 import { PaywallModal } from "../../components/subscription/PaywallModal";
 import {
+  ApiError,
   buddyApi,
   getFriendlyErrorMessage,
   getWebSocketUrl,
@@ -176,31 +177,36 @@ function BuddyNomination() {
   const loadBuddySpace = useCallback(async () => {
     try {
       const [matchesResponse, activeBuddy, messages] = await Promise.all([
-        buddyApi.getMatches().catch(() => ({ matches: [] })),
+        // null (not an empty list) on failure, so a failed fetch keeps the
+        // nominees already on screen instead of wiping them.
+        buddyApi.getMatches().catch(() => null),
         buddyApi.getActive().catch(() => null),
         buddyApi.getMessages().catch(() => []),
       ]);
 
-      let finalNominees: PeriodBuddy[] = [];
-      if (matchesResponse && matchesResponse.matches && matchesResponse.matches.length > 0) {
-        finalNominees = matchesResponse.matches.filter(isRealMatch).map(mapBuddy);
-      }
+      const fetchedNominees: PeriodBuddy[] | null = matchesResponse
+        ? (matchesResponse.matches ?? []).filter(isRealMatch).map(mapBuddy)
+        : null;
+      const mappedActive = activeBuddy ? mapBuddy(activeBuddy) : null;
 
-      if (activeBuddy) {
-        const mappedActive = mapBuddy(activeBuddy);
+      if (mappedActive) {
         setActiveNominatedId(mappedActive.id);
-
-        // The active match is authoritative (it has roomKey; a same-id discovery-list
-        // preview from getBuddyMatches never does), so overwrite any preview entry
-        // instead of only adding one when it's missing.
-        const exists = finalNominees.some((b) => b.id === mappedActive.id);
-        finalNominees = exists
-          ? finalNominees.map((b) => (b.id === mappedActive.id ? mappedActive : b))
-          : [mappedActive, ...finalNominees];
         setIsChatConsoleOpen(true);
       }
 
-      setNominees(finalNominees);
+      setNominees((prev) => {
+        let finalNominees = fetchedNominees ?? prev;
+        if (mappedActive) {
+          // The active match is authoritative (it has roomKey; a same-id discovery-list
+          // preview from getBuddyMatches never does), so overwrite any preview entry
+          // instead of only adding one when it's missing.
+          const exists = finalNominees.some((b) => b.id === mappedActive.id);
+          finalNominees = exists
+            ? finalNominees.map((b) => (b.id === mappedActive.id ? mappedActive : b))
+            : [mappedActive, ...finalNominees];
+        }
+        return finalNominees;
+      });
 
       const chatMessages = (messages && messages.length > 0)
         ? messages
@@ -415,20 +421,32 @@ function BuddyNomination() {
       alert("Buddy nominated", "Your Period Buddy space is ready.");
     } catch (err) {
       console.warn("Failed to nominate buddy:", err);
-      if (isNetworkError(err)) {
-        // Offline: keep the optimistic buddy so development/testing works.
-        alert("Buddy nominated", "Your Period Buddy space is ready.");
+      // Undo the optimistic pairing in every failure case — including offline/
+      // timeout, where we can't know whether the server created it. Faking
+      // success there left a local-only "buddy" that vanished on next load.
+      setActiveNominatedId(null);
+      setIsChatConsoleOpen(false);
+      earnTokens(-25);
+      if (isFeatureLockedError(err)) {
+        setPaywallVisible(true);
       } else {
-        // The server rejected it (e.g. this buddy just connected with someone
-        // else, or — see isFeatureLockedError below — access lapsed since
-        // the hasAccess() check above ran) — undo the optimistic pairing.
-        setActiveNominatedId(null);
-        setIsChatConsoleOpen(false);
-        earnTokens(-25);
-        if (isFeatureLockedError(err)) {
-          setPaywallVisible(true);
-        } else {
-          alert("Couldn't connect buddy", getFriendlyErrorMessage(err));
+        alert(
+          "Couldn't connect buddy",
+          isNetworkError(err)
+            ? "We couldn't reach the server. Check your connection and try again."
+            : getFriendlyErrorMessage(err),
+        );
+        // Re-sync with the server: a timed-out request may have actually
+        // paired us, and a 409 "already have an active Period Buddy" means the
+        // server has a pairing this screen didn't know about (e.g. the initial
+        // getActive() failed and was swallowed) — reloading surfaces it instead
+        // of letting every Invite tap fail the same way.
+        // Plain network errors are skipped: offline, the reload would fail too.
+        if (
+          err instanceof ApiError &&
+          (err.kind === "timeout" || err.status === 409)
+        ) {
+          loadBuddySpace();
         }
       }
     }
@@ -480,6 +498,15 @@ function BuddyNomination() {
               await buddyApi.endActive();
             } catch (err) {
               console.warn("Failed to end buddy pairing:", err);
+              // 404 = the server already has no active pairing, so clearing
+              // locally is correct. Anything else means the pairing still
+              // exists server-side — clearing it here would make the screen
+              // look free while every new Invite 409s "already have an
+              // active Period Buddy".
+              if (!(err instanceof ApiError && err.status === 404)) {
+                alert("Couldn't leave pairing", getFriendlyErrorMessage(err));
+                return;
+              }
             }
             setActiveNominatedId(null);
             setIsChatConsoleOpen(false);

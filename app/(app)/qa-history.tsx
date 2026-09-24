@@ -5,7 +5,7 @@ import { RefreshControl, ScrollView, Text, TouchableOpacity, View } from "react-
 import { SafeAreaView } from "react-native-safe-area-context";
 import { EmptyState } from "../../components/EmptyState";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
-import { Loader } from "../../components/Loader";
+import { SkeletonList } from "../../components/Skeleton";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { useTheme } from "../../components/theme";
 import { getLogCategoryTints, getShadow, getSoftTints } from "../../components/ui-tokens";
@@ -85,7 +85,7 @@ export default function QaHistory() {
     return (
       <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
         <ScreenHeader title="Chat History" />
-        <Loader fullscreen />
+        <SkeletonList count={6} style={{ paddingTop: 16 }} />
       </SafeAreaView>
     );
   }
@@ -130,7 +130,13 @@ export default function QaHistory() {
         }
       />
 
-      <LoadingErrorState loading={loading} error={error} offline={offline} onRetry={() => reload()}>
+      <LoadingErrorState
+        loading={loading}
+        error={error}
+        offline={offline}
+        onRetry={() => reload()}
+        skeleton={<SkeletonList count={6} style={{ paddingTop: 16 }} />}
+      >
         {!sessions?.length ? (
           <EmptyState
             icon="chat-question-outline"

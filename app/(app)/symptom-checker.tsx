@@ -10,7 +10,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Loader } from "../../components/Loader";
+import { SkeletonCardList } from "../../components/Skeleton";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { useTheme } from "../../components/theme";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
@@ -201,7 +201,7 @@ export default function SymptomCheckerScreen() {
     return (
       <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
         <ScreenHeader title="Symptom Checker" />
-        <Loader fullscreen />
+        <SkeletonCardList count={4} style={{ paddingTop: 16 }} />
       </SafeAreaView>
     );
   }

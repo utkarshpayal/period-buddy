@@ -182,3 +182,14 @@ export function SkeletonMediaGrid({ count = 6, style }: { count?: number; style?
     </View>
   );
 }
+
+/** A vertical stack of `count` card skeletons, for lists of cards (schemes, applications, plans). */
+export function SkeletonCardList({ count = 3, style }: { count?: number; style?: ViewStyle }) {
+  return (
+    <View className="gap-4 px-6" style={style}>
+      {Array.from({ length: count }).map((_, i) => (
+        <SkeletonCard key={i} />
+      ))}
+    </View>
+  );
+}

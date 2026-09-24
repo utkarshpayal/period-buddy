@@ -13,7 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { EmptyState } from "../../components/EmptyState";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
-import { Loader } from "../../components/Loader";
+import { SkeletonCardList } from "../../components/Skeleton";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { useTheme } from "../../components/theme";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
@@ -270,7 +270,7 @@ export default function GovernmentSchemes() {
     return (
       <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
         <ScreenHeader title="Govt. Schemes" />
-        <Loader fullscreen />
+        <SkeletonCardList count={4} style={{ paddingTop: 16 }} />
       </SafeAreaView>
     );
   }
@@ -401,6 +401,7 @@ export default function GovernmentSchemes() {
         offline={offline}
         onRetry={() => load()}
         loadingLabel="Loading schemes…"
+        skeleton={<SkeletonCardList count={4} style={{ paddingTop: 16 }} />}
       >
         <ScrollView
           className="flex-1 mt-4"

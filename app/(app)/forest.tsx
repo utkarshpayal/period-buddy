@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ForestScene, type ForestPhase } from "../../components/ForestScene";
 import { GROWTH_STAGE_LABEL, GROWTH_STAGE_MOTIVATION, GrowthTree, getGrowthStage } from "../../components/GrowthTree";
+import { SkeletonBlock } from "../../components/Skeleton";
 import { ThemeColors, useTheme } from "../../components/theme";
 import { getShadow } from "../../components/ui-tokens";
 import { alert } from "../../lib/alert";
@@ -53,6 +54,9 @@ export default function Forest() {
   const [forestStatus, setForestStatus] = useState<ForestStatus | null>(null);
   const [currentPhase, setCurrentPhase] = useState<string | undefined>(undefined);
   const [refreshing, setRefreshing] = useState(false);
+  // False until the first status fetch settles — until then the numbers and
+  // history below would otherwise show the offline/demo fallback values.
+  const [hasLoaded, setHasLoaded] = useState(false);
 
   const loadForest = useCallback(async () => {
     const [status, predictions] = await Promise.allSettled([
@@ -63,6 +67,7 @@ export default function Forest() {
     setCurrentPhase(
       predictions.status === "fulfilled" ? predictions.value?.currentPhase : undefined,
     );
+    setHasLoaded(true);
   }, []);
 
   useEffect(() => {
@@ -207,12 +212,16 @@ export default function Forest() {
               className="flex-1 items-center rounded-2xl p-3"
               style={{ backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
             >
-              <Text
-                className="text-lg font-bold"
-                style={{ color: colors.foreground, fontFamily: fonts.heading }}
-              >
-                {healthyTreeCount}
-              </Text>
+              {hasLoaded ? (
+                <Text
+                  className="text-lg font-bold"
+                  style={{ color: colors.foreground, fontFamily: fonts.heading }}
+                >
+                  {healthyTreeCount}
+                </Text>
+              ) : (
+                <SkeletonBlock width={28} height={20} style={{ marginVertical: 4 }} />
+              )}
               <Text
                 className="text-[10px] font-bold uppercase mt-0.5"
                 style={{ color: colors.mutedText, fontFamily: fonts.body }}
@@ -224,12 +233,16 @@ export default function Forest() {
               className="flex-1 items-center rounded-2xl p-3"
               style={{ backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
             >
-              <Text
-                className="text-lg font-bold"
-                style={{ color: colors.foreground, fontFamily: fonts.heading }}
-              >
-                {forestStatus?.careActions ?? 0}
-              </Text>
+              {hasLoaded ? (
+                <Text
+                  className="text-lg font-bold"
+                  style={{ color: colors.foreground, fontFamily: fonts.heading }}
+                >
+                  {forestStatus?.careActions ?? 0}
+                </Text>
+              ) : (
+                <SkeletonBlock width={28} height={20} style={{ marginVertical: 4 }} />
+              )}
               <Text
                 className="text-[10px] font-bold uppercase mt-0.5"
                 style={{ color: colors.mutedText, fontFamily: fonts.body }}
@@ -364,7 +377,13 @@ export default function Forest() {
             </Text>
 
             <View className="gap-4">
-              {trees.map((tree) => (
+              {!hasLoaded ? (
+                <>
+                  <SkeletonBlock width="100%" height={88} radius={16} />
+                  <SkeletonBlock width="100%" height={88} radius={16} />
+                  <SkeletonBlock width="100%" height={88} radius={16} />
+                </>
+              ) : trees.map((tree) => (
                 <View
                   key={tree.id}
                   className="overflow-hidden rounded-2xl border-2"

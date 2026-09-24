@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader } from "../../components/ScreenHeader";
+import { SkeletonBlock } from "../../components/Skeleton";
 import { useTheme } from "../../components/theme";
 import { getShadow } from "../../components/ui-tokens";
 import { useAuth } from "../../components/auth-context";
@@ -318,7 +319,7 @@ export default function CheckinCallScreen() {
                 </Text>
               </View>
               {scheduleLoading ? (
-                <ActivityIndicator color={colors.mutedText} />
+                <SkeletonBlock width={50} height={30} radius={15} />
               ) : (
                 <Switch
                   value={scheduleEnabled}

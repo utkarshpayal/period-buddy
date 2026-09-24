@@ -3,10 +3,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import { requestRecordingPermissionsAsync } from "expo-audio";
 import React, { useEffect, useState } from "react";
-import { Platform, Text, TouchableOpacity, View } from "react-native";
+import { Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { openAppSettings } from "../lib/modal-host";
-import { registerForPushNotificationsAsync } from "../lib/notifications";
+import { requestNotificationPermissionAsync } from "../lib/notifications";
 import { useTheme } from "./theme";
 import { getShadow } from "./ui-tokens";
 
@@ -28,11 +28,11 @@ const permissionRows: PermissionRowConfig[] = [
     icon: "notifications-outline",
     title: "Notifications",
     description: "Get period, ovulation, and reminder alerts right on time.",
-    request: async () => {
-      if (Platform.OS === "web") return { granted: true, canAskAgain: true };
-      const token = await registerForPushNotificationsAsync();
-      return { granted: Boolean(token), canAskAgain: true };
-    },
+    // Permission only — this gate runs before login, so there's no session
+    // to attach a push token to yet (uploading one here used to 401 and make
+    // a granted permission look denied). auth-context registers the token
+    // once the user signs in.
+    request: requestNotificationPermissionAsync,
   },
   {
     id: "microphone",

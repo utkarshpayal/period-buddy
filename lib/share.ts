@@ -1,8 +1,11 @@
 import { Share } from "react-native";
 
-// Hosted on the marketing site (Marketing website/src/pages/AppRedirect.jsx).
-// It tries the app's custom scheme first and falls back to the Play Store
-// listing if the app isn't installed (see that file for the redirect logic).
+// With the app installed, Android App Links open this URL straight in the app
+// (app/+native-intent.tsx → lib/deeplink.ts). Otherwise it loads the marketing
+// site's /app page (The-Nura-Marketing-Website/src/pages/AppRedirect.jsx),
+// which re-launches the app via thenura://<deeplink> or falls back to the
+// Play Store listing. Every `deeplink` route must be listed in
+// lib/deeplink.ts#SHAREABLE_ROUTES.
 const APP_LINK_BASE = "https://thenura.care/app";
 
 /**

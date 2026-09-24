@@ -18,6 +18,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { alert } from "../../lib/alert";
 import { ScreenHeader } from "../../components/ScreenHeader";
+import { SkeletonBlock, SkeletonCard } from "../../components/Skeleton";
 import { useTheme } from "../../components/theme";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
 import { useSubscriptionAccess } from "../../hooks/useSubscriptionAccess";
@@ -38,7 +39,7 @@ export default function Partner() {
   const insets = useSafeAreaInsets();
 
   const [profile, setProfile] = useState<PartnerProfile | null>(null);
-  const [, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const [activeTab, setActiveTab] = useState<"info" | "invite" | "access" | "chat">("info");
@@ -350,6 +351,17 @@ export default function Partner() {
           }
         >
           <View className="mx-6 mt-6">
+            {/* Until the first profile fetch resolves, don't render the
+                (default "not connected") tab content — it would flash the
+                invite flow at an already-connected user. */}
+            {loading && !profile ? (
+              <View className="gap-4">
+                <SkeletonBlock width="100%" height={72} radius={16} />
+                <SkeletonCard />
+                <SkeletonCard />
+              </View>
+            ) : (
+            <>
             {/* ── OVERVIEW ── */}
             {activeTab === "info" && (
               <View className="gap-5">
@@ -604,6 +616,8 @@ export default function Partner() {
                   })
                 )}
               </View>
+            )}
+            </>
             )}
           </View>
         </ScrollView>

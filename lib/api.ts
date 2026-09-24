@@ -1163,7 +1163,14 @@ export const authApi = {
 
   logout: () => apiRequest<null>("/api/auth/logout", { method: "POST" }),
 
-  logoutAlias: () => apiRequest<null>("/api/logout", { method: "POST" }),
+  // `fcmToken` is this device's current push token (optional): the backend
+  // only clears the stored token when it matches, so logging out on one
+  // device doesn't stop pushes to another that registered since.
+  logoutAlias: (fcmToken?: string | null) =>
+    apiRequest<null>("/api/logout", {
+      body: JSON.stringify(fcmToken ? { fcmToken } : {}),
+      method: "POST",
+    }),
 
   deleteAccount: (password: string) =>
     apiRequest<null>("/api/auth/delete-account", {

@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { EmptyState } from "../../components/EmptyState";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
+import { SkeletonCardList } from "../../components/Skeleton";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { useTheme } from "../../components/theme";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
@@ -135,6 +136,7 @@ export default function SchemeApplications() {
         offline={offline}
         onRetry={() => load()}
         loadingLabel="Loading applications…"
+        skeleton={<SkeletonCardList count={4} style={{ paddingTop: 16 }} />}
       >
         <ScrollView
           className="flex-1 mt-4"
