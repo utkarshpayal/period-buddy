@@ -1,22 +1,10 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
-import {
-  RefreshControl,
-  ScrollView,
-  StatusBar,
-  Switch,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
-import {
-  SafeAreaView,
-  useSafeAreaInsets,
-} from "react-native-safe-area-context";
+import { RefreshControl, ScrollView, StatusBar, Switch, Text, TouchableOpacity, View } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Avatar from "../../../components/Avatar";
 import { useAuth } from "../../../components/auth-context";
-import { usePartnerViewState } from "../../../components/partner-view-state";
 import { ThemeToggle, useTheme } from "../../../components/theme";
 import { getShadow, getSoftTints } from "../../../components/ui-tokens";
 import { alert } from "../../../lib/alert";
@@ -25,6 +13,7 @@ import {
   enablePushOnDeviceAsync,
   getCurrentPushTokenQuietlyAsync,
 } from "../../../lib/notifications";
+import { usePartnerViewState } from "../../../components/partner-view-state";
 
 export default function PartnerViewAccount() {
   const { colors, isDark, fonts } = useTheme();
@@ -34,9 +23,7 @@ export default function PartnerViewAccount() {
   const { profile, refreshProfile } = usePartnerViewState();
   const softTints = getSoftTints(colors);
 
-  const [notificationsEnabled, setNotificationsEnabled] = useState(
-    user?.notificationsEnabled ?? true,
-  );
+  const [notificationsEnabled, setNotificationsEnabled] = useState(user?.notificationsEnabled ?? true);
   const [savingPreference, setSavingPreference] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
@@ -51,9 +38,7 @@ export default function PartnerViewAccount() {
     }
   }, [refreshProfile]);
 
-  const displayName =
-    [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
-    "Nura partner";
+  const displayName = [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Nura partner";
   const displayEmail = user?.email || "Private account";
   const isConnected = profile?.isConnected ?? false;
   const partnerName =
@@ -65,17 +50,12 @@ export default function PartnerViewAccount() {
     setNotificationsEnabled(next);
     setSavingPreference(true);
     try {
-      const updatedUser = await authApi.updateProfile({
-        notificationsEnabled: next,
-      });
+      const updatedUser = await authApi.updateProfile({ notificationsEnabled: next });
       updateUser(updatedUser);
       if (next) enablePushOnDeviceAsync();
     } catch (error) {
       setNotificationsEnabled(!next);
-      alert(
-        "Couldn't save preference",
-        error instanceof Error ? error.message : "Please try again.",
-      );
+      alert("Couldn't save preference", error instanceof Error ? error.message : "Please try again.");
     } finally {
       setSavingPreference(false);
     }
@@ -98,10 +78,7 @@ export default function PartnerViewAccount() {
               await refreshProfile();
               router.replace("/(app)/(dashboard)/tracker");
             } catch (err) {
-              alert(
-                "Error",
-                err instanceof Error ? err.message : "Failed to disconnect",
-              );
+              alert("Error", err instanceof Error ? err.message : "Failed to disconnect");
             } finally {
               setIsDisconnecting(false);
             }
@@ -134,22 +111,13 @@ export default function PartnerViewAccount() {
 
   return (
     <>
-      <StatusBar
-        barStyle={isDark ? "light-content" : "dark-content"}
-        backgroundColor={colors.background}
-      />
-      <SafeAreaView
-        className="flex-1"
-        style={{ backgroundColor: colors.background }}
-      >
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
+      <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
         {/* Anchored to the real device safe-area inset, not a fixed
             className offset, so it clears the status bar/notch/rounded
             corner on curved-screen phones — same fix as the owner profile
             screen's identical toggle. */}
-        <View
-          className="absolute right-6 z-10"
-          style={{ top: insets.top + 12 }}
-        >
+        <View className="absolute right-6 z-10" style={{ top: insets.top + 12 }}>
           <ThemeToggle />
         </View>
 
@@ -157,11 +125,7 @@ export default function PartnerViewAccount() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 140 }}
           refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={colors.primary}
-            />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
           }
         >
           {/* Identity */}
@@ -198,10 +162,7 @@ export default function PartnerViewAccount() {
             </Text>
             <View
               className="mt-3 flex-row items-center gap-1.5 px-3 py-1.5 rounded-full border"
-              style={{
-                borderColor: colors.border,
-                backgroundColor: colors.surface,
-              }}
+              style={{ borderColor: colors.border, backgroundColor: colors.surface }}
             >
               <Ionicons name="eye-outline" size={12} color={colors.primary} />
               <Text
@@ -217,22 +178,13 @@ export default function PartnerViewAccount() {
           <View
             className="mx-6 mt-6 rounded-3xl border p-4 flex-row items-center gap-3"
             style={[
-              {
-                backgroundColor: isConnected
-                  ? softTints.emerald
-                  : colors.surface,
-                borderColor: colors.border,
-              },
+              { backgroundColor: isConnected ? softTints.emerald : colors.surface, borderColor: colors.border },
               getShadow(colors, isDark),
             ]}
           >
             <View
               className="w-10 h-10 rounded-2xl items-center justify-center shrink-0"
-              style={{
-                backgroundColor: isConnected
-                  ? colors.success
-                  : colors.surfaceSoft,
-              }}
+              style={{ backgroundColor: isConnected ? colors.success : colors.surfaceSoft }}
             >
               <Ionicons
                 name={isConnected ? "link" : "unlink-outline"}
@@ -246,17 +198,13 @@ export default function PartnerViewAccount() {
                 numberOfLines={1}
                 style={{ color: colors.foreground, fontFamily: fonts.heading }}
               >
-                {isConnected
-                  ? `Linked to ${partnerName || "your partner"}`
-                  : "No partner connected"}
+                {isConnected ? `Linked to ${partnerName || "your partner"}` : "No partner connected"}
               </Text>
               <Text
                 className="text-[10.5px] mt-0.5 font-semibold"
                 style={{ color: colors.mutedText, fontFamily: fonts.body }}
               >
-                {isConnected
-                  ? "You can see what they choose to share."
-                  : "Ask them for an invite code to connect."}
+                {isConnected ? "You can see what they choose to share." : "Ask them for an invite code to connect."}
               </Text>
             </View>
           </View>
@@ -264,37 +212,18 @@ export default function PartnerViewAccount() {
           {/* Menu list */}
           <View
             className="mx-6 mt-6 rounded-3xl border overflow-hidden"
-            style={[
-              { backgroundColor: colors.surface, borderColor: colors.border },
-              getShadow(colors, isDark),
-            ]}
+            style={[{ backgroundColor: colors.surface, borderColor: colors.border }, getShadow(colors, isDark)]}
           >
-            <View
-              className="flex-row items-center justify-between px-4 py-4 border-b"
-              style={{ borderColor: colors.border }}
-            >
+            <View className="flex-row items-center justify-between px-4 py-4 border-b" style={{ borderColor: colors.border }}>
               <View className="flex-row items-center flex-1 min-w-0 mr-3">
-                <View
-                  className="p-2.5 rounded-xl mr-4"
-                  style={{ backgroundColor: softTints.pink }}
-                >
-                  <Ionicons
-                    name="notifications-outline"
-                    size={18}
-                    color={colors.primary}
-                  />
+                <View className="p-2.5 rounded-xl mr-4" style={{ backgroundColor: softTints.pink }}>
+                  <Ionicons name="notifications-outline" size={18} color={colors.primary} />
                 </View>
                 <View className="flex-1 min-w-0">
-                  <Text
-                    className="text-sm font-bold"
-                    style={{ color: colors.foreground, fontFamily: fonts.body }}
-                  >
+                  <Text className="text-sm font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
                     Notifications
                   </Text>
-                  <Text
-                    className="text-[10px] mt-0.5"
-                    style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                  >
+                  <Text className="text-[10px] mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                     Alerts when they share an update
                   </Text>
                 </View>
@@ -315,27 +244,13 @@ export default function PartnerViewAccount() {
               className="flex-row items-center px-4 py-4 border-b"
               style={{ borderColor: colors.border }}
             >
-              <View
-                className="p-2.5 rounded-xl mr-4"
-                style={{ backgroundColor: softTints.pink }}
-              >
-                <Ionicons
-                  name="finger-print-outline"
-                  size={18}
-                  color={colors.primary}
-                />
+              <View className="p-2.5 rounded-xl mr-4" style={{ backgroundColor: softTints.pink }}>
+                <Ionicons name="finger-print-outline" size={18} color={colors.primary} />
               </View>
-              <Text
-                className="flex-1 text-sm font-bold"
-                style={{ color: colors.foreground, fontFamily: fonts.body }}
-              >
+              <Text className="flex-1 text-sm font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
                 App Lock
               </Text>
-              <Feather
-                name="chevron-right"
-                size={16}
-                color={colors.mutedText}
-              />
+              <Feather name="chevron-right" size={16} color={colors.mutedText} />
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -343,32 +258,18 @@ export default function PartnerViewAccount() {
               onPress={() =>
                 alert(
                   "Help & Support",
-                  "Reach us anytime at hello@thenura.care — we typically reply within a day.",
+                  "Reach us anytime at support@thenura.care — we typically reply within a day.",
                 )
               }
               className="flex-row items-center px-4 py-4"
             >
-              <View
-                className="p-2.5 rounded-xl mr-4"
-                style={{ backgroundColor: softTints.pink }}
-              >
-                <Ionicons
-                  name="help-circle-outline"
-                  size={18}
-                  color={colors.primary}
-                />
+              <View className="p-2.5 rounded-xl mr-4" style={{ backgroundColor: softTints.pink }}>
+                <Ionicons name="help-circle-outline" size={18} color={colors.primary} />
               </View>
-              <Text
-                className="flex-1 text-sm font-bold"
-                style={{ color: colors.foreground, fontFamily: fonts.body }}
-              >
+              <Text className="flex-1 text-sm font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
                 Help & Support
               </Text>
-              <Feather
-                name="chevron-right"
-                size={16}
-                color={colors.mutedText}
-              />
+              <Feather name="chevron-right" size={16} color={colors.mutedText} />
             </TouchableOpacity>
           </View>
 
@@ -379,10 +280,7 @@ export default function PartnerViewAccount() {
               activeOpacity={0.85}
               disabled={isDisconnecting}
               className="mx-6 mt-6 flex-row items-center justify-center py-3.5 rounded-2xl border"
-              style={{
-                borderColor: colors.danger,
-                backgroundColor: colors.dangerLight,
-              }}
+              style={{ borderColor: colors.danger, backgroundColor: colors.dangerLight }}
             >
               <Ionicons name="unlink-outline" size={15} color={colors.danger} />
               <Text
@@ -402,10 +300,7 @@ export default function PartnerViewAccount() {
             className="mx-6 mt-4 flex-row items-center justify-center py-3"
           >
             <Feather name="log-out" size={15} color={colors.danger} />
-            <Text
-              className="ml-2 text-sm font-bold tracking-wide"
-              style={{ color: colors.danger, fontFamily: fonts.body }}
-            >
+            <Text className="ml-2 text-sm font-bold tracking-wide" style={{ color: colors.danger, fontFamily: fonts.body }}>
               {isLoggingOut ? "Logging Out..." : "Log out"}
             </Text>
           </TouchableOpacity>
