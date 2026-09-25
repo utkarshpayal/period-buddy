@@ -71,6 +71,7 @@ export type ApiErrorKind =
   | "notFound"
   | "unauthorized"
   | "featureLocked"
+  | "accountSuspended"
   | "unknown";
 
 /** The 402 FEATURE_LOCKED body's payload — see
@@ -124,6 +125,15 @@ export function isNetworkError(err: unknown): boolean {
  * A user-friendly message for any thrown error, mapping raw fetch/abort failures
  * to plain language. Use this wherever an error is shown to the user.
  */
+/** code ACCOUNT_SUSPENDED — an admin suspended this account (period-buddy-be's
+ * utils/accountStatus.js). Login/Google sign-in return it as a 403 once the
+ * credentials are verified; any authenticated request returns it as a 401 if
+ * the account is suspended mid-session (which also triggers the unauthorized
+ * handler with reason "suspended"). The message is user-facing. */
+export function isAccountSuspendedError(err: unknown): err is ApiError {
+  return err instanceof ApiError && err.kind === "accountSuspended";
+}
+
 export function getFriendlyErrorMessage(err: unknown): string {
   if (err instanceof ApiError) return err.message;
   if (err instanceof Error) {
@@ -880,10 +890,12 @@ export type AppNotification = {
 };
 
 // Registered by AuthProvider so a 401 from any endpoint (expired/invalid token,
-// deactivated account) clears the local session instead of failing silently.
-let onUnauthorized: (() => void) | null = null;
+// deleted account) clears the local session instead of failing silently.
+// `reason` is "suspended" for a 403 ACCOUNT_SUSPENDED, so the user is told why.
+export type UnauthorizedReason = "suspended";
+let onUnauthorized: ((reason?: UnauthorizedReason) => void) | null = null;
 
-export function setUnauthorizedHandler(handler: (() => void) | null) {
+export function setUnauthorizedHandler(handler: ((reason?: UnauthorizedReason) => void) | null) {
   onUnauthorized = handler;
 }
 
@@ -1034,6 +1046,16 @@ export async function apiEnvelopeRequest<T>(
   }
 
   if (!response.ok) {
+    // Login/Google sign-in answer 403 for a suspended account; any other
+    // authenticated request answers 401 (so older clients still sign out) —
+    // both carry this code.
+    if ((data as { code?: string })?.code === "ACCOUNT_SUSPENDED") {
+      if (!options.skipAuth) {
+        invalidateTokenCache();
+        onUnauthorized?.("suspended");
+      }
+      throw new ApiError(getErrorMessage(data, response.status), "accountSuspended", response.status);
+    }
     if (response.status === 401 && !options.skipAuth) {
       invalidateTokenCache();
       onUnauthorized?.();
