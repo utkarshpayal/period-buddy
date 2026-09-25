@@ -17,7 +17,6 @@ npm run android            # start + open Android
 npm run ios                # start + open iOS
 npm run web                 # start + open web
 npm run lint                 # expo lint (eslint.config.js, eslint-config-expo)
-npm run reset-project          # moves starter code to app-example/, blanks app/
 ```
 
 No test runner is configured in package.json. There is no `build` script — production builds go through EAS:

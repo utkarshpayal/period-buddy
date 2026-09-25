@@ -97,7 +97,6 @@ assets/
 ├── fonts/               Manrope, IBM Plex Mono
 └── google-services.json, GoogleService-Info.plist   Firebase client configs
 docs/                    Product and technical documentation (see below)
-scripts/                 Local helper scripts that inspect the database (read MONGODB_URI from .env.local)
 app.json, app.config.js  Expo config (app.config.js lets EAS override the Firebase files)
 eas.json                 EAS build profiles
 ```
