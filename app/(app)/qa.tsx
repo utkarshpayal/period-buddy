@@ -576,12 +576,12 @@ export default function QA() {
                 className="w-11 h-11 rounded-full items-center justify-start overflow-hidden"
                 style={{ backgroundColor: softTints.pink }}
               >
-                {/* icon.png is a tall half-body illustration with the face in
+                {/* nura-avatar.png is a tall half-body illustration with the face in
                     the top square — scale to container width and anchor to
                     the top (instead of centering) so the circle crops off
                     the shoulders/hands below instead of cutting the face. */}
                 <Image
-                  source={require("../../assets/images/icon.png")}
+                  source={require("../../assets/images/illustrations/nura-avatar.png")}
                   style={{ width: 44, height: 44 * (1294 / 871) }}
                   resizeMode="cover"
                 />

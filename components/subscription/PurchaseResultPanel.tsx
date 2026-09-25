@@ -7,7 +7,7 @@ import type { PurchaseResult } from "../../hooks/usePaymentCheckout";
 
 /**
  * In-app success/failure/pending state rendered in place of a native OS
- * Alert (fixes.md 6.6) — also resolves 4.1's "payment pending" dead end via
+ * Alert (docs/fixes.md 6.6) — also resolves 4.1's "payment pending" dead end via
  * `onRecheckPending`'s manual retry.
  */
 export function PurchaseResultPanel({

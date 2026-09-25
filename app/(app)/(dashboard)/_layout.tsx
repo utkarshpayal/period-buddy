@@ -22,7 +22,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { showPermissionModal } from "../../../lib/modal-host";
 import { useRealtimeSocket, type RealtimeMessage } from "../../../hooks/useRealtimeSocket";
 
-const CENTER_AVATAR_SOURCE = require("../../../assets/images/icon.png");
+const CENTER_AVATAR_SOURCE = require("../../../assets/images/illustrations/nura-avatar.png");
 
 // Center avatar tab: a full circular avatar floats above the tab bar,
 // overlapping its bottom edge slightly (tabBarStyle has overflow: "visible").

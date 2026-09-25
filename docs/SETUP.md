@@ -123,7 +123,7 @@ npx expo start           # press w for web, a for Android, i for iOS
 | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` / `_IOS_CLIENT_ID` / `_ANDROID_CLIENT_ID` / `_EXPO_CLIENT_ID` | Must match the backend's `GOOGLE_*_CLIENT_ID` values so token verification succeeds. Only fill in the ones for platforms you're testing. |
 | `MONGODB_URI` | Only present in `.env.local` for a couple of local tooling scripts — the running app never talks to MongoDB directly; this is not required to run the app itself. |
 
-Two gitignored native config files are needed for push notifications /
+Two native config files (tracked in git; EAS builds use them) are needed for push notifications /
 Google Sign-In on native builds, not for `web`/Expo Go dev:
 `assets/google-services.json` (Android) and
 `assets/GoogleService-Info.plist` (iOS) — see `CLAUDE.md`'s app-identity

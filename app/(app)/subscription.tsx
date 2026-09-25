@@ -132,7 +132,7 @@ export default function SubscriptionScreen() {
 
   // Opening the confirm sheet previews the coupon (if one was typed) against
   // this specific item — the same preview-then-apply flow PaywallModal uses,
-  // instead of blindly carrying an unvalidated code into checkout (fixes.md 6.3).
+  // instead of blindly carrying an unvalidated code into checkout (docs/fixes.md 6.3).
   async function openConfirm(target: ConfirmTarget) {
     setConfirmTarget(target);
     setCouponPreview(null);

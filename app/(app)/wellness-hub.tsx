@@ -11,7 +11,7 @@ import { getSharedHubTiles } from "../../lib/hubTiles";
 
 // Check-in Call is a one-off setup action (schedule/trigger a phone call),
 // not a daily-use destination like the shared tiles below — it stays local
-// and visually secondary (fixes.md 2.7).
+// and visually secondary (docs/fixes.md 2.7).
 const CHECKIN_CALL_TILE = {
   bgKey: "skyLight" as const,
   colorKey: "sky" as const,
@@ -30,7 +30,7 @@ const CHECKIN_CALL_TILE = {
  * Most-used-first: Nura AI and Health Concerns are the daily-use entries and
  * get a prominent full-width row each; Hygiene/Sexual Wellbeing/Check-in
  * Call are lower-frequency and sit in a smaller "More support" grid below
- * (fixes.md 2.7).
+ * (docs/fixes.md 2.7).
  */
 export default function WellnessHub() {
   const { colors, isDark, fonts } = useTheme();

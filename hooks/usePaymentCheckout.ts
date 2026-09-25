@@ -27,7 +27,7 @@ function wait(ms: number) {
  * `subscriptionApi` and resolve to the same `SubscriptionOrder`/entitlement
  * shape. app/(app)/consultation.tsx books against a differently-shaped
  * `consultationApi` (a `consultationId`, not an `entitlementId`) and isn't
- * unified into this hook yet — see fixes.md 6.7.
+ * unified into this hook yet — see docs/fixes.md 6.7.
  */
 export function usePaymentCheckout() {
   const [purchasingKey, setPurchasingKey] = useState<string | null>(null);
@@ -35,7 +35,7 @@ export function usePaymentCheckout() {
   // Hosted checkout (cards/UPI apps/netbanking/wallets, Cashfree's own
   // branded page) is the default, prominent entry — native UPI-ID collect is
   // an opt-in alternative a caller can request via `startPurchase`'s
-  // `preferUpiCollect` option, not the landing surface (fixes.md 6.1).
+  // `preferUpiCollect` option, not the landing surface (docs/fixes.md 6.1).
   const [useHostedCheckout, setUseHostedCheckout] = useState(true);
   const [purchaseResult, setPurchaseResult] = useState<PurchaseResult | null>(null);
   const lastOrder = useRef<SubscriptionOrder | null>(null);
@@ -147,7 +147,7 @@ export function usePaymentCheckout() {
   };
 
   // Manual "Check payment status" retry for the dead-end pending state
-  // (fixes.md 4.1) — re-runs the same verify the automatic retries already
+  // (docs/fixes.md 4.1) — re-runs the same verify the automatic retries already
   // tried, in case the order has since settled.
   const recheckPending = async () => {
     const order = lastOrder.current;
