@@ -14,6 +14,10 @@ export type GoogleSignInButtonProps = {
   label?: string;
   onError: (message: string) => void;
   onSuccess: (result: { token: string; user: AuthUser }) => void;
+  // Fires true once Google hands control back and the backend exchange
+  // starts, false when it fails — lets the screen cover itself with a
+  // loader instead of re-showing the form while the session is verified.
+  onBusyChange?: (busy: boolean) => void;
   role?: string;
 };
 
@@ -34,6 +38,7 @@ export function GoogleSignInButton({
   label = "Continue with Google",
   onError,
   onSuccess,
+  onBusyChange,
   role,
 }: GoogleSignInButtonProps) {
   const { colors, fonts } = useTheme();
@@ -79,6 +84,7 @@ export function GoogleSignInButton({
   });
 
   const handlePress = async () => {
+    let succeeded = false;
     try {
       const result = await promptAsync();
 
@@ -107,6 +113,7 @@ export function GoogleSignInButton({
       }
 
       setIsExchanging(true);
+      onBusyChange?.(true);
 
       let idToken: string | undefined = result.params?.id_token;
       if (!idToken && result.params?.code) {
@@ -132,6 +139,7 @@ export function GoogleSignInButton({
         onError("Signed in with Google, but no session was returned.");
         return;
       }
+      succeeded = true;
       onSuccess({ token: authResult.token, user: authResult.data });
     } catch (error) {
       onError(
@@ -139,6 +147,9 @@ export function GoogleSignInButton({
       );
     } finally {
       setIsExchanging(false);
+      // On success the screen's own onSuccess flow owns the loader from here
+      // (partner-role lookup + navigation), so only release it on failure.
+      if (!succeeded) onBusyChange?.(false);
     }
   };
 

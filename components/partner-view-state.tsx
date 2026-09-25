@@ -6,6 +6,7 @@ import {
   type PartnerMessage,
   type PartnerProfile,
 } from "../lib/api";
+import { useAuth } from "./auth-context";
 
 type PartnerViewStateValue = {
   profile: PartnerProfile | null;
@@ -30,6 +31,7 @@ const PartnerViewStateContext = createContext<PartnerViewStateValue | undefined>
  * chat history for the session.
  */
 export function PartnerViewStateProvider({ children }: { children: React.ReactNode }) {
+  const { syncPartnerRole } = useAuth();
   const [profile, setProfile] = useState<PartnerProfile | null>(null);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [chatMessages, setChatMessages] = useState<PartnerMessage[]>([]);
@@ -44,10 +46,14 @@ export function PartnerViewStateProvider({ children }: { children: React.ReactNo
       ]);
       setProfile(partnerProfile);
       setNotifications(notifs);
+      // If the owner disconnected this viewer, the server has already
+      // cleared their role — hand that to auth so the partner-view layout
+      // guard moves them out instead of leaving an empty shared view.
+      syncPartnerRole(partnerProfile.role ?? null);
     } catch {
       // Screens that need this data show their own error/retry state.
     }
-  }, []);
+  }, [syncPartnerRole]);
 
   useEffect(() => {
     refreshProfile();
@@ -117,6 +123,13 @@ export function PartnerViewStateProvider({ children }: { children: React.ReactNo
                 if (!found) next.push(parsed.message);
                 return next;
               });
+            } else if (parsed.type === "partner_disconnected") {
+              // The owner ended the connection — re-fetch the profile, whose
+              // cleared role moves this viewer out of the partner view.
+              if (parsed.notification) {
+                setNotifications((prev) => [parsed.notification, ...prev]);
+              }
+              refreshProfile();
             } else if (parsed.type === "partner_notification") {
               refreshProfile();
               if (parsed.notification) {

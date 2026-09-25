@@ -7,6 +7,7 @@ import {
   Platform,
   ScrollView,
   StatusBar,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
@@ -23,6 +24,7 @@ import {
   AuthTopBar,
 } from "../../components/auth-ui";
 import { GoogleSignInButton } from "../../components/GoogleSignInButton";
+import { Loader } from "../../components/Loader";
 import { useTheme } from "../../components/theme";
 import { connectPartnerAndResolveRoute, loginUser } from "../../lib/auth";
 import type { AuthUser } from "../../lib/api";
@@ -39,6 +41,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isGoogleBusy, setIsGoogleBusy] = useState(false);
   const passwordRef = useRef<TextInput>(null);
 
   const cardWidth = Math.min(Math.max(width - 40, 280), 400);
@@ -85,8 +88,15 @@ export default function Login() {
 
   async function handleGoogleSignInSuccess({ token, user }: { token: string; user: AuthUser }) {
     setErrorMessage("");
-    await signIn({ token, user });
-    await finishSignIn(user);
+    try {
+      await signIn({ token, user });
+      await finishSignIn(user);
+    } catch (error) {
+      setIsGoogleBusy(false);
+      setErrorMessage(
+        error instanceof Error ? error.message : "Unable to complete Google sign-in.",
+      );
+    }
   }
 
   async function handleLogin() {
@@ -258,6 +268,7 @@ export default function Login() {
 
               <GoogleSignInButton
                 disabled={isSubmitting}
+                onBusyChange={setIsGoogleBusy}
                 onError={setErrorMessage}
                 onSuccess={handleGoogleSignInSuccess}
               />
@@ -310,6 +321,17 @@ export default function Login() {
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
+
+      {/* While credentials are verified and the partner role is resolved,
+          cover the form with the branded loader instead of leaving the
+          login page on screen until navigation happens. Rendered as an
+          overlay (not an early return) so the form — and the Google
+          button's in-flight handler — stay mounted underneath. */}
+      {isSubmitting || isGoogleBusy ? (
+        <View style={StyleSheet.absoluteFill}>
+          <Loader fullscreen label="Signing you in…" />
+        </View>
+      ) : null}
     </LinearGradient>
   );
 }
