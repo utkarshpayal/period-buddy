@@ -21,6 +21,7 @@ import {
   getShadow,
 } from "../../components/ui-tokens";
 import { cycleApi, type Predictions as CyclePredictions } from "../../lib/api";
+import { useDataRefresh } from "../../hooks/useDataRefresh";
 
 
 type AnalyticsBar = {
@@ -222,6 +223,13 @@ export default function Predictions() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useDataRefresh(["cycle"], () =>
+    cycleApi.getPredictions().then((predictions) => {
+      setData(predictions);
+      setError(null);
+    }),
+  );
 
   const phaseMeta = data ? PHASE_META[data.currentPhase] ?? PHASE_META.follicular : null;
   const analyticsBars = useMemo(

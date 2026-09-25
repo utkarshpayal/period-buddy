@@ -42,7 +42,7 @@ function SymptomPredictionsContent() {
   const { data, loading, refreshing, error, offline, reload } = useAsyncLoad<SymptomPredictionsData>(async () => {
     const result = await cycleApi.getSymptomPredictions();
     return { nextCycleStart: result.nextCycleStart, predictions: result.predictions ?? [] };
-  }, []);
+  }, [], { refreshOn: ["cycle"] });
 
   const nextCycleStart = data?.nextCycleStart ?? null;
   const predictions = useMemo(() => data?.predictions ?? [], [data]);

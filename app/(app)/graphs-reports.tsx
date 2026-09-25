@@ -232,7 +232,9 @@ export default function GraphsAndReportsScreen() {
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
 
-  const { data, loading, refreshing, error, offline, reload } = useAsyncLoad<GraphsData>(loadGraphsData, []);
+  const { data, loading, refreshing, error, offline, reload } = useAsyncLoad<GraphsData>(loadGraphsData, [], {
+    refreshOn: ["cycle"],
+  });
 
   const cardTints = useMemo(
     () => ({

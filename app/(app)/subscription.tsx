@@ -14,6 +14,7 @@ import { PaymentTrustFooter } from "../../components/subscription/PaymentTrustFo
 import { PurchaseConfirmSheet } from "../../components/subscription/PurchaseConfirmSheet";
 import { PurchaseResultPanel } from "../../components/subscription/PurchaseResultPanel";
 import { usePaymentCheckout } from "../../hooks/usePaymentCheckout";
+import { useDataRefresh } from "../../hooks/useDataRefresh";
 import { formatShortDate } from "../../lib/format";
 import {
   getFriendlyErrorMessage,
@@ -104,6 +105,22 @@ export default function SubscriptionScreen() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Purchases made elsewhere (a PaywallModal) update plans/history here too.
+  // Quiet: a failure keeps the current page instead of an error state.
+  useDataRefresh(["subscription"], async () => {
+    const [meResult, plansResult, featuresResult, historyResult] = await Promise.all([
+      subscriptionApi.getMe(),
+      subscriptionApi.getPlans(),
+      subscriptionApi.getFeatures(),
+      subscriptionApi.getHistory(),
+    ]);
+    setMe(meResult);
+    setPlans(plansResult);
+    setFeatures(featuresResult);
+    setHistory(historyResult);
+    setError(null);
+  });
 
   const handleRefresh = () => {
     setRefreshing(true);

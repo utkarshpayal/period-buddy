@@ -25,6 +25,7 @@ import {
 import Avatar from "../../../components/Avatar";
 import StatCard from "../../../components/StatCard";
 import { useUserStats } from "../../../hooks/useUserStats";
+import { useDataRefresh } from "../../../hooks/useDataRefresh";
 
 export default function Profile() {
   const { colors, isDark, fonts } = useTheme();
@@ -84,6 +85,19 @@ export default function Profile() {
       isMounted = false;
     };
   }, [updateUser]);
+
+  // Profile is a tab: pick up profile edits made on other screens (edit
+  // profile, check-in call phone number, scheme eligibility details).
+  // Skipped while focused: this screen's own toggles already apply the
+  // server's response, and a late refetch could flip a switch mid-toggle.
+  useDataRefresh(["profile"], async ({ whileFocused }) => {
+    if (whileFocused) return;
+    try {
+      updateUser(await authApi.getProfile());
+    } catch {
+      // keep what's shown
+    }
+  });
 
   async function handleTogglePreference(
     key: "anonymousCommunityMode" | "notificationsEnabled",

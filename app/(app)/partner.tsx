@@ -22,6 +22,7 @@ import { SkeletonBlock, SkeletonCard } from "../../components/Skeleton";
 import { useTheme } from "../../components/theme";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
 import { useSubscriptionAccess } from "../../hooks/useSubscriptionAccess";
+import { useDataRefresh } from "../../hooks/useDataRefresh";
 import { PaywallModal } from "../../components/subscription/PaywallModal";
 import {
   isFeatureLockedError,
@@ -100,6 +101,11 @@ export default function Partner() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // `load` already fails silently and never shows a loader after mount.
+  // Skipped while focused: this screen's own writes (permissions, invite
+  // code) already update it, and a late refetch could undo a toggle mid-tap.
+  useDataRefresh(["partner"], ({ whileFocused }) => (whileFocused ? undefined : load()));
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

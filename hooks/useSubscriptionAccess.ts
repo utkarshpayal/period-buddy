@@ -1,11 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../components/auth-context";
 import { subscriptionApi, type MySubscription } from "../lib/api";
+import { subscribeDataChange } from "../lib/data-sync";
+import { useDataRefresh } from "./useDataRefresh";
 
 // Mirrors useUserStats.ts's cache: consumed by ~13 stack screens, each of
 // which would otherwise refetch GET /api/subscriptions/me on every visit.
 const SUBSCRIPTION_CACHE_TTL_MS = 60_000;
 let subscriptionCache: { data: MySubscription; fetchedAt: number } | null = null;
+
+// A purchase / free unlock must be visible to the next screen that mounts,
+// not hidden behind the 60s cache.
+subscribeDataChange((topics) => {
+  if (topics.has("subscription")) subscriptionCache = null;
+});
 
 export type SubscriptionAccess = {
   /** False while the admin has the whole system switched off — every
@@ -55,6 +63,21 @@ export function useSubscriptionAccess(): SubscriptionAccess {
       setIsLoading(false);
     }
   }, [isAuthenticated]);
+
+  // Every mounted gate (FeatureGate, action-level checks on screens under
+  // the current one) picks up a purchase made anywhere, e.g. in a
+  // PaywallModal or on the My Subscription screen. Keeps the last known
+  // entitlements if the refetch fails.
+  useDataRefresh(["subscription"], async () => {
+    if (!isAuthenticated) return;
+    try {
+      const result = await subscriptionApi.getMe();
+      subscriptionCache = { data: result, fetchedAt: Date.now() };
+      setSummary(result);
+    } catch {
+      // keep existing entitlements
+    }
+  });
 
   useEffect(() => {
     if (!isAuthenticated) {

@@ -95,6 +95,7 @@ export default function DailyInsightsScreen() {
   const { data, loading, refreshing, error, offline, reload } = useAsyncLoad<DailyInsights>(
     () => insightsApi.getDaily(),
     [],
+    { refreshOn: ["cycle"] },
   );
 
   const phaseLabel = data?.phase ? PHASE_LABELS[data.phase] ?? data.phase : null;

@@ -111,6 +111,7 @@ export default function SymptomReportScreen() {
   const { data, loading, refreshing, error, offline, reload } = useAsyncLoad<HealthReportCycleStats>(
     loadReport,
     [],
+    { refreshOn: ["cycle"] },
   );
 
   const hasAnyData =

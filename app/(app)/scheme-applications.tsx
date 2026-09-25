@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useDataRefresh } from "../../hooks/useDataRefresh";
 import { EmptyState } from "../../components/EmptyState";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
 import { SkeletonCardList } from "../../components/Skeleton";
@@ -71,6 +72,15 @@ export default function SchemeApplications() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Picks up an application saved from a scheme detail screen opened on top.
+  useDataRefresh(["schemeApplications"], async () => {
+    const res = await schemeApplicationsApi.list({ page: 1, limit: PAGE_SIZE });
+    setApplications(res.applications);
+    setPage(1);
+    setHasMore(res.pagination.page < res.pagination.pages);
+    setError(null);
+  });
 
   const handleLoadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return;

@@ -22,6 +22,7 @@ import type { DayEntry as LocalDayEntry } from "../../../components/AppState";
 import { useAppState } from "../../../components/AppState";
 import { useAuth } from "../../../components/auth-context";
 import DayDetailsModal from "../../../components/DayDetailsModal";
+import { useDataRefresh } from "../../../hooks/useDataRefresh";
 import { Loader } from "../../../components/Loader";
 import { useTheme } from "../../../components/theme";
 import { getShadow, getSoftTints } from "../../../components/ui-tokens";
@@ -749,6 +750,23 @@ export default function Tracker() {
   useEffect(() => {
     loadYearLogs();
   }, [loadYearLogs]);
+
+  // Saving a day log only patches that one calendar cell locally, but it can
+  // also move predictions/phase, streak and tracked-day counts — and cycle
+  // data can change from other screens while this tab stays mounted. When
+  // the change was made here, refetch the summary + settings only (the cell
+  // is already up to date); when catching up on return, reload the logs too.
+  useDataRefresh(["cycle", "dashboard", "profile"], ({ whileFocused }) => {
+    const refreshSettings = cycleApi
+      .getSettings()
+      .then(setCycleSettings)
+      .catch(() => {});
+    return Promise.all([
+      loadDashboard(),
+      refreshSettings,
+      whileFocused ? Promise.resolve() : loadYearLogs(),
+    ]);
+  });
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
