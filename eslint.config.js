@@ -5,7 +5,7 @@ const expoConfig = require('eslint-config-expo/flat');
 module.exports = defineConfig([
   expoConfig,
   {
-    ignores: ['dist/*', 'check_db.js', 'list_users.js'],
+    ignores: ['dist/*'],
   },
   {
     rules: {

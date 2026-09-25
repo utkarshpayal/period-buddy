@@ -27,7 +27,7 @@ const PHASE_LABEL: Record<string, string> = {
   period: "On her period",
 };
 
-// Same tile definitions the owner-side hubs use (fixes.md 2.8) — kept as one
+// Same tile definitions the owner-side hubs use (docs/fixes.md 2.8) — kept as one
 // shared source so this list can't silently drift from theirs.
 const KNOWLEDGE_LINKS = getSharedHubTiles([
   "blogs",

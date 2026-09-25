@@ -451,7 +451,7 @@ export default function Profile() {
             </View>
 
             {/* Documents and Graphs & Reports moved to care-hub.tsx
-                (fixes.md 2.5, 2.6) — Care & Insights is their natural home
+                (docs/fixes.md 2.5, 2.6) — Care & Insights is their natural home
                 and this avoids the Graphs & Reports double-listing. */}
 
             {/* Row: My Subscription (Route) */}

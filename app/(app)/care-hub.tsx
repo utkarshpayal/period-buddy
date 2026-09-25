@@ -60,7 +60,7 @@ export default function CareHub() {
       color: colors.gold,
       bg: colors.goldLight,
     },
-    // Moved here from a buried Profile settings row (fixes.md 2.5) — sits
+    // Moved here from a buried Profile settings row (docs/fixes.md 2.5) — sits
     // next to Graphs & Reports since documents.tsx already cross-links into
     // this hub's PDF-report flow.
     {

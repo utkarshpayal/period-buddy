@@ -56,7 +56,7 @@ export function AuthBrandMark() {
       }}
     >
       <Image
-        source={require("../assets/images/icon-logo-nobg.png")}
+        source={require("../assets/images/brand/logo-mark.png")}
         resizeMode="contain"
         style={{ width: "100%", height: "100%" }}
       />
