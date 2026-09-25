@@ -177,6 +177,16 @@ function buildCurrentWeekStrip(
   });
 }
 
+// Only the unread total is needed for the bell's dot — ask for a single item
+// and read the server's count (falls back to scanning what came back on a
+// backend without pagination, which ignores `limit` and sends the newest 50).
+async function fetchHasUnread() {
+  const res = await partnerApi.getNotificationsPage({ page: 1, limit: 1 });
+  return res.unreadCount !== undefined
+    ? res.unreadCount > 0
+    : res.notifications.some((n) => !n.isRead);
+}
+
 export default function Home() {
   const { colors, isDark, fonts } = useTheme();
   const { enabled: genZModeEnabled } = useGenZMode();
@@ -209,12 +219,7 @@ export default function Home() {
         () => setPredictions(null),
       )
       .finally(() => setHomeLoaded(true));
-    const notificationsTask = partnerApi
-      .getNotifications()
-      .then(
-        (notifs) => setHasUnreadNotifications(notifs.some((n) => !n.isRead)),
-        () => {},
-      );
+    const notificationsTask = fetchHasUnread().then(setHasUnreadNotifications, () => {});
     await Promise.all([predictionsTask, notificationsTask]);
   }, []);
 
@@ -228,9 +233,7 @@ export default function Home() {
   useDataRefresh(["cycle", "notifications"], async () => {
     await Promise.allSettled([
       cycleApi.getPredictions().then(setPredictions),
-      partnerApi
-        .getNotifications()
-        .then((notifs) => setHasUnreadNotifications(notifs.some((n) => !n.isRead))),
+      fetchHasUnread().then(setHasUnreadNotifications),
     ]);
   });
 

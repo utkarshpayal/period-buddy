@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { useState } from "react";
 import { RefreshControl, ScrollView, StatusBar, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader } from "../../components/ScreenHeader";
@@ -8,7 +8,8 @@ import { LoadingErrorState } from "../../components/LoadingErrorState";
 import { SkeletonList } from "../../components/Skeleton";
 import { useTheme } from "../../components/theme";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
-import { useAsyncLoad } from "../../hooks/useAsyncLoad";
+import { usePaginatedList } from "../../hooks/usePaginatedList";
+import { LoadMoreButton } from "../../components/LoadMoreButton";
 import { partnerApi, type AppNotification } from "../../lib/api";
 import { NOTIFICATIONS_LIST_ROUTE, resolveNotificationTarget } from "../../lib/notifications";
 import { useAuth } from "../../components/auth-context";
@@ -47,26 +48,43 @@ export default function NotificationsScreen() {
   const { user } = useAuth();
   const { colors, fonts, isDark } = useTheme();
   const softTints = getSoftTints(colors);
+  // Server-wide unread total (from page 1), so the "N new" pill is right
+  // even when most notifications haven't been loaded yet.
+  const [serverUnread, setServerUnread] = useState<number | undefined>(undefined);
   const {
-    data: notifications,
+    items: list,
+    setItems,
     loading,
     refreshing,
     error,
     offline,
     reload,
-  } = useAsyncLoad<AppNotification[]>(() => partnerApi.getNotifications(), [], {
-    refreshOn: ["notifications"],
-  });
+    hasMore,
+    loadingMore,
+    loadMore,
+  } = usePaginatedList<AppNotification>(
+    async (page) => {
+      const res = await partnerApi.getNotificationsPage({ page, limit: 20 });
+      if (page === 1) setServerUnread(res.unreadCount);
+      return { items: res.notifications, hasMore: res.hasMore };
+    },
+    [],
+    { refreshOn: ["notifications"] },
+  );
 
-  const list = notifications ?? [];
-  const unreadCount = list.filter((n) => !n.isRead).length;
+  const unreadCount = serverUnread ?? list.filter((n) => !n.isRead).length;
 
+  // Optimistic: flip the row and the count right away (reloading the list
+  // would collapse any pages opened with "Show more"); roll back on failure.
   const markAsRead = async (id: string) => {
+    setItems((prev) => prev.map((n) => (n._id === id ? { ...n, isRead: true } : n)));
+    setServerUnread((count) => (count === undefined ? count : Math.max(0, count - 1)));
     try {
       await partnerApi.markNotificationAsRead(id);
-      reload(true);
     } catch (err) {
       console.error(err);
+      setItems((prev) => prev.map((n) => (n._id === id ? { ...n, isRead: false } : n)));
+      setServerUnread((count) => (count === undefined ? count : count + 1));
     }
   };
 
@@ -201,6 +219,7 @@ export default function NotificationsScreen() {
                   </TouchableOpacity>
                 );
               })}
+              <LoadMoreButton hasMore={hasMore} loading={loadingMore} onPress={loadMore} />
             </View>
           )}
         </ScrollView>
