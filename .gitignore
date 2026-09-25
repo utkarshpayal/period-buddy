@@ -31,9 +31,10 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
-.env*.local
+# env files — every variant holds real values; only the example is tracked
 .env
+.env.*
+!.env.example
 # typescript
 *.tsbuildinfo
 
@@ -47,6 +48,6 @@ app-example
 credentials.json
 /credentials/
 
-# Firebase config (contains project keys — keep out of git)
-# assets/GoogleService-Info.plist
-# assets/google-services.json
+# Firebase client config (assets/google-services.json, GoogleService-Info.plist)
+# is tracked on purpose: app.json points EAS builds at it, and these client
+# keys ship inside every app binary anyway (restricted by package/bundle id).
