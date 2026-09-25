@@ -21,6 +21,7 @@ import Markdown from "react-native-markdown-display";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 import { CalendarModal } from "../../components/CalendarModal";
+import { LoadMoreButton } from "../../components/LoadMoreButton";
 import { useAuth } from "../../components/auth-context";
 import { useTheme } from "../../components/theme";
 import { SkeletonList, SkeletonRow } from "../../components/Skeleton";
@@ -33,6 +34,7 @@ import { LockedFeatureCard } from "../../components/subscription/LockedFeatureCa
 import { PaywallModal } from "../../components/subscription/PaywallModal";
 import {
   documentApi,
+  hasMorePages,
   isFeatureLockedError,
   type DocType,
   type LanguageCode,
@@ -132,21 +134,60 @@ export default function DocumentsScreen() {
     if (locked) setPaywallFeature("health_reports");
   }, [locked]);
 
+  // Paged 20 at a time with a "Show more" button. `docTotal` is the server's
+  // count for the current filter, so the header count stays right before
+  // every page is loaded.
+  const DOC_PAGE_SIZE = 20;
+  const [docPage, setDocPage] = useState(1);
+  const [docTotal, setDocTotal] = useState<number | null>(null);
+  const [hasMoreDocs, setHasMoreDocs] = useState(false);
+  const [loadingMoreDocs, setLoadingMoreDocs] = useState(false);
+
+  const fetchDocumentsPage = useCallback(
+    (page: number) =>
+      documentApi.list({
+        docType: typeFilter ?? undefined,
+        limit: DOC_PAGE_SIZE,
+        page,
+        sort: sortOrder,
+      }),
+    [typeFilter, sortOrder],
+  );
+
   const fetchDocuments = useCallback(async () => {
     try {
-      const result = await documentApi.list({
-        docType: typeFilter ?? undefined,
-        limit: 100,
-        sort: sortOrder,
-      });
+      const result = await fetchDocumentsPage(1);
       setDocuments(result.documents);
+      setDocPage(1);
+      setDocTotal(result.pagination?.total ?? null);
+      setHasMoreDocs(hasMorePages(result.pagination));
     } catch (error) {
       alert("Couldn't load documents", error instanceof Error ? error.message : "Please try again.");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [typeFilter, sortOrder]);
+  }, [fetchDocumentsPage]);
+
+  const loadMoreDocuments = useCallback(async () => {
+    if (loadingMoreDocs || !hasMoreDocs) return;
+    setLoadingMoreDocs(true);
+    try {
+      const nextPage = docPage + 1;
+      const result = await fetchDocumentsPage(nextPage);
+      setDocuments((prev) => {
+        const seen = new Set(prev.map((d) => d._id));
+        return prev.concat(result.documents.filter((d) => !seen.has(d._id)));
+      });
+      setDocPage(nextPage);
+      setDocTotal(result.pagination?.total ?? null);
+      setHasMoreDocs(hasMorePages(result.pagination));
+    } catch {
+      // Keep the list and the button so the user can retry.
+    } finally {
+      setLoadingMoreDocs(false);
+    }
+  }, [loadingMoreDocs, hasMoreDocs, docPage, fetchDocumentsPage]);
 
   useEffect(() => {
     if (locked) return;
@@ -161,14 +202,17 @@ export default function DocumentsScreen() {
 
   // Keeps the list in sync with uploads/summaries/deletes, including async
   // extraction finishing. Quiet: no loader and no error alert.
+  // Re-fetches page 1 and merges it over the top, so pages already opened
+  // with "Show more" stay open.
   useDataRefresh(["documents"], async () => {
     if (locked) return;
-    const result = await documentApi.list({
-      docType: typeFilter ?? undefined,
-      limit: 100,
-      sort: sortOrder,
+    const result = await fetchDocumentsPage(1);
+    setDocuments((prev) => {
+      const fresh = new Set(result.documents.map((d) => d._id));
+      return result.documents.concat(docPage > 1 ? prev.filter((d) => !fresh.has(d._id)) : []);
     });
-    setDocuments(result.documents);
+    setDocTotal(result.pagination?.total ?? null);
+    if (docPage === 1) setHasMoreDocs(hasMorePages(result.pagination));
   });
 
   // --- Upload flow ---
@@ -600,9 +644,9 @@ export default function DocumentsScreen() {
           <View className="mt-4 px-6 flex-row items-center justify-between">
             <Text className="text-xs font-semibold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
               <Text style={{ color: colors.foreground, fontFamily: fonts.heading, fontWeight: "800" }}>
-                {documents.length}
+                {docTotal ?? documents.length}
               </Text>
-              {" "}document{documents.length === 1 ? "" : "s"}
+              {" "}document{(docTotal ?? documents.length) === 1 ? "" : "s"}
             </Text>
             <TouchableOpacity
               activeOpacity={0.7}
@@ -700,6 +744,9 @@ export default function DocumentsScreen() {
                 );
               })
             )}
+            {documents.length > 0 ? (
+              <LoadMoreButton hasMore={hasMoreDocs} loading={loadingMoreDocs} onPress={loadMoreDocuments} />
+            ) : null}
           </View>
         </ScrollView>
 

@@ -9,7 +9,8 @@ import { SkeletonList } from "../../components/Skeleton";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { useTheme } from "../../components/theme";
 import { getLogCategoryTints, getShadow, getSoftTints } from "../../components/ui-tokens";
-import { useAsyncLoad } from "../../hooks/useAsyncLoad";
+import { usePaginatedList } from "../../hooks/usePaginatedList";
+import { LoadMoreButton } from "../../components/LoadMoreButton";
 import { useSubscriptionAccess } from "../../hooks/useSubscriptionAccess";
 import { LockedFeatureCard } from "../../components/subscription/LockedFeatureCard";
 import { PaywallModal } from "../../components/subscription/PaywallModal";
@@ -44,11 +45,25 @@ export default function QaHistory() {
     if (locked) setPaywallVisible(true);
   }, [locked]);
 
-  const { data: sessions, loading, refreshing, error, offline, reload } = useAsyncLoad<QaChatSessionSummary[]>(
-    () => questionAnswerApi.listSessions(),
+  const {
+    items: sessions,
+    setItems: setSessions,
+    loading,
+    refreshing,
+    error,
+    offline,
+    reload,
+    hasMore,
+    loadingMore,
+    loadMore,
+  } = usePaginatedList<QaChatSessionSummary>(
+    async (page) => {
+      const res = await questionAnswerApi.listSessionsPage({ page, limit: 20 });
+      return { items: res.sessions, hasMore: res.hasMore };
+    },
     [],
     // A chat opened from here (new or resumed) adds/updates sessions.
-    { refreshOn: ["qaSessions"] },
+    { getKey: (session) => session.id, refreshOn: ["qaSessions"] },
   );
 
   // Gated right here, before ever navigating into qa.tsx — "New chat" is an
@@ -71,7 +86,9 @@ export default function QaHistory() {
           setDeletingId(session.id);
           try {
             await questionAnswerApi.deleteSession(session.id);
-            reload();
+            // Drop it in place — a reload would collapse pages opened with
+            // "Show more".
+            setSessions((prev) => prev.filter((s) => s.id !== session.id));
           } catch (err) {
             alert("Couldn't delete chat", err instanceof Error ? err.message : "Please try again.");
           } finally {
@@ -208,6 +225,7 @@ export default function QaHistory() {
                 );
               })}
             </View>
+            <LoadMoreButton hasMore={hasMore} loading={loadingMore} onPress={loadMore} />
           </ScrollView>
         )}
       </LoadingErrorState>

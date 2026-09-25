@@ -48,6 +48,8 @@ type ApiEnvelope<T> = {
   statusCode?: number;
   success?: boolean;
   token?: string;
+  /** GET /api/partner/notifications only: unread total across all pages. */
+  unreadCount?: number;
   user?: AuthUser;
 };
 
@@ -964,6 +966,11 @@ function getErrorMessage(data: unknown, status: number): string {
   return `Request failed (${status})`;
 }
 
+/** Whether a `Pagination` block says another page exists (false when absent). */
+export function hasMorePages(pagination?: Pagination | null) {
+  return Boolean(pagination && pagination.page < pagination.pages);
+}
+
 function toQuery(params?: Record<string, QueryValue>) {
   const query = new URLSearchParams();
   Object.entries(params ?? {}).forEach(([key, value]) => {
@@ -1502,7 +1509,22 @@ export const partnerApi = {
   disconnect: () =>
     apiRequest<void>("/api/partner/disconnect", { method: "DELETE" }),
 
+  /** Newest 50, no paging — for callers that only need a quick look. */
   getNotifications: () => apiRequest<AppNotification[]>("/api/partner/notifications"),
+
+  /** One page, newest first. `unreadCount` covers every notification (not
+   * just this page); it's undefined on a backend without pagination, in
+   * which case `hasMore` is false and callers can count unread in the page. */
+  getNotificationsPage: async (params: { page?: number; limit?: number } = {}) => {
+    const envelope = await apiEnvelopeRequest<AppNotification[]>(
+      `/api/partner/notifications${toQuery({ page: params.page ?? 1, limit: params.limit ?? 20 })}`,
+    );
+    return {
+      notifications: envelope.data ?? [],
+      hasMore: hasMorePages(envelope.pagination),
+      unreadCount: envelope.unreadCount,
+    };
+  },
 
   markNotificationAsRead: (id: string) =>
     apiRequest<AppNotification>(`/api/partner/notifications/${id}/read`, {
@@ -1867,6 +1889,13 @@ export const questionAnswerApi = {
     }),
 
   listSessions: () => apiRequest<QaChatSessionSummary[]>("/api/questions/sessions"),
+
+  listSessionsPage: async (params: { page?: number; limit?: number } = {}) => {
+    const envelope = await apiEnvelopeRequest<QaChatSessionSummary[]>(
+      `/api/questions/sessions${toQuery({ page: params.page ?? 1, limit: params.limit ?? 20 })}`,
+    );
+    return { sessions: envelope.data ?? [], hasMore: hasMorePages(envelope.pagination) };
+  },
 
   getSession: (sessionId: string) =>
     apiRequest<QaChatSessionDetail>(`/api/questions/sessions/${sessionId}`),

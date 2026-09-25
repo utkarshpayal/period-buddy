@@ -42,6 +42,7 @@ import { PaywallModal } from "../subscription/PaywallModal";
 import { isFeatureLockedError } from "../../lib/api";
 import {
   communityApi,
+  hasMorePages,
   uploadApi,
   type CommunityAttachment,
   type CommunityPoll,
@@ -738,7 +739,11 @@ export default function CommunityScreen() {
           search: submittedSearch.trim() || undefined,
         });
         setPosts(postsResponse.posts.map(mapCommunityPost));
-        setHasMorePosts(postsResponse.posts.length >= POSTS_PAGE_SIZE);
+        setHasMorePosts(
+          postsResponse.pagination
+            ? hasMorePages(postsResponse.pagination)
+            : postsResponse.posts.length >= POSTS_PAGE_SIZE,
+        );
         setLikedPostIds(
           new Set(
             postsResponse.posts
@@ -773,7 +778,11 @@ export default function CommunityScreen() {
       });
       const mapped = postsResponse.posts.map(mapCommunityPost);
       pageRef.current = nextPage;
-      setHasMorePosts(mapped.length >= POSTS_PAGE_SIZE);
+      setHasMorePosts(
+        postsResponse.pagination
+          ? hasMorePages(postsResponse.pagination)
+          : mapped.length >= POSTS_PAGE_SIZE,
+      );
       setPosts((current) => {
         const seen = new Set(current.map((p) => p.id));
         return [...current, ...mapped.filter((p) => !seen.has(p.id))];
