@@ -3,6 +3,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { AppState } from "react-native";
 import type { AuthUser } from "../lib/auth";
 import { invalidateTokenCache, partnerApi, setUnauthorizedHandler } from "../lib/api";
+import { alert } from "../lib/alert";
 
 type PartnerRole = AuthUser["partnerRole"];
 
@@ -158,9 +159,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Any API call that comes back 401 (expired/invalid token, deactivated
   // account) clears the local session instead of failing silently, so the
   // dashboard's auth guard can redirect back to login.
+  // A suspension mid-session gets the same sign-out, plus one explanation —
+  // several requests in flight would otherwise each raise their own alert.
+  const suspendedAlertShown = useRef(false);
   useEffect(() => {
-    setUnauthorizedHandler(() => {
+    setUnauthorizedHandler((reason) => {
       signOut();
+      if (reason === "suspended" && !suspendedAlertShown.current) {
+        suspendedAlertShown.current = true;
+        alert(
+          "Account suspended",
+          "Your account has been suspended, so you've been signed out. Please contact hello@thenura.care if you think this is a mistake.",
+          [{ text: "OK", onPress: () => { suspendedAlertShown.current = false; } }],
+        );
+      }
     });
     return () => setUnauthorizedHandler(null);
   }, [signOut]);
