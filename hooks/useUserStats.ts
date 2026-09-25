@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../components/auth-context";
 import { authApi, type DashboardSummary } from "../lib/api";
+import { subscribeDataChange } from "../lib/data-sync";
+import { useDataRefresh } from "./useDataRefresh";
 
 // Short-lived module-level cache: ~13 stack screens mount this hook on every
 // visit (stack screens unmount on navigate-away, unlike tabs), so without
@@ -8,6 +10,12 @@ import { authApi, type DashboardSummary } from "../lib/api";
 // Cleared on logout below so a new session never shows a stale user's data.
 const DASHBOARD_CACHE_TTL_MS = 60_000;
 let dashboardCache: { data: DashboardSummary; fetchedAt: number } | null = null;
+
+// A write that moves streak/points (a day log, habit, forest care, profile
+// edit) must not be hidden behind the cache on the next screen that mounts.
+subscribeDataChange((topics) => {
+  if (topics.has("dashboard")) dashboardCache = null;
+});
 
 export type UserStats = {
   /** Current streak in days. Sourced from the dashboard fetch first (freshest),
@@ -53,6 +61,20 @@ export function useUserStats(): UserStats {
       setIsLoading(false);
     }
   }, [updateUser]);
+
+  // Mounted instances (every tab, screens under the current one) refetch
+  // quietly — keeping the numbers already shown if that fails.
+  useDataRefresh(["dashboard"], async () => {
+    if (!isAuthenticated) return;
+    try {
+      const summary = await authApi.getDashboard();
+      dashboardCache = { data: summary, fetchedAt: Date.now() };
+      setDashboard(summary);
+      if (summary.user) updateUser(summary.user);
+    } catch {
+      // keep existing stats
+    }
+  });
 
   useEffect(() => {
     // Logging out invalidates the cache so the next signed-in user never

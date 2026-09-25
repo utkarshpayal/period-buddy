@@ -54,7 +54,9 @@ export default function NotificationsScreen() {
     error,
     offline,
     reload,
-  } = useAsyncLoad<AppNotification[]>(() => partnerApi.getNotifications());
+  } = useAsyncLoad<AppNotification[]>(() => partnerApi.getNotifications(), [], {
+    refreshOn: ["notifications"],
+  });
 
   const list = notifications ?? [];
   const unreadCount = list.filter((n) => !n.isRead).length;

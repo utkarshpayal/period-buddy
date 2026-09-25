@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 import type { CyclePhase } from "./cycle";
+import { emitDataChange, emitMutation } from "./data-sync";
 
 const LOCAL_DEV_API_PORT = "5000";
 const envApiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
@@ -1057,6 +1058,9 @@ export async function apiEnvelopeRequest<T>(
     throw new ApiError(getErrorMessage(data, response.status), kind, response.status);
   }
 
+  // Tell still-mounted screens that show this data to refetch (lib/data-sync.ts).
+  emitMutation(fetchOptions.method ?? "GET", path);
+
   return data as ApiEnvelope<T>;
 }
 
@@ -2051,6 +2055,8 @@ export const documentApi = {
       throw new Error(getErrorMessage(data, response.status));
     }
 
+    // Bypasses apiEnvelopeRequest, so announce the change by hand.
+    emitDataChange("documents");
     return data.data.document as MedicalDocument;
   },
 

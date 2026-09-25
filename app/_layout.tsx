@@ -19,6 +19,7 @@ import {
   subscribePendingDeepLink,
 } from "../lib/deeplink";
 import { resolveNotificationTarget } from "../lib/notifications";
+import { emitDataChange } from "../lib/data-sync";
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
@@ -159,7 +160,15 @@ function AppShell() {
       if (response) handleResponse(response);
     });
     const subscription = Notifications.addNotificationResponseReceivedListener(handleResponse);
-    return () => subscription.remove();
+    // A push arriving while the app is open means the server-side list
+    // changed — refresh unread badges and the notifications screen.
+    const received = Notifications.addNotificationReceivedListener(() => {
+      emitDataChange("notifications");
+    });
+    return () => {
+      subscription.remove();
+      received.remove();
+    };
   }, []);
 
   // Open a queued notification only once the navigator exists, the user is

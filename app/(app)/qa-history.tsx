@@ -46,6 +46,9 @@ export default function QaHistory() {
 
   const { data: sessions, loading, refreshing, error, offline, reload } = useAsyncLoad<QaChatSessionSummary[]>(
     () => questionAnswerApi.listSessions(),
+    [],
+    // A chat opened from here (new or resumed) adds/updates sessions.
+    { refreshOn: ["qaSessions"] },
   );
 
   // Gated right here, before ever navigating into qa.tsx — "New chat" is an

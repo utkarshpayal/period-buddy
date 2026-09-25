@@ -20,6 +20,7 @@ import { useAuth } from "../../components/auth-context";
 import { useTheme } from "../../components/theme";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
 import { useAsyncLoad } from "../../hooks/useAsyncLoad";
+import { useDataRefresh } from "../../hooks/useDataRefresh";
 import { useSubscriptionAccess } from "../../hooks/useSubscriptionAccess";
 import { LockedFeatureCard } from "../../components/subscription/LockedFeatureCard";
 import { PaywallModal } from "../../components/subscription/PaywallModal";
@@ -130,7 +131,11 @@ export default function GovernmentSchemeDetail() {
   const [pregnantInput, setPregnantInput] = useState<boolean | null>(null);
   const [stateInput, setStateInput] = useState("");
 
-  // Detect whether this scheme is already tracked in My Applications.
+  // Detect whether this scheme is already tracked in My Applications —
+  // re-checked when applications change (e.g. one removed on the My
+  // Applications screen pushed from here).
+  const [applicationsVersion, setApplicationsVersion] = useState(0);
+  useDataRefresh(["schemeApplications"], () => setApplicationsVersion((v) => v + 1));
   useEffect(() => {
     let mounted = true;
     if (!scheme) return;
@@ -148,7 +153,7 @@ export default function GovernmentSchemeDetail() {
     return () => {
       mounted = false;
     };
-  }, [scheme]);
+  }, [scheme, applicationsVersion]);
 
   const openUrl = (url?: string) => {
     if (!url) {

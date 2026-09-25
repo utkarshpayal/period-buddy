@@ -17,6 +17,7 @@ import { ThemeColors, useTheme } from "../../components/theme";
 import { getShadow } from "../../components/ui-tokens";
 import { alert } from "../../lib/alert";
 import { cycleApi, forestApi, type ForestStatus } from "../../lib/api";
+import { useDataRefresh } from "../../hooks/useDataRefresh";
 
 // Vitality color follows the same red→amber→green read as any health meter
 // in the app — high health is good here, so this is deliberately the
@@ -73,6 +74,18 @@ export default function Forest() {
   useEffect(() => {
     loadForest();
   }, [loadForest]);
+
+  // Cycle phase drives the scene's mood; forest status also moves with care
+  // logged elsewhere. Only apply what actually loaded, so a failed quiet
+  // refetch never blanks the tree.
+  useDataRefresh(["forest", "cycle"], async () => {
+    const [status, predictions] = await Promise.allSettled([
+      forestApi.getStatus(),
+      cycleApi.getPredictions(),
+    ]);
+    if (status.status === "fulfilled") setForestStatus(status.value);
+    if (predictions.status === "fulfilled") setCurrentPhase(predictions.value?.currentPhase);
+  });
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

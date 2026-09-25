@@ -28,6 +28,7 @@ import { getShadow, getSoftTints } from "../../components/ui-tokens";
 import { alert } from "../../lib/alert";
 import { showPermissionModal } from "../../lib/modal-host";
 import { useSubscriptionAccess } from "../../hooks/useSubscriptionAccess";
+import { useDataRefresh } from "../../hooks/useDataRefresh";
 import { LockedFeatureCard } from "../../components/subscription/LockedFeatureCard";
 import { PaywallModal } from "../../components/subscription/PaywallModal";
 import {
@@ -157,6 +158,18 @@ export default function DocumentsScreen() {
     setRefreshing(true);
     fetchDocuments();
   }
+
+  // Keeps the list in sync with uploads/summaries/deletes, including async
+  // extraction finishing. Quiet: no loader and no error alert.
+  useDataRefresh(["documents"], async () => {
+    if (locked) return;
+    const result = await documentApi.list({
+      docType: typeFilter ?? undefined,
+      limit: 100,
+      sort: sortOrder,
+    });
+    setDocuments(result.documents);
+  });
 
   // --- Upload flow ---
   const [uploadVisible, setUploadVisible] = useState(false);

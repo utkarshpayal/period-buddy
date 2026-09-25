@@ -21,6 +21,7 @@ import StatCard from "../../../components/StatCard";
 import { useTheme } from "../../../components/theme";
 import { getHeroGradient, getShadow } from "../../../components/ui-tokens";
 import { useUserStats } from "../../../hooks/useUserStats";
+import { useDataRefresh } from "../../../hooks/useDataRefresh";
 import {
   cycleApi,
   partnerApi,
@@ -220,6 +221,18 @@ export default function Home() {
   useEffect(() => {
     loadHome();
   }, [loadHome]);
+
+  // Home is a tab, so it stays mounted while the user logs days in the
+  // tracker or reads notifications. Refetch quietly on return, keeping what's
+  // on screen if a request fails. Streak/points refresh via useUserStats.
+  useDataRefresh(["cycle", "notifications"], async () => {
+    await Promise.allSettled([
+      cycleApi.getPredictions().then(setPredictions),
+      partnerApi
+        .getNotifications()
+        .then((notifs) => setHasUnreadNotifications(notifs.some((n) => !n.isRead))),
+    ]);
+  });
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
