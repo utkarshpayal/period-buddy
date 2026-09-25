@@ -4,9 +4,9 @@
     "slug": "thenuracare",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon-square.png",
+    "icon": "./assets/images/brand/app-icon.png",
     "splash": {
-      "image": "./assets/images/full-logo-nobg.png",
+      "image": "./assets/images/brand/logo-full.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -33,7 +33,7 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#fff0f6",
-        "foregroundImage": "./assets/images/icon-square.png"
+        "foregroundImage": "./assets/images/brand/app-icon.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -71,7 +71,7 @@
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/icon-square.png"
+      "favicon": "./assets/images/brand/app-icon.png"
     },
     "plugins": [
       "expo-router",
@@ -92,10 +92,10 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/icon-square.png",
+          "icon": "./assets/images/brand/app-icon.png",
           "color": "#fff0f6",
           "sounds": [
-            "./lib/notification.wav"
+            "./assets/sounds/notification.wav"
           ]
         }
       ],
@@ -108,7 +108,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/full-logo-nobg.png",
+          "image": "./assets/images/brand/logo-full.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",

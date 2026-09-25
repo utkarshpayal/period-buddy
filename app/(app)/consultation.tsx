@@ -368,7 +368,7 @@ export default function ConsultationScreen() {
       }
       // Hosted checkout (cards/UPI apps/netbanking/wallets) is the
       // prominent, default entry — see PaywallModal.tsx's identically
-      // motivated default (fixes.md 6.1). CashfreeUpiCollectModal's own
+      // motivated default (docs/fixes.md 6.1). CashfreeUpiCollectModal's own
       // "Pay another way" link still offers the reverse switch.
       setUseHostedCheckout(true);
       setCheckoutOrder(order);

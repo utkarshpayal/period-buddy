@@ -32,7 +32,7 @@ export const ANDROID_CHANNEL_ID = 'default';
 export async function ensureAndroidNotificationChannelAsync() {
   if (Platform.OS !== 'android') return;
   // The custom sound must be referenced by its bundled filename *with*
-  // extension (expo-notifications copies ./lib/notification.wav into
+  // extension (expo-notifications copies ./assets/sounds/notification.wav into
   // res/raw/notification.wav at build time).
   await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
     name: 'General',

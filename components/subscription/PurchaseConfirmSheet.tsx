@@ -8,7 +8,7 @@ import type { CouponPreview } from "../../lib/api";
 
 /**
  * "Confirm your purchase" step shown between tapping Buy and the checkout UI
- * opening (fixes.md 6.2) — also where 6.1's UPI-vs-hosted-checkout choice is
+ * opening (docs/fixes.md 6.2) — also where 6.1's UPI-vs-hosted-checkout choice is
  * made, since it's a safer place to offer that than injecting a link over
  * either live payment surface.
  */

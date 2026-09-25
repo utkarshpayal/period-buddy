@@ -13,7 +13,7 @@ import { PartnerViewStateProvider } from "../../../components/partner-view-state
 // sizes, colors, center-avatar treatment) so the partner view reads as the
 // same app, not a stripped-down mode — just with tabs relevant to a
 // read-only viewer instead of the account owner's own tracking tools.
-const CENTER_AVATAR_SOURCE = require("../../../assets/images/icon.png");
+const CENTER_AVATAR_SOURCE = require("../../../assets/images/illustrations/nura-avatar.png");
 const AVATAR_SIZE = 76;
 const AVATAR_WRAP_SIZE = 100;
 const AVATAR_WRAP_TOP = -54;

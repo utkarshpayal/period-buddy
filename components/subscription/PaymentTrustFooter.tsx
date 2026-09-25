@@ -4,7 +4,7 @@ import { Text, View } from "react-native";
 import { useTheme } from "../theme";
 
 /**
- * Small reassurance line for real-money screens (fixes.md 6.4) — no policy
+ * Small reassurance line for real-money screens (docs/fixes.md 6.4) — no policy
  * page exists in-app to link to yet, so this stays text-only rather than
  * inventing one.
  */

@@ -5,7 +5,7 @@ import type { ThemeColors } from "../components/theme";
  * more than one place — the owner-side hubs (wellness-hub.tsx, explore-hub.tsx)
  * and partner-view's read-only overview.tsx "Knowledge & resources" section
  * used to each hand-roll their own copy of these, which drifted (see
- * fixes.md 2.8). `colorKey`/`bgKey` name a `ThemeColors` property rather than
+ * docs/fixes.md 2.8). `colorKey`/`bgKey` name a `ThemeColors` property rather than
  * a literal color so each screen still resolves them through its own
  * `useTheme()` call and stays theme/light-dark correct.
  */
@@ -62,7 +62,7 @@ export const SHARED_HUB_TILES: Record<SharedHubTileId, SharedHubTile> = {
     icon: "help-circle-outline",
     id: "nuraAi",
     // ?new=1 always starts a fresh chat — qa.tsx redirects a bare push to
-    // the chat-history list instead (see fixes.md 2.3).
+    // the chat-history list instead (see docs/fixes.md 2.3).
     route: "/(app)/qa?new=1",
     title: "Nura AI",
   },
