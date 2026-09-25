@@ -8,6 +8,7 @@ import {
   Platform,
   ScrollView,
   StatusBar,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
@@ -24,6 +25,7 @@ import {
   AuthTopBar,
 } from "../../components/auth-ui";
 import { GoogleSignInButton } from "../../components/GoogleSignInButton";
+import { Loader } from "../../components/Loader";
 import { OtpModal } from "../../components/OtpModal";
 import { useTheme } from "../../components/theme";
 import { connectPartnerAndResolveRoute, signupUser } from "../../lib/auth";
@@ -46,6 +48,10 @@ export default function SignUp() {
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isOtpModalVisible, setIsOtpModalVisible] = useState(false);
+  // Covers the form from the moment the account is verified (OTP or Google)
+  // until finishSignIn navigates away, so the signup page doesn't reappear
+  // while the session/partner role is being resolved.
+  const [isFinishing, setIsFinishing] = useState(false);
 
   const lastNameRef = useRef<TextInput>(null);
   const emailRef = useRef<TextInput>(null);
@@ -135,15 +141,28 @@ export default function SignUp() {
     user: Record<string, unknown>;
   }) {
     const signedInUser = user as AuthUser;
+    setIsFinishing(true);
     setIsOtpModalVisible(false);
-    await signIn({ token, user: signedInUser });
-    await finishSignIn(signedInUser);
+    try {
+      await signIn({ token, user: signedInUser });
+      await finishSignIn(signedInUser);
+    } catch (error) {
+      setIsFinishing(false);
+      setErrorMessage(error instanceof Error ? error.message : "Unable to finish signing up.");
+    }
   }
 
   async function handleGoogleSignInSuccess({ token, user }: { token: string; user: AuthUser }) {
     setErrorMessage("");
-    await signIn({ token, user });
-    await finishSignIn(user);
+    try {
+      await signIn({ token, user });
+      await finishSignIn(user);
+    } catch (error) {
+      setIsFinishing(false);
+      setErrorMessage(
+        error instanceof Error ? error.message : "Unable to complete Google sign-in.",
+      );
+    }
   }
 
   return (
@@ -366,6 +385,7 @@ export default function SignUp() {
 
               <GoogleSignInButton
                 disabled={isSubmitting}
+                onBusyChange={setIsFinishing}
                 onError={setErrorMessage}
                 onSuccess={handleGoogleSignInSuccess}
                 role={role}
@@ -410,6 +430,12 @@ export default function SignUp() {
         onVerified={handleOtpVerified}
         visible={isOtpModalVisible}
       />
+
+      {isFinishing ? (
+        <View style={StyleSheet.absoluteFill}>
+          <Loader fullscreen label="Setting up your account…" />
+        </View>
+      ) : null}
     </LinearGradient>
   );
 }

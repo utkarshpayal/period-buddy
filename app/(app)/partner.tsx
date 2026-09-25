@@ -167,6 +167,23 @@ export default function Partner() {
     rooms: partnerChatRoom ? [partnerChatRoom] : [],
   });
 
+  // While connected, also listen (on any tab) for the partner ending the
+  // connection from their side, so this screen drops back to the invite
+  // state instead of showing a stale "connected" pairing. The event arrives
+  // on the personal user_<id> room every socket auto-joins; the partner room
+  // here is just what keeps the shared socket open.
+  const partnerStatusRoom = profile?._id && profile.isConnected ? `partner_${profile._id}` : null;
+  useRealtimeSocket({
+    enabled: Boolean(partnerStatusRoom),
+    onMessage: useCallback(
+      (data: RealtimeMessage) => {
+        if (data.type === "partner_disconnected") load();
+      },
+      [load],
+    ),
+    rooms: partnerStatusRoom ? [partnerStatusRoom] : [],
+  });
+
 
   const generateCode = async () => {
     setGeneratingCode(true);
