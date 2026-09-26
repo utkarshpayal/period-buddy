@@ -1101,6 +1101,28 @@ export async function apiRequest<T>(
   return (envelope.data !== undefined ? envelope.data : envelope) as T;
 }
 
+/**
+ * App CMS layout (period-buddy-be `/api/app-config`, public). Parsed and
+ * cached by components/app-config.tsx — screens read it via useAppConfig(),
+ * never call this directly.
+ */
+export const appConfigApi = {
+  get: () => apiRequest<unknown>("/api/app-config", { skipAuth: true, timeoutMs: 8000 }),
+  trackBannerClick: (id: string) =>
+    apiRequest<unknown>(`/api/app-config/banners/${encodeURIComponent(id)}/click`, {
+      method: "POST",
+      skipAuth: true,
+      timeoutMs: 5000,
+    }),
+  trackBannerImpressions: (ids: string[]) =>
+    apiRequest<unknown>("/api/app-config/banners/impressions", {
+      method: "POST",
+      skipAuth: true,
+      timeoutMs: 5000,
+      body: JSON.stringify({ ids }),
+    }),
+};
+
 export const healthApi = {
   check: () =>
     apiRequest<{

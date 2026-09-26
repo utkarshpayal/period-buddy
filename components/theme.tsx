@@ -8,6 +8,7 @@ import React, {
   useState,
 } from "react";
 import { TouchableOpacity, View } from "react-native";
+import { useAppConfig } from "./app-config";
 
 type ThemeMode = "light" | "dark";
 
@@ -87,6 +88,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [mode, setMode] = useState<ThemeMode>("light");
   const [hasHydrated, setHasHydrated] = useState(false);
   const isDark = mode === "dark";
+  // Colour overrides from the App CMS (already validated in lib/appConfig.ts,
+  // and limited to brand/surface/text tokens — never danger or overlays).
+  const { config } = useAppConfig();
+  const overrides = config.theme[mode];
 
   const fonts = useMemo<ThemeFonts>(
     () => ({
@@ -100,7 +105,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<ThemeContextValue>(
     () => ({
-      colors: isDark
+      colors: {
+        ...(isDark
         ? {
             // Buddy dark — warm plum-black with soft rose, lavender & mint accents.
             background: "#221A20",
@@ -197,7 +203,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             shadow: "rgba(230, 110, 150, 0.16)",
             overlay: "rgba(58, 42, 50, 0.4)",
             track: "#E3E7ED",
-          },
+          }),
+        ...overrides,
+      } as ThemeColors,
       fonts,
       isDark,
       mode,
@@ -206,7 +214,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         setMode((currentMode) => (currentMode === "dark" ? "light" : "dark"));
       },
     }),
-    [isDark, mode, fonts, hasHydrated],
+    [isDark, mode, fonts, hasHydrated, overrides],
   );
 
   useEffect(() => {

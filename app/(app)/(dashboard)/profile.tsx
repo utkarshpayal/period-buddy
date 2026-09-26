@@ -24,6 +24,8 @@ import {
 } from "../../../lib/notifications";
 import Avatar from "../../../components/Avatar";
 import StatCard from "../../../components/StatCard";
+import { CmsShortcuts } from "../../../components/CmsShortcuts";
+import { PromoBanners } from "../../../components/PromoBanners";
 import { useUserStats } from "../../../hooks/useUserStats";
 import { useDataRefresh } from "../../../hooks/useDataRefresh";
 
@@ -587,6 +589,11 @@ export default function Profile() {
               />
             </TouchableOpacity>
           </View>
+
+          {/* App CMS: banners and features/links an admin placed on Profile.
+              Both render nothing by default. */}
+          <PromoBanners placement="profile" style={{ marginTop: 24 }} />
+          <CmsShortcuts placement="profile" style={{ marginTop: 24 }} />
 
           {/* EXIT ACTION */}
           <TouchableOpacity

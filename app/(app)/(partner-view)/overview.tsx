@@ -19,6 +19,8 @@ import { formatShortDate } from "../../../lib/format";
 import { partnerApi, type PartnerSharedData } from "../../../lib/api";
 import { usePartnerViewState } from "../../../components/partner-view-state";
 import { getSharedHubTiles } from "../../../lib/hubTiles";
+import { isFeatureVisible } from "../../../lib/appConfig";
+import { useAppConfig } from "../../../components/app-config";
 
 const PHASE_LABEL: Record<string, string> = {
   follicular: "Follicular phase",
@@ -36,7 +38,7 @@ const KNOWLEDGE_LINKS = getSharedHubTiles([
   "nuraAi",
   "hygiene",
   "sexualWellbeing",
-]).map((tile) => ({ title: tile.title === "Nura AI" ? "Anonymous Q&A" : tile.title, desc: tile.desc, icon: tile.icon, route: tile.route }));
+]).map((tile) => ({ id: tile.id, title: tile.title === "Nura AI" ? "Anonymous Q&A" : tile.title, desc: tile.desc, icon: tile.icon, route: tile.route }));
 
 function formatDateKey(dateKey?: string) {
   if (!dateKey) return "—";
@@ -53,6 +55,10 @@ function formatDateKey(dateKey?: string) {
 
 export default function PartnerViewOverview() {
   const { colors, isDark, fonts } = useTheme();
+  // Links to a feature hidden in the App CMS disappear here too (tile ids
+  // match the CMS feature keys).
+  const { config: appConfig } = useAppConfig();
+  const knowledgeLinks = KNOWLEDGE_LINKS.filter((link) => isFeatureVisible(appConfig, link.id));
   const { user } = useAuth();
   const router = useRouter();
   const { profile, setProfile, notifications, setNotifications, refreshProfile } = usePartnerViewState();
@@ -772,7 +778,7 @@ export default function PartnerViewOverview() {
                   Knowledge & resources
                 </Text>
                 <View className="flex-row flex-wrap justify-between" style={{ gap: 10 }}>
-                  {KNOWLEDGE_LINKS.map((link) => (
+                  {knowledgeLinks.map((link) => (
                     <TouchableOpacity
                       key={link.title}
                       activeOpacity={0.7}
