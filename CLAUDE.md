@@ -56,6 +56,32 @@ Modals are centralized: `components/modals/AppModalHost.tsx` is a single host re
     - `home.tsx` is intentionally short: greeting, stat pills, week strip, cycle-phase hero card, quick actions, an Insights carousel (See all → `predictions`), then a single "More for you" section with three `components/HubEntryCard.tsx` rows — `Care & Insights` → `(app)/care-hub.tsx` (predictions, daily insights, symptom trends/checker, graphs & reports, book-a-consult CTA), `Wellness & Support` → `(app)/wellness-hub.tsx` (health concerns, Nura AI, hygiene, sexual wellbeing, check-in call), `Explore` → `(app)/explore-hub.tsx` (forest, blogs, videos, partner sync, habits, buddy nomination). Add a new lightweight/browse destination to the matching hub screen's grid, not to Home directly — Home should stay a short dashboard, not grow back into a long list of tiles.
   - `(app)/(partner-view)/` — shown when the signed-in user is a connected partner "viewer" rather than the data owner (see `AuthUser.partnerRole`). Has its own floating tab bar (`_layout.tsx`) matching `(dashboard)/_layout.tsx`'s look exactly (same sizes/colors/center-avatar treatment): `overview` (read-only shared overview), `chat` (owner↔partner messaging), `voice` (center avatar, same mic-permission-gated voice assistant), `forum` (identical UI to the owner's — both re-export `components/screens/CommunityScreen.tsx`), `account` (partner's own account: notifications, app lock, disconnect, logout) — a code comment in `_layout.tsx` notes these names are deliberately distinct from the dashboard's tab names. `overview`'s notification bell pushes to the shared `(app)/notifications.tsx` screen — the same one the owner dashboard's bell opens — instead of its own bottom-sheet drawer, so the two roles see byte-identical notification UI; on focus it re-syncs `usePartnerViewState()`'s notifications so the bell's unread badge stays accurate after reading/marking things there. Cross-tab state (profile, notifications, live chat messages, the one WebSocket connection) lives in `components/partner-view-state.tsx`'s `PartnerViewStateProvider`/`usePartnerViewState()`, since Tabs screens are siblings and would otherwise each re-fetch/reconnect independently.
 
+### App CMS (remote layout)
+
+The separate **The-Nura-CMS** portal controls parts of the app through `period-buddy-be`'s public `GET /api/app-config`, so none of this needs a release.
+
+**Files:**
+- `lib/appConfig.ts`: pure types, parsing, selectors and tests (`lib/__tests__/appConfig.test.ts`).
+- `components/app-config.tsx`: `AppConfigProvider`, which sits above `ThemeProvider`.
+- `hooks/useViewer.ts`: who is looking, for audience rules.
+- `lib/tapAction.ts`: runs tap actions.
+
+**What the CMS controls:**
+- **Feature tiles:** which of the built-in `FEATURE_REGISTRY` features show, and where. The places are the three hubs plus a **Shortcuts** block on Home (`home` placement, the `shortcuts` home section) and Profile (`profile`, via `components/CmsShortcuts.tsx`).
+- **Tile look:** order, size (`small` grid tile or `large` row), colour, text, badge and audience (signed-in / premium / free, platform, app-version range).
+- **Admin link tiles** (`customTiles`): open a route, a website (`expo-web-browser`), or **another app** via `Linking.openURL(value)`, falling back to `fallbackUrl`.
+- **Home sections:** order and visibility.
+- **Theme:** brand, surface and text colour overrides per mode, merged into `components/theme.tsx`.
+- **Promo banners** (`components/PromoBanners.tsx`): Home top/middle slots, hubs and Profile, plus a once-per-device **popup** over Home (`components/PromoPopup.tsx`, its own `Modal` because `AppModalHost` only renders alerts). Clicks and impressions are beaconed, impressions once per session.
+- **App settings** (`components/AppGate.tsx`, mounted in `AppShell`): maintenance mode blocks the app. Below `minVersion` the app is blocked with the store link. Below `latestVersion` a dismissible card shows once per version. None of this applies on web.
+
+**How it loads:**
+- Built-in defaults (today's layout) render first. Then the AsyncStorage cache (`period-buddy.app-config`), then a fresh fetch.
+- It refetches on foreground (≤ every 3 min) and on Home's pull-to-refresh.
+- Every failure is silent, and anything malformed or unknown falls back to the default.
+
+**Adding a feature:** add it to `FEATURE_REGISTRY` here **and** to `constants/appCatalog.js` in the backend (same key, route, placement). A key only one side knows is ignored by the other.
+
 ### Data layer (`lib/api.ts`)
 
 All backend access goes through one file: typed request helpers (`apiRequest`, `apiEnvelopeRequest`) plus one `xApi` object per domain (`authApi`, `cycleApi`, `habitsApi`, `forestApi`, `consultationApi`, `subscriptionApi`, `partnerApi`, `buddyApi`, `nominationsApi`, `communityApi`, `blogsApi`, `reelsApi`, `healthIssuesApi`, `wellbeingApi`, `questionAnswerApi`, `voiceAgentApi`, `uploadApi`, `documentApi`, `speechApi`, `reportApi`, `insightsApi`, `screeningApi`, `schemesApi`, `schemeApplicationsApi`). Every response envelope is `{ data, error, message, ... }`; `apiRequest` unwraps `.data`, `apiEnvelopeRequest` returns the raw envelope (used for auth flows that need `token`/`user`/`isProfileComplete` alongside data). `healthApi` just wraps the `/health` liveness check.

@@ -3,6 +3,8 @@ import { Stack, usePathname, useRootNavigationState, useRouter } from "expo-rout
 import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Platform, Text, TextInput } from "react-native";
 import { AppLockProvider, useAppLock } from "../components/AppLock";
+import { AppConfigProvider } from "../components/app-config";
+import { AppGate } from "../components/AppGate";
 import { AppLockScreen } from "../components/AppLockScreen";
 import { AuthProvider, useAuth } from "../components/auth-context";
 import { GenZModeProvider } from "../components/genz-mode";
@@ -209,6 +211,8 @@ function AppShell() {
     <>
       <Stack screenOptions={{ headerShown: false }} />
       {isLocked && <AppLockScreen />}
+      {/* App CMS maintenance mode / update prompts; renders nothing by default. */}
+      <AppGate />
       <AppModalHost />
     </>
   );
@@ -236,14 +240,18 @@ export default function RootLayout() {
   }
 
   return (
-    <ThemeProvider>
-      <GenZModeProvider>
-        <AuthProvider>
-          <AppLockProvider>
-            <AppShell />
-          </AppLockProvider>
-        </AuthProvider>
-      </GenZModeProvider>
-    </ThemeProvider>
+    // AppConfigProvider (App CMS layout) is outermost: ThemeProvider reads
+    // its colour overrides, and it needs no auth (the config is public).
+    <AppConfigProvider>
+      <ThemeProvider>
+        <GenZModeProvider>
+          <AuthProvider>
+            <AppLockProvider>
+              <AppShell />
+            </AppLockProvider>
+          </AuthProvider>
+        </GenZModeProvider>
+      </ThemeProvider>
+    </AppConfigProvider>
   );
 }
