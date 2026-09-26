@@ -25,7 +25,8 @@ export type DataTopic =
   | "schemeApplications"
   | "qaSessions"
   | "consultations"
-  | "blogs";
+  | "blogs"
+  | "circles"; // Bestie Circles (list, detail, vibes)
 
 type Listener = (topics: ReadonlySet<DataTopic>) => void;
 
@@ -72,6 +73,7 @@ const MUTATION_TOPICS: [RegExp, DataTopic[] | null][] = [
   [/^\/api\/documents\/[^/]+\/chat/, null],
   [/^\/api\/documents/, ["documents"]],
   [/^\/api\/scheme-applications/, ["schemeApplications"]],
+  [/^\/api\/circles/, ["circles"]],
 ];
 
 export function topicsForMutation(method: string, path: string): DataTopic[] {
