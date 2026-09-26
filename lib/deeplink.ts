@@ -30,13 +30,17 @@ export type DeepLinkTarget = { pathname: string; params: Record<string, string> 
 
 /** Route names (URL paths — route groups like `(app)` aren't part of them) a shared link may open. */
 export const SHAREABLE_ROUTES = new Set([
+  "badges",
   "blogs",
+  "circles",
   "community",
+  "era",
   "government-scheme-detail",
   "government-schemes",
   "partner-connect",
   "reels",
   "symptom-checker",
+  "wrapped",
 ]);
 
 /** Deep-link targets that work without a session, so they're opened right away instead of after login. */
