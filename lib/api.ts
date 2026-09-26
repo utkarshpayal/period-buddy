@@ -1928,16 +1928,59 @@ export type VoiceAgentReply =
     });
 
 export type CheckinCallResult = {
+  callId: string;
   expectedPeriodDate: string;
+  /** "Call me now" requests left today after this one. */
+  callsLeftToday: number;
+};
+
+export type CheckinCallMode = "once" | "period_daily";
+
+export type CheckinCallOutcome =
+  | "completed"
+  | "declined"
+  | "callback"
+  | "no_answer"
+  | "opted_out"
+  | "wrong_person"
+  | "dropped"
+  | "failed";
+
+export type CheckinCallRecord = {
+  _id: string;
+  source: "manual" | "scheduled" | "retry";
+  dateKey: string;
+  status: "dialing" | "requested" | "connected" | "no_answer" | "busy" | "failed";
+  /** Absent while the call is still ringing or in progress. */
+  outcome?: CheckinCallOutcome;
+  durationSeconds?: number;
+  summary?: string;
+  loggedFields?: string[];
+  /** When Buddy will try again (no answer / callback requested). */
+  retryAt?: string;
+  endedAt?: string;
+  createdAt: string;
 };
 
 export type CheckinCallSchedule = {
   enabled: boolean;
-  /** Days relative to the predicted period start: 0 = on period day,
-   * negative = N days before, positive = N days after. */
+  /** "period_daily" = one call on each day of the period; "once" = one
+   * call per cycle on period start + dayOffset. */
+  mode: CheckinCallMode;
+  /** "once" mode only. Days relative to the period start: 0 = on period
+   * day, negative = N days before, positive = N days after. */
   dayOffset: number;
   /** Local time of day, "HH:mm" (24h), or null if never set. */
   time: string | null;
+  periodLength: number;
+  /** ISO time of the next automatic call, or null when none is coming up. */
+  nextCallAt: string | null;
+  lastCall: CheckinCallRecord | null;
+  limits: {
+    maxCallMinutes: number;
+    manualCallsPerDay: number;
+    manualCooldownMinutes: number;
+  };
 };
 
 export const voiceAgentApi = {
@@ -1969,6 +2012,7 @@ export const voiceAgentApi = {
    * resolve "time" to this user's actual local moment. */
   saveCheckinCallSchedule: (payload: {
     enabled: boolean;
+    mode?: CheckinCallMode;
     dayOffset: number;
     time?: string;
     timezoneOffsetMinutes?: number;
@@ -1977,6 +2021,12 @@ export const voiceAgentApi = {
       body: JSON.stringify(payload),
       method: "PUT",
     }),
+
+  /** This user's recent check-in calls, newest first. */
+  getCheckinCallHistory: (limit = 10) =>
+    apiRequest<{ calls: CheckinCallRecord[] }>(
+      `/api/voice-agent/checkin-call/history?limit=${limit}`,
+    ),
 };
 
 export const uploadApi = {
