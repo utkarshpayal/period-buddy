@@ -194,6 +194,11 @@ export const FEATURE_REGISTRY: FeatureDefinition[] = [
   { key: "partnerSync", title: "Partner Sync", description: "Share cycle info & chat", icon: "git-merge-outline", route: "/(app)/partner", placement: "explore_hub", size: "small", colorKey: "accent" },
   { key: "habits", title: "Habits", description: "Daily habit tracking", icon: "checkmark-done-outline", route: "/(app)/habits", placement: "explore_hub", size: "small", colorKey: "warning" },
   { key: "buddyNomination", title: "Nominate Buddy", description: "Anonymous peer support", icon: "star-outline", route: "/(app)/buddy-nomination", placement: "explore_hub", size: "small", colorKey: "secondary" },
+  // Gen Z pack — Home's Shortcuts block by default
+  { key: "wrapped", title: "Cycle Wrapped", description: "Your month, story-style", icon: "sparkles", route: "/(app)/wrapped", placement: "home", size: "small", colorKey: "rose" },
+  { key: "cycleEra", title: "Your Era", description: "Phase vibes & cycle syncing", icon: "planet-outline", route: "/(app)/era", placement: "home", size: "small", colorKey: "lavender" },
+  { key: "badges", title: "Streaks & Badges", description: "Collect them all", icon: "trophy-outline", route: "/(app)/badges", placement: "home", size: "small", colorKey: "gold" },
+  { key: "circles", title: "Bestie Circles", description: "Your squad, your vibes", icon: "people-circle-outline", route: "/(app)/circles", placement: "home", size: "small", colorKey: "mint" },
 ];
 
 const REGISTRY_BY_KEY = new Map(FEATURE_REGISTRY.map((f) => [f.key, f]));

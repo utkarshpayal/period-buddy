@@ -133,7 +133,8 @@ test("link tiles join a hub in CMS order, and features can move to Home/Profile"
   assert.equal(c.customTiles.some((t) => t.id === "bad"), false);
   assert.equal(explore.some((t) => t.key === "blogs"), false);
   assert.deepEqual(hubTilesFor(c, "profile", viewer()).map((t) => t.key), ["blogs"]);
-  assert.equal(hubTilesFor(c, "home", viewer()).length, 0);
+  // Home only carries the Gen Z pack by default.
+  assert.deepEqual(hubTilesFor(c, "home", viewer()).map((t) => t.key), ["wrapped", "cycleEra", "badges", "circles"]);
 });
 
 test("isAppLink", () => {

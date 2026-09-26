@@ -57,6 +57,13 @@ const GENZ_LABELS: Record<string, string> = {
   Habits: "Daily W's ✅",
   "Nominate Buddy": "Tag a Bestie 🫂",
   "Govt. Schemes": "Free Money, Fr 💸",
+
+  // Gen Z pack (Home → Shortcuts by default)
+  Shortcuts: "Your Faves ✨",
+  "Cycle Wrapped": "Wrapped, Bestie 🎁",
+  "Your Era": "What Era Am I In? 🪐",
+  "Streaks & Badges": "Flex Your W's 🏆",
+  "Bestie Circles": "The Group Chat 🫶",
 };
 
 type GenZModeContextValue = {

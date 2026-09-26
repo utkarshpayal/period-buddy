@@ -21,6 +21,7 @@ test("more specific paths win over their prefixes", () => {
   assert.deepEqual(topicsForMutation("POST", "/api/auth/login"), []);
   assert.deepEqual(topicsForMutation("POST", "/api/documents/abc/chat"), []);
   assert.deepEqual(topicsForMutation("DELETE", "/api/documents/abc"), ["documents"]);
+  assert.deepEqual(topicsForMutation("POST", "/api/circles/abc/vibes"), ["circles"]);
 });
 
 test("query strings and unknown endpoints", () => {
