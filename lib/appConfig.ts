@@ -435,8 +435,10 @@ export function parseAppConfig(raw: unknown): AppConfig {
       if (!t || typeof t !== "object") continue;
       const title = text(t.title, 40);
       const action = parseAction(t.action);
-      // A link tile that can't open anything isn't worth showing.
-      if (!title || action.type === "none" || typeof t.icon !== "string") continue;
+      if (!title || typeof t.icon !== "string") continue;
+      // No action = a Coming soon teaser for something not in the app yet
+      // (the CMS allows that only while it's locked); hubTilesFor drops it
+      // for anyone it would open for, since there's nothing to open.
       customTiles.push({
         id: String(t.id ?? title),
         title,
@@ -589,7 +591,7 @@ export function hubTilesFor(config: AppConfig, placement: HubPlacement, viewer: 
   for (const t of config.customTiles) {
     if (!t.enabled || t.placement !== placement || !matchesAudience(t.audience, viewer)) continue;
     const launch = resolveLaunch(t.launch, viewer);
-    if (!launch) continue;
+    if (!launch || (launch.access === "open" && t.action.type === "none")) continue;
     tiles.push({
       key: `link:${t.id}`,
       title: t.title,

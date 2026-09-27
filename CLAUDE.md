@@ -70,7 +70,7 @@ The separate **The-Nura-CMS** portal controls parts of the app through `period-b
 **What the CMS controls:**
 - **Feature tiles:** which of the built-in `FEATURE_REGISTRY` features show, and where. The places are the three hubs plus a **Shortcuts** block on Home (`home` placement, the `shortcuts` home section, last in the default order) and Profile (`profile`, via `components/CmsShortcuts.tsx`, which draws them as rows of four round quick-action icons with labels and no heading, ignoring tile size).
 - **Tile look:** order, size (`small` grid tile or `large` row), colour, text, badge and audience (signed-in / premium / free, platform, app-version range).
-- **Admin link tiles** (`customTiles`): open a route, a website (`expo-web-browser`), or **another app** via `Linking.openURL(value)`, falling back to `fallbackUrl`.
+- **Admin link tiles** (`customTiles`): open a route, a website (`expo-web-browser`), or **another app** via `Linking.openURL(value)`, falling back to `fallbackUrl`. A tile with no action (`type: "none"`, or an unsafe one parsed down to it) is a Coming soon teaser for something not in the app yet: it shows only while locked, and `hubTilesFor` drops it for anyone it would resolve to `open` for.
 - **Home sections:** order and visibility.
 - **Theme:** brand, surface and text colour overrides per mode, merged into `components/theme.tsx`.
 - **Promo banners** (`components/PromoBanners.tsx`): Home top/middle slots, hubs and Profile, plus a once-per-device **popup** over Home (`components/PromoPopup.tsx`, its own `Modal` because `AppModalHost` only renders alerts). Clicks and impressions are beaconed, impressions once per session.
