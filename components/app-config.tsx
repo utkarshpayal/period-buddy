@@ -13,7 +13,8 @@ import { AppConfig, DEFAULT_APP_CONFIG, parseAppConfig } from "../lib/appConfig"
  * copy from AsyncStorage replaces them as soon as it's read → a fresh fetch
  * replaces that. It refetches when the app comes back to the foreground
  * (at most every REFRESH_MS), so a CMS change reaches a running app within
- * minutes without a restart. Every failure is silent: the app keeps
+ * minutes without a restart, and on sign-in/out (components/AppConfigSync.tsx),
+ * since launch states make the config per user. Every failure is silent: the app keeps
  * whatever it last had, since layout config must never block the app.
  */
 
@@ -39,17 +40,32 @@ export function AppConfigProvider({ children }: { children: React.ReactNode }) {
   // A fetch that lands before the cache read must not be overwritten by the older cached copy.
   const fetched = useRef(false);
 
-  const refresh = useCallback(() => {
-    if (inFlight.current) return inFlight.current;
+  // A refresh asked for mid-fetch (e.g. right after sign-in, while the
+  // signed-out fetch is still out) runs again once it lands, since the
+  // config is per user and the older response would be the wrong one.
+  const again = useRef(false);
+
+  const refresh = useCallback((): Promise<void> => {
+    if (inFlight.current) {
+      again.current = true;
+      return inFlight.current;
+    }
     inFlight.current = (async () => {
       try {
-        const raw = await appConfigApi.get();
-        fetched.current = true;
-        lastFetch.current = Date.now();
-        setConfig(parseAppConfig(raw));
-        AsyncStorage.setItem(CACHE_KEY, JSON.stringify(raw)).catch(() => undefined);
-      } catch {
-        // Offline, old backend without /api/app-config, server error: keep what we have.
+        do {
+          again.current = false;
+          try {
+            const raw = await appConfigApi.get();
+            // Superseded by a newer request: drop this one, the loop refetches.
+            if (again.current) continue;
+            fetched.current = true;
+            lastFetch.current = Date.now();
+            setConfig(parseAppConfig(raw));
+            AsyncStorage.setItem(CACHE_KEY, JSON.stringify(raw)).catch(() => undefined);
+          } catch {
+            // Offline, old backend without /api/app-config, server error: keep what we have.
+          }
+        } while (again.current);
       } finally {
         inFlight.current = null;
       }

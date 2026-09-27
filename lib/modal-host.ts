@@ -1,6 +1,7 @@
 import { Alert, Linking } from "react-native";
 import type {
   AlertRequest,
+  LaunchSheetRequest,
   ModalButtonSpec,
   ModalRequest,
   ModalVariant,
@@ -74,6 +75,17 @@ export function showPermissionModal(opts: {
     cancelLabel: opts.cancelLabel ?? "Not Now",
     ...opts,
   });
+}
+
+/**
+ * The Coming soon / Paused sheet for a locked App CMS feature: from its tile,
+ * or from the route guard (lib/launchGuard.ts) when a link points at it.
+ * Returns false if the host isn't mounted yet, so the caller can decide.
+ */
+export function showLaunchSheet(opts: Omit<LaunchSheetRequest, "kind" | "id">): boolean {
+  if (!listener) return false;
+  listener({ kind: "launch", id: ++nextId, ...opts });
+  return true;
 }
 
 export function dismissModal() {

@@ -64,7 +64,8 @@ The separate **The-Nura-CMS** portal controls parts of the app through `period-b
 - `lib/appConfig.ts`: pure types, parsing, selectors and tests (`lib/__tests__/appConfig.test.ts`).
 - `components/app-config.tsx`: `AppConfigProvider`, which sits above `ThemeProvider`.
 - `hooks/useViewer.ts`: who is looking, for audience rules.
-- `lib/tapAction.ts`: runs tap actions.
+- `lib/tapAction.ts`: runs tap actions (in-app routes go through the launch route guard).
+- `lib/launchGuard.ts`, `components/AppConfigSync.tsx`, `components/LaunchSheet.tsx`, `components/LaunchTileParts.tsx`, `lib/deviceId.ts`: launch states (below).
 
 **What the CMS controls:**
 - **Feature tiles:** which of the built-in `FEATURE_REGISTRY` features show, and where. The places are the three hubs plus a **Shortcuts** block on Home (`home` placement, the `shortcuts` home section, last in the default order) and Profile (`profile`, via `components/CmsShortcuts.tsx`, which draws them as rows of four round quick-action icons with labels and no heading, ignoring tile size).
@@ -73,11 +74,13 @@ The separate **The-Nura-CMS** portal controls parts of the app through `period-b
 - **Home sections:** order and visibility.
 - **Theme:** brand, surface and text colour overrides per mode, merged into `components/theme.tsx`.
 - **Promo banners** (`components/PromoBanners.tsx`): Home top/middle slots, hubs and Profile, plus a once-per-device **popup** over Home (`components/PromoPopup.tsx`, its own `Modal` because `AppModalHost` only renders alerts). Clicks and impressions are beaconed, impressions once per session.
+- **Launch states** (spec: The-Nura-CMS `docs/launch-states.md` §4 and §7.3): each feature and link tile carries a `launch` the backend has already decided for this user or device. The values are `open`, `soon` (Coming soon: a dimmed tile with a SOON pill replacing any badge, and no chevron on large rows) and `paused` (a pause dot, badge hidden), plus an optional BETA pill. `openFor` + `fallback` narrow `open` to a rollout slice that is matched against the viewer; `fallback: "hidden"` drops the tile (`resolveLaunch` in `lib/appConfig.ts`). A locked tile's tap opens `components/LaunchSheet.tsx`, a bottom sheet rendered by `AppModalHost` as a `kind: "launch"` request (`showLaunchSheet` in `lib/modal-host.ts`), with Notify me (`appConfigApi.notifyLaunch`, optimistic) or the paused alternative action. Soon taps are beaconed (`trackLockedTap`). **Route guard:** `guardRoute()` in `lib/launchGuard.ts` (called by `runTapAction` for routes, and in `AppShell`/`notifications.tsx` before pushing a push-notification or shared-link target) opens the sheet instead of a locked feature's screen. A route belongs to a feature when its path equals the feature route's path or sits under it, ignoring groups and the query (`launchForRoute`). `components/AppConfigSync.tsx` (in `AppShell`) mirrors config + viewer into the guard and refetches the config on sign-in/out. `isFeatureVisible` is true only when the feature is actually usable.
 - **App settings** (`components/AppGate.tsx`, mounted in `AppShell`): maintenance mode blocks the app. Below `minVersion` the app is blocked with the store link. Below `latestVersion` a dismissible card shows once per version. None of this applies on web.
 
 **How it loads:**
 - Built-in defaults (today's layout) render first. Then the AsyncStorage cache (`period-buddy.app-config`), then a fresh fetch.
-- It refetches on foreground (≤ every 3 min) and on Home's pull-to-refresh.
+- The fetch is per viewer. It sends the session token attached by hand under `skipAuth`, so a stale token can never sign the user out from here, along with `X-Device-Id` (`lib/deviceId.ts`, a random id per install) and `X-Nura-Launch: 1`. Without that last header the backend hides every item that isn't plainly open, so older builds never show unfinished features.
+- It refetches on foreground (≤ every 3 min), on Home's pull-to-refresh and on sign-in/out. A refresh asked for mid-fetch runs again once the fetch lands.
 - Every failure is silent, and anything malformed or unknown falls back to the default.
 
 **Adding a feature:** add it to `FEATURE_REGISTRY` here **and** to `constants/appCatalog.js` in the backend (same key, route, placement). A key only one side knows is ignored by the other.

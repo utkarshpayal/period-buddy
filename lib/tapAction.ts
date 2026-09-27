@@ -2,10 +2,13 @@ import type { useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { Linking } from "react-native";
 import type { TapAction } from "./appConfig";
+import { guardRoute } from "./launchGuard";
 
 /**
  * Run an App CMS tap action (tiles, banners, the popup):
- *   route → push the in-app screen
+ *   route → push the in-app screen, unless the App CMS has it Coming soon
+ *           or paused for this user: then its sheet opens instead
+ *           (lib/launchGuard.ts)
  *   url   → the website in the in-app browser
  *   app   → another app by its link (whatsapp://…, youtube://…); if it isn't
  *           installed (or the OS refuses the scheme), `fallbackUrl`, usually
@@ -19,7 +22,7 @@ export async function runTapAction(action: TapAction, router: Router): Promise<v
   if (!value || type === "none") return;
   try {
     if (type === "route") {
-      router.push(value as any);
+      if (!guardRoute(value)) router.push(value as any);
     } else if (type === "url") {
       await WebBrowser.openBrowserAsync(value);
     } else if (type === "app") {

@@ -1,4 +1,5 @@
 import type { Ionicons } from "@expo/vector-icons";
+import type { LaunchSheetInfo, TileColorKey } from "../../lib/appConfig";
 
 export type ModalIconName = keyof typeof Ionicons.glyphMap;
 
@@ -32,4 +33,20 @@ export type PermissionRequest = {
   onCancel?: () => void;
 };
 
-export type ModalRequest = AlertRequest | PermissionRequest;
+/** The Coming soon / Paused bottom sheet for a locked App CMS feature (components/LaunchSheet.tsx). */
+export type LaunchSheetRequest = {
+  kind: "launch";
+  id: number;
+  /** Launch item key: a feature key or `link:<tileId>`. */
+  itemKey: string;
+  title: string;
+  description: string;
+  icon: string;
+  colorKey: TileColorKey;
+  /** Built-in features get the GenZ label swap, like their tiles. */
+  builtIn: boolean;
+  access: "soon" | "paused";
+  sheet: LaunchSheetInfo;
+};
+
+export type ModalRequest = AlertRequest | PermissionRequest | LaunchSheetRequest;

@@ -1,13 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
 import React from "react";
 import { Text, TouchableOpacity, View } from "react-native";
 import { useAppConfig } from "./app-config";
 import { genZLabel, useGenZMode } from "./genz-mode";
+import { LOCKED_OPACITY, PauseDot, isLocked, launchSuffix, pillColors, tilePill, useTilePress } from "./LaunchTileParts";
 import { ThemeColors, useTheme } from "./theme";
 import { useViewer } from "../hooks/useViewer";
 import { HubTile, hubTilesFor } from "../lib/appConfig";
-import { runTapAction } from "../lib/tapAction";
 
 const PER_ROW = 4;
 const ICON = 52;
@@ -20,6 +19,8 @@ const ICON = 52;
  * Drawn as quick actions, not cards: rows of four round icons with short
  * labels, straight on the page (no box, no heading). Tile size and description are hub-screen
  * ideas, so they're ignored here (the description is still read out).
+ * Coming soon / paused shortcuts are drawn locked and open their sheet
+ * (components/LaunchTileParts.tsx).
  */
 export function CmsShortcuts({ placement, style }: { placement: "home" | "profile"; style?: object }) {
   const { config } = useAppConfig();
@@ -60,30 +61,41 @@ const isExternal = (tile: HubTile) => tile.action.type === "url" || tile.action.
 function Shortcut({ tile }: { tile: HubTile }) {
   const { colors, fonts } = useTheme();
   const { enabled: genZ } = useGenZMode();
-  const router = useRouter();
+  const onPress = useTilePress(tile);
   const { color, bg } = tint(colors, tile.colorKey);
   const label = tile.builtIn ? genZLabel(tile.title, genZ) : tile.title;
-  const external = isExternal(tile);
+  const external = isExternal(tile) && !isLocked(tile);
+  const pill = tilePill(tile);
+  const pillTint = pill ? pillColors(colors, pill.tone) : null;
+  const dim = tile.launch.access === "soon" ? LOCKED_OPACITY : 1;
 
   return (
     <TouchableOpacity
-      onPress={() => runTapAction(tile.action, router)}
+      onPress={onPress}
       activeOpacity={0.7}
       accessibilityRole="button"
-      accessibilityLabel={[label, tile.badge, tile.description, external ? "Opens outside the app" : null].filter(Boolean).join(". ")}
+      accessibilityLabel={[
+        [label, launchSuffix(tile)].filter(Boolean).join(", "),
+        pill?.tone === "badge" ? pill.text : null,
+        tile.description,
+        external ? "Opens outside the app" : null,
+      ]
+        .filter(Boolean)
+        .join(". ")}
       style={{ flex: 1, alignItems: "center", paddingHorizontal: 4 }}
     >
       <View>
         <View style={{ width: ICON, height: ICON, borderRadius: ICON / 2, backgroundColor: bg, alignItems: "center", justifyContent: "center" }}>
-          <Ionicons name={tile.icon as keyof typeof Ionicons.glyphMap} size={22} color={color} />
+          <Ionicons name={tile.icon as keyof typeof Ionicons.glyphMap} size={22} color={color} style={{ opacity: dim }} />
+          {tile.launch.access === "paused" ? <PauseDot size={18} offset={-2} ring={colors.background} /> : null}
         </View>
-        {tile.badge ? (
+        {pill && pillTint ? (
           <View
             style={{
               position: "absolute",
               top: -4,
               right: -10,
-              backgroundColor: colors.primary,
+              backgroundColor: pillTint.bg,
               borderRadius: 8,
               paddingHorizontal: 5,
               paddingVertical: 1,
@@ -91,8 +103,8 @@ function Shortcut({ tile }: { tile: HubTile }) {
               borderColor: colors.background,
             }}
           >
-            <Text style={{ fontSize: 9, fontWeight: "800", color: colors.buttonText, fontFamily: fonts.body }} numberOfLines={1}>
-              {tile.badge}
+            <Text style={{ fontSize: 9, fontWeight: "800", color: pillTint.fg, fontFamily: fonts.body }} numberOfLines={1}>
+              {pill.text}
             </Text>
           </View>
         ) : external ? (
@@ -115,7 +127,7 @@ function Shortcut({ tile }: { tile: HubTile }) {
       </View>
       <Text
         numberOfLines={2}
-        style={{ marginTop: 8, fontSize: 12, lineHeight: 15, fontWeight: "600", color: colors.foreground, textAlign: "center", fontFamily: fonts.body }}
+        style={{ marginTop: 8, fontSize: 12, lineHeight: 15, fontWeight: "600", color: colors.foreground, textAlign: "center", fontFamily: fonts.body, opacity: dim }}
       >
         {label}
       </Text>

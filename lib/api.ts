@@ -3,6 +3,7 @@ import Constants from "expo-constants";
 import { Platform } from "react-native";
 import type { CyclePhase } from "./cycle";
 import { emitDataChange, emitMutation } from "./data-sync";
+import { getDeviceId } from "./deviceId";
 
 const LOCAL_DEV_API_PORT = "5000";
 const envApiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
@@ -1102,12 +1103,49 @@ export async function apiRequest<T>(
 }
 
 /**
+ * Headers for the App CMS endpoints: who's asking (token when signed in, and
+ * this install's id) and `X-Nura-Launch: 1`, which tells the backend this
+ * build understands launch states. Without it the backend hides every item
+ * that isn't plainly open, so older builds never show unfinished features.
+ */
+async function launchHeaders(): Promise<Record<string, string>> {
+  const [token, deviceId] = await Promise.all([getToken(), getDeviceId()]);
+  const headers: Record<string, string> = { "X-Device-Id": deviceId, "X-Nura-Launch": "1" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
+}
+
+/**
  * App CMS layout (period-buddy-be `/api/app-config`, public). Parsed and
  * cached by components/app-config.tsx — screens read it via useAppConfig(),
  * never call this directly.
+ *
+ * The config is per viewer since launch states (rollout slice, testers,
+ * "Notify me"), so the token rides along — attached by hand, with skipAuth,
+ * so an expired session can never sign the user out from a background
+ * config fetch (the backend's optionalAuth just ignores a bad token).
  */
 export const appConfigApi = {
-  get: () => apiRequest<unknown>("/api/app-config", { skipAuth: true, timeoutMs: 8000 }),
+  get: async () =>
+    apiRequest<unknown>("/api/app-config", { skipAuth: true, timeoutMs: 8000, headers: await launchHeaders() }),
+  /** Join a Coming soon feature's "Notify me" list (itemKey: feature key or `link:<id>`). */
+  notifyLaunch: async (itemKey: string) =>
+    apiRequest<{ onList: boolean }>(`/api/app-config/launch/${encodeURIComponent(itemKey)}/notify`, {
+      method: "POST",
+      skipAuth: true,
+      timeoutMs: 8000,
+      headers: await launchHeaders(),
+      // Same platform names as hooks/useViewer.ts, for the CMS's waitlist export.
+      body: JSON.stringify({ platform: Platform.OS === "ios" ? "ios" : Platform.OS === "web" ? "web" : "android" }),
+    }),
+  /** Fire-and-forget: someone tapped a locked (Coming soon) tile. */
+  trackLockedTap: async (itemKey: string) =>
+    apiRequest<unknown>(`/api/app-config/launch/${encodeURIComponent(itemKey)}/tap`, {
+      method: "POST",
+      skipAuth: true,
+      timeoutMs: 5000,
+      headers: await launchHeaders(),
+    }),
   trackBannerClick: (id: string) =>
     apiRequest<unknown>(`/api/app-config/banners/${encodeURIComponent(id)}/click`, {
       method: "POST",
