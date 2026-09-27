@@ -204,7 +204,7 @@ export const FEATURE_REGISTRY: FeatureDefinition[] = [
 const REGISTRY_BY_KEY = new Map(FEATURE_REGISTRY.map((f) => [f.key, f]));
 
 export const DEFAULT_HOME_SECTIONS: HomeSection[] = (
-  ["statPills", "weekStrip", "promo_top", "phaseHero", "quickActions", "shortcuts", "promo_middle", "insights", "moreForYou"] as HomeSectionKey[]
+  ["statPills", "weekStrip", "promo_top", "phaseHero", "quickActions", "promo_middle", "insights", "moreForYou", "shortcuts"] as HomeSectionKey[]
 ).map((key) => ({ key, visible: true }));
 
 const SECTION_KEYS = new Set<string>(DEFAULT_HOME_SECTIONS.map((s) => s.key));

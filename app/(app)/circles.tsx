@@ -1,5 +1,4 @@
 import { Feather } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -9,6 +8,7 @@ import {
   RefreshControl,
   ScrollView,
   StatusBar,
+  StyleSheet,
   Switch,
   Text,
   TextInput,
@@ -17,12 +17,10 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Avatar from "../../components/Avatar";
-import { EmptyState } from "../../components/EmptyState";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { SkeletonCard } from "../../components/Skeleton";
 import { useTheme } from "../../components/theme";
-import { getShadow } from "../../components/ui-tokens";
 import { useAsyncLoad } from "../../hooks/useAsyncLoad";
 import { circlesApi, getFriendlyErrorMessage, type CircleDetail, type CircleMember, type CircleVibe } from "../../lib/api";
 import { timeAgo } from "../../lib/genz";
@@ -35,10 +33,17 @@ import { shareWithAppLink } from "../../lib/share";
  * react, and send each other hype. Nothing else about anyone's cycle is ever
  * shared. `?id=` opens one circle; `?code=` (invite deep link) opens the
  * join sheet prefilled.
+ *
+ * Layout follows the app's calm list style: open rows on the page (no card
+ * per item), sheets for anything that needs a form.
  */
 
 const CIRCLE_EMOJIS = ["🫶", "💅", "🌸", "🔥", "👯", "🦋", "🍓", "🌙", "✨", "🧸"];
 const VIBE_EMOJIS = ["😴", "🍫", "💅", "🔥", "🥺", "😤", "🫶", "✨", "🩸", "🌙", "🤯", "🥳"];
+
+const SIDE = 20;
+
+/* ─────────────────────────────── Shared bits ─────────────────────────────── */
 
 function Sheet({ visible, title, onClose, children }: { visible: boolean; title: string; onClose: () => void; children: React.ReactNode }) {
   const { colors, fonts } = useTheme();
@@ -46,11 +51,18 @@ function Sheet({ visible, title, onClose, children }: { visible: boolean; title:
     <Modal transparent animationType="slide" visible={visible} onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1, justifyContent: "flex-end", backgroundColor: colors.overlay }}>
         <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} accessibilityLabel="Close" />
-        <View className="px-6 pt-5 pb-10" style={{ backgroundColor: colors.background, borderTopLeftRadius: 28, borderTopRightRadius: 28 }}>
+        <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: SIDE, paddingTop: 10, paddingBottom: 34 }}>
+          <View style={{ alignSelf: "center", width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: 14 }} />
           <View className="flex-row items-center justify-between mb-4">
-            <Text style={{ color: colors.foreground, fontSize: 19, fontFamily: fonts.heading, fontWeight: "900" }}>{title}</Text>
-            <TouchableOpacity onPress={onClose} hitSlop={12} accessibilityLabel="Close">
-              <Feather name="x" size={22} color={colors.mutedText} />
+            <Text style={{ color: colors.foreground, fontSize: 18, fontFamily: fonts.heading, fontWeight: "800" }}>{title}</Text>
+            <TouchableOpacity
+              onPress={onClose}
+              hitSlop={12}
+              accessibilityLabel="Close"
+              className="items-center justify-center rounded-full"
+              style={{ width: 30, height: 30, backgroundColor: colors.surfaceSoft }}
+            >
+              <Feather name="x" size={16} color={colors.mutedText} />
             </TouchableOpacity>
           </View>
           {children}
@@ -60,10 +72,17 @@ function Sheet({ visible, title, onClose, children }: { visible: boolean; title:
   );
 }
 
-function EmojiRow({ options, value, onChange }: { options: string[]; value: string; onChange: (e: string) => void }) {
+function FieldLabel({ children, first }: { children: string; first?: boolean }) {
+  const { colors, fonts } = useTheme();
+  return (
+    <Text style={{ color: colors.mutedText, fontSize: 12.5, fontFamily: fonts.body, fontWeight: "700", marginTop: first ? 0 : 18, marginBottom: 8 }}>{children}</Text>
+  );
+}
+
+function EmojiGrid({ options, value, onChange }: { options: string[]; value: string; onChange: (e: string) => void }) {
   const { colors } = useTheme();
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 2 }}>
+    <View className="flex-row flex-wrap" style={{ gap: 8 }}>
       {options.map((e) => {
         const active = e === value;
         return (
@@ -71,14 +90,17 @@ function EmojiRow({ options, value, onChange }: { options: string[]; value: stri
             key={e}
             onPress={() => onChange(e)}
             activeOpacity={0.8}
-            className="items-center justify-center rounded-2xl"
-            style={{ width: 46, height: 46, backgroundColor: active ? colors.primaryLight : colors.surface, borderColor: active ? colors.primary : colors.border, borderWidth: active ? 2 : 1 }}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: active }}
+            accessibilityLabel={e}
+            className="items-center justify-center rounded-full"
+            style={{ width: 46, height: 46, backgroundColor: active ? colors.primaryLight : colors.surface, borderColor: active ? colors.primary : "transparent", borderWidth: 2 }}
           >
             <Text style={{ fontSize: 22 }}>{e}</Text>
           </TouchableOpacity>
         );
       })}
-    </ScrollView>
+    </View>
   );
 }
 
@@ -89,12 +111,55 @@ function PrimaryButton({ label, onPress, disabled, busy }: { label: string; onPr
       onPress={onPress}
       disabled={disabled || busy}
       activeOpacity={0.85}
-      className="items-center rounded-2xl py-4 mt-5"
-      style={{ backgroundColor: colors.primary, opacity: disabled || busy ? 0.55 : 1 }}
+      accessibilityRole="button"
+      className="items-center justify-center rounded-full mt-6"
+      style={{ height: 52, backgroundColor: colors.primary, opacity: disabled || busy ? 0.5 : 1 }}
     >
-      <Text style={{ color: colors.buttonText, fontSize: 15, fontFamily: fonts.heading, fontWeight: "900" }}>{busy ? "One sec…" : label}</Text>
+      <Text style={{ color: colors.buttonText, fontSize: 15, fontFamily: fonts.heading, fontWeight: "800" }}>{busy ? "One sec…" : label}</Text>
     </TouchableOpacity>
   );
+}
+
+function Input(props: React.ComponentProps<typeof TextInput>) {
+  const { colors, fonts } = useTheme();
+  return (
+    <TextInput
+      placeholderTextColor={colors.mutedText}
+      {...props}
+      style={[
+        { backgroundColor: colors.surface, color: colors.foreground, fontSize: 15, fontFamily: fonts.body, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 14 },
+        props.style,
+      ]}
+    />
+  );
+}
+
+/** A dashed box holding an invite code, with a share action. */
+function InviteCode({ code, onShare }: { code: string; onShare: () => void }) {
+  const { colors, fonts } = useTheme();
+  return (
+    <View className="flex-row items-center rounded-2xl" style={{ borderWidth: 1.5, borderStyle: "dashed", borderColor: colors.border, paddingVertical: 12, paddingLeft: 18, paddingRight: 8 }}>
+      <Text selectable style={{ flex: 1, color: colors.foreground, fontSize: 26, letterSpacing: 6, fontFamily: fonts.monoSemiBold }}>
+        {code}
+      </Text>
+      <TouchableOpacity
+        onPress={onShare}
+        accessibilityRole="button"
+        accessibilityLabel="Share invite"
+        className="flex-row items-center rounded-full px-4"
+        style={{ height: 38, backgroundColor: colors.primaryLight, gap: 6 }}
+      >
+        <Feather name="share-2" size={14} color={colors.primary} />
+        <Text style={{ color: colors.primary, fontSize: 13, fontFamily: fonts.body, fontWeight: "800" }}>Share</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+/** Hairline under a row, starting where the text starts. */
+function Divider({ inset }: { inset: number }) {
+  const { colors } = useTheme();
+  return <View style={{ position: "absolute", bottom: 0, left: inset, right: SIDE, height: StyleSheet.hairlineWidth, backgroundColor: colors.border }} />;
 }
 
 const shareInvite = (name: string, code: string) =>
@@ -102,9 +167,26 @@ const shareInvite = (name: string, code: string) =>
 
 /* ─────────────────────────────── List ─────────────────────────────── */
 
+function ActionRow({ icon, label, hint, onPress, last }: { icon: React.ComponentProps<typeof Feather>["name"]; label: string; hint?: string; onPress: () => void; last?: boolean }) {
+  const { colors, fonts } = useTheme();
+  return (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.6} accessibilityRole="button" className="flex-row items-center" style={{ paddingHorizontal: SIDE, paddingVertical: 12, gap: 14 }}>
+      <View className="items-center justify-center rounded-full" style={{ width: 48, height: 48, backgroundColor: colors.surface }}>
+        <Feather name={icon} size={19} color={colors.primary} />
+      </View>
+      <View className="flex-1">
+        <Text style={{ color: colors.foreground, fontSize: 15, fontFamily: fonts.body, fontWeight: "700" }}>{label}</Text>
+        {hint ? <Text style={{ color: colors.mutedText, fontSize: 12.5, fontFamily: fonts.body, marginTop: 1 }}>{hint}</Text> : null}
+      </View>
+      <Feather name="chevron-right" size={18} color={colors.mutedText} />
+      {!last ? <Divider inset={SIDE + 48 + 14} /> : null}
+    </TouchableOpacity>
+  );
+}
+
 function CircleList({ initialCode }: { initialCode?: string }) {
   const router = useRouter();
-  const { colors, isDark, fonts } = useTheme();
+  const { colors, fonts } = useTheme();
   const { data, loading, refreshing, error, offline, reload } = useAsyncLoad(() => circlesApi.list(), [], { refreshOn: ["circles"] });
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -152,6 +234,8 @@ function CircleList({ initialCode }: { initialCode?: string }) {
   };
 
   const atLimit = data ? data.circles.length >= data.limits.maxCirclesPerUser : false;
+  const startNew = () =>
+    atLimit && data ? showAlert("Circle limit", `You can be in up to ${data.limits.maxCirclesPerUser} circles.`) : setCreateOpen(true);
 
   return (
     <>
@@ -159,8 +243,14 @@ function CircleList({ initialCode }: { initialCode?: string }) {
         title="Bestie Circles"
         right={
           data?.circles.length ? (
-            <TouchableOpacity onPress={() => setJoinOpen(true)} className="rounded-full px-3.5 py-2" style={{ backgroundColor: colors.surface }}>
-              <Text style={{ color: colors.foreground, fontSize: 13, fontFamily: fonts.body, fontWeight: "800" }}>Join</Text>
+            <TouchableOpacity
+              onPress={startNew}
+              hitSlop={10}
+              accessibilityLabel="Start a new circle"
+              className="items-center justify-center rounded-full"
+              style={{ width: 36, height: 36, backgroundColor: colors.primaryLight }}
+            >
+              <Feather name="plus" size={18} color={colors.primary} />
             </TouchableOpacity>
           ) : null
         }
@@ -185,79 +275,71 @@ function CircleList({ initialCode }: { initialCode?: string }) {
             contentContainerStyle={{ paddingBottom: 60, flexGrow: 1 }}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => reload(true)} tintColor={colors.primary} />}
           >
-            <View className="mx-6 mt-5">
-              <LinearGradient colors={["#34C99A", "#3A86FF", "#B24BF3"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ borderRadius: 26, padding: 20 }}>
-                <Text style={{ fontSize: 34 }}>🫶👯‍♀️✨</Text>
-                <Text style={{ color: "#FFF", fontSize: 21, fontFamily: fonts.heading, fontWeight: "900", marginTop: 8 }}>Your people, your vibes</Text>
-                <Text style={{ color: "#FFF", fontSize: 13, lineHeight: 19, fontFamily: fonts.body, fontWeight: "600", marginTop: 4, opacity: 0.95 }}>
-                  {`Private circles of up to ${data.limits.maxMembers}. Drop a vibe, share your phase emoji if you want, and hype each other up. Your cycle details stay yours.`}
-                </Text>
-              </LinearGradient>
-            </View>
-
             {data.circles.length === 0 ? (
-              <EmptyState
-                compact
-                icon="account-group-outline"
-                title="No circles yet"
-                message="Start one for your besties, or join with a code a friend sent you."
-              />
+              <View className="items-center px-8" style={{ paddingTop: 56 }}>
+                <View className="items-center justify-center rounded-full" style={{ width: 88, height: 88, backgroundColor: colors.primaryLight }}>
+                  <Text style={{ fontSize: 40 }}>🫶</Text>
+                </View>
+                <Text style={{ color: colors.foreground, fontSize: 20, fontFamily: fonts.heading, fontWeight: "800", marginTop: 20, textAlign: "center" }}>
+                  Your inner circle
+                </Text>
+                <Text style={{ color: colors.mutedText, fontSize: 14, lineHeight: 21, fontFamily: fonts.body, marginTop: 8, textAlign: "center" }}>
+                  {`A private space for up to ${data.limits.maxMembers} friends. Share how you're feeling and cheer each other on. Your cycle details always stay with you.`}
+                </Text>
+                <View style={{ alignSelf: "stretch" }}>
+                  <PrimaryButton label="Start a circle" onPress={startNew} />
+                </View>
+                <TouchableOpacity onPress={() => setJoinOpen(true)} hitSlop={8} className="mt-5" accessibilityRole="button">
+                  <Text style={{ color: colors.primary, fontSize: 14, fontFamily: fonts.body, fontWeight: "700" }}>I have an invite code</Text>
+                </TouchableOpacity>
+              </View>
             ) : (
-              <View className="mx-6 mt-4" style={{ gap: 12 }}>
-                {data.circles.map((c) => (
+              <>
+                <Text style={{ color: colors.mutedText, fontSize: 13, lineHeight: 19, fontFamily: fonts.body, paddingHorizontal: SIDE, marginTop: 6, marginBottom: 6 }}>
+                  Only the vibe you post is shared, never your cycle data.
+                </Text>
+                {data.circles.map((c, i) => (
                   <TouchableOpacity
                     key={c.id}
                     onPress={() => openCircle(c.id)}
-                    activeOpacity={0.85}
-                    className="flex-row items-center rounded-3xl p-4"
-                    style={{ backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, gap: 14, ...getShadow(colors, isDark) }}
+                    activeOpacity={0.6}
+                    accessibilityRole="button"
+                    className="flex-row items-center"
+                    style={{ paddingHorizontal: SIDE, paddingVertical: 12, gap: 14 }}
                   >
-                    <View className="items-center justify-center rounded-2xl" style={{ width: 54, height: 54, backgroundColor: colors.primaryLight }}>
-                      <Text style={{ fontSize: 28 }}>{c.emoji}</Text>
+                    <View className="items-center justify-center rounded-full" style={{ width: 48, height: 48, backgroundColor: colors.primaryLight }}>
+                      <Text style={{ fontSize: 24 }}>{c.emoji}</Text>
                     </View>
                     <View className="flex-1">
-                      <Text style={{ color: colors.foreground, fontSize: 16, fontFamily: fonts.heading, fontWeight: "900" }} numberOfLines={1}>
-                        {c.name}
-                      </Text>
-                      <Text style={{ color: colors.mutedText, fontSize: 12.5, fontFamily: fonts.body, marginTop: 3 }} numberOfLines={1}>
+                      <View className="flex-row items-baseline" style={{ gap: 8 }}>
+                        <Text style={{ flex: 1, color: colors.foreground, fontSize: 15.5, fontFamily: fonts.body, fontWeight: "700" }} numberOfLines={1}>
+                          {c.name}
+                        </Text>
+                        {c.latestVibe ? (
+                          <Text style={{ color: colors.mutedText, fontSize: 12, fontFamily: fonts.body }}>{timeAgo(c.latestVibe.createdAt).replace(" ago", "")}</Text>
+                        ) : null}
+                      </View>
+                      <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body, marginTop: 2 }} numberOfLines={1}>
                         {c.latestVibe
-                          ? `${c.latestVibe.name}: ${c.latestVibe.emoji} ${c.latestVibe.text || ""} · ${timeAgo(c.latestVibe.createdAt)}`
+                          ? `${c.latestVibe.name}: ${c.latestVibe.emoji} ${c.latestVibe.text || ""}`.trim()
                           : `${c.memberCount} ${c.memberCount === 1 ? "member" : "members"} · no vibes yet`}
                       </Text>
                     </View>
-                    <Feather name="chevron-right" size={20} color={colors.mutedText} />
+                    <Divider inset={SIDE + 48 + 14} />
                   </TouchableOpacity>
                 ))}
-              </View>
+                <View style={{ height: 8 }} />
+                <ActionRow icon="plus" label="Start a new circle" onPress={startNew} />
+                <ActionRow icon="key" label="Join with a code" hint="Got an invite from a friend?" onPress={() => setJoinOpen(true)} last />
+              </>
             )}
-
-            <View className="mx-6 mt-5 flex-row" style={{ gap: 10 }}>
-              <TouchableOpacity
-                onPress={() => (atLimit ? showAlert("Circle limit", `You can be in up to ${data.limits.maxCirclesPerUser} circles.`) : setCreateOpen(true))}
-                activeOpacity={0.85}
-                className="flex-1 flex-row items-center justify-center rounded-2xl py-4"
-                style={{ backgroundColor: colors.primary, gap: 8 }}
-              >
-                <Feather name="plus" size={18} color={colors.buttonText} />
-                <Text style={{ color: colors.buttonText, fontSize: 15, fontFamily: fonts.heading, fontWeight: "900" }}>New circle</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => setJoinOpen(true)}
-                activeOpacity={0.85}
-                className="flex-1 flex-row items-center justify-center rounded-2xl py-4"
-                style={{ backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, gap: 8 }}
-              >
-                <Feather name="key" size={16} color={colors.foreground} />
-                <Text style={{ color: colors.foreground, fontSize: 15, fontFamily: fonts.heading, fontWeight: "900" }}>Join with code</Text>
-              </TouchableOpacity>
-            </View>
           </ScrollView>
         ) : null}
       </LoadingErrorState>
 
       <Sheet
         visible={createOpen}
-        title={created ? "Your circle is live 🎉" : "Start a circle"}
+        title={created ? "Your circle is ready 🎉" : "Start a circle"}
         onClose={() => {
           setCreateOpen(false);
           if (created) {
@@ -269,44 +351,44 @@ function CircleList({ initialCode }: { initialCode?: string }) {
       >
         {created ? (
           <>
-            <Text style={{ color: colors.mutedText, fontSize: 14, fontFamily: fonts.body }}>Send this code to your besties:</Text>
-            <Text selectable style={{ color: colors.foreground, fontSize: 40, letterSpacing: 8, fontFamily: fonts.monoSemiBold, textAlign: "center", marginVertical: 18 }}>
-              {created.code}
+            <Text style={{ color: colors.mutedText, fontSize: 14, lineHeight: 20, fontFamily: fonts.body, marginBottom: 14 }}>
+              Share this code with your friends so they can join.
             </Text>
-            <PrimaryButton label="Share invite" onPress={() => shareInvite(created.name, created.code)} />
+            <InviteCode code={created.code} onShare={() => shareInvite(created.name, created.code)} />
+            <PrimaryButton
+              label="Open circle"
+              onPress={() => {
+                const id = created.id;
+                setCreateOpen(false);
+                setCreated(null);
+                openCircle(id);
+              }}
+            />
           </>
         ) : (
           <>
-            <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body, fontWeight: "700", marginBottom: 8 }}>Pick an icon</Text>
-            <EmojiRow options={CIRCLE_EMOJIS} value={emoji} onChange={setEmoji} />
-            <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body, fontWeight: "700", marginTop: 16, marginBottom: 8 }}>Name it</Text>
-            <TextInput
-              value={name}
-              onChangeText={setName}
-              maxLength={data?.limits.nameMaxLength ?? 30}
-              placeholder="Hot Girl Club, The Coven, Hostel Girlies…"
-              placeholderTextColor={colors.mutedText}
-              className="rounded-2xl px-4 py-3.5"
-              style={{ backgroundColor: colors.surface, color: colors.foreground, fontSize: 15, fontFamily: fonts.body, borderColor: colors.border, borderWidth: 1 }}
-            />
+            <FieldLabel first>Icon</FieldLabel>
+            <EmojiGrid options={CIRCLE_EMOJIS} value={emoji} onChange={setEmoji} />
+            <FieldLabel>Name</FieldLabel>
+            <Input value={name} onChangeText={setName} maxLength={data?.limits.nameMaxLength ?? 30} placeholder="e.g. Hostel Girlies" />
             <PrimaryButton label="Create circle" onPress={create} disabled={!name.trim()} busy={busy} />
           </>
         )}
       </Sheet>
 
       <Sheet visible={joinOpen} title="Join a circle" onClose={() => setJoinOpen(false)}>
-        <Text style={{ color: colors.mutedText, fontSize: 14, fontFamily: fonts.body, marginBottom: 12 }}>Enter the 6-character code your friend sent you.</Text>
-        <TextInput
+        <Text style={{ color: colors.mutedText, fontSize: 14, lineHeight: 20, fontFamily: fonts.body, marginBottom: 14 }}>
+          Enter the 6-character code your friend shared.
+        </Text>
+        <Input
           value={code}
           onChangeText={(t) => setCode(t.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6))}
           autoCapitalize="characters"
           autoCorrect={false}
           placeholder="ABC234"
-          placeholderTextColor={colors.mutedText}
-          className="rounded-2xl px-4 py-4"
-          style={{ backgroundColor: colors.surface, color: colors.foreground, fontSize: 26, letterSpacing: 8, textAlign: "center", fontFamily: fonts.monoSemiBold, borderColor: colors.border, borderWidth: 1 }}
+          style={{ fontSize: 24, letterSpacing: 8, textAlign: "center", fontFamily: fonts.monoSemiBold, paddingVertical: 16 }}
         />
-        <PrimaryButton label="Join" onPress={join} disabled={code.length !== 6} busy={busy} />
+        <PrimaryButton label="Join circle" onPress={join} disabled={code.length !== 6} busy={busy} />
       </Sheet>
     </>
   );
@@ -314,79 +396,127 @@ function CircleList({ initialCode }: { initialCode?: string }) {
 
 /* ────────────────────────────── Detail ────────────────────────────── */
 
-function MemberBubble({ m, onHype }: { m: CircleMember; onHype: (m: CircleMember) => void }) {
+function MemberBubble({ m, onPress }: { m: CircleMember; onPress: (m: CircleMember) => void }) {
   const { colors, fonts } = useTheme();
   return (
-    <View className="items-center" style={{ width: 76 }}>
+    <TouchableOpacity
+      onPress={() => onPress(m)}
+      activeOpacity={0.7}
+      accessibilityRole="button"
+      accessibilityLabel={`${m.isYou ? "You" : m.name}${m.isOwner ? ", owner" : ""}${m.vibe ? `, feeling ${m.vibe.emoji}` : ""}`}
+      className="items-center"
+      style={{ width: 68 }}
+    >
       <View>
-        <Avatar uri={m.profilePicture ?? undefined} name={m.name} size={58} backgroundColor={colors.primaryLight} textColor={colors.primary} fontFamily={fonts.heading} />
+        <Avatar uri={m.profilePicture ?? undefined} name={m.name} size={52} backgroundColor={colors.primaryLight} textColor={colors.primary} fontFamily={fonts.heading} />
         {m.vibe ? (
-          <View className="absolute items-center justify-center rounded-full" style={{ right: -6, bottom: -4, width: 28, height: 28, backgroundColor: colors.background, borderColor: colors.border, borderWidth: 1 }}>
-            <Text style={{ fontSize: 15 }}>{m.vibe.emoji}</Text>
+          <View
+            className="absolute items-center justify-center rounded-full"
+            style={{ right: -4, bottom: -2, width: 24, height: 24, backgroundColor: colors.surface, borderColor: colors.background, borderWidth: 2 }}
+          >
+            <Text style={{ fontSize: 12 }}>{m.vibe.emoji}</Text>
           </View>
         ) : null}
       </View>
-      <Text style={{ color: colors.foreground, fontSize: 12, fontFamily: fonts.body, fontWeight: "800", marginTop: 6 }} numberOfLines={1}>
-        {m.isYou ? "You" : m.name}
+      <Text style={{ color: colors.foreground, fontSize: 12, fontFamily: fonts.body, fontWeight: "600", marginTop: 6 }} numberOfLines={1}>
+        {m.isYou ? "You" : m.name.split(" ")[0]}
         {m.isOwner ? " 👑" : ""}
       </Text>
-      {!m.isYou ? (
-        <TouchableOpacity onPress={() => onHype(m)} hitSlop={8} className="rounded-full px-2.5 py-1 mt-1" style={{ backgroundColor: colors.surface }} accessibilityLabel={`Send ${m.name} hype`}>
-          <Text style={{ color: colors.foreground, fontSize: 10.5, fontFamily: fonts.body, fontWeight: "800" }}>hype 🫶</Text>
-        </TouchableOpacity>
-      ) : null}
-    </View>
+    </TouchableOpacity>
   );
 }
 
-function VibeCard({ v, reactions, onReact, onDelete }: { v: CircleVibe; reactions: string[]; onReact: (v: CircleVibe, e: string) => void; onDelete: (v: CircleVibe) => void }) {
+function VibeRow({
+  v,
+  reactions,
+  onReact,
+  onDelete,
+  last,
+}: {
+  v: CircleVibe;
+  reactions: string[];
+  onReact: (v: CircleVibe, e: string) => void;
+  onDelete: (v: CircleVibe) => void;
+  last: boolean;
+}) {
   const { colors, fonts } = useTheme();
-  const counts = new Map(v.reactions.map((r) => [r.emoji, r]));
+  const [picking, setPicking] = useState(false);
+  const used = v.reactions.filter((r) => r.count > 0);
+
+  const chip = (e: string, count: number | undefined, mine: boolean | undefined) => (
+    <TouchableOpacity
+      key={e}
+      onPress={() => {
+        setPicking(false);
+        onReact(v, e);
+      }}
+      activeOpacity={0.8}
+      accessibilityRole="button"
+      accessibilityState={{ selected: Boolean(mine) }}
+      accessibilityLabel={`React ${e}${count ? `, ${count}` : ""}`}
+      className="flex-row items-center rounded-full"
+      style={{ paddingHorizontal: 9, height: 28, backgroundColor: mine ? colors.primaryLight : colors.surface, borderColor: mine ? colors.primary : "transparent", borderWidth: 1, gap: 4 }}
+    >
+      <Text style={{ fontSize: 13 }}>{e}</Text>
+      {count ? <Text style={{ color: colors.foreground, fontSize: 12, fontFamily: fonts.body, fontWeight: "700" }}>{count}</Text> : null}
+    </TouchableOpacity>
+  );
+
   return (
-    <View className="rounded-3xl p-4 mt-3" style={{ backgroundColor: colors.surface, borderColor: v.askForSupport ? colors.primary : colors.border, borderWidth: v.askForSupport ? 1.5 : 1 }}>
+    <View style={{ paddingHorizontal: SIDE, paddingVertical: 14 }}>
       <View className="flex-row items-start" style={{ gap: 12 }}>
-        <Text style={{ fontSize: 34 }}>{v.emoji}</Text>
+        <View className="items-center justify-center rounded-full" style={{ width: 44, height: 44, backgroundColor: colors.surface }}>
+          <Text style={{ fontSize: 22 }}>{v.emoji}</Text>
+        </View>
         <View className="flex-1">
           <View className="flex-row items-center" style={{ gap: 6 }}>
-            <Text style={{ color: colors.foreground, fontSize: 14, fontFamily: fonts.heading, fontWeight: "900" }}>{v.isMine ? "You" : v.name}</Text>
-            {v.phaseEmoji ? <Text style={{ fontSize: 13 }}>{v.phaseEmoji}</Text> : null}
-            <Text style={{ color: colors.mutedText, fontSize: 11.5, fontFamily: fonts.body }}>{`· ${timeAgo(v.createdAt)}`}</Text>
+            <Text style={{ color: colors.foreground, fontSize: 14.5, fontFamily: fonts.body, fontWeight: "700" }} numberOfLines={1}>
+              {v.isMine ? "You" : v.name}
+            </Text>
+            {v.phaseEmoji ? <Text style={{ fontSize: 12 }}>{v.phaseEmoji}</Text> : null}
+            <Text style={{ flex: 1, color: colors.mutedText, fontSize: 12, fontFamily: fonts.body }} numberOfLines={1}>
+              {timeAgo(v.createdAt)}
+            </Text>
+            {v.isMine ? (
+              <TouchableOpacity onPress={() => onDelete(v)} hitSlop={10} accessibilityLabel="Delete vibe">
+                <Feather name="more-horizontal" size={18} color={colors.mutedText} />
+              </TouchableOpacity>
+            ) : null}
           </View>
-          {v.text ? <Text style={{ color: colors.foreground, fontSize: 14.5, lineHeight: 20, fontFamily: fonts.body, marginTop: 3 }}>{v.text}</Text> : null}
+          {v.text ? <Text style={{ color: colors.foreground, fontSize: 14.5, lineHeight: 21, fontFamily: fonts.body, marginTop: 3 }}>{v.text}</Text> : null}
           {v.askForSupport ? (
-            <Text style={{ color: colors.primary, fontSize: 12, fontFamily: fonts.body, fontWeight: "800", marginTop: 5 }}>could use some love 🫂</Text>
+            <View className="flex-row items-center self-start rounded-full mt-2" style={{ backgroundColor: colors.primaryLight, paddingHorizontal: 10, paddingVertical: 4, gap: 5 }}>
+              <Text style={{ fontSize: 12 }}>🫂</Text>
+              <Text style={{ color: colors.primary, fontSize: 12, fontFamily: fonts.body, fontWeight: "700" }}>Could use some love</Text>
+            </View>
           ) : null}
-        </View>
-        {v.isMine ? (
-          <TouchableOpacity onPress={() => onDelete(v)} hitSlop={10} accessibilityLabel="Delete vibe">
-            <Feather name="trash-2" size={16} color={colors.mutedText} />
-          </TouchableOpacity>
-        ) : null}
-      </View>
-      <View className="flex-row flex-wrap mt-3" style={{ gap: 6 }}>
-        {reactions.map((e) => {
-          const r = counts.get(e);
-          return (
+
+          <View className="flex-row flex-wrap items-center mt-2.5" style={{ gap: 6 }}>
+            {picking ? reactions.map((e) => {
+              const r = v.reactions.find((x) => x.emoji === e);
+              return chip(e, r?.count, r?.mine);
+            }) : used.map((r) => chip(r.emoji, r.count, r.mine))}
             <TouchableOpacity
-              key={e}
-              onPress={() => onReact(v, e)}
-              activeOpacity={0.8}
-              className="flex-row items-center rounded-full px-2.5 py-1"
-              style={{ backgroundColor: r?.mine ? colors.primaryLight : colors.surfaceSoft, borderColor: r?.mine ? colors.primary : "transparent", borderWidth: 1, gap: 3 }}
+              onPress={() => setPicking((p) => !p)}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel={picking ? "Close reactions" : "Add a reaction"}
+              className="items-center justify-center rounded-full"
+              style={{ width: 28, height: 28, backgroundColor: colors.surface }}
             >
-              <Text style={{ fontSize: 14 }}>{e}</Text>
-              {r?.count ? <Text style={{ color: colors.foreground, fontSize: 11.5, fontFamily: fonts.mono }}>{r.count}</Text> : null}
+              <Feather name={picking ? "x" : "smile"} size={14} color={colors.mutedText} />
             </TouchableOpacity>
-          );
-        })}
+          </View>
+        </View>
       </View>
+      {!last ? <Divider inset={SIDE + 44 + 12} /> : null}
     </View>
   );
 }
 
 function CircleView({ id }: { id: string }) {
   const router = useRouter();
-  const { colors, isDark, fonts } = useTheme();
+  const { colors, fonts } = useTheme();
   const { data, loading, refreshing, error, offline, reload } = useAsyncLoad(() => circlesApi.get(id), [id], { refreshOn: ["circles"] });
   const [circle, setCircle] = useState<CircleDetail | null>(null);
   const [emoji, setEmoji] = useState(VIBE_EMOJIS[0]);
@@ -394,7 +524,9 @@ function CircleView({ id }: { id: string }) {
   const [sharePhase, setSharePhase] = useState(false);
   const [askForSupport, setAskForSupport] = useState(false);
   const [posting, setPosting] = useState(false);
+  const [composerOpen, setComposerOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [member, setMember] = useState<CircleMember | null>(null);
 
   useEffect(() => {
     if (data) setCircle(data.circle);
@@ -409,6 +541,7 @@ function CircleView({ id }: { id: string }) {
       await circlesApi.postVibe(id, { emoji, text: text.trim(), sharePhase, askForSupport });
       setText("");
       setAskForSupport(false);
+      setComposerOpen(false);
       await reload(true);
     } catch (err) {
       showAlert("Couldn't post", getFriendlyErrorMessage(err));
@@ -444,6 +577,7 @@ function CircleView({ id }: { id: string }) {
     ]);
 
   const hype = async (m: CircleMember) => {
+    setMember(null);
     try {
       await circlesApi.hype(id, m.userId);
       showAlert("Hype sent 🫶", `${m.name} just got a little boost.`);
@@ -486,13 +620,21 @@ function CircleView({ id }: { id: string }) {
     }
   };
 
+  const me = circle?.members.find((m) => m.isYou);
+
   return (
     <>
       <ScreenHeader
         title={circle ? `${circle.emoji} ${circle.name}` : "Circle"}
         right={
           circle ? (
-            <TouchableOpacity onPress={() => setMenuOpen(true)} hitSlop={10} accessibilityLabel="Circle options" className="w-9 h-9 items-center justify-center rounded-full" style={{ backgroundColor: colors.surface }}>
+            <TouchableOpacity
+              onPress={() => setMenuOpen(true)}
+              hitSlop={10}
+              accessibilityLabel="Circle options"
+              className="w-9 h-9 items-center justify-center rounded-full"
+              style={{ backgroundColor: colors.surface }}
+            >
               <Feather name="more-horizontal" size={18} color={colors.foreground} />
             </TouchableOpacity>
           ) : null
@@ -513,80 +655,130 @@ function CircleView({ id }: { id: string }) {
             contentContainerStyle={{ paddingBottom: 60 }}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => reload(true)} tintColor={colors.primary} />}
           >
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 18, gap: 4 }}>
+            <Text style={{ color: colors.mutedText, fontSize: 12.5, fontFamily: fonts.body, paddingHorizontal: SIDE, marginTop: 4 }}>
+              {`${circle.memberCount} of ${data.limits.maxMembers} members · tap someone to send hype`}
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: SIDE - 8, paddingTop: 12, gap: 2 }}>
               {circle.members.map((m) => (
-                <MemberBubble key={m.userId} m={m} onHype={hype} />
+                <MemberBubble key={m.userId} m={m} onPress={setMember} />
               ))}
               {circle.members.length < data.limits.maxMembers ? (
-                <TouchableOpacity onPress={() => shareInvite(circle.name, circle.inviteCode)} className="items-center" style={{ width: 76 }} accessibilityLabel="Invite a friend">
-                  <View className="items-center justify-center rounded-full" style={{ width: 58, height: 58, borderColor: colors.border, borderWidth: 1.5, borderStyle: "dashed" }}>
-                    <Feather name="user-plus" size={20} color={colors.mutedText} />
+                <TouchableOpacity
+                  onPress={() => shareInvite(circle.name, circle.inviteCode)}
+                  className="items-center"
+                  style={{ width: 68 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Invite a friend"
+                >
+                  <View className="items-center justify-center rounded-full" style={{ width: 52, height: 52, borderColor: colors.border, borderWidth: 1.5, borderStyle: "dashed" }}>
+                    <Feather name="plus" size={20} color={colors.mutedText} />
                   </View>
-                  <Text style={{ color: colors.mutedText, fontSize: 12, fontFamily: fonts.body, fontWeight: "800", marginTop: 6 }}>Invite</Text>
+                  <Text style={{ color: colors.mutedText, fontSize: 12, fontFamily: fonts.body, fontWeight: "600", marginTop: 6 }}>Invite</Text>
                 </TouchableOpacity>
               ) : null}
             </ScrollView>
 
-            {/* Composer */}
-            <View className="mx-6 mt-5 rounded-3xl p-4" style={{ backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, ...getShadow(colors, isDark) }}>
-              <Text style={{ color: colors.foreground, fontSize: 15, fontFamily: fonts.heading, fontWeight: "900", marginBottom: 10 }}>{"What's your vibe rn?"}</Text>
-              <EmojiRow options={VIBE_EMOJIS} value={emoji} onChange={setEmoji} />
-              <TextInput
-                value={text}
-                onChangeText={setText}
-                maxLength={data.limits.vibeMaxLength}
-                placeholder="cramps are winning today, send snacks"
-                placeholderTextColor={colors.mutedText}
-                className="rounded-2xl px-4 py-3 mt-3"
-                style={{ backgroundColor: colors.background, color: colors.foreground, fontSize: 14.5, fontFamily: fonts.body }}
-              />
-              <View className="flex-row items-center justify-between mt-3">
-                <Text style={{ color: colors.foreground, fontSize: 13, fontFamily: fonts.body, fontWeight: "700" }}>Show my phase emoji</Text>
-                <Switch value={sharePhase} onValueChange={setSharePhase} trackColor={{ true: colors.primary, false: colors.border }} thumbColor="#FFF" />
-              </View>
-              <View className="flex-row items-center justify-between mt-1">
-                <View className="flex-1 pr-3">
-                  <Text style={{ color: colors.foreground, fontSize: 13, fontFamily: fonts.body, fontWeight: "700" }}>I could use some love 🫂</Text>
-                  <Text style={{ color: colors.mutedText, fontSize: 11, fontFamily: fonts.body }}>Sends your circle a notification</Text>
-                </View>
-                <Switch value={askForSupport} onValueChange={setAskForSupport} trackColor={{ true: colors.primary, false: colors.border }} thumbColor="#FFF" />
-              </View>
-              <PrimaryButton label={`Post ${emoji}`} onPress={post} busy={posting} />
-            </View>
+            {/* Composer entry: one quiet line that opens the full form in a sheet. */}
+            <TouchableOpacity
+              onPress={() => setComposerOpen(true)}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Share how you're feeling"
+              className="flex-row items-center rounded-full"
+              style={{ marginHorizontal: SIDE, marginTop: 20, backgroundColor: colors.surface, paddingLeft: 6, paddingRight: 16, height: 52, gap: 10 }}
+            >
+              {me ? (
+                <Avatar uri={me.profilePicture ?? undefined} name={me.name} size={40} backgroundColor={colors.primaryLight} textColor={colors.primary} fontFamily={fonts.heading} />
+              ) : null}
+              <Text style={{ flex: 1, color: colors.mutedText, fontSize: 14.5, fontFamily: fonts.body }}>How are you feeling today?</Text>
+              <Text style={{ fontSize: 20 }}>{emoji}</Text>
+            </TouchableOpacity>
 
-            <View className="mx-6 mt-6">
-              <Text style={{ color: colors.foreground, fontSize: 17, fontFamily: fonts.heading, fontWeight: "900" }}>Vibe feed</Text>
-              <Text style={{ color: colors.mutedText, fontSize: 11.5, fontFamily: fonts.body, marginTop: 2 }}>Vibes disappear after 7 days.</Text>
-              {circle.feed.length ? (
-                circle.feed.map((v) => <VibeCard key={v.id} v={v} reactions={data.reactions} onReact={react} onDelete={remove} />)
-              ) : (
-                <EmptyState compact icon="emoticon-happy-outline" title="Quiet in here" message="Be the first to drop a vibe ✨" />
-              )}
+            <View className="flex-row items-baseline justify-between" style={{ paddingHorizontal: SIDE, marginTop: 24, marginBottom: 2 }}>
+              <Text style={{ color: colors.foreground, fontSize: 16, fontFamily: fonts.heading, fontWeight: "800" }}>Vibes</Text>
+              <Text style={{ color: colors.mutedText, fontSize: 12, fontFamily: fonts.body }}>Cleared after 7 days</Text>
             </View>
+            {circle.feed.length ? (
+              circle.feed.map((v, i) => (
+                <VibeRow key={v.id} v={v} reactions={data.reactions} onReact={react} onDelete={remove} last={i === circle.feed.length - 1} />
+              ))
+            ) : (
+              <View className="items-center px-10" style={{ paddingTop: 36 }}>
+                <Text style={{ fontSize: 30 }}>✨</Text>
+                <Text style={{ color: colors.foreground, fontSize: 15, fontFamily: fonts.body, fontWeight: "700", marginTop: 8 }}>Quiet in here</Text>
+                <Text style={{ color: colors.mutedText, fontSize: 13.5, fontFamily: fonts.body, marginTop: 4, textAlign: "center" }}>
+                  Share the first vibe and get the conversation going.
+                </Text>
+              </View>
+            )}
           </ScrollView>
         ) : null}
       </LoadingErrorState>
 
+      <Sheet visible={composerOpen} title="Share a vibe" onClose={() => setComposerOpen(false)}>
+        {data ? (
+          <>
+            <FieldLabel first>How are you feeling?</FieldLabel>
+            <EmojiGrid options={VIBE_EMOJIS} value={emoji} onChange={setEmoji} />
+            <FieldLabel>Add a note (optional)</FieldLabel>
+            <Input value={text} onChangeText={setText} maxLength={data.limits.vibeMaxLength} placeholder="Cramps are winning today, send snacks" />
+            <View className="rounded-2xl mt-4" style={{ backgroundColor: colors.surface, paddingHorizontal: 16 }}>
+              <View className="flex-row items-center" style={{ paddingVertical: 10, gap: 12 }}>
+                <Text style={{ flex: 1, color: colors.foreground, fontSize: 14, fontFamily: fonts.body, fontWeight: "600" }}>Show my phase emoji</Text>
+                <Switch value={sharePhase} onValueChange={setSharePhase} trackColor={{ true: colors.primary, false: colors.border }} thumbColor="#FFF" />
+              </View>
+              <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: colors.border }} />
+              <View className="flex-row items-center" style={{ paddingVertical: 10, gap: 12 }}>
+                <View className="flex-1">
+                  <Text style={{ color: colors.foreground, fontSize: 14, fontFamily: fonts.body, fontWeight: "600" }}>I could use some love 🫂</Text>
+                  <Text style={{ color: colors.mutedText, fontSize: 12, fontFamily: fonts.body, marginTop: 1 }}>Your circle gets a gentle notification</Text>
+                </View>
+                <Switch value={askForSupport} onValueChange={setAskForSupport} trackColor={{ true: colors.primary, false: colors.border }} thumbColor="#FFF" />
+              </View>
+            </View>
+            <PrimaryButton label="Share vibe" onPress={post} busy={posting} />
+          </>
+        ) : null}
+      </Sheet>
+
+      <Sheet visible={member !== null} title={member ? (member.isYou ? "You" : member.name) : ""} onClose={() => setMember(null)}>
+        {member ? (
+          <>
+            <View className="flex-row items-center" style={{ gap: 14 }}>
+              <Avatar uri={member.profilePicture ?? undefined} name={member.name} size={56} backgroundColor={colors.primaryLight} textColor={colors.primary} fontFamily={fonts.heading} />
+              <View className="flex-1">
+                <Text style={{ color: colors.foreground, fontSize: 14.5, fontFamily: fonts.body, fontWeight: "600" }}>
+                  {member.vibe ? `Feeling ${member.vibe.emoji}${member.vibe.text ? `  “${member.vibe.text}”` : ""}` : "No vibe shared yet"}
+                </Text>
+                <Text style={{ color: colors.mutedText, fontSize: 12.5, fontFamily: fonts.body, marginTop: 2 }}>
+                  {member.vibe ? timeAgo(member.vibe.createdAt) : member.isOwner ? "Started this circle" : "Member"}
+                </Text>
+              </View>
+            </View>
+            {!member.isYou ? <PrimaryButton label="Send hype 🫶" onPress={() => hype(member)} /> : null}
+          </>
+        ) : null}
+      </Sheet>
+
       <Sheet visible={menuOpen} title="Circle options" onClose={() => setMenuOpen(false)}>
         {circle ? (
-          <View style={{ gap: 4 }}>
-            <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body }}>Invite code</Text>
-            <Text selectable style={{ color: colors.foreground, fontSize: 30, letterSpacing: 6, fontFamily: fonts.monoSemiBold, marginBottom: 8 }}>
-              {circle.inviteCode}
-            </Text>
-            {[
-              { label: "Share invite", icon: "share-2" as const, onPress: () => shareInvite(circle.name, circle.inviteCode), show: true },
-              { label: "Reset invite code", icon: "refresh-cw" as const, onPress: resetCode, show: circle.isOwner },
-              { label: "Leave circle", icon: "log-out" as const, onPress: leave, show: true, danger: true },
-            ]
-              .filter((o) => o.show)
-              .map((o) => (
-                <TouchableOpacity key={o.label} onPress={o.onPress} activeOpacity={0.8} className="flex-row items-center py-3.5" style={{ gap: 12 }}>
-                  <Feather name={o.icon} size={18} color={o.danger ? colors.danger : colors.foreground} />
-                  <Text style={{ color: o.danger ? colors.danger : colors.foreground, fontSize: 15, fontFamily: fonts.body, fontWeight: "700" }}>{o.label}</Text>
-                </TouchableOpacity>
-              ))}
-          </View>
+          <>
+            <FieldLabel first>Invite code</FieldLabel>
+            <InviteCode code={circle.inviteCode} onShare={() => shareInvite(circle.name, circle.inviteCode)} />
+            <View className="mt-3">
+              {[
+                { label: "Reset invite code", icon: "refresh-cw" as const, onPress: resetCode, show: circle.isOwner },
+                { label: "Leave circle", icon: "log-out" as const, onPress: leave, show: true, danger: true },
+              ]
+                .filter((o) => o.show)
+                .map((o) => (
+                  <TouchableOpacity key={o.label} onPress={o.onPress} activeOpacity={0.7} accessibilityRole="button" className="flex-row items-center py-3.5" style={{ gap: 12 }}>
+                    <Feather name={o.icon} size={18} color={o.danger ? colors.danger : colors.foreground} />
+                    <Text style={{ color: o.danger ? colors.danger : colors.foreground, fontSize: 15, fontFamily: fonts.body, fontWeight: "600" }}>{o.label}</Text>
+                  </TouchableOpacity>
+                ))}
+            </View>
+          </>
         ) : null}
       </Sheet>
     </>

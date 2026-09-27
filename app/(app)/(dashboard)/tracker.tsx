@@ -3,7 +3,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Animated,
+  FlatList,
   Modal,
   PanResponder,
   Pressable,
@@ -23,7 +23,6 @@ import { useAppState } from "../../../components/AppState";
 import { useAuth } from "../../../components/auth-context";
 import DayDetailsModal from "../../../components/DayDetailsModal";
 import { useDataRefresh } from "../../../hooks/useDataRefresh";
-import { Loader } from "../../../components/Loader";
 import { useTheme } from "../../../components/theme";
 import { getShadow, getSoftTints } from "../../../components/ui-tokens";
 import {
@@ -35,17 +34,28 @@ import {
   type Predictions,
 } from "../../../lib/api";
 import { getCyclePhase, type CyclePhase } from "../../../lib/cycle";
+import { buildCalendarModel, dayStatus, type DayStatus } from "../../../lib/cycleCalendar";
+import { CalendarDayCell } from "../../../components/CycleCalendar";
 import { getDateKey, getMonthKey } from "../../../lib/format";
 
 const CYCLE_LENGTH = 28;
 const CURRENT_CYCLE_DAY = 14;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
-// Placeholder height for the calendar card while it's settling onto the
-// current month — roughly one month's grid (weekday row + up to 6 rows of
-// day cells), so the loader sits in a normal-looking card instead of a tall
-// blank void or a cramped sliver.
-const CALENDAR_LOADING_HEIGHT = 360;
 const WEEKDAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+// Every month page gets 6 rows so swiping never changes the card's height.
+const CAL_ROWS = 6;
+const CAL_CELL = 46;
+// The month pager is one continuous strip, so swiping crosses years without
+// any re-centering. Only ~3 pages are ever mounted (windowSize).
+const PAGER_START_YEAR = 2020;
+const PAGER_END_YEAR = 2035;
+const PAGER_MONTHS = Array.from(
+  { length: (PAGER_END_YEAR - PAGER_START_YEAR + 1) * 12 },
+  (_, i) => new Date(PAGER_START_YEAR, i, 1),
+);
+const pagerIndexOf = (year: number, month: number) =>
+  Math.min(PAGER_MONTHS.length - 1, Math.max(0, (year - PAGER_START_YEAR) * 12 + month));
 
 type CalendarCell =
   | {
@@ -68,6 +78,30 @@ type SelectedDate = {
   day: number;
   phaseLabel: string;
 };
+
+/**
+ * One month page of the pager. Memoised so a swipe (which only changes the
+ * selected month) doesn't rebuild every day cell.
+ */
+const CalendarMonthPage = React.memo(function CalendarMonthPage({
+  monthDate,
+  width,
+  buildDays,
+  renderDay,
+}: {
+  monthDate: Date;
+  width: number;
+  buildDays: (monthDate: Date) => CalendarCell[];
+  renderDay: (cell: CalendarCell) => React.ReactNode;
+}) {
+  const cells = buildDays(monthDate);
+  const monthKey = getMonthKey(monthDate);
+  const padded: CalendarCell[] = [
+    ...cells,
+    ...Array.from({ length: CAL_ROWS * 7 - cells.length }, (_, i) => ({ key: `pad-${monthKey}-${i}`, kind: "blank" as const })),
+  ];
+  return <View style={{ width, paddingHorizontal: 12, flexDirection: "row", flexWrap: "wrap" }}>{padded.map(renderDay)}</View>;
+});
 
 function addDays(date: Date, days: number) {
   const next = new Date(date);
@@ -496,30 +530,16 @@ export default function Tracker() {
   const [selectedMonthIndex, setSelectedMonthIndex] = useState(() =>
     new Date().getMonth(),
   );
-  const [yearPickerVisible, setYearPickerVisible] = useState(false);
   const [searchVisible, setSearchVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const mainScrollRef = useRef<ScrollView>(null);
-  const [monthLayouts, setMonthLayouts] = useState<Record<number, number>>({});
-  // The calendar's month list is kept invisible until the very first
-  // (instant, unanimated) scroll to the current month has landed, so opening
-  // the tracker never shows a flash of January before jumping — it just
-  // fades in already positioned on today's month. Chevron/"Today" navigation
-  // after that first landing scrolls smoothly instead.
-  const hasInitialScrolled = useRef(false);
-  const calendarRevealAnim = useRef(new Animated.Value(0)).current;
-  // Until the initial scroll lands, the (still-mounted, just invisible)
-  // 12-month list is clamped to a single month's height with a loader over
-  // it — otherwise its true full-year height would sit there as a tall
-  // blank void instead of a normal-looking, loading calendar card.
-  const [isCalendarRevealed, setIsCalendarRevealed] = useState(false);
-  // Position (in the outer page ScrollView's content coordinates) of the top
-  // of the Calendar card — compared against live scroll offset to decide
-  // when the floating phase legend should take over from the in-card one.
-  const [calendarSectionY, setCalendarSectionY] = useState<number | null>(
-    null,
-  );
-  const [pageScrollY, setPageScrollY] = useState(0);
+  // The month pager and its measured page width.
+  const monthListRef = useRef<FlatList<Date>>(null);
+  const [calendarWidth, setCalendarWidth] = useState(0);
+  const calendarPositioned = useRef(false);
+  // Set when the user swiped to the month, so the pager isn't scrolled again.
+  const monthFromSwipe = useRef(false);
+  // Pager page last scrolled to, so only one-page moves animate.
+  const pagerIndexRef = useRef(-1);
   const [cycleSettings, setCycleSettings] = useState<CycleSettings | null>(
     null,
   );
@@ -543,7 +563,7 @@ export default function Tracker() {
   const [remoteDayEntries, setRemoteDayEntries] = useState<
     Record<string, LocalDayEntry>
   >({});
-  const softTints = getSoftTints(colors);
+  const softTints = useMemo(() => getSoftTints(colors), [colors]);
 
   const { user, updateUser } = useAuth();
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
@@ -597,14 +617,14 @@ export default function Tracker() {
     previewCycleDay !== null && previewCycleDay !== cycleDay;
 
   const weekDays = useMemo(() => {
+    // Monday-first, like every calendar grid in the app.
     const today = new Date();
-    const dayOfWeek = today.getDay(); // 0 is Sunday, 1 is Monday, etc.
-    const sunday = new Date(today);
-    sunday.setDate(today.getDate() - dayOfWeek); // Go back to Sunday
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - getMondayFirstWeekday(today));
 
     return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(sunday);
-      d.setDate(sunday.getDate() + i);
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
       return d;
     });
   }, []);
@@ -741,9 +761,11 @@ export default function Tracker() {
         {},
       );
 
-      setRemoteDayEntries(entries);
+      // Merge, don't replace: neighbouring years (and this week's strip)
+      // keep their markers when the pager crosses into another year.
+      setRemoteDayEntries((current) => ({ ...current, ...entries }));
     } catch {
-      setRemoteDayEntries({});
+      // keep what's already loaded
     }
   }, [calendarMonths]);
 
@@ -777,44 +799,56 @@ export default function Tracker() {
     }
   }, [loadDashboard, loadSettings, loadYearLogs]);
 
-  // Scrolls the stacked 12-month calendar to whichever month is selected.
-  // The very first time (on mount, landing on today's month) it does NOT
-  // auto-scroll the page — the calendar just reveals in place at the top,
-  // and the current month is highlighted via the "Today" circle/pill
-  // instead of the whole page jumping down to it. Any later change
-  // (chevrons, "Today") scrolls smoothly, since by then it's a deliberate,
-  // visible user action.
+  // Keeps the month pager on the selected month (chevrons, "Today", year
+  // change). The first positioning is instant; later ones animate.
   useEffect(() => {
-    if (monthLayouts[selectedMonthIndex] === undefined) return;
-    const y = monthLayouts[selectedMonthIndex] + 280; // Offset to account for top headers
-
-    if (!hasInitialScrolled.current) {
-      hasInitialScrolled.current = true;
-      setIsCalendarRevealed(true);
-      Animated.timing(calendarRevealAnim, {
-        toValue: 1,
-        duration: 220,
-        useNativeDriver: true,
-      }).start();
-    } else {
-      mainScrollRef.current?.scrollTo({ y, animated: true });
+    if (!calendarWidth) return;
+    const index = pagerIndexOf(selectedYear, selectedMonthIndex);
+    if (monthFromSwipe.current) {
+      monthFromSwipe.current = false;
+      calendarPositioned.current = true;
+      pagerIndexRef.current = index;
+      return;
     }
-  }, [selectedMonthIndex, selectedYear, monthLayouts, calendarRevealAnim]);
+    // One page (chevrons) glides; longer jumps (Today, year picker) land
+    // instantly, so the swipe tracker below never sees the months in between.
+    const animated = calendarPositioned.current && Math.abs(index - pagerIndexRef.current) <= 1;
+    monthListRef.current?.scrollToOffset({ offset: index * calendarWidth, animated });
+    calendarPositioned.current = true;
+    pagerIndexRef.current = index;
+  }, [selectedMonthIndex, selectedYear, calendarWidth]);
 
-  function changeSelectedMonth(direction: 1 | -1) {
-    setSelectedMonthIndex((prevMonth) => {
-      let nextMonth = prevMonth + direction;
-      if (nextMonth < 0) {
-        nextMonth = 11;
-        setSelectedYear((prevYear) => prevYear - 1);
-      } else if (nextMonth > 11) {
-        nextMonth = 0;
-        setSelectedYear((prevYear) => prevYear + 1);
-      }
-      return nextMonth;
-    });
-  }
+  const pagerKey = useCallback((m: Date) => getMonthKey(m), []);
+  const getPagerLayout = useCallback(
+    (_: ArrayLike<Date> | null | undefined, index: number) => ({ length: calendarWidth, offset: calendarWidth * index, index }),
+    [calendarWidth],
+  );
+  // The header follows the swipe: as soon as a month page is mostly on
+  // screen it becomes the selected month. (onMomentumScrollEnd alone isn't
+  // reliable for a nested paging list on Android.) FlatList needs these
+  // callbacks to keep one identity, so the latest state is read via a ref.
+  const pagerMonthRef = useRef({ year: selectedYear, month: selectedMonthIndex });
+  pagerMonthRef.current = { year: selectedYear, month: selectedMonthIndex };
+  const selectPagerMonth = useRef((month: Date | undefined) => {
+    if (!month) return;
+    const { year, month: current } = pagerMonthRef.current;
+    if (month.getFullYear() === year && month.getMonth() === current) return;
+    monthFromSwipe.current = true;
+    setSelectedYear(month.getFullYear());
+    setSelectedMonthIndex(month.getMonth());
+  }).current;
+  const pagerViewability = useRef({ itemVisiblePercentThreshold: 60, minimumViewTime: 0 }).current;
+  const onPagerViewable = useRef(({ viewableItems }: { viewableItems: { item: Date }[] }) =>
+    selectPagerMonth(viewableItems[0]?.item),
+  ).current;
+  const onPagerSettled = useCallback(
+    (e: { nativeEvent: { contentOffset: { x: number } } }) => {
+      if (calendarWidth) selectPagerMonth(PAGER_MONTHS[Math.round(e.nativeEvent.contentOffset.x / calendarWidth)]);
+    },
+    [calendarWidth, selectPagerMonth],
+  );
 
+  const calendarMonthParam = `${selectedYear}-${String(selectedMonthIndex + 1).padStart(2, "0")}`;
   const today = new Date();
   const isViewingCurrentMonth =
     selectedYear === today.getFullYear() &&
@@ -824,14 +858,6 @@ export default function Tracker() {
     setSelectedYear(today.getFullYear());
     setSelectedMonthIndex(today.getMonth());
   }
-
-  // The in-card phase legend scrolls away with the rest of the calendar
-  // header once you're deep into later months — this floating copy (shown
-  // in the fixed header block below) takes over once that point has
-  // scrolled past, so the legend is always reachable without scrolling back
-  // to the top of the page.
-  const showFloatingLegend =
-    calendarSectionY !== null && pageScrollY > calendarSectionY + 70;
 
   function mapApiDayEntry(log: ApiDayEntry): LocalDayEntry {
     return {
@@ -859,6 +885,13 @@ export default function Tracker() {
       exercise: log.exercise,
     };
   }
+
+  // Shared calendar model + lookups (lib/cycleCalendar) for the week strip,
+  // so it paints days exactly like the calendar grids.
+  const calendarModel = useMemo(() => buildCalendarModel(predictions, cycleSettings), [predictions, cycleSettings]);
+  const entryFor = useCallback((dateKey: string) => dayEntries[dateKey] ?? remoteDayEntries[dateKey], [dayEntries, remoteDayEntries]);
+  const noteFor = useCallback((dateKey: string) => dayNotes[dateKey], [dayNotes]);
+  const currentPhase = getCyclePhase(cycleDay, activePeriodLength, activeCycleLength);
 
   // Canonical 4-phase palette — one distinct color per cycle phase, reused
   // everywhere a day/phase is shown (week strip, month grid, legend, modal)
@@ -889,30 +922,14 @@ export default function Tracker() {
     [colors, softTints],
   );
 
-  // One chip per cycle phase, colored from phaseStyles so it always matches
-  // the day cells — rendered both in the calendar card and, once that
-  // scrolls out of view, in the floating copy above the month list.
+  // Phase key for the calendar: a small dot + label per phase, coloured from
+  // phaseStyles so it always matches the day cells. Kept to one line.
   const phaseLegendRow = (
-    <View className="flex-row items-center flex-wrap gap-x-4 gap-y-1.5">
-      {(
-        [
-          { phase: "period", icon: "water" },
-          { phase: "follicular", icon: "sprout" },
-          { phase: "ovulation", icon: "egg" },
-          { phase: "luteal", icon: "moon-waning-crescent" },
-        ] as const
-      ).map(({ phase, icon }) => (
-        <View key={phase} className="flex-row items-center gap-1.5">
-          <View
-            className="h-4 w-4 rounded-full items-center justify-center"
-            style={{ backgroundColor: phaseStyles[phase].color }}
-          >
-            <MaterialCommunityIcons name={icon} size={9} color={colors.buttonText} />
-          </View>
-          <Text
-            className="text-[10px] font-bold"
-            style={{ color: colors.mutedText, fontFamily: fonts.body }}
-          >
+    <View className="flex-row items-center justify-between">
+      {(["period", "follicular", "ovulation", "luteal"] as const).map((phase) => (
+        <View key={phase} className="flex-row items-center" style={{ gap: 5 }}>
+          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: phaseStyles[phase].color }} />
+          <Text numberOfLines={1} style={{ color: colors.mutedText, fontSize: 11, fontWeight: "600", fontFamily: fonts.body }}>
             {phaseStyles[phase].label}
           </Text>
         </View>
@@ -920,7 +937,7 @@ export default function Tracker() {
     </View>
   );
 
-  function buildCalendarDays(monthDate: Date): CalendarCell[] {
+  const buildCalendarDays = useCallback((monthDate: Date): CalendarCell[] => {
     const year = monthDate.getFullYear();
     const month = monthDate.getMonth();
     const firstWeekday = getMondayFirstWeekday(new Date(year, month, 1));
@@ -954,7 +971,101 @@ export default function Tracker() {
     );
 
     return [...blanks, ...monthDays];
-  }
+  }, [cycleStartDate, activeCycleLength, activePeriodLength]);
+
+  /**
+   * One day in the month grid. Soft by default: a plain number with a faint
+   * phase dot. A logged day gets a soft fill in its phase colour, a predicted
+   * period day a dashed rose ring, the fertile window a light lavender wash,
+   * today a primary ring and the selected day a solid primary circle. Icons
+   * appear only for logged flow and the ovulation peak.
+   */
+  const renderCalendarDay = useCallback((cell: CalendarCell) => {
+    if (cell.kind === "blank") {
+      return <View key={cell.key} style={{ width: `${100 / 7}%`, height: CAL_CELL }} />;
+    }
+    const isSelected = selectedDate?.dateKey === cell.dateKey;
+    const isToday = cell.dateKey === todayKey;
+    const entry = dayEntries[cell.dateKey] ?? remoteDayEntries[cell.dateKey];
+    const isLogged = Boolean(
+      entry?.note.trim() || entry?.symptoms.length || entry?.flow || entry?.mood || entry?.energy || dayNotes[cell.dateKey]?.trim(),
+    );
+    const hasFlowLog = Boolean(entry?.flow && entry.flow !== "none");
+    const isOvulationPeak = cell.cycleDay === ovulationDayPivot;
+    const isFertileDay = cell.cycleDay >= ovulationDayPivot - 5 && cell.cycleDay <= ovulationDayPivot + 1;
+    const style = phaseStyles[cell.phase];
+    const isPeriod = cell.phase === "period";
+    // Predicted highlight is forward-looking only, and never pads past the
+    // actually-logged current period.
+    const isPredictedPeriod =
+      isPeriod && !isLogged && !isPhantomPeriodTail(cell.date) && startOfDay(cell.date) >= todayStart;
+
+    const background = isSelected
+      ? colors.primary
+      : isLogged
+        ? style.bg
+        : isFertileDay && !isPeriod
+          ? /^#[0-9a-f]{6}$/i.test(colors.secondary)
+            ? `${colors.secondary}24`
+            : softTints.lavender
+          : "transparent";
+    const ring = isSelected ? null : isToday ? colors.primary : isPredictedPeriod ? colors.rose : null;
+    const textColor = isSelected
+      ? colors.buttonText
+      : isToday
+        ? colors.primary
+        : isLogged || isPeriod
+          ? style.color
+          : colors.foreground;
+    const markerIcon = hasFlowLog ? "water" : isOvulationPeak ? "egg" : null;
+
+    return (
+      <TouchableOpacity
+        key={cell.key}
+        activeOpacity={0.7}
+        onPress={() => openDateRef.current(cell.date)}
+        accessibilityRole="button"
+        accessibilityLabel={`${cell.date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}, ${style.label} phase${isToday ? ", today" : ""}${isLogged ? ", logged" : ""}${isPredictedPeriod ? ", predicted period" : ""}`}
+        style={{ width: `${100 / 7}%`, height: CAL_CELL, alignItems: "center", justifyContent: "center" }}
+      >
+        <View
+          style={{
+            width: 38,
+            height: 38,
+            borderRadius: 19,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: background,
+            borderWidth: ring ? 1.5 : 0,
+            borderColor: ring ?? "transparent",
+            borderStyle: isPredictedPeriod && !isToday ? "dashed" : "solid",
+          }}
+        >
+          <Text
+            style={{
+              color: textColor,
+              fontSize: 14,
+              fontWeight: isToday || isSelected || isLogged ? "800" : "500",
+              fontFamily: fonts.body,
+              marginTop: markerIcon ? -4 : 0,
+            }}
+          >
+            {cell.day}
+          </Text>
+          {markerIcon ? (
+            <MaterialCommunityIcons
+              name={markerIcon}
+              size={9}
+              color={isSelected ? colors.buttonText : style.color}
+              style={{ position: "absolute", bottom: 4 }}
+            />
+          ) : !isSelected && !isPeriod && !isLogged ? (
+            <View style={{ position: "absolute", bottom: 5, width: 4, height: 4, borderRadius: 2, backgroundColor: style.color, opacity: 0.4 }} />
+          ) : null}
+        </View>
+      </TouchableOpacity>
+    );
+  }, [selectedDate?.dateKey, todayKey, dayEntries, remoteDayEntries, dayNotes, phaseStyles, ovulationDayPivot, isPhantomPeriodTail, todayStart, colors, fonts, softTints]);
 
   function openDate(date: Date) {
     const cycleDay = getCycleDay(date, cycleStartDate, activeCycleLength);
@@ -972,11 +1083,22 @@ export default function Tracker() {
     });
     setDayDetailsVisible(true);
   }
+  const openWeekDay = (st: DayStatus) => openDate(st.date);
+  // Latest openDate for the memoised day cells.
+  const openDateRef = useRef(openDate);
+  openDateRef.current = openDate;
+  const renderMonthPage = useCallback(
+    ({ item }: { item: Date }) => (
+      <CalendarMonthPage monthDate={item} width={calendarWidth} buildDays={buildCalendarDays} renderDay={renderCalendarDay} />
+    ),
+    [calendarWidth, buildCalendarDays, renderCalendarDay],
+  );
 
   function openToday(focus?: "flow" | "symptoms" | "mood") {
     setModalFocusSection(focus);
     const today = new Date();
     setSelectedYear(today.getFullYear());
+    setSelectedMonthIndex(today.getMonth());
     openDate(today);
   }
 
@@ -1063,242 +1185,84 @@ export default function Tracker() {
       >
         {/* FIXED HEADER AND SELECTORS */}
         <View style={{ backgroundColor: colors.background, zIndex: 10 }}>
-          {/* Personalized Greeting Header */}
-          <View className="px-6 pt-4 flex-row justify-between items-center">
-            <View className="flex-row items-center gap-3">
-              <View
-                className="h-12 w-12 rounded-full items-center justify-center border"
-                style={{
-                  backgroundColor: colors.primaryLight,
-                  borderColor: colors.primary,
-                }}
-              >
-                <Text
-                  className="text-lg font-black"
-                  style={{ color: colors.primary, fontFamily: fonts.mono }}
-                >
-                  {user?.firstName
-                    ? user.firstName.charAt(0).toUpperCase()
-                    : "U"}
-                </Text>
-              </View>
-              <View>
-                <Text
-                  className="text-xs font-semibold"
-                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                >
-                  Hello,
-                </Text>
-                <Text
-                  className="text-lg font-black tracking-tight"
-                  style={{
-                    color: colors.foreground,
-                    fontFamily: fonts.heading,
-                  }}
-                >
-                  {user?.firstName || "there"}
-                </Text>
-              </View>
-            </View>
-
-            <View className="flex-row gap-2.5">
-              <TouchableOpacity
-                activeOpacity={0.7}
-                onPress={() => {
-                  setSearchQuery("");
-                  setSearchVisible(true);
-                }}
-                className="h-11 w-11 items-center justify-center rounded-full"
-                style={{
-                  backgroundColor: colors.surface,
-                  ...getShadow(colors, isDark),
-                }}
-              >
-                <Feather name="search" size={18} color={colors.foreground} />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                activeOpacity={0.7}
-                onPress={openCycleSettings}
-                className="h-11 w-11 items-center justify-center rounded-full"
-                style={{
-                  backgroundColor: colors.surface,
-                  ...getShadow(colors, isDark),
-                }}
-              >
-                <Feather name="settings" size={18} color={colors.foreground} />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Month Selector */}
-          <View className="px-6 mt-5 flex-row items-center justify-center gap-3">
-            <TouchableOpacity
-              activeOpacity={0.6}
-              onPress={() => changeSelectedMonth(-1)}
-              className="p-1.5"
-            >
-              <Feather name="chevron-left" size={20} color={colors.mutedText} />
-            </TouchableOpacity>
-
-            <Text
-              className="text-base font-black tracking-tight"
-              style={{ color: colors.foreground, fontFamily: fonts.heading }}
-            >
-              {new Date(selectedYear, selectedMonthIndex, 1).toLocaleDateString(
-                "en-US",
-                {
-                  month: "long",
-                  year: "numeric",
-                },
-              )}
-            </Text>
-
-            <TouchableOpacity
-              activeOpacity={0.6}
-              onPress={() => changeSelectedMonth(1)}
-              className="p-1.5"
-            >
-              <Feather
-                name="chevron-right"
-                size={20}
-                color={colors.mutedText}
-              />
-            </TouchableOpacity>
-          </View>
-
-          {/* Horizontal dates week line */}
-          <View
-            className="px-6 mt-3 pb-3 flex-row justify-between border-b"
-            style={{ borderColor: colors.border }}
-          >
-            {weekDays.map((d) => {
-              const dateKey = getDateKey(d);
-              const dayNum = d.getDate();
-              const isToday = dateKey === todayKey;
-              const weekday = d
-                .toLocaleDateString("en-US", { weekday: "short" })
-                .substring(0, 2);
-
-              // Every day is colored by its actual cycle phase (period /
-              // follicular / ovulation / luteal) via phaseStyles, same
-              // palette as the full calendar grid and legend below. Icons
-              // layer on top to call out logged flow vs predicted peaks.
-              const cDay = getCycleDay(d, cycleStartDate, activeCycleLength);
-              const phase = getCyclePhase(
-                cDay,
-                activePeriodLength,
-                activeCycleLength,
-              );
-              const style = phaseStyles[phase];
-
-              const entry =
-                dayEntries[dateKey] ?? remoteDayEntries[dateKey];
-              const hasFlowLog = Boolean(entry?.flow && entry.flow !== "none");
-              const hasLog = Boolean(
-                entry?.note?.trim() ||
-                entry?.symptoms?.length ||
-                entry?.flow ||
-                entry?.mood ||
-                entry?.energy ||
-                dayNotes[dateKey]?.trim(),
-              );
-              const isPredictedPeriod =
-                phase === "period" &&
-                !hasLog &&
-                !isPhantomPeriodTail(d) &&
-                startOfDay(d) >= todayStart;
-              const isOvulationPeakDay = cDay === ovulationDayPivot;
-              const isFertile =
-                cDay >= ovulationDayPivot - 5 && cDay <= ovulationDayPivot + 1;
-
-              const markerIcon = hasFlowLog
-                ? "water"
-                : isOvulationPeakDay
-                  ? "egg"
-                  : isFertile
-                    ? "dna"
-                    : null;
-
-              return (
-                <TouchableOpacity
-                  key={dateKey}
-                  activeOpacity={0.8}
-                  onPress={() => openDate(d)}
-                  className="items-center"
-                >
-                  <Text
-                    className="text-[10px] font-bold uppercase tracking-wider mb-1.5"
-                    style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                  >
-                    {weekday}
-                  </Text>
-                  <View
-                    className="h-10 w-10 items-center justify-center rounded-2xl relative"
-                    style={{
-                      // Logged day = solid filled; predicted (unlogged) period
-                      // day = dashed outline only.
-                      backgroundColor: isToday
-                        ? colors.primary
-                        : hasLog
-                          ? style.bg
-                          : "transparent",
-                      borderColor: isToday ? colors.primary : style.color,
-                      borderStyle: isPredictedPeriod && !isToday ? "dashed" : "solid",
-                      borderWidth: isToday || hasLog || isPredictedPeriod ? 1.5 : 0,
-                    }}
-                  >
-                    <Text
-                      className="text-xs font-extrabold"
-                      style={{
-                        color: isToday
-                          ? colors.buttonText
-                          : phase === "period"
-                            ? style.color
-                            : colors.foreground,
-                        fontFamily: fonts.body,
-                      }}
-                    >
-                      {dayNum}
-                    </Text>
-                    {markerIcon && !isToday ? (
-                      <MaterialCommunityIcons
-                        name={markerIcon}
-                        size={9}
-                        color={style.color}
-                        style={{ position: "absolute", bottom: 2 }}
-                      />
-                    ) : !isToday && phase !== "period" ? (
-                      <View
-                        className="absolute bottom-1.5 h-1 w-1 rounded-full"
-                        style={{ backgroundColor: style.color, opacity: 0.55 }}
-                      />
-                    ) : null}
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          {/* Floating phase legend — takes over once the in-card legend has
-              scrolled out of view, so the 4 phase colors stay reachable
-              without scrolling back up to the top of the calendar. */}
-          {showFloatingLegend && (
+          {/* Greeting */}
+          <View className="px-5 pt-4 flex-row items-center">
             <View
-              className="px-6 pt-2.5 pb-2.5 border-b"
-              style={{ backgroundColor: colors.background, borderColor: colors.border }}
+              className="items-center justify-center rounded-full"
+              style={{ width: 44, height: 44, backgroundColor: colors.primaryLight }}
             >
-              {phaseLegendRow}
+              <Text style={{ color: colors.primary, fontSize: 18, fontWeight: "800", fontFamily: fonts.heading }}>
+                {user?.firstName ? user.firstName.charAt(0).toUpperCase() : "U"}
+              </Text>
             </View>
-          )}
+            <View className="flex-1" style={{ marginLeft: 12 }}>
+              <Text style={{ color: colors.mutedText, fontSize: 12.5, fontWeight: "600", fontFamily: fonts.body }}>Hello,</Text>
+              <Text numberOfLines={1} style={{ color: colors.foreground, fontSize: 19, fontWeight: "800", fontFamily: fonts.heading }}>
+                {user?.firstName || "there"}
+              </Text>
+            </View>
+            {(
+              [
+                { icon: "search" as const, label: "Search", onPress: () => { setSearchQuery(""); setSearchVisible(true); } },
+                { icon: "settings" as const, label: "Cycle settings", onPress: openCycleSettings },
+              ]
+            ).map((b) => (
+              <TouchableOpacity
+                key={b.icon}
+                activeOpacity={0.7}
+                onPress={b.onPress}
+                accessibilityRole="button"
+                accessibilityLabel={b.label}
+                className="items-center justify-center rounded-full"
+                style={{ width: 40, height: 40, marginLeft: 8, backgroundColor: colors.surface }}
+              >
+                <Feather name={b.icon} size={18} color={colors.foreground} />
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Today + this week, painted with the same day circles as the calendar. */}
+          <View className="px-5 mt-5 flex-row items-center justify-between">
+            <Text style={{ color: colors.foreground, fontSize: 15.5, fontWeight: "800", fontFamily: fonts.heading }}>
+              {new Date().toLocaleDateString("en-US", { weekday: "long", day: "numeric", month: "long" })}
+            </Text>
+            <View
+              className="flex-row items-center rounded-full"
+              style={{ backgroundColor: phaseStyles[currentPhase].bg, paddingHorizontal: 10, paddingVertical: 4, gap: 5 }}
+            >
+              <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: phaseStyles[currentPhase].color }} />
+              <Text style={{ color: colors.foreground, fontSize: 12, fontWeight: "700", fontFamily: fonts.body }}>
+                {`${phaseStyles[currentPhase].label} · Day ${cycleDay}`}
+              </Text>
+            </View>
+          </View>
+          <View className="flex-row mt-3" style={{ paddingHorizontal: 12 }}>
+            {weekDays.map((d) => (
+              <Text
+                key={`wd-${getDateKey(d)}`}
+                style={{ width: `${100 / 7}%`, textAlign: "center", color: colors.mutedText, fontSize: 11.5, fontWeight: "700", fontFamily: fonts.body }}
+              >
+                {d.toLocaleDateString("en-US", { weekday: "short" }).charAt(0)}
+              </Text>
+            ))}
+          </View>
+          <View className="flex-row pb-2" style={{ paddingHorizontal: 12 }}>
+            {weekDays.map((d) => (
+              <CalendarDayCell
+                key={getDateKey(d)}
+                s={dayStatus(d, calendarModel, entryFor, noteFor, todayKey)}
+                selected={false}
+                palette={phaseStyles}
+                onPress={openWeekDay}
+              />
+            ))}
+          </View>
         </View>
 
         {/* SCROLLABLE BODY */}
         <ScrollView
-          ref={mainScrollRef}
           showsVerticalScrollIndicator={false}
-          scrollEventThrottle={32}
-          onScroll={(e) => setPageScrollY(e.nativeEvent.contentOffset.y)}
+          directionalLockEnabled
           contentContainerStyle={{ paddingBottom: 140 }}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
@@ -1306,17 +1270,14 @@ export default function Tracker() {
         >
           {/* Today · Cycle day N — surface card framing the ring scrubber */}
           <View
-            className="mx-6 mt-6 items-center rounded-3xl px-5 pb-6 pt-5"
+            className="mx-5 mt-4 items-center rounded-3xl px-5 pb-6 pt-5"
             style={{
               backgroundColor: colors.surface,
               ...getShadow(colors, isDark),
             }}
           >
-            <Text
-              className="text-xs font-extrabold uppercase tracking-wider"
-              style={{ color: colors.mutedText, fontFamily: fonts.body }}
-            >
-              Today · Cycle day {cycleDay}
+            <Text style={{ color: colors.mutedText, fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}>
+              {`Today · Cycle day ${cycleDay}`}
             </Text>
 
           {/* Circular progress tracker — drag the handle to preview any cycle day */}
@@ -1397,8 +1358,8 @@ export default function Tracker() {
             </View>
           </View>
 
-          {/* Three Stats Cards Row */}
-          <View className="px-6 mt-6 flex-row justify-between gap-3">
+          {/* Three stats */}
+          <View className="mx-5 mt-4 flex-row" style={{ gap: 10 }}>
             {[
               { label: "Days logged", val: `${loggedDays}` },
               { label: "Period length", val: `${activePeriodLength} days` },
@@ -1406,393 +1367,100 @@ export default function Tracker() {
             ].map((stat) => (
               <View
                 key={stat.label}
-                className="flex-1 rounded-2xl p-3.5 items-center justify-center"
-                style={{
-                  backgroundColor: colors.surface,
-                  ...getShadow(colors, isDark),
-                }}
+                className="flex-1 items-center justify-center rounded-2xl"
+                style={{ backgroundColor: colors.surface, paddingVertical: 14, paddingHorizontal: 8 }}
               >
-                <Text
-                  className="text-base font-black"
-                  style={{ color: colors.foreground, fontFamily: fonts.mono }}
-                >
-                  {stat.val}
-                </Text>
-                <Text
-                  className="text-[9px] font-bold uppercase tracking-wider text-center mt-1"
-                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                >
+                <Text style={{ color: colors.foreground, fontSize: 17, fontWeight: "800", fontFamily: fonts.heading }}>{stat.val}</Text>
+                <Text numberOfLines={1} style={{ color: colors.mutedText, fontSize: 11.5, fontWeight: "600", fontFamily: fonts.body, marginTop: 2 }}>
                   {stat.label}
                 </Text>
               </View>
             ))}
           </View>
 
-          {/* Calendar Body Area */}
+          {/* Calendar — one month at a time, swiped horizontally. */}
           <View
-            className="mx-4 mt-6"
-            onLayout={(e) => setCalendarSectionY(e.nativeEvent.layout.y)}
+            className="mx-5 mt-6 rounded-3xl"
+            style={{ backgroundColor: colors.surface, paddingTop: 18, paddingBottom: 14, ...getShadow(colors, isDark) }}
           >
-            <View
-              className="overflow-hidden rounded-[28px] border"
-              style={{
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-                ...getShadow(colors, isDark),
-              }}
-            >
-              <View className="px-5 pb-3 pt-5">
-                <View className="flex-row items-center justify-between">
-                  <Text
-                    className="text-lg font-extrabold tracking-tight"
-                    style={{
-                      color: colors.foreground,
-                      fontFamily: fonts.heading,
-                    }}
-                  >
-                    Calendar
-                  </Text>
-
-                  <View className="flex-row items-center gap-2">
-                    {/* Jump straight back to the current month — only shown
-                        once the user has actually navigated away from it. */}
-                    {!isViewingCurrentMonth && (
-                      <TouchableOpacity
-                        activeOpacity={0.7}
-                        onPress={jumpToToday}
-                        className="flex-row items-center gap-1 px-3 py-1.5 rounded-full"
-                        style={{ backgroundColor: colors.primaryLight }}
-                      >
-                        <Feather name="calendar" size={11} color={colors.primary} />
-                        <Text
-                          className="text-xs font-black"
-                          style={{ color: colors.primary, fontFamily: fonts.body }}
-                        >
-                          Today
-                        </Text>
-                      </TouchableOpacity>
-                    )}
-
-                    {/* Year Dropdown Picker Button */}
-                    <TouchableOpacity
-                      activeOpacity={0.7}
-                      onPress={() => setYearPickerVisible(true)}
-                      className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-full border"
-                      style={{
-                        backgroundColor: colors.surfaceSoft,
-                        borderColor: colors.border,
-                      }}
-                    >
-                      <Text
-                        className="text-xs font-black"
-                        style={{
-                          color: colors.foreground,
-                          fontFamily: fonts.body,
-                        }}
-                      >
-                        {selectedYear}
-                      </Text>
-                      <Feather
-                        name="chevron-down"
-                        size={12}
-                        color={colors.mutedText}
-                      />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-                <View className="mt-2">{phaseLegendRow}</View>
-              </View>
-
-              <View
-                className="border-y px-5 py-3"
-                style={{ borderColor: colors.border }}
+            <View className="flex-row items-center px-5">
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => router.push({ pathname: "/(app)/calendar", params: { month: calendarMonthParam } })}
+                accessibilityRole="button"
+                accessibilityLabel={`${MONTH_NAMES[selectedMonthIndex]} ${selectedYear}. Open full calendar`}
+                className="flex-row items-center flex-1"
+                style={{ gap: 5, minWidth: 0 }}
               >
-                <View className="flex-row">
-                  {WEEKDAY_LABELS.map((day, index) => (
-                    <Text
-                      className="text-center text-[10px] font-black uppercase"
-                      key={`${day}-${index}`}
-                      style={{
-                        color: colors.mutedText,
-                        width: `${100 / 7}%`,
-                        fontFamily: fonts.body,
-                      }}
-                    >
-                      {day}
-                    </Text>
-                  ))}
-                </View>
-              </View>
-
-              {/* All 12 months of the selected year, stacked and scrollable.
-                  Hidden until the initial instant scroll-to-current-month has
-                  landed (see the effect above), then fades in already
-                  positioned there — so opening the tracker never shows a
-                  visible jump. Clamped to one month's height with a loader
-                  over it while hidden, so the (still-mounted) full 12-month
-                  content doesn't sit there as a tall blank void. */}
-              <View
-                style={{
-                  height: isCalendarRevealed ? undefined : CALENDAR_LOADING_HEIGHT,
-                  overflow: isCalendarRevealed ? "visible" : "hidden",
-                }}
-              >
-                {!isCalendarRevealed && (
-                  <View
-                    pointerEvents="none"
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      height: CALENDAR_LOADING_HEIGHT,
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <Loader size={44} label="Loading your calendar…" />
-                  </View>
-                )}
-                <Animated.View
-                  className="px-4 pb-6"
-                  style={{ opacity: calendarRevealAnim }}
+                <Text
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.85}
+                  style={{ flexShrink: 1, color: colors.foreground, fontSize: 18, fontWeight: "800", fontFamily: fonts.heading }}
                 >
-                  {calendarMonths.map((monthDate, monthIndex) => {
-                  const monthDays = buildCalendarDays(monthDate);
-                  const monthKey = getMonthKey(monthDate);
+                  {MONTH_NAMES[selectedMonthIndex]}
+                  <Text style={{ color: colors.mutedText, fontWeight: "600" }}>{` ${selectedYear}`}</Text>
+                </Text>
+                <MaterialCommunityIcons name="calendar-month-outline" size={16} color={colors.mutedText} />
+              </TouchableOpacity>
 
-                  return (
-                    <View
-                      key={monthKey}
-                      className={
-                        monthIndex === 0 ? "pt-5" : "mt-5 border-t pt-5"
-                      }
-                      style={{
-                        borderColor:
-                          monthIndex === 0 ? "transparent" : colors.border,
-                      }}
-                      onLayout={(e) => {
-                        const y = e.nativeEvent.layout.y;
-                        setMonthLayouts((prev) => {
-                          if (prev[monthIndex] === y) return prev;
-                          return { ...prev, [monthIndex]: y };
-                        });
-                      }}
-                    >
-                      <Text
-                        className="mb-4 text-center text-sm font-black"
-                        style={{
-                          color: colors.foreground,
-                          fontFamily: fonts.heading,
-                        }}
-                      >
-                        {monthDate.toLocaleDateString("en-US", {
-                          month: "long",
-                        })}
-                      </Text>
+              {!isViewingCurrentMonth && (
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={jumpToToday}
+                  accessibilityRole="button"
+                  accessibilityLabel="Go to today"
+                  hitSlop={6}
+                  className="items-center justify-center rounded-full"
+                  style={{ width: 32, height: 32, backgroundColor: colors.primaryLight }}
+                >
+                  <MaterialCommunityIcons name="calendar-today" size={16} color={colors.primary} />
+                </TouchableOpacity>
+              )}
+            </View>
 
-                      <View className="flex-row flex-wrap row-gap-1.5">
-                        {monthDays.map((cell) => {
-                          if (cell.kind === "blank") {
-                            return (
-                              <View
-                                key={cell.key}
-                                style={{ height: 46, width: `${100 / 7}%` }}
-                              />
-                            );
-                          }
+            <View className="px-5 mt-3">{phaseLegendRow}</View>
 
-                          const isSelected =
-                            selectedDate?.dateKey === cell.dateKey;
-                          const isToday = cell.dateKey === todayKey;
-                          const entry =
-                            dayEntries[cell.dateKey] ??
-                            remoteDayEntries[cell.dateKey];
-                          const hasLog = Boolean(
-                            entry?.note.trim() ||
-                            entry?.symptoms.length ||
-                            entry?.flow ||
-                            entry?.mood ||
-                            entry?.energy ||
-                            dayNotes[cell.dateKey]?.trim(),
-                          );
-                          const hasFlowLog = Boolean(
-                            entry?.flow && entry.flow !== "none",
-                          );
-                          const isFertileDay =
-                            cell.cycleDay >= ovulationDayPivot - 5 &&
-                            cell.cycleDay <= ovulationDayPivot + 1;
-                          const isOvulationPeak =
-                            cell.cycleDay === ovulationDayPivot;
+            <View className="flex-row px-3 mt-4 mb-1">
+              {WEEKDAY_LABELS.map((day, index) => (
+                <Text
+                  key={`${day}-${index}`}
+                  className="text-center"
+                  style={{ width: `${100 / 7}%`, color: colors.mutedText, fontSize: 11.5, fontWeight: "700", fontFamily: fonts.body }}
+                >
+                  {day}
+                </Text>
+              ))}
+            </View>
 
-                          // Every day is tinted by its actual cycle phase
-                          // (period/follicular/ovulation/luteal) — the same
-                          // 4-color palette as the legend below. A solid
-                          // border + dot means the day has a real logged
-                          // entry; a dashed border on a predicted highlight
-                          // day (period start, ovulation peak) means it's
-                          // algorithm-predicted, not yet confirmed by input.
-                          const style = phaseStyles[cell.phase];
-                          const markerIcon = hasFlowLog
-                            ? "water"
-                            : isOvulationPeak
-                              ? "egg"
-                              : isFertileDay
-                                ? "dna"
-                                : null;
-                          // Logged vs predicted: a day the user actually logged
-                          // is rendered as a SOLID FILLED pill (confirmed); a
-                          // predicted period day they haven't logged yet shows
-                          // as a DASHED OUTLINE only (algorithm guess, not
-                          // confirmed). Other unlogged days stay neutral with a
-                          // small phase dot, the selected day is a solid primary
-                          // pill, and today keeps a thin primary ring.
-                          const isPeriod = cell.phase === "period";
-                          const isLogged = hasLog;
-                          // Predicted highlight is forward-looking only, and
-                          // never pads past the actually-logged current period.
-                          const isPredictedPeriod =
-                            isPeriod &&
-                            !isLogged &&
-                            !isPhantomPeriodTail(cell.date) &&
-                            startOfDay(cell.date) >= todayStart;
-                          const dayTextColor = isSelected
-                            ? colors.buttonText
-                            : isToday
-                              ? colors.primary
-                              : isPeriod || isLogged
-                                ? style.color
-                                : colors.foreground;
-
-                          return (
-                            <TouchableOpacity
-                              activeOpacity={0.82}
-                              className="items-center justify-center"
-                              key={cell.key}
-                              onPress={() => openDate(cell.date)}
-                              style={{ height: 46, width: `${100 / 7}%` }}
-                            >
-                              <View
-                                className="items-center justify-center rounded-2xl relative"
-                                style={{
-                                  // Filled when confirmed (logged) or period-
-                                  // phase-with-a-log; transparent when it's just
-                                  // a predicted period day (outline only).
-                                  backgroundColor: isSelected
-                                    ? colors.primary
-                                    : isLogged
-                                      ? style.bg
-                                      : "transparent",
-                                  borderColor: isToday
-                                    ? colors.primary
-                                    : style.color,
-                                  borderStyle:
-                                    isPredictedPeriod && !isToday && !isSelected
-                                      ? "dashed"
-                                      : "solid",
-                                  borderWidth: isSelected
-                                    ? 0
-                                    : isToday || isLogged || isPredictedPeriod
-                                      ? 1.5
-                                      : 0,
-                                  height: 38,
-                                  width: 36,
-                                }}
-                              >
-                                <Text
-                                  className="text-xs font-black"
-                                  style={{ color: dayTextColor, fontFamily: fonts.mono }}
-                                >
-                                  {cell.day}
-                                </Text>
-                                {/* Phase / log indicator: a logged or peak day
-                                    shows its marker icon, every other day a
-                                    small phase-colored dot. */}
-                                {markerIcon ? (
-                                  <MaterialCommunityIcons
-                                    name={markerIcon}
-                                    size={9}
-                                    color={isSelected ? colors.buttonText : style.color}
-                                    style={{ position: "absolute", bottom: 2 }}
-                                  />
-                                ) : !isSelected && !isPeriod ? (
-                                  <View
-                                    className="absolute bottom-1.5 h-1 w-1 rounded-full"
-                                    style={{ backgroundColor: style.color, opacity: hasLog ? 1 : 0.55 }}
-                                  />
-                                ) : null}
-                              </View>
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </View>
-                    </View>
-                  );
-                })}
-                </Animated.View>
-              </View>
+            {/* Swipeable months: one continuous strip, so swipes and chevrons cross years. */}
+            <View onLayout={(e) => setCalendarWidth(e.nativeEvent.layout.width)} style={{ height: CAL_ROWS * CAL_CELL }}>
+              {calendarWidth > 0 ? (
+                <FlatList
+                  ref={monthListRef}
+                  data={PAGER_MONTHS}
+                  keyExtractor={pagerKey}
+                  horizontal
+                  pagingEnabled
+                  nestedScrollEnabled
+                  decelerationRate="fast"
+                  showsHorizontalScrollIndicator={false}
+                  initialScrollIndex={pagerIndexOf(selectedYear, selectedMonthIndex)}
+                  getItemLayout={getPagerLayout}
+                  initialNumToRender={1}
+                  maxToRenderPerBatch={2}
+                  windowSize={3}
+                  extraData={renderCalendarDay}
+                  viewabilityConfig={pagerViewability}
+                  onViewableItemsChanged={onPagerViewable}
+                  onMomentumScrollEnd={onPagerSettled}
+                  renderItem={renderMonthPage}
+                />
+              ) : null}
             </View>
           </View>
         </ScrollView>
       </SafeAreaView>
-
-      {/* Year Picker Dropdown Modal */}
-      <Modal
-        visible={yearPickerVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setYearPickerVisible(false)}
-      >
-        <Pressable
-          className="flex-1 justify-center items-center"
-          style={{ backgroundColor: colors.overlay }}
-          onPress={() => setYearPickerVisible(false)}
-        >
-          <View
-            className="w-[260px] p-4 rounded-3xl border"
-            style={{
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-              ...getShadow(colors, isDark),
-            }}
-          >
-            <Text
-              className="text-center font-extrabold mb-3 text-base"
-              style={{ color: colors.foreground, fontFamily: fonts.heading }}
-            >
-              Select Year
-            </Text>
-            {[2024, 2025, 2026, 2027, 2028, 2029, 2030].map((y) => (
-              <TouchableOpacity
-                key={y}
-                onPress={() => {
-                  setSelectedYear(y);
-                  setYearPickerVisible(false);
-                }}
-                className="py-3 px-4 rounded-xl flex-row items-center justify-between"
-                style={{
-                  backgroundColor:
-                    y === selectedYear ? colors.primaryLight : "transparent",
-                }}
-              >
-                <Text
-                  className="font-bold text-sm"
-                  style={{
-                    color:
-                      y === selectedYear ? colors.primary : colors.foreground,
-                    fontFamily: fonts.body,
-                  }}
-                >
-                  {y}
-                </Text>
-                {y === selectedYear && (
-                  <Feather name="check" size={16} color={colors.primary} />
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
-        </Pressable>
-      </Modal>
 
       {/* ── Search Overlay Modal ── */}
       <Modal

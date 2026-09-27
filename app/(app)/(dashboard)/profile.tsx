@@ -1,29 +1,29 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   Modal,
   RefreshControl,
   ScrollView,
   StatusBar,
+  StyleSheet,
   Switch,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../../components/auth-context";
 import { useGenZMode } from "../../../components/genz-mode";
 import { alert } from "../../../lib/alert";
 import { ThemeToggle, useTheme } from "../../../components/theme";
-import { getShadow, getSoftTints } from "../../../components/ui-tokens";
+import { getSoftTints } from "../../../components/ui-tokens";
 import { authApi, type DashboardSummary } from "../../../lib/api";
 import {
   enablePushOnDeviceAsync,
   getCurrentPushTokenQuietlyAsync,
 } from "../../../lib/notifications";
 import Avatar from "../../../components/Avatar";
-import StatCard from "../../../components/StatCard";
 import { CmsShortcuts } from "../../../components/CmsShortcuts";
 import { PromoBanners } from "../../../components/PromoBanners";
 import { useUserStats } from "../../../hooks/useUserStats";
@@ -31,7 +31,6 @@ import { useDataRefresh } from "../../../hooks/useDataRefresh";
 
 export default function Profile() {
   const { colors, isDark, fonts } = useTheme();
-  const insets = useSafeAreaInsets();
   const { signOut, user, updateUser } = useAuth();
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -49,6 +48,12 @@ export default function Profile() {
   const [supportModalVisible, setSupportModalVisible] = useState(false);
   const [privacyModalVisible, setPrivacyModalVisible] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  // Profile is a tab and stays mounted: close the Preferences dropdown when
+  // leaving so it always starts collapsed.
+  useFocusEffect(
+    React.useCallback(() => () => setActiveMenuId(null), []),
+  );
 
   // Settings Functional Flags — seeded from the backend, kept in sync with
   // `user` below, and persisted on every toggle (see handleTogglePreference).
@@ -182,585 +187,255 @@ export default function Profile() {
     );
   }
 
+  type RowIcon = React.ComponentProps<typeof Ionicons>["name"];
+  const accountRows: { icon: RowIcon; label: string; tint: string; color: string; onPress: () => void }[] = [
+    { icon: "trophy-outline", label: "Achievements", tint: softTints.amber, color: colors.warning, onPress: () => setAchievementsModalVisible(true) },
+    { icon: "star-outline", label: "My subscription", tint: softTints.gold, color: colors.gold, onPress: () => router.push("/subscription") },
+    { icon: "ribbon-outline", label: "Government schemes & benefits", tint: softTints.pink, color: colors.primary, onPress: () => router.push("/government-schemes") },
+  ];
+  const privacyRows: typeof accountRows = [
+    { icon: "finger-print-outline", label: "App lock", tint: softTints.lavender, color: colors.secondary, onPress: () => router.push("/app-lock") },
+    { icon: "shield-checkmark-outline", label: "Data privacy & security", tint: softTints.mint, color: colors.accent, onPress: () => setPrivacyModalVisible(true) },
+    { icon: "help-circle-outline", label: "Help & support", tint: softTints.blue, color: colors.info, onPress: () => setSupportModalVisible(true) },
+  ];
+  const settingsOpen = activeMenuId === "settings";
+  const preferenceRows: { label: string; hint: string; value: boolean; disabled?: boolean; onChange: (v: boolean) => void }[] = [
+    {
+      label: "Cycle notifications",
+      hint: "Remind me before my next expected period",
+      value: notificationsEnabled,
+      disabled: savingPreference === "notificationsEnabled",
+      onChange: (next) => handleTogglePreference("notificationsEnabled", next),
+    },
+    {
+      label: "Anonymous community mode",
+      hint: "Hide my name on community posts",
+      value: anonymousMode,
+      disabled: savingPreference === "anonymousCommunityMode",
+      onChange: (next) => handleTogglePreference("anonymousCommunityMode", next),
+    },
+    { label: "Gen Z mode", hint: "Swap a few labels for Gen Z slang, no cap", value: genZModeEnabled, onChange: setGenZModeEnabled },
+  ];
+
+  const sectionLabel = (text: string) => (
+    <Text style={{ color: colors.mutedText, fontSize: 12.5, fontWeight: "700", fontFamily: fonts.body, marginTop: 24, marginBottom: 8, marginLeft: 24 }}>{text}</Text>
+  );
+  const card = { marginHorizontal: 20, backgroundColor: colors.surface, borderRadius: 20, overflow: "hidden" as const };
+  const divider = <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: 16 + 36 + 14 }} />;
+  const menuRow = (row: (typeof accountRows)[number], last: boolean, right?: React.ReactNode) => (
+    <View key={row.label}>
+      <TouchableOpacity activeOpacity={0.6} onPress={row.onPress} accessibilityRole="button" className="flex-row items-center" style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
+        <View className="items-center justify-center rounded-full" style={{ width: 36, height: 36, backgroundColor: row.tint, marginRight: 14 }}>
+          <Ionicons name={row.icon} size={18} color={row.color} />
+        </View>
+        <Text numberOfLines={1} className="flex-1" style={{ color: colors.foreground, fontSize: 15, fontWeight: "600", fontFamily: fonts.body, marginRight: 8 }}>
+          {row.label}
+        </Text>
+        {right ?? <Feather name="chevron-right" size={18} color={colors.mutedText} />}
+      </TouchableOpacity>
+      {!last ? divider : null}
+    </View>
+  );
+
+  const sheetHeader = (title: string, onClose: () => void) => (
+    <View className="flex-row items-center justify-between mb-6">
+      <Text style={{ color: colors.foreground, fontSize: 20, fontWeight: "800", fontFamily: fonts.heading }}>{title}</Text>
+      <TouchableOpacity
+        onPress={onClose}
+        hitSlop={10}
+        accessibilityRole="button"
+        accessibilityLabel="Close"
+        className="items-center justify-center rounded-full"
+        style={{ width: 32, height: 32, backgroundColor: colors.surface }}
+      >
+        <Feather name="x" size={17} color={colors.foreground} />
+      </TouchableOpacity>
+    </View>
+  );
+
   return (
     <>
-      <StatusBar
-        barStyle={isDark ? "light-content" : "dark-content"}
-        backgroundColor={colors.background}
-      />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
 
-      <SafeAreaView
-        className="flex-1"
-        style={{ backgroundColor: colors.background }}
-      >
-        {/* Absolute Top Toggle Bar — anchored to the actual device safe-area
-            inset (not a fixed className offset) so it clears the status bar
-            / notch / rounded-corner cutout on curved-screen phones instead
-            of sitting under it. */}
-        <View
-          className="absolute right-6 z-10"
-          style={{ top: insets.top + 12 }}
-        >
-          <ThemeToggle />
-        </View>
-
+      <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 140 }}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
-          }
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
         >
-          {/* USER AVATAR BRAND IDENTITY SECTION */}
-          <View className="items-center px-6 pt-8">
-            <View className="relative">
-              <Avatar
-                uri={user?.profilePicture}
-                name={displayName}
-                size={112}
-                backgroundColor={softTints.pink}
-                borderColor={colors.primary}
-                borderWidth={4}
-                textColor={colors.primary}
-                fontFamily={fonts.heading}
-                style={{
-                  shadowColor: "#000",
-                  shadowOpacity: 0.05,
-                  shadowRadius: 4,
-                  shadowOffset: { width: 0, height: 2 },
-                }}
-              />
+          {/* Header */}
+          <View className="flex-row items-center justify-between" style={{ paddingHorizontal: 20, paddingTop: 16 }}>
+            <Text style={{ color: colors.foreground, fontSize: 22, fontWeight: "800", fontFamily: fonts.heading }}>Profile</Text>
+            <ThemeToggle />
+          </View>
 
-              <View
-                className="absolute bottom-1 right-1 w-6 h-6 rounded-full items-center justify-center"
-                style={{ backgroundColor: colors.primary, borderWidth: 2, borderColor: colors.background }}
-              >
-                <Feather name="edit-3" size={11} color={colors.buttonText} />
-              </View>
-            </View>
-
-            <Text
-              className="mt-4 text-2xl font-black tracking-tight"
-              style={{ color: colors.foreground, fontFamily: fonts.heading }}
-            >
+          {/* Identity */}
+          <View className="items-center" style={{ paddingHorizontal: 24, marginTop: 20 }}>
+            <Avatar
+              uri={user?.profilePicture}
+              name={displayName}
+              size={88}
+              backgroundColor={softTints.pink}
+              textColor={colors.primary}
+              fontFamily={fonts.heading}
+            />
+            <Text numberOfLines={1} style={{ color: colors.foreground, fontSize: 21, fontWeight: "800", fontFamily: fonts.heading, marginTop: 12 }}>
               {displayName}
             </Text>
-            <Text
-              className="mt-1 text-xs font-semibold"
-              style={{ color: colors.mutedText, fontFamily: fonts.body }}
-            >
+            <Text numberOfLines={1} style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body, marginTop: 2 }}>
               {displayEmail}
             </Text>
           </View>
 
-          {/* PREMIUM SPLIT METRICS ROW */}
-          <View className="mx-6 mt-8 flex-row gap-3">
+          {/* Stats — same flat style as the Tracker's */}
+          <View className="flex-row" style={{ marginHorizontal: 20, marginTop: 20, gap: 10 }}>
             {[
-              {
-                label: "Days Tracked",
-                value: dashboard?.trackedDays ?? 0,
-                icon: "calendar-outline" as const,
-                color: colors.primary,
-                bg: softTints.pink,
-              },
-              {
-                label: "Care Points",
-                value: walletBalance,
-                icon: "star" as const,
-                color: colors.accent,
-                bg: softTints.purple,
-              },
-              {
-                label: "Day Streak",
-                value: streakCount,
-                icon: "flame" as const,
-                color: colors.warning,
-                bg: softTints.amber,
-              },
-            ].map((metric, i) => (
-              <StatCard
-                key={i}
-                variant="tile-stack"
-                icon={metric.icon}
-                iconColor={metric.color}
-                iconBg={metric.bg}
-                value={metric.value}
-                label={metric.label}
-                valueColor={colors.foreground}
-                labelColor={colors.mutedText}
-                valueFontFamily={fonts.mono}
-                labelFontFamily={fonts.body}
-                backgroundColor={colors.surface}
-                containerStyle={getShadow(colors, isDark)}
-              />
+              { label: "Days tracked", value: dashboard?.trackedDays ?? 0, icon: "calendar-outline" as const, color: colors.primary },
+              { label: "Care points", value: walletBalance, icon: "star" as const, color: colors.accent },
+              { label: "Day streak", value: streakCount, icon: "flame" as const, color: colors.warning },
+            ].map((m) => (
+              <View
+                key={m.label}
+                accessible
+                accessibilityLabel={`${m.label}: ${m.value}`}
+                className="flex-1 items-center rounded-2xl"
+                style={{ backgroundColor: colors.surface, paddingVertical: 14, paddingHorizontal: 6 }}
+              >
+                <View className="flex-row items-center" style={{ gap: 5 }}>
+                  <Ionicons name={m.icon} size={15} color={m.color} />
+                  <Text style={{ color: colors.foreground, fontSize: 17, fontWeight: "800", fontFamily: fonts.heading }}>{m.value}</Text>
+                </View>
+                <Text numberOfLines={1} style={{ color: colors.mutedText, fontSize: 11.5, fontWeight: "600", fontFamily: fonts.body, marginTop: 3 }}>
+                  {m.label}
+                </Text>
+              </View>
             ))}
           </View>
 
-          {/* MENUS LIST — one cohesive rounded surface card, flush rows w/ dividers */}
-          <View
-            className="mx-6 mt-8 rounded-3xl border overflow-hidden"
-            style={[
-              { backgroundColor: colors.surface, borderColor: colors.border },
-              getShadow(colors, isDark),
-            ]}
-          >
-            {/* Row: Achievements (Modal Trigger) */}
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => setAchievementsModalVisible(true)}
-              className="flex-row items-center px-4 py-4 border-b"
-              style={{ borderColor: colors.border }}
-            >
-              <View
-                className="p-2.5 rounded-xl mr-4"
-                style={{ backgroundColor: softTints.pink }}
-              >
-                <Ionicons
-                  name="trophy-outline"
-                  size={18}
-                  color={colors.primary}
-                />
-              </View>
-              <Text
-                className="flex-1 text-sm font-bold"
-                style={{ color: colors.foreground, fontFamily: fonts.body }}
-              >
-                Achievements
-              </Text>
-              <Feather
-                name="chevron-right"
-                size={16}
-                color={colors.mutedText}
-              />
-            </TouchableOpacity>
+          {sectionLabel("Your account")}
+          <View style={card}>{accountRows.map((row, i) => menuRow(row, i === accountRows.length - 1))}</View>
 
-            {/* Row: Embedded Dropdown Settings Area */}
-            <View className="border-b" style={{ borderColor: colors.border }}>
-              <TouchableOpacity
-                activeOpacity={0.7}
-                onPress={() =>
-                  setActiveMenuId(
-                    activeMenuId === "settings" ? null : "settings",
-                  )
-                }
-                className="flex-row items-center px-4 py-4"
-              >
-                <View
-                  className="p-2.5 rounded-xl mr-4"
-                  style={{ backgroundColor: softTints.pink }}
-                >
-                  <Ionicons
-                    name="settings-outline"
-                    size={18}
-                    color={colors.primary}
-                  />
-                </View>
-                <Text
-                  className="flex-1 text-sm font-bold"
-                  style={{ color: colors.foreground, fontFamily: fonts.body }}
-                >
-                  Preferences & Settings
-                </Text>
-                <Feather
-                  name={
-                    activeMenuId === "settings"
-                      ? "chevron-down"
-                      : "chevron-right"
-                  }
-                  size={16}
-                  color={
-                    activeMenuId === "settings"
-                      ? colors.secondary
-                      : colors.mutedText
-                  }
-                />
-              </TouchableOpacity>
-
-              {activeMenuId === "settings" && (
-                <View
-                  className="mx-4 mb-4 rounded-2xl p-4 gap-4"
-                  style={{ backgroundColor: colors.background }}
-                >
-                  <View className="flex-row justify-between items-center">
-                    <View className="flex-1 mr-3">
-                      <Text
-                        className="text-xs font-bold"
-                        style={{ color: colors.foreground, fontFamily: fonts.body }}
-                      >
-                        Cycle Notifications
-                      </Text>
-                      <Text
-                        className="text-[10px] mt-0.5"
-                        style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                      >
-                        Alert me before my next expected date
-                      </Text>
+          {sectionLabel("Preferences")}
+          <View style={card}>
+            {menuRow(
+              {
+                icon: "options-outline",
+                label: "Notifications & display",
+                tint: softTints.pink,
+                color: colors.primary,
+                onPress: () => setActiveMenuId(settingsOpen ? null : "settings"),
+              },
+              !settingsOpen,
+              <Feather name={settingsOpen ? "chevron-up" : "chevron-down"} size={18} color={colors.mutedText} />,
+            )}
+            {settingsOpen
+              ? preferenceRows.map((p, i) => (
+                  <View key={p.label}>
+                    <View className="flex-row items-center" style={{ paddingLeft: 16 + 36 + 14, paddingRight: 16, paddingVertical: 12, gap: 12 }}>
+                      <View className="flex-1">
+                        <Text style={{ color: colors.foreground, fontSize: 14.5, fontWeight: "600", fontFamily: fonts.body }}>{p.label}</Text>
+                        <Text style={{ color: colors.mutedText, fontSize: 12.5, fontFamily: fonts.body, marginTop: 1 }}>{p.hint}</Text>
+                      </View>
+                      <Switch
+                        value={p.value}
+                        disabled={p.disabled}
+                        onValueChange={p.onChange}
+                        trackColor={{ true: colors.primary, false: colors.border }}
+                        thumbColor="#FFFFFF"
+                        accessibilityLabel={p.label}
+                      />
                     </View>
-                    <Switch
-                      value={notificationsEnabled}
-                      disabled={savingPreference === "notificationsEnabled"}
-                      onValueChange={(next) => handleTogglePreference("notificationsEnabled", next)}
-                      trackColor={{ true: colors.primary }}
-                    />
+                    {i < preferenceRows.length - 1 ? divider : null}
                   </View>
-                  <View className="h-[1px] w-full" style={{ backgroundColor: colors.border }} />
-                  <View className="flex-row justify-between items-center">
-                    <View className="flex-1 mr-3">
-                      <Text
-                        className="text-xs font-bold"
-                        style={{ color: colors.foreground, fontFamily: fonts.body }}
-                      >
-                        Anonymous Community Mode
-                      </Text>
-                      <Text
-                        className="text-[10px] mt-0.5"
-                        style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                      >
-                        Mask my initials on forum posts
-                      </Text>
-                    </View>
-                    <Switch
-                      value={anonymousMode}
-                      disabled={savingPreference === "anonymousCommunityMode"}
-                      onValueChange={(next) => handleTogglePreference("anonymousCommunityMode", next)}
-                      trackColor={{ true: colors.primary }}
-                    />
-                  </View>
-                  <View className="h-[1px] w-full" style={{ backgroundColor: colors.border }} />
-                  <View className="flex-row justify-between items-center">
-                    <View className="flex-1 mr-3">
-                      <Text
-                        className="text-xs font-bold"
-                        style={{ color: colors.foreground, fontFamily: fonts.body }}
-                      >
-                        Gen Z Mode
-                      </Text>
-                      <Text
-                        className="text-[10px] mt-0.5"
-                        style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                      >
-                        Rename a few labels around the app to Gen Z slang, no cap
-                      </Text>
-                    </View>
-                    <Switch
-                      value={genZModeEnabled}
-                      onValueChange={setGenZModeEnabled}
-                      trackColor={{ true: colors.primary }}
-                    />
-                  </View>
-                </View>
-              )}
-            </View>
-
-            {/* Documents and Graphs & Reports moved to care-hub.tsx
-                (docs/fixes.md 2.5, 2.6) — Care & Insights is their natural home
-                and this avoids the Graphs & Reports double-listing. */}
-
-            {/* Row: My Subscription (Route) */}
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => router.push("/subscription")}
-              className="flex-row items-center px-4 py-4 border-b"
-              style={{ borderColor: colors.border }}
-            >
-              <View
-                className="p-2.5 rounded-xl mr-4"
-                style={{ backgroundColor: softTints.gold }}
-              >
-                <Ionicons name="star-outline" size={18} color={colors.gold} />
-              </View>
-              <Text
-                className="flex-1 text-sm font-bold"
-                style={{ color: colors.foreground, fontFamily: fonts.body }}
-              >
-                My Subscription
-              </Text>
-              <Feather name="chevron-right" size={16} color={colors.mutedText} />
-            </TouchableOpacity>
-
-            {/* Row: Government Schemes & Benefits (Route) */}
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => router.push("/government-schemes")}
-              className="flex-row items-center px-4 py-4 border-b"
-              style={{ borderColor: colors.border }}
-            >
-              <View
-                className="p-2.5 rounded-xl mr-4"
-                style={{ backgroundColor: softTints.pink }}
-              >
-                <Ionicons name="ribbon-outline" size={18} color={colors.primary} />
-              </View>
-              <Text
-                className="flex-1 text-sm font-bold"
-                style={{ color: colors.foreground, fontFamily: fonts.body }}
-              >
-                Government Schemes & Benefits
-              </Text>
-              <Feather name="chevron-right" size={16} color={colors.mutedText} />
-            </TouchableOpacity>
-
-            {/* Row: App Lock (Route) */}
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => router.push("/app-lock")}
-              className="flex-row items-center px-4 py-4 border-b"
-              style={{ borderColor: colors.border }}
-            >
-              <View
-                className="p-2.5 rounded-xl mr-4"
-                style={{ backgroundColor: softTints.pink }}
-              >
-                <Ionicons
-                  name="finger-print-outline"
-                  size={18}
-                  color={colors.primary}
-                />
-              </View>
-              <Text
-                className="flex-1 text-sm font-bold"
-                style={{ color: colors.foreground, fontFamily: fonts.body }}
-              >
-                App Lock
-              </Text>
-              <Feather
-                name="chevron-right"
-                size={16}
-                color={colors.mutedText}
-              />
-            </TouchableOpacity>
-
-            {/* Row: Help & Support (Modal Trigger) */}
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => setSupportModalVisible(true)}
-              className="flex-row items-center px-4 py-4 border-b"
-              style={{ borderColor: colors.border }}
-            >
-              <View
-                className="p-2.5 rounded-xl mr-4"
-                style={{ backgroundColor: softTints.pink }}
-              >
-                <Ionicons
-                  name="help-circle-outline"
-                  size={18}
-                  color={colors.primary}
-                />
-              </View>
-              <Text
-                className="flex-1 text-sm font-bold"
-                style={{ color: colors.foreground, fontFamily: fonts.body }}
-              >
-                Help & Support
-              </Text>
-              <Feather
-                name="chevron-right"
-                size={16}
-                color={colors.mutedText}
-              />
-            </TouchableOpacity>
-
-            {/* Row: Privacy Policy (Modal Trigger) */}
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => setPrivacyModalVisible(true)}
-              className="flex-row items-center px-4 py-4"
-            >
-              <View
-                className="p-2.5 rounded-xl mr-4"
-                style={{ backgroundColor: softTints.pink }}
-              >
-                <Ionicons
-                  name="shield-checkmark-outline"
-                  size={18}
-                  color={colors.primary}
-                />
-              </View>
-              <Text
-                className="flex-1 text-sm font-bold"
-                style={{ color: colors.foreground, fontFamily: fonts.body }}
-              >
-                Data Privacy & Security
-              </Text>
-              <Feather
-                name="chevron-right"
-                size={16}
-                color={colors.mutedText}
-              />
-            </TouchableOpacity>
+                ))
+              : null}
           </View>
+
+          {sectionLabel("Privacy & help")}
+          <View style={card}>{privacyRows.map((row, i) => menuRow(row, i === privacyRows.length - 1))}</View>
 
           {/* App CMS: banners and features/links an admin placed on Profile.
               Both render nothing by default. */}
           <PromoBanners placement="profile" style={{ marginTop: 24 }} />
           <CmsShortcuts placement="profile" style={{ marginTop: 24 }} />
 
-          {/* EXIT ACTION */}
           <TouchableOpacity
             onPress={handleLogout}
             activeOpacity={0.7}
             disabled={isLoggingOut}
-            className="mx-6 mt-8 flex-row items-center justify-center py-3"
+            accessibilityRole="button"
+            className="flex-row items-center justify-center"
+            style={{ ...card, marginTop: 24, paddingVertical: 15, gap: 8 }}
           >
-            <Feather name="log-out" size={15} color={colors.danger} />
-            <Text
-              className="ml-2 text-sm font-bold tracking-wide"
-              style={{ color: colors.danger, fontFamily: fonts.body }}
-            >
-              {isLoggingOut ? "Logging Out..." : "Log out"}
+            <Feather name="log-out" size={16} color={colors.danger} />
+            <Text style={{ color: colors.danger, fontSize: 15, fontWeight: "700", fontFamily: fonts.body }}>
+              {isLoggingOut ? "Logging out…" : "Log out"}
             </Text>
           </TouchableOpacity>
         </ScrollView>
       </SafeAreaView>
 
-      {/* --- INTEGRATED MODALS SYSTEM --- */}
-
-      {/* Modals 1: Achievements System */}
-      <Modal
-        visible={achievementsModalVisible}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setAchievementsModalVisible(false)}
-      >
-        {/* Android ignores presentationStyle="pageSheet" and renders this
-            Modal truly fullscreen under the status bar — SafeAreaView (not
-            a plain View) keeps the header from being clipped at the top. */}
-        <SafeAreaView
-          className="flex-1 px-6 pt-6"
-          style={{ backgroundColor: colors.background }}
-        >
-          <View className="flex-row justify-between items-center mb-8">
-            <Text
-              className="text-xl font-black"
-              style={{ color: colors.foreground, fontFamily: fonts.heading }}
-            >
-              Your Achievements
-            </Text>
-            <TouchableOpacity
-              onPress={() => setAchievementsModalVisible(false)}
-              className="p-1 rounded-full"
-              style={{ backgroundColor: colors.border }}
-            >
-              <Feather name="x" size={18} color={colors.foreground} />
-            </TouchableOpacity>
-          </View>
-          <View
-            className="items-center p-6 rounded-3xl border"
-            style={{
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-            }}
-          >
-            <MaterialCommunityIcons
-              name="medal-outline"
-              size={56}
-              color={colors.accent}
-            />
-            <Text
-              className="text-base font-black mt-4"
-              style={{ color: colors.foreground, fontFamily: fonts.heading }}
-            >
-              Consistency Champion Badge
-            </Text>
-            <Text
-              className="text-xs text-center mt-2 leading-4"
-              style={{ color: colors.mutedText, fontFamily: fonts.body }}
-            >
-              Unlocked for steady symptom logging and habit care across your
-              recent cycle.
+      {/* Achievements */}
+      <Modal visible={achievementsModalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setAchievementsModalVisible(false)}>
+        {/* Android ignores pageSheet and renders fullscreen, so SafeAreaView keeps the header clear. */}
+        <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background, paddingHorizontal: 20, paddingTop: 20 }}>
+          {sheetHeader("Your achievements", () => setAchievementsModalVisible(false))}
+          <View className="items-center rounded-3xl" style={{ backgroundColor: colors.surface, padding: 24 }}>
+            <View className="items-center justify-center rounded-full" style={{ width: 72, height: 72, backgroundColor: softTints.amber }}>
+              <MaterialCommunityIcons name="medal-outline" size={36} color={colors.warning} />
+            </View>
+            <Text style={{ color: colors.foreground, fontSize: 16, fontWeight: "800", fontFamily: fonts.heading, marginTop: 14 }}>Consistency Champion</Text>
+            <Text style={{ color: colors.mutedText, fontSize: 13.5, lineHeight: 20, fontFamily: fonts.body, marginTop: 6, textAlign: "center" }}>
+              Unlocked for steady symptom logging and habit care across your recent cycle.
             </Text>
           </View>
-        </SafeAreaView>
-      </Modal>
-
-      {/* Modals 2: Support Ticket Desk */}
-      <Modal
-        visible={supportModalVisible}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setSupportModalVisible(false)}
-      >
-        <SafeAreaView
-          className="flex-1 px-6 pt-6"
-          style={{ backgroundColor: colors.background }}
-        >
-          <View className="flex-row justify-between items-center mb-6">
-            <Text
-              className="text-xl font-black"
-              style={{ color: colors.foreground, fontFamily: fonts.heading }}
-            >
-              Help & Support
-            </Text>
-            <TouchableOpacity onPress={() => setSupportModalVisible(false)}>
-              <Text
-                className="text-sm font-bold"
-                style={{ color: colors.primary, fontFamily: fonts.body }}
-              >
-                Done
-              </Text>
-            </TouchableOpacity>
-          </View>
-          <Text
-            className="text-sm leading-5 mb-4"
-            style={{ color: colors.foreground, fontFamily: fonts.body }}
-          >
-            Need help with predictions, account access, cycle logs, or partner
-            sharing? Send a support request and we will guide you through it.
-          </Text>
           <TouchableOpacity
-            onPress={() =>
-              alert(
-                "Ticket Logged",
-                "Your support request has been logged.",
-              )
-            }
-            className="w-full rounded-2xl py-4 items-center justify-center"
-            style={{ backgroundColor: colors.primary }}
+            onPress={() => {
+              setAchievementsModalVisible(false);
+              router.push("/badges");
+            }}
+            activeOpacity={0.85}
+            className="items-center justify-center rounded-full mt-5"
+            style={{ height: 50, backgroundColor: colors.primaryLight }}
           >
-            <Text
-              className="text-sm font-bold"
-              style={{ color: colors.buttonText, fontFamily: fonts.body }}
-            >
-              Create Support Ticket
-            </Text>
+            <Text style={{ color: colors.primary, fontSize: 14.5, fontWeight: "800", fontFamily: fonts.body }}>See all streaks & badges</Text>
           </TouchableOpacity>
         </SafeAreaView>
       </Modal>
 
-      {/* Modals 3: Local Privacy Framework */}
-      <Modal
-        visible={privacyModalVisible}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setPrivacyModalVisible(false)}
-      >
-        <SafeAreaView
-          className="flex-1 px-6 pt-6"
-          style={{ backgroundColor: colors.background }}
-        >
-          <View className="flex-row justify-between items-center mb-6">
-            <Text
-              className="text-xl font-black"
-              style={{ color: colors.foreground, fontFamily: fonts.heading }}
-            >
-              Privacy Safeguard
-            </Text>
-            <TouchableOpacity onPress={() => setPrivacyModalVisible(false)}>
-              <Feather name="arrow-down" size={20} color={colors.foreground} />
-            </TouchableOpacity>
-          </View>
-          <View
-            className="p-5 rounded-2xl border"
-            style={{ borderColor: colors.border, backgroundColor: colors.surface }}
+      {/* Help & support */}
+      <Modal visible={supportModalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setSupportModalVisible(false)}>
+        <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background, paddingHorizontal: 20, paddingTop: 20 }}>
+          {sheetHeader("Help & support", () => setSupportModalVisible(false))}
+          <Text style={{ color: colors.foreground, fontSize: 14.5, lineHeight: 22, fontFamily: fonts.body, marginBottom: 20 }}>
+            Need help with predictions, account access, cycle logs or partner sharing? Send a support request and we&apos;ll guide you through it.
+          </Text>
+          <TouchableOpacity
+            onPress={() => alert("Request sent", "Your support request has been logged. We'll get back to you soon.")}
+            activeOpacity={0.85}
+            className="items-center justify-center rounded-full"
+            style={{ height: 52, backgroundColor: colors.primary }}
           >
-            <Text
-              className="text-xs leading-5"
-              style={{ color: colors.foreground, fontFamily: fonts.body }}
-            >
-              Your tracking notes, cycle logs, and identity details are treated
-              as private health data. Sharing controls stay with you, and
-              sensitive records should only be sent with clear permission.
-            </Text>
+            <Text style={{ color: colors.buttonText, fontSize: 15, fontWeight: "800", fontFamily: fonts.body }}>Contact support</Text>
+          </TouchableOpacity>
+        </SafeAreaView>
+      </Modal>
+
+      {/* Data privacy */}
+      <Modal visible={privacyModalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setPrivacyModalVisible(false)}>
+        <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background, paddingHorizontal: 20, paddingTop: 20 }}>
+          {sheetHeader("Data privacy & security", () => setPrivacyModalVisible(false))}
+          <View className="rounded-3xl" style={{ backgroundColor: colors.surface, padding: 20, gap: 14 }}>
+            {[
+              { icon: "lock-closed-outline" as const, text: "Your cycle logs, notes and identity details are treated as private health data." },
+              { icon: "people-outline" as const, text: "Sharing (partner, circles, doctors) is always your choice, and you can stop it any time." },
+              { icon: "finger-print-outline" as const, text: "Turn on App lock to keep the app private on a shared phone." },
+            ].map((item) => (
+              <View key={item.icon} className="flex-row" style={{ gap: 12 }}>
+                <Ionicons name={item.icon} size={18} color={colors.accent} style={{ marginTop: 1 }} />
+                <Text style={{ flex: 1, color: colors.foreground, fontSize: 14, lineHeight: 21, fontFamily: fonts.body }}>{item.text}</Text>
+              </View>
+            ))}
           </View>
         </SafeAreaView>
       </Modal>
