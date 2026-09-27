@@ -130,7 +130,8 @@ test("link tiles join a hub in CMS order, and features can move to Home/Profile"
   assert.equal(explore[0].key, "link:yt");
   assert.equal(explore[0].builtIn, false);
   assert.equal(explore.some((t) => t.key === "link:vip"), false); // premium only
-  assert.equal(c.customTiles.some((t) => t.id === "bad"), false);
+  // An unsafe action becomes "none": nothing to open, so it never shows unlocked.
+  assert.equal(explore.some((t) => t.key === "link:bad"), false);
   assert.equal(explore.some((t) => t.key === "blogs"), false);
   assert.deepEqual(hubTilesFor(c, "profile", viewer()).map((t) => t.key), ["blogs"]);
   // Home only carries the Gen Z pack by default.
@@ -222,6 +223,18 @@ test("launch: link tiles carry launch state under their link: key", () => {
   const [tile] = hubTilesFor(c, "home");
   assert.equal(tile.key, "link:abc123");
   assert.equal(tile.launch.access, "soon");
+});
+
+test("launch: a teaser tile with no action shows while locked, never unlocked", () => {
+  const c = parseAppConfig({
+    customTiles: [
+      { id: "pcos01", title: "PCOS Care", icon: "heart-outline", placement: "care_hub", size: "large", order: 0, action: { type: "none" }, launch: { access: "soon", sheet } },
+      { id: "pcos02", title: "Tester view", icon: "heart-outline", placement: "care_hub", size: "large", order: 1, action: { type: "none" }, launch: { access: "open" } },
+    ],
+  });
+  const keys = hubTilesFor(c, "care_hub").map((t) => t.key);
+  assert.ok(keys.includes("link:pcos01"));
+  assert.equal(keys.includes("link:pcos02"), false);
 });
 
 test("routePath drops groups, query and trailing slash", () => {
