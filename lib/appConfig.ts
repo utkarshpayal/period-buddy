@@ -75,11 +75,44 @@ export type FeatureDefinition = {
   colorKey: TileColorKey;
 };
 
+/**
+ * Launch state (The-Nura-CMS docs/launch-states.md §7.3), already decided
+ * by the backend for this user/device: open, Coming soon (a locked tile) or
+ * paused. `openFor` narrows "open" to viewers matching it (a rollout slice
+ * such as "Android only"); everyone else gets `fallback`.
+ */
+export type LaunchAccess = "open" | "soon" | "paused";
+
+/** What the Coming soon / Paused sheet shows (components/LaunchSheet.tsx). */
+export type LaunchSheetInfo = {
+  headline: string;
+  /** null = show the tile's description instead. */
+  message: string | null;
+  notifyMe: boolean;
+  onList: boolean;
+  /** Paused only: where to send people meanwhile ("none" = no button). */
+  alternative: TapAction;
+  /** The alternative's button text from the CMS; null = a generic label. */
+  alternativeLabel: string | null;
+};
+
+export type LaunchInfo = {
+  access: LaunchAccess;
+  beta: boolean;
+  openFor: Audience | null;
+  fallback: "soon" | "hidden";
+  sheet: LaunchSheetInfo;
+};
+
+/** A launch resolved against one viewer: what their tile does. */
+export type ViewerLaunch = { access: LaunchAccess; beta: boolean; sheet: LaunchSheetInfo };
+
 export type ResolvedFeature = FeatureDefinition & {
   enabled: boolean;
   order: number;
   badge: string | null;
   audience: Audience;
+  launch: LaunchInfo;
 };
 
 /** An admin-made link tile from the CMS, living in a hub next to the features. */
@@ -96,6 +129,7 @@ export type CustomTile = {
   badge: string | null;
   action: TapAction;
   audience: Audience;
+  launch: LaunchInfo;
 };
 
 /** Anything a hub renders: a built-in feature or a link tile, normalised. */
@@ -111,6 +145,8 @@ export type HubTile = {
   action: TapAction;
   /** Built-in features get the GenZ label swap; admin text is shown as written. */
   builtIn: boolean;
+  /** Open / Coming soon / paused for this viewer. `key` doubles as the launch item key. */
+  launch: ViewerLaunch;
 };
 
 export type AppSettings = {
@@ -220,6 +256,17 @@ export const OVERRIDABLE_THEME_TOKENS = new Set([
 
 export const EVERYONE: Audience = { segment: "all", platforms: [], minAppVersion: null, maxAppVersion: null };
 
+const NO_ACTION: TapAction = { type: "none", value: null, fallbackUrl: null };
+
+/** Plainly open: what every item is without a `launch` from the backend. */
+export const OPEN_LAUNCH: LaunchInfo = {
+  access: "open",
+  beta: false,
+  openFor: null,
+  fallback: "soon",
+  sheet: { headline: "Coming soon", message: null, notifyMe: false, onList: false, alternative: NO_ACTION, alternativeLabel: null },
+};
+
 export const DEFAULT_SETTINGS: AppSettings = {
   maintenance: {
     enabled: false,
@@ -238,7 +285,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
 export const DEFAULT_APP_CONFIG: AppConfig = {
   version: 0,
-  features: FEATURE_REGISTRY.map((f, order) => ({ ...f, enabled: true, order, badge: null, audience: EVERYONE })),
+  features: FEATURE_REGISTRY.map((f, order) => ({ ...f, enabled: true, order, badge: null, audience: EVERYONE, launch: OPEN_LAUNCH })),
   customTiles: [],
   homeSections: DEFAULT_HOME_SECTIONS,
   theme: { light: {}, dark: {} },
@@ -310,6 +357,32 @@ function parseAudience(raw: unknown): Audience {
   };
 }
 
+/**
+ * `launch` from the backend → LaunchInfo. Missing or malformed means open
+ * (an older backend has no launch states), so this can only ever lock a
+ * tile the backend explicitly said to lock.
+ */
+function parseLaunch(raw: unknown): LaunchInfo {
+  if (!raw || typeof raw !== "object") return OPEN_LAUNCH;
+  const l = raw as Record<string, unknown>;
+  const access = oneOf(l.access, ["open", "soon", "paused"] as const, "open");
+  const s = (l.sheet && typeof l.sheet === "object" ? l.sheet : {}) as Record<string, unknown>;
+  return {
+    access,
+    beta: access === "open" && l.beta === true,
+    openFor: l.openFor && typeof l.openFor === "object" ? parseAudience(l.openFor) : null,
+    fallback: oneOf(l.fallback, ["soon", "hidden"] as const, "soon"),
+    sheet: {
+      headline: text(s.headline, 60) ?? (access === "paused" ? "Taking a short break" : "Coming soon"),
+      message: text(s.message, 200),
+      notifyMe: s.notifyMe === true,
+      onList: s.onList === true,
+      alternative: parseAction(s.alternative),
+      alternativeLabel: text(s.alternativeLabel, 24),
+    },
+  };
+}
+
 /** Whether `viewer` is in `audience`. Unknown rules never hide anything. */
 export function matchesAudience(audience: Audience, viewer: Viewer): boolean {
   if (audience.segment === "signed_in" && !viewer.signedIn) return false;
@@ -340,7 +413,7 @@ export function parseAppConfig(raw: unknown): AppConfig {
   }
   const features: ResolvedFeature[] = FEATURE_REGISTRY.map((def, i) => {
     const s = sent.get(def.key);
-    if (!s) return { ...def, enabled: true, order: 100 + i, badge: null, audience: EVERYONE };
+    if (!s) return { ...def, enabled: true, order: 100 + i, badge: null, audience: EVERYONE, launch: OPEN_LAUNCH };
     return {
       ...def,
       title: text(s.title, 40) ?? def.title,
@@ -352,6 +425,7 @@ export function parseAppConfig(raw: unknown): AppConfig {
       order: typeof s.order === "number" && Number.isFinite(s.order) ? s.order : 100 + i,
       badge: text(s.badge, 12),
       audience: parseAudience(s.audience),
+      launch: parseLaunch(s.launch),
     };
   });
 
@@ -376,6 +450,7 @@ export function parseAppConfig(raw: unknown): AppConfig {
         badge: text(t.badge, 12),
         action,
         audience: parseAudience(t.audience),
+        launch: parseLaunch(t.launch),
       });
     }
   }
@@ -473,13 +548,31 @@ export function parseAppConfig(raw: unknown): AppConfig {
 export const ANY_VIEWER: Viewer = { signedIn: true, premium: true, platform: "android", appVersion: "999.0.0" };
 
 /**
+ * An item's launch for `viewer`, or null when it's hidden from them (open
+ * only for a rollout slice they're not in, with "everyone else sees
+ * nothing"). Outside the slice with the Coming soon fallback, they get a
+ * locked tile.
+ */
+export function resolveLaunch(launch: LaunchInfo, viewer: Viewer): ViewerLaunch | null {
+  if (launch.access === "open" && launch.openFor && !matchesAudience(launch.openFor, viewer)) {
+    if (launch.fallback === "hidden") return null;
+    return { access: "soon", beta: false, sheet: launch.sheet };
+  }
+  return { access: launch.access, beta: launch.beta, sheet: launch.sheet };
+}
+
+/**
  * What a hub shows for `viewer`: its enabled built-in features and link
- * tiles, filtered by audience, in one CMS order.
+ * tiles, filtered by audience and launch state, in one CMS order. Coming
+ * soon and paused tiles stay in (drawn locked); `launch` says which.
  */
 export function hubTilesFor(config: AppConfig, placement: HubPlacement, viewer: Viewer = ANY_VIEWER): HubTile[] {
-  const features: HubTile[] = config.features
-    .filter((f) => f.enabled && f.placement === placement && matchesAudience(f.audience, viewer))
-    .map((f) => ({
+  const tiles: HubTile[] = [];
+  for (const f of config.features) {
+    if (!f.enabled || f.placement !== placement || !matchesAudience(f.audience, viewer)) continue;
+    const launch = resolveLaunch(f.launch, viewer);
+    if (!launch) continue;
+    tiles.push({
       key: f.key,
       title: f.title,
       description: f.description,
@@ -490,10 +583,14 @@ export function hubTilesFor(config: AppConfig, placement: HubPlacement, viewer: 
       badge: f.badge,
       action: { type: "route", value: f.route, fallbackUrl: null },
       builtIn: true,
-    }));
-  const links: HubTile[] = config.customTiles
-    .filter((t) => t.enabled && t.placement === placement && matchesAudience(t.audience, viewer))
-    .map((t) => ({
+      launch,
+    });
+  }
+  for (const t of config.customTiles) {
+    if (!t.enabled || t.placement !== placement || !matchesAudience(t.audience, viewer)) continue;
+    const launch = resolveLaunch(t.launch, viewer);
+    if (!launch) continue;
+    tiles.push({
       key: `link:${t.id}`,
       title: t.title,
       description: t.description ?? "",
@@ -504,16 +601,80 @@ export function hubTilesFor(config: AppConfig, placement: HubPlacement, viewer: 
       badge: t.badge,
       action: t.action,
       builtIn: false,
-    }));
-  return [...features, ...links].sort((a, b) => a.order - b.order);
+      launch,
+    });
+  }
+  return tiles.sort((a, b) => a.order - b.order);
 }
 
 /** Built-in features only (kept for callers that need the feature objects). */
 export const featuresFor = (config: AppConfig, placement: HubPlacement): ResolvedFeature[] =>
   config.features.filter((f) => f.enabled && f.placement === placement).sort((a, b) => a.order - b.order);
 
+/**
+ * Whether `key` is shown to `viewer` *and* usable. A Coming soon or paused
+ * feature counts as not visible here: callers use this to offer plain links
+ * to a feature, and a link to something locked would just open its sheet.
+ */
 export const isFeatureVisible = (config: AppConfig, key: string, viewer: Viewer = ANY_VIEWER) =>
-  config.features.some((f) => f.key === key && f.enabled && matchesAudience(f.audience, viewer));
+  config.features.some(
+    (f) => f.key === key && f.enabled && matchesAudience(f.audience, viewer) && resolveLaunch(f.launch, viewer)?.access === "open"
+  );
+
+/** "/(app)/qa?new=1" → "/qa": route groups, query and hash dropped, no trailing slash. */
+export function routePath(route: string): string {
+  const path = route
+    .split(/[?#]/)[0]
+    .replace(/\/\([^/)]*\)/g, "")
+    .replace(/\/+$/, "");
+  return path.startsWith("/") ? path : `/${path}`;
+}
+
+/** What the route guard shows instead of a locked feature's screen. */
+export type LockedRoute = {
+  itemKey: string;
+  title: string;
+  description: string;
+  icon: string;
+  colorKey: TileColorKey;
+  builtIn: boolean;
+  access: Exclude<LaunchAccess, "open">;
+  sheet: LaunchSheetInfo;
+};
+
+/**
+ * Route guard: if `route` (from a banner, link tile, pop-up, push or shared
+ * link) opens a feature that's Coming soon or paused for `viewer`, the
+ * sheet to show instead; null when it may open. A route belongs to a
+ * feature when its path equals the feature route's path or sits under it
+ * ("/consultation/book/…" belongs to "/(app)/consultation").
+ *
+ * A feature hidden from this viewer by its rollout ("everyone else sees
+ * nothing") is guarded with the Coming soon sheet too, minus Notify me:
+ * a stale link must not open an unlaunched screen. A feature the CMS
+ * simply switched off (no launch lock) isn't guarded, as before.
+ */
+export function launchForRoute(config: AppConfig, route: string, viewer: Viewer = ANY_VIEWER): LockedRoute | null {
+  const path = routePath(route);
+  for (const f of config.features) {
+    const base = routePath(f.route);
+    if (path !== base && !path.startsWith(`${base}/`)) continue;
+    // An item the backend hid (enabled: false) still carries its lock, if any.
+    const launch = resolveLaunch(f.launch, viewer) ?? { access: "soon" as const, beta: false, sheet: { ...f.launch.sheet, notifyMe: false } };
+    if (launch.access === "open") continue;
+    return {
+      itemKey: f.key,
+      title: f.title,
+      description: f.description,
+      icon: f.icon,
+      colorKey: f.colorKey,
+      builtIn: true,
+      access: launch.access,
+      sheet: launch.sheet,
+    };
+  }
+  return null;
+}
 
 /**
  * Banners for a placement, highest priority first. `endAt` is re-checked on

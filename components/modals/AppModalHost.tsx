@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
 import { Modal, Pressable, Text, TouchableOpacity, View } from "react-native";
 import { openAppSettings, registerModalListener } from "../../lib/modal-host";
+import { LaunchSheet } from "../LaunchSheet";
 import { useTheme } from "../theme";
 import type { ModalButtonSpec, ModalIconName, ModalRequest, ModalVariant } from "./types";
 
@@ -58,6 +59,9 @@ export function AppModalHost() {
     close();
     req.onCancel?.();
   }
+
+  // Launch sheets are a bottom sheet with their own layout and state.
+  if (request?.kind === "launch") return <LaunchSheet key={request.id} request={request} onClose={close} />;
 
   const variant: ModalVariant = request ? (request.kind === "permission" ? "permission" : request.variant) : "default";
   const accent = variantColors(colors, variant);

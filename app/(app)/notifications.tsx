@@ -10,6 +10,7 @@ import { useTheme } from "../../components/theme";
 import { usePaginatedList } from "../../hooks/usePaginatedList";
 import { LoadMoreButton } from "../../components/LoadMoreButton";
 import { partnerApi, type AppNotification } from "../../lib/api";
+import { guardRoute } from "../../lib/launchGuard";
 import { NOTIFICATIONS_LIST_ROUTE, resolveNotificationTarget } from "../../lib/notifications";
 import { notificationIcon, notificationImage } from "../../lib/notificationIcons";
 import { useAuth } from "../../components/auth-context";
@@ -124,7 +125,8 @@ export default function NotificationsScreen() {
       { ...(notif.data ?? {}), type: notif.type },
       user?.partnerRole === "viewer",
     );
-    if (target !== NOTIFICATIONS_LIST_ROUTE) {
+    // A feature the App CMS has Coming soon / paused opens its sheet instead.
+    if (target !== NOTIFICATIONS_LIST_ROUTE && !guardRoute(target)) {
       router.push(target as Parameters<typeof router.push>[0]);
     }
   };

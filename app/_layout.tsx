@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState, useSyncExternalStore } from "react"
 import { Platform, Text, TextInput } from "react-native";
 import { AppLockProvider, useAppLock } from "../components/AppLock";
 import { AppConfigProvider } from "../components/app-config";
+import { AppConfigSync } from "../components/AppConfigSync";
 import { AppGate } from "../components/AppGate";
 import { AppLockScreen } from "../components/AppLockScreen";
 import { AuthProvider, useAuth } from "../components/auth-context";
@@ -20,6 +21,7 @@ import {
   PUBLIC_DEEP_LINK_PATHS,
   subscribePendingDeepLink,
 } from "../lib/deeplink";
+import { guardRoute } from "../lib/launchGuard";
 import { resolveNotificationTarget } from "../lib/notifications";
 import { emitDataChange } from "../lib/data-sync";
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -129,6 +131,8 @@ function AppShell() {
       pendingDeepLink.pathname === "/community" && user?.partnerRole === "viewer"
         ? "/forum"
         : pendingDeepLink.pathname;
+    // A feature the App CMS has Coming soon / paused opens its sheet instead.
+    if (guardRoute(targetPath)) return;
     // `openedAt` makes every link tap a distinct param change, so a screen
     // that's already mounted (e.g. the community tab) re-opens the same item
     // again if the same link is tapped twice. Typed routes can't know the
@@ -189,6 +193,7 @@ function AppShell() {
     }
     const target = resolveNotificationTarget(pendingNotification, user?.partnerRole === "viewer");
     setPendingNotification(null);
+    if (guardRoute(target)) return;
     router.push(target as Parameters<typeof router.push>[0]);
   }, [pendingNotification, navigatorReady, isAuthenticated, pathname, router, user?.partnerRole]);
 
@@ -213,6 +218,8 @@ function AppShell() {
       {isLocked && <AppLockScreen />}
       {/* App CMS maintenance mode / update prompts; renders nothing by default. */}
       <AppGate />
+      {/* Refetches the App CMS config on sign-in/out; feeds the launch route guard. */}
+      <AppConfigSync />
       <AppModalHost />
     </>
   );
