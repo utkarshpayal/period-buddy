@@ -67,7 +67,7 @@ The separate **The-Nura-CMS** portal controls parts of the app through `period-b
 - `lib/tapAction.ts`: runs tap actions.
 
 **What the CMS controls:**
-- **Feature tiles:** which of the built-in `FEATURE_REGISTRY` features show, and where. The places are the three hubs plus a **Shortcuts** block on Home (`home` placement, the `shortcuts` home section) and Profile (`profile`, via `components/CmsShortcuts.tsx`).
+- **Feature tiles:** which of the built-in `FEATURE_REGISTRY` features show, and where. The places are the three hubs plus a **Shortcuts** block on Home (`home` placement, the `shortcuts` home section, last in the default order) and Profile (`profile`, via `components/CmsShortcuts.tsx`, which draws them as rows of four round quick-action icons with labels and no heading, ignoring tile size).
 - **Tile look:** order, size (`small` grid tile or `large` row), colour, text, badge and audience (signed-in / premium / free, platform, app-version range).
 - **Admin link tiles** (`customTiles`): open a route, a website (`expo-web-browser`), or **another app** via `Linking.openURL(value)`, falling back to `fallbackUrl`.
 - **Home sections:** order and visibility.
