@@ -1552,6 +1552,11 @@ export const partnerApi = {
     apiRequest<AppNotification>(`/api/partner/notifications/${id}/read`, {
       method: "POST",
     }),
+
+  markAllNotificationsAsRead: () =>
+    apiRequest<{ updated: number }>("/api/partner/notifications/read-all", {
+      method: "POST",
+    }),
 };
 
 export const buddyApi = {
