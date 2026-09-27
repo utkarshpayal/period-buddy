@@ -1,30 +1,124 @@
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import React from "react";
-import { Text, View } from "react-native";
+import { Text, TouchableOpacity, View } from "react-native";
 import { useAppConfig } from "./app-config";
-import { HubFeatureTiles } from "./HubFeatureTiles";
-import { useTheme } from "./theme";
+import { genZLabel, useGenZMode } from "./genz-mode";
+import { ThemeColors, useTheme } from "./theme";
 import { useViewer } from "../hooks/useViewer";
-import { hubTilesFor } from "../lib/appConfig";
+import { HubTile, hubTilesFor } from "../lib/appConfig";
+import { runTapAction } from "../lib/tapAction";
+
+const PER_ROW = 4;
+const ICON = 52;
 
 /**
  * Features and link tiles the App CMS moved onto Home or Profile (placement
- * "home" / "profile"), under a small heading. Renders nothing when the CMS
+ * "home" / "profile"). Renders nothing when the CMS
  * put nothing there, which is the default.
+ *
+ * Drawn as quick actions, not cards: rows of four round icons with short
+ * labels, straight on the page (no box, no heading). Tile size and description are hub-screen
+ * ideas, so they're ignored here (the description is still read out).
  */
-export function CmsShortcuts({ placement, title = "Shortcuts", style }: { placement: "home" | "profile"; title?: string; style?: object }) {
-  const { colors, fonts } = useTheme();
+export function CmsShortcuts({ placement, style }: { placement: "home" | "profile"; style?: object }) {
   const { config } = useAppConfig();
   const viewer = useViewer();
   const tiles = hubTilesFor(config, placement, viewer);
   if (tiles.length === 0) return null;
 
+  const rows: HubTile[][] = [];
+  for (let i = 0; i < tiles.length; i += PER_ROW) rows.push(tiles.slice(i, i + PER_ROW));
+
   return (
     <View style={style}>
-      <View className="mx-6 mb-2.5 flex-row items-center" style={{ gap: 7 }}>
-        <View style={{ width: 5, height: 14, borderRadius: 3, backgroundColor: colors.accent }} />
-        <Text style={{ fontSize: 14.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>{title}</Text>
+      <View className="mx-4" style={{ paddingTop: 4, gap: 16 }}>
+        {rows.map((row) => (
+          <View key={row[0].key} style={{ flexDirection: "row" }}>
+            {row.map((tile) => (
+              <Shortcut key={tile.key} tile={tile} />
+            ))}
+            {/* Keep a short last row aligned to the grid. */}
+            {Array.from({ length: PER_ROW - row.length }, (_, i) => (
+              <View key={`gap-${i}`} style={{ flex: 1 }} />
+            ))}
+          </View>
+        ))}
       </View>
-      <HubFeatureTiles features={tiles} />
     </View>
+  );
+}
+
+const tint = (colors: ThemeColors, key: HubTile["colorKey"]) => ({
+  color: colors[key],
+  bg: colors[`${key}Light` as keyof ThemeColors],
+});
+
+/** A website or another app, so the shortcut says it leaves the app. */
+const isExternal = (tile: HubTile) => tile.action.type === "url" || tile.action.type === "app";
+
+function Shortcut({ tile }: { tile: HubTile }) {
+  const { colors, fonts } = useTheme();
+  const { enabled: genZ } = useGenZMode();
+  const router = useRouter();
+  const { color, bg } = tint(colors, tile.colorKey);
+  const label = tile.builtIn ? genZLabel(tile.title, genZ) : tile.title;
+  const external = isExternal(tile);
+
+  return (
+    <TouchableOpacity
+      onPress={() => runTapAction(tile.action, router)}
+      activeOpacity={0.7}
+      accessibilityRole="button"
+      accessibilityLabel={[label, tile.badge, tile.description, external ? "Opens outside the app" : null].filter(Boolean).join(". ")}
+      style={{ flex: 1, alignItems: "center", paddingHorizontal: 4 }}
+    >
+      <View>
+        <View style={{ width: ICON, height: ICON, borderRadius: ICON / 2, backgroundColor: bg, alignItems: "center", justifyContent: "center" }}>
+          <Ionicons name={tile.icon as keyof typeof Ionicons.glyphMap} size={22} color={color} />
+        </View>
+        {tile.badge ? (
+          <View
+            style={{
+              position: "absolute",
+              top: -4,
+              right: -10,
+              backgroundColor: colors.primary,
+              borderRadius: 8,
+              paddingHorizontal: 5,
+              paddingVertical: 1,
+              borderWidth: 2,
+              borderColor: colors.background,
+            }}
+          >
+            <Text style={{ fontSize: 9, fontWeight: "800", color: colors.buttonText, fontFamily: fonts.body }} numberOfLines={1}>
+              {tile.badge}
+            </Text>
+          </View>
+        ) : external ? (
+          <View
+            style={{
+              position: "absolute",
+              bottom: -2,
+              right: -2,
+              width: 18,
+              height: 18,
+              borderRadius: 9,
+              backgroundColor: colors.background,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Ionicons name="arrow-up-outline" size={11} color={colors.mutedText} style={{ transform: [{ rotate: "45deg" }] }} />
+          </View>
+        ) : null}
+      </View>
+      <Text
+        numberOfLines={2}
+        style={{ marginTop: 8, fontSize: 12, lineHeight: 15, fontWeight: "600", color: colors.foreground, textAlign: "center", fontFamily: fonts.body }}
+      >
+        {label}
+      </Text>
+    </TouchableOpacity>
   );
 }
