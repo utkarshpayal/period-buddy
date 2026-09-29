@@ -1,7 +1,7 @@
 import * as Notifications from "expo-notifications";
 import { Stack, usePathname, useRootNavigationState, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Platform, Text, TextInput, View } from "react-native";
+import { Platform, View } from "react-native";
 import { AppLockProvider, useAppLock } from "../components/AppLock";
 import { AppConfigProvider } from "../components/app-config";
 import { AppConfigSync } from "../components/AppConfigSync";
@@ -24,6 +24,8 @@ import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
 import "../global.css";
+import { LinearGradient } from "expo-linear-gradient";
+import { cssInterop } from "nativewind";
 import { MAX_CONTENT_WIDTH } from "../lib/layout";
 
 
@@ -49,26 +51,19 @@ function isEntryPath(pathname: string, isAuthenticated: boolean) {
   return ENTRY_PATHS.has(pathname) || (!isAuthenticated && pathname === "/partner-connect");
 }
 
+// NativeWind only turns `className` into styles for components it knows about;
+// on anything else the prop is silently ignored. Register third-party
+// components that take className here.
+cssInterop(LinearGradient, { className: "style" });
+
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 // The app standardizes on exactly two typefaces (see ThemeFonts in
 // components/theme.tsx): Manrope for all headings/body copy, and IBM Plex
-// Mono for numeric/code-like content (streaks, OTPs, stats). NativeWind's
-// `font-*` utility classes only set fontWeight, not fontFamily, so any Text
-// that forgets an explicit `fontFamily: fonts.body` would silently fall back
-// to the OS default font and read as inconsistent. Setting Manrope as the
-// default here closes that gap app-wide — screens that already set
-// `fontFamily` explicitly (heading/body/mono) are unaffected, since an
-// explicit style always wins over these defaults.
-(Text as unknown as { defaultProps: Record<string, unknown> }).defaultProps = {
-  ...(Text as unknown as { defaultProps?: Record<string, unknown> }).defaultProps,
-  style: [{ fontFamily: "Manrope" }],
-};
-(TextInput as unknown as { defaultProps: Record<string, unknown> }).defaultProps = {
-  ...(TextInput as unknown as { defaultProps?: Record<string, unknown> }).defaultProps,
-  style: [{ fontFamily: "Manrope" }],
-};
+// Mono for numeric/code-like content. Text without an explicit fontFamily
+// still gets Manrope from lib/react-native-shim.tsx (wired in metro.config.js);
+// `Text.defaultProps` can't do it, React 19 ignores it on function components.
 
 // Mounted only once AuthProvider has finished hydrating (it withholds children
 // until then). Waiting on theme hydration here too, and hiding the splash
@@ -228,7 +223,12 @@ export default function RootLayout() {
     ...Ionicons.font,
     ...Feather.font,
     ...MaterialCommunityIcons.font,
-    "Manrope": require("../assets/fonts/Manrope-Variable.ttf"),
+    // Native builds embed Manrope as one family with a file per weight
+    // (expo-font plugin in app.json), so fontWeight picks the right file.
+    // Android can't select weights from a variable font, and loading one here
+    // under the same name would replace that family. Browsers handle the
+    // variable font fine, so web loads it at runtime.
+    ...(Platform.OS === "web" ? { Manrope: require("../assets/fonts/Manrope-Variable.ttf") } : {}),
     "IBM Plex Mono": require("../assets/fonts/IBMPlexMono-Regular.ttf"),
     "IBMPlexMono-SemiBold": require("../assets/fonts/IBMPlexMono-SemiBold.ttf"),
   });
