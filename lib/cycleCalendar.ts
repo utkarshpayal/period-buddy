@@ -23,8 +23,14 @@ export function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
+/**
+ * 1-based day of the cycle `date` falls on. The gap between two local
+ * midnights is 23h or 25h across a daylight-saving change, so it's rounded to
+ * whole days — flooring it made every day after a spring-forward one day short.
+ * The one definition for the tracker, Home's week strip and the Calendar screen.
+ */
 export function getCycleDay(date: Date, cycleStartDate: Date, cycleLength = DEFAULT_CYCLE_LENGTH) {
-  const difference = Math.floor((startOfDay(date).getTime() - startOfDay(cycleStartDate).getTime()) / MS_PER_DAY);
+  const difference = Math.round((startOfDay(date).getTime() - startOfDay(cycleStartDate).getTime()) / MS_PER_DAY);
   return (((difference % cycleLength) + cycleLength) % cycleLength) + 1;
 }
 

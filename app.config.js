@@ -1,10 +1,10 @@
 // app.json stays the source of truth for everything else. This wrapper only
-// overrides the two Google services file paths so EAS Build can inject them
-// via file-type environment variables (GOOGLE_SERVICES_JSON /
-// GOOGLE_SERVICES_INFO_PLIST) -- those files are gitignored (see CLAUDE.md)
-// and EAS Build only uploads git-tracked files, so without this the cloud
-// build can't find them. Falls back to the local gitignored files for
-// `npx expo start` / local builds where the env vars aren't set.
+// lets EAS file-type environment variables (GOOGLE_SERVICES_JSON /
+// GOOGLE_SERVICES_INFO_PLIST, set per environment with `eas env:set --type
+// file`) override the two Google services file paths. Without them it falls
+// back to the git-tracked assets/google-services.json and
+// assets/GoogleService-Info.plist, which are Firebase client configs tracked
+// on purpose (see .gitignore and CLAUDE.md).
 //
 // `config` below is Expo's own resolved static config (app.json + defaults),
 // passed in for exactly this purpose -- extend it, don't re-require app.json,

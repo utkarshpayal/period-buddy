@@ -60,8 +60,6 @@ type BrowserStorage = {
 };
 
 type StoredAppState = {
-  dayEntries?: Record<string, DayEntry>;
-  dayNotes?: Record<string, string>;
   reportedPosts?: string[];
   savedPosts?: string[];
   tokens?: number;
@@ -76,12 +74,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [reportedPosts, setReportedPosts] = useState<Set<string>>(
     () => new Set(initialState.reportedPosts ?? []),
   );
-  const [dayNotes, setDayNotes] = useState<Record<string, string>>(
-    initialState.dayNotes ?? {},
-  );
-  const [dayEntries, setDayEntries] = useState<Record<string, DayEntry>>(
-    initialState.dayEntries ?? {},
-  );
+  // Day logs are an in-session overlay only: every save also goes to the
+  // server, which stays the source of truth. Persisting them (web used to)
+  // let an old local copy hide newer edits made on another device.
+  const [dayNotes, setDayNotes] = useState<Record<string, string>>({});
+  const [dayEntries, setDayEntries] = useState<Record<string, DayEntry>>({});
   const trackedDays = useMemo(
     () =>
       Object.values(dayEntries).filter(
@@ -148,13 +145,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     writeStoredAppState({
-      dayEntries,
-      dayNotes,
       reportedPosts: Array.from(reportedPosts),
       savedPosts: Array.from(savedPosts),
       tokens,
     });
-  }, [dayEntries, dayNotes, reportedPosts, savedPosts, tokens]);
+  }, [reportedPosts, savedPosts, tokens]);
 
   return (
     <AppStateContext.Provider
@@ -204,8 +199,6 @@ function readStoredAppState(): StoredAppState {
     const state = JSON.parse(rawState) as StoredAppState;
 
     return {
-      dayEntries: state.dayEntries ?? {},
-      dayNotes: state.dayNotes ?? {},
       reportedPosts: Array.isArray(state.reportedPosts)
         ? state.reportedPosts
         : [],
@@ -214,6 +207,19 @@ function readStoredAppState(): StoredAppState {
     };
   } catch {
     return {};
+  }
+}
+
+/**
+ * Drops the persisted copy (saved/reported posts, and day logs written by
+ * older builds). Called when the account changes: the key isn't per user, so
+ * on a shared browser the next account would otherwise inherit it.
+ */
+export function clearStoredAppState() {
+  try {
+    getStorage()?.removeItem(APP_STATE_STORAGE_KEY);
+  } catch {
+    // Nothing persisted to clear.
   }
 }
 

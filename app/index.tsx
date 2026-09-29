@@ -31,19 +31,19 @@ const SLIDES: Slide[] = [
   {
     key: "brand",
     title: "Cycle care that\nfeels like you",
-    body: "Private, judgment-free tracking and support, built for how your body really works.",
+    body: "Private, judgment-free tracking, built around how your body works.",
     art: "brand",
   },
   {
     key: "predict",
     title: "Know what's\ncoming next",
-    body: "Period, fertile window and mood predictions that get smarter every time you log.",
+    body: "Period, fertile window and mood predictions that learn as you log.",
     art: "predict",
   },
   {
     key: "care",
     title: "Support whenever\nyou need it",
-    body: "Ask Buddy anything, talk to doctors, and build habits that help, all in one place.",
+    body: "Ask Nura AI, talk to doctors and build healthy habits, all in one place.",
     art: "care",
   },
 ];
@@ -55,8 +55,12 @@ export default function Index() {
   const { width, height } = useWindowDimensions();
   // Short phones: shrink the artwork rather than clip the text under it.
   const compact = height < 720;
+  const artScale = compact ? 0.78 : 1;
   const hasNavigated = useRef(false);
   const [index, setIndex] = useState(0);
+  // The pager's real height, so every slide fills it and centres its content
+  // (a horizontal list doesn't stretch its items to its height on web).
+  const [pagerHeight, setPagerHeight] = useState(0);
   const contentWidth = Math.min(width, 540);
   const screenGradient = getScreenGradient(colors, isDark) as [string, string, string];
 
@@ -107,6 +111,7 @@ export default function Index() {
             <ThemeToggle />
           </View>
 
+          <View style={{ flex: 1 }} onLayout={(e) => setPagerHeight(e.nativeEvent.layout.height)}>
           <FlatList
             data={SLIDES}
             keyExtractor={(slide) => slide.key}
@@ -117,11 +122,15 @@ export default function Index() {
             onScroll={onScroll}
             scrollEventThrottle={32}
             getItemLayout={(_, i) => ({ index: i, length: contentWidth, offset: contentWidth * i })}
-            style={{ flexGrow: 1 }}
+            style={{ height: pagerHeight || undefined }}
             renderItem={({ item }) => (
-              <View style={{ width: contentWidth, flex: 1, paddingHorizontal: 28, justifyContent: "center" }}>
-                <View style={{ alignItems: "center", marginTop: compact ? -25 : 0, marginBottom: compact ? 8 : 36, transform: [{ scale: compact ? 0.78 : 1 }] }}>
-                  <SlideArt art={item.art} colors={colors} isDark={isDark} />
+              <View style={{ width: contentWidth, height: pagerHeight || undefined, paddingHorizontal: 28, alignItems: "center", justifyContent: "center" }}>
+                {/* The art is drawn at 250×230 and scaled on short phones; this box
+                    takes the scaled size so the text sits right under it. */}
+                <View style={{ width: 250 * artScale, height: 230 * artScale, alignItems: "center", justifyContent: "center", marginBottom: compact ? 20 : 32 }}>
+                  <View style={{ transform: [{ scale: artScale }] }}>
+                    <SlideArt art={item.art} colors={colors} isDark={isDark} />
+                  </View>
                 </View>
                 <Text
                   accessibilityRole="header"
@@ -138,12 +147,17 @@ export default function Index() {
                   {item.title}
                 </Text>
                 <Text
+                  textBreakStrategy="balanced"
                   style={{
-                    color: colors.mutedText,
+                    // mutedText is 4.4:1 on this screen's pink middle band; the
+                    // foreground at 80% keeps the softer look above 4.5:1.
+                    color: colors.foreground,
+                    opacity: 0.8,
                     fontSize: 15.5,
                     lineHeight: 23,
                     textAlign: "center",
                     marginTop: 12,
+                    maxWidth: 320,
                     fontFamily: fonts.body,
                   }}
                 >
@@ -152,6 +166,7 @@ export default function Index() {
               </View>
             )}
           />
+          </View>
 
           <View style={{ paddingHorizontal: 24, paddingBottom: 12 }}>
             <View className="flex-row justify-center" style={{ gap: 6, marginBottom: 26 }}>
@@ -173,7 +188,7 @@ export default function Index() {
                 ...getShadow(colors, isDark),
               })}
             >
-              <Text style={{ color: colors.buttonText, fontSize: 16, fontWeight: "800", fontFamily: fonts.body }}>
+              <Text style={{ color: colors.buttonText, fontSize: 19, fontWeight: "800", letterSpacing: 0.2, fontFamily: fonts.body }}>
                 Get started
               </Text>
             </Pressable>
@@ -199,9 +214,9 @@ export default function Index() {
               onPress={() => router.push("/(tabs)/partner-connect")}
               hitSlop={8}
               className="flex-row justify-center items-center"
-              style={({ pressed }) => ({ gap: 5, paddingVertical: 6, opacity: pressed ? 0.6 : 1 })}
+              style={({ pressed }) => ({ paddingVertical: 6, opacity: pressed ? 0.6 : 1 })}
             >
-              <Ionicons name="heart-outline" size={13} color={colors.mutedText} />
+              <Ionicons name="heart-outline" size={14} color={colors.mutedText} style={{ marginRight: 5 }} />
               <Text style={{ color: colors.mutedText, fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}>
                 Joining a partner? Use your invite code
               </Text>
@@ -217,9 +232,11 @@ function Dot({ active, colors }: { active: boolean; colors: ThemeColors }) {
   const style = useAnimatedStyle(
     () => ({
       width: withTiming(active ? 22 : 7, { duration: 220 }),
-      backgroundColor: active ? colors.primary : colors.border,
+      // Inactive dots used `border`, which all but vanished on the pink band (1.1:1); this is ≥3:1 in both themes.
+      backgroundColor: active ? colors.primary : colors.mutedText,
+      opacity: active ? 1 : 0.8,
     }),
-    [active, colors.primary, colors.border],
+    [active, colors.primary, colors.mutedText],
   );
   return <Animated.View style={[{ height: 7, borderRadius: 4 }, style]} />;
 }

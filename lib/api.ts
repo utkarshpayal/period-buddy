@@ -1085,15 +1085,20 @@ export async function apiEnvelopeRequest<T>(
     // Login/Google sign-in answer 403 for a suspended account; any other
     // authenticated request answers 401 (so older clients still sign out) —
     // both carry this code.
+    // Only sign out when the token this request carried is still the
+    // session's: a slow request from before a logout/login would otherwise
+    // come back 401 and sign the new account straight out.
+    const tokenStillCurrent = async () => {
+      invalidateTokenCache();
+      return (await getToken()) === token;
+    };
     if ((data as { code?: string })?.code === "ACCOUNT_SUSPENDED") {
-      if (!options.skipAuth) {
-        invalidateTokenCache();
+      if (!options.skipAuth && token && (await tokenStillCurrent())) {
         onUnauthorized?.("suspended");
       }
       throw new ApiError(getErrorMessage(data, response.status), "accountSuspended", response.status);
     }
-    if (response.status === 401 && !options.skipAuth) {
-      invalidateTokenCache();
+    if (response.status === 401 && !options.skipAuth && token && (await tokenStillCurrent())) {
       onUnauthorized?.();
     }
     if (response.status === 402) {

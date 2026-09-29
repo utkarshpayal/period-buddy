@@ -4,6 +4,8 @@ import { AppState } from "react-native";
 import type { AuthUser } from "../lib/auth";
 import { invalidateTokenCache, partnerApi, setUnauthorizedHandler } from "../lib/api";
 import { alert } from "../lib/alert";
+import { emitDataChange } from "../lib/data-sync";
+import { clearStoredAppState } from "./AppState";
 
 type PartnerRole = AuthUser["partnerRole"];
 
@@ -37,6 +39,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // e.g. the post-login sync racing connectPartner() would otherwise land
   // after login's own updateUser(viewer) and reset the role to null.
   const roleWriteSeq = useRef(0);
+  // Which account the device last held, so signIn can tell a new account from a refresh of the same one.
+  const signedInUserId = useRef<string | null>(null);
 
   // Hydrate from AsyncStorage on mount
   useEffect(() => {
@@ -44,7 +48,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .then((raw) => {
         if (raw) {
           const parsed = JSON.parse(raw) as AuthSession;
-          if (parsed.token) setSession(parsed);
+          if (parsed.token) {
+            signedInUserId.current = parsed.user?._id ?? null;
+            setSession(parsed);
+          }
         }
       })
       .catch(() => {})
@@ -79,12 +86,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [session?.token, setupPending]);
 
+  // Per-account data held outside React state must not carry over to the
+  // next session: the 60s dashboard/subscription caches (useUserStats,
+  // useSubscriptionAccess — both drop their cache on these topics) and the
+  // locally persisted day logs.
+  const clearAccountData = useCallback(() => {
+    emitDataChange("dashboard", "subscription");
+    clearStoredAppState();
+  }, []);
+
   const signOut = useCallback(async () => {
     roleWriteSeq.current += 1;
     setSession(null);
     invalidateTokenCache();
+    clearAccountData();
     await AsyncStorage.removeItem(AUTH_SESSION_KEY).catch(() => {});
-  }, []);
+  }, [clearAccountData]);
 
   // Awaited by callers before firing off any follow-up authenticated request
   // (e.g. resolving partner role right after login) — otherwise getToken()
@@ -92,10 +109,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // no Authorization header at all.
   const signIn = useCallback(async (s: AuthSession) => {
     roleWriteSeq.current += 1;
+    // Onboarding's finish re-signs-in the same user; only a different account clears.
+    if (signedInUserId.current !== (s.user?._id ?? null)) clearAccountData();
+    signedInUserId.current = s.user?._id ?? null;
     setSession(s);
     invalidateTokenCache();
     await AsyncStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(s)).catch(() => {});
-  }, []);
+  }, [clearAccountData]);
 
   // Stable identity (via the functional setSession form, no `session` dep
   // needed) is load-bearing: screens call this from a `useEffect` keyed on

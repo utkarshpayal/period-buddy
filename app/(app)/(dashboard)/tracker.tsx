@@ -38,11 +38,11 @@ import { HeaderIconButton, TabHeader } from "../../../components/ScreenHeader";
 import { MonthCalendar } from "../../../components/onboarding/parts";
 import { SkeletonBlock } from "../../../components/Skeleton";
 import { CalendarDayCell, CalendarLegend } from "../../../components/CycleCalendar";
-import type { DayStatus } from "../../../lib/cycleCalendar";
+import { getCycleDay, type DayStatus } from "../../../lib/cycleCalendar";
+import { alertLogNotSaved } from "../../../lib/alert";
 
 const CYCLE_LENGTH = 28;
 const CURRENT_CYCLE_DAY = 14;
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const WEEKDAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 // Every month page gets 6 rows so swiping never changes the card's height.
@@ -121,18 +121,6 @@ function getDateLabel(date: Date) {
     month: "long",
     year: "numeric",
   });
-}
-
-function getCycleDay(
-  date: Date,
-  cycleStartDate: Date,
-  cycleLength = CYCLE_LENGTH,
-) {
-  const difference = Math.floor(
-    (startOfDay(date).getTime() - startOfDay(cycleStartDate).getTime()) /
-      MS_PER_DAY,
-  );
-  return (((difference % cycleLength) + cycleLength) % cycleLength) + 1;
 }
 
 function getMondayFirstWeekday(date: Date) {
@@ -648,7 +636,12 @@ export default function Tracker() {
   // (or wasn't) logged — re-anchoring on a newly logged period must NOT
   // retroactively repaint old months. So the dashed "predicted period"
   // highlight is shown only for today and future dates.
-  const todayStart = useMemo(() => startOfDay(new Date()), []);
+  // Derived from todayKey, not frozen at mount: the tracker tab stays mounted,
+  // so a mount-time value would still be yesterday after midnight.
+  const todayStart = useMemo(() => {
+    const [y, m, d] = todayKey.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  }, [todayKey]);
 
   // True for a day inside the current cycle's configured period window that
   // falls *after* the actually-logged bleeding ended — i.e. a phantom tail day.
@@ -2055,7 +2048,7 @@ export default function Tracker() {
                 // double-counting with an optimistic local award.
                 if (result.tokensEarned) earnTokens(result.tokensEarned);
               })
-              .catch(() => {});
+              .catch(alertLogNotSaved);
           }
         }}
         onLogSymptom={(symptom) => {
@@ -2088,7 +2081,7 @@ export default function Tracker() {
                 // double-counting with an optimistic local award.
                 if (result.tokensEarned) earnTokens(result.tokensEarned);
               })
-              .catch(() => {});
+              .catch(alertLogNotSaved);
           }
         }}
       />
