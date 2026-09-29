@@ -53,7 +53,7 @@ function SectionLabel({ text }: { text: string }) {
   const { colors, fonts } = useTheme();
   return (
     <Text
-      style={{ fontSize: 10, fontWeight: "900", color: colors.mutedText, letterSpacing: 0.6, fontFamily: fonts.body, textTransform: "uppercase", marginTop: 14, marginBottom: 10 }}
+      style={{ fontSize: 11.5, fontWeight: "900", color: colors.mutedText, letterSpacing: 0.6, fontFamily: fonts.body, textTransform: "uppercase", marginTop: 14, marginBottom: 10 }}
     >
       {text}
     </Text>
@@ -87,7 +87,7 @@ function SmallTile({ feature }: { feature: HubTile }) {
         <Text style={{ fontSize: 13.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.body, opacity: dim }}>{title}</Text>
         <TilePill tile={feature} />
       </View>
-      <Text style={{ fontSize: 11, color: colors.mutedText, marginTop: 3, fontFamily: fonts.body, opacity: dim }} numberOfLines={2}>
+      <Text style={{ fontSize: 12.5, color: colors.mutedText, marginTop: 3, fontFamily: fonts.body, opacity: dim }} numberOfLines={2}>
         {feature.description}
       </Text>
     </TouchableOpacity>
@@ -120,7 +120,7 @@ function LargeTile({ feature }: { feature: HubTile }) {
           <Text style={{ fontSize: 14, fontWeight: "800", color: colors.foreground, fontFamily: fonts.body, opacity: dim }}>{title}</Text>
           <TilePill tile={feature} />
         </View>
-        <Text style={{ fontSize: 11.5, color: colors.mutedText, marginTop: 2, fontFamily: fonts.body, opacity: dim }} numberOfLines={2}>
+        <Text style={{ fontSize: 12.5, color: colors.mutedText, marginTop: 2, fontFamily: fonts.body, opacity: dim }} numberOfLines={2}>
           {feature.description}
         </Text>
       </View>

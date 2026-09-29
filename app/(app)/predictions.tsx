@@ -1,5 +1,4 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -22,6 +21,7 @@ import {
 } from "../../components/ui-tokens";
 import { cycleApi, type Predictions as CyclePredictions } from "../../lib/api";
 import { useDataRefresh } from "../../hooks/useDataRefresh";
+import { ScreenHeader } from "../../components/ScreenHeader";
 
 
 type AnalyticsBar = {
@@ -103,7 +103,7 @@ function CycleTrendLine({ bars }: { bars: AnalyticsBar[] }) {
   if (loggedValues.length < 2) {
     return (
       <Text
-        className="text-[11px] font-semibold text-center py-6"
+        className="text-xs font-semibold text-center py-6"
         style={{ color: colors.mutedText, fontFamily: fonts.body }}
       >
         Log at least two cycles to see your trend line.
@@ -142,7 +142,7 @@ function CycleTrendLine({ bars }: { bars: AnalyticsBar[] }) {
     <View>
       <View className="flex-row items-center gap-1.5 mb-2">
         <MaterialCommunityIcons name={trendIcon} size={14} color={trendColor} />
-        <Text className="text-[11px] font-bold" style={{ color: trendColor, fontFamily: fonts.body }}>
+        <Text className="text-xs font-bold" style={{ color: trendColor, fontFamily: fonts.body }}>
           {trendLabel}
         </Text>
       </View>
@@ -174,7 +174,7 @@ function CycleTrendLine({ bars }: { bars: AnalyticsBar[] }) {
         {bars.map((bar, index) => (
           <Text
             key={`${bar.month}-${index}`}
-            className="text-[10px] font-bold flex-1 text-center"
+            className="text-xs font-bold flex-1 text-center"
             style={{ color: colors.mutedText, fontFamily: fonts.body }}
           >
             {bar.month}
@@ -187,7 +187,6 @@ function CycleTrendLine({ bars }: { bars: AnalyticsBar[] }) {
 
 export default function Predictions() {
   const { colors, isDark, fonts } = useTheme();
-  const router = useRouter();
 
   const PHASE_META: Record<string, { label: string; color: string; description: string }> = {
     period: { label: "Period", color: colors.rose, description: "Rest, hydrate, and notice what your body needs." },
@@ -252,20 +251,7 @@ export default function Predictions() {
       />
 
       <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
-        {/* Navigation */}
-        <View className="flex-row items-center gap-2 px-6 pt-6">
-          <TouchableOpacity
-            onPress={() => router.back()}
-            activeOpacity={0.7}
-            className="p-2 -ml-2 rounded-full border"
-            style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-          >
-            <Feather name="arrow-left" size={18} color={colors.foreground} />
-          </TouchableOpacity>
-          <Text className="flex-1 text-2xl font-black tracking-tight ml-2" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-            Smart Predictions
-          </Text>
-        </View>
+        <ScreenHeader title="Smart Predictions" />
 
         {loading ? (
           <View className="px-6 mt-6 gap-4">
@@ -318,7 +304,7 @@ export default function Predictions() {
                     <Text className="text-xs font-black uppercase tracking-widest" style={{ color: phaseMeta.color, fontFamily: fonts.heading }}>
                       {phaseMeta.label} Phase — Day {data.currentCycleDay}
                     </Text>
-                    <Text className="text-[11px] mt-0.5 font-medium" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                    <Text className="text-xs mt-0.5 font-medium" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                       {phaseMeta.description}
                     </Text>
                   </View>
@@ -337,7 +323,7 @@ export default function Predictions() {
                     <Text className="text-xs font-black" style={{ color: colors.warning, fontFamily: fonts.heading }}>
                       Predictions may be off
                     </Text>
-                    <Text className="text-[11px] mt-0.5 font-medium leading-4" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                    <Text className="text-xs mt-0.5 font-medium leading-4" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                       It&apos;s been a while since your last logged period{typeof data.daysSinceLastActualPeriod === "number" ? ` (${data.daysSinceLastActualPeriod} days)` : ""}. Log your current period to re-anchor these dates.
                     </Text>
                   </View>
@@ -419,7 +405,7 @@ export default function Predictions() {
                         <Text className="text-3xl font-black" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
                           {data.nextPeriodDaysAway}
                         </Text>
-                        <Text className="text-[11px] font-bold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                        <Text className="text-xs font-bold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                           days left
                         </Text>
                       </View>
@@ -431,7 +417,7 @@ export default function Predictions() {
                 </Text>
                 {data.isEstimate && data.predictedWindowRange ? (
                   <Text
-                    className="mt-1 text-[11px] font-semibold text-center px-6"
+                    className="mt-1 text-xs font-semibold text-center px-6"
                     style={{ color: colors.mutedText, fontFamily: fonts.body }}
                   >
                     Your cycles vary — it may arrive anytime {data.predictedWindowRange}.
@@ -443,7 +429,7 @@ export default function Predictions() {
                     style={{ backgroundColor: `${colors.primary}14` }}
                   >
                     <Text
-                      className="text-[10px] font-black uppercase tracking-wider"
+                      className="text-[11.5px] font-black uppercase tracking-wider"
                       style={{ color: colors.primary, fontFamily: fonts.body }}
                     >
                       {data.confidence} confidence
@@ -468,13 +454,13 @@ export default function Predictions() {
                     <Ionicons name="heart-outline" size={18} color={colors.accent} />
                   </View>
                   <View className="mt-4">
-                    <Text className="text-[11px] font-bold tracking-wide" style={{ color: colors.mutedText, fontFamily: fonts.heading }}>
+                    <Text className="text-xs font-bold tracking-wide" style={{ color: colors.mutedText, fontFamily: fonts.heading }}>
                       Fertile Window
                     </Text>
                     <Text className="text-lg font-black tracking-tight mt-0.5" style={{ color: colors.foreground, fontFamily: fonts.mono }}>
                       {data.fertileWindowRange}
                     </Text>
-                    <Text className="text-[10px] font-semibold mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                    <Text className="text-xs font-semibold mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                       {data.fertileWindowDuration}
                     </Text>
                   </View>
@@ -493,13 +479,13 @@ export default function Predictions() {
                     <Feather name="zap" size={16} color={colors.primary} />
                   </View>
                   <View className="mt-4">
-                    <Text className="text-[11px] font-bold tracking-wide" style={{ color: colors.mutedText, fontFamily: fonts.heading }}>
+                    <Text className="text-xs font-bold tracking-wide" style={{ color: colors.mutedText, fontFamily: fonts.heading }}>
                       Ovulation Day
                     </Text>
                     <Text className="text-lg font-black tracking-tight mt-0.5" style={{ color: colors.foreground, fontFamily: fonts.mono }}>
                       {data.ovulationReliable === false ? "—" : data.ovulationDate}
                     </Text>
-                    <Text className="text-[10px] font-semibold mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                    <Text className="text-xs font-semibold mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                       {data.ovulationReliable === false
                         ? "Less reliable for irregular cycles"
                         : data.ovulationDaysAway === 0
@@ -533,7 +519,7 @@ export default function Predictions() {
                       <Text className="text-base font-extrabold tracking-tight" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
                         Last 5 Cycle Entries
                       </Text>
-                      <Text className="mt-1 text-[11px] font-semibold leading-4" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                      <Text className="mt-1 text-xs font-semibold leading-4" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                         {hasAnalyticsHistory
                            ? "Missing months stay visible as 0 so trends are easy to read."
                            : "Log your first cycle month to start building this trend."}
@@ -543,7 +529,7 @@ export default function Predictions() {
                       className="rounded-full px-3 py-1"
                       style={{ backgroundColor: softTints.emerald }}
                     >
-                      <Text className="text-[10px] font-black uppercase" style={{ color: colors.success, fontFamily: fonts.body }}>
+                      <Text className="text-[11.5px] font-black uppercase" style={{ color: colors.success, fontFamily: fonts.body }}>
                         5 months
                       </Text>
                     </View>
@@ -555,7 +541,7 @@ export default function Predictions() {
                       const isLatest = i === analyticsBars.length - 1;
                       return (
                         <View key={`${d.month}-${i}`} className="items-center flex-1 gap-1.5">
-                          <Text className="text-[10px] font-bold" style={{ color: d.length ? colors.foreground : colors.mutedText, fontFamily: fonts.mono }}>
+                          <Text className="text-xs font-bold" style={{ color: d.length ? colors.foreground : colors.mutedText, fontFamily: fonts.mono }}>
                             {d.length}d
                           </Text>
                           <View
@@ -590,7 +576,7 @@ export default function Predictions() {
                               />
                             )}
                           </View>
-                          <Text className="text-[10px] font-bold mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                          <Text className="text-xs font-bold mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                             {d.month}
                           </Text>
                         </View>
@@ -639,7 +625,7 @@ export default function Predictions() {
                     <Text className="mt-2 text-lg font-black" style={{ color: colors.foreground, fontFamily: fonts.mono }}>
                       {s.value}
                     </Text>
-                    <Text className="text-[10px] font-semibold mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                    <Text className="text-xs font-semibold mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                       {s.label}
                     </Text>
                   </View>

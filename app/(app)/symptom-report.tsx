@@ -221,7 +221,7 @@ export default function SymptomReportScreen() {
                           { label: "Stress level", value: data.averages.stressLevel, unit: "/10" },
                         ].map((stat) => (
                           <View key={stat.label} style={{ minWidth: 96 }}>
-                            <Text style={{ color: colors.mutedText, fontSize: 10.5, fontWeight: "700", fontFamily: fonts.body }}>
+                            <Text style={{ color: colors.mutedText, fontSize: 12.5, fontWeight: "700", fontFamily: fonts.body }}>
                               {stat.label.toUpperCase()}
                             </Text>
                             <Text style={{ color: colors.foreground, fontSize: 17, fontWeight: "900", marginTop: 2, fontFamily: fonts.mono }}>
@@ -248,7 +248,7 @@ export default function SymptomReportScreen() {
                   }}
                 >
                   <Feather name="info" size={14} color={colors.mutedText} style={{ marginTop: 1 }} />
-                  <Text style={{ flex: 1, color: colors.mutedText, fontSize: 11, lineHeight: 16, fontFamily: fonts.body }}>
+                  <Text style={{ flex: 1, color: colors.mutedText, fontSize: 12.5, lineHeight: 16, fontFamily: fonts.body }}>
                     A summary of what you&apos;ve logged — educational only, not a diagnosis. For a
                     shareable clinical summary, use Download doctor report on the Graphs & Reports screen.
                   </Text>

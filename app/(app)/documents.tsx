@@ -42,6 +42,7 @@ import {
 } from "../../lib/api";
 import { generateAndShareHealthReport } from "../../lib/healthReport";
 import { SUPPORTED_LANGUAGES as LANGUAGE_OPTIONS } from "../../lib/languages";
+import { ScreenHeader } from "../../components/ScreenHeader";
 
 type PickedFile = {
   mimeType: string;
@@ -488,24 +489,7 @@ export default function DocumentsScreen() {
   );
 
   const documentsHeader = (
-    <View className="flex-row items-center gap-2 px-6 pt-6">
-      <TouchableOpacity
-        onPress={() => router.back()}
-        activeOpacity={0.7}
-        className="p-2.5 -ml-2 rounded-full border"
-        style={{ backgroundColor: colors.surface, borderColor: colors.border, ...getShadow(colors, isDark) }}
-      >
-        <Feather name="arrow-left" size={18} color={colors.foreground} />
-      </TouchableOpacity>
-      <View className="flex-1 ml-2">
-        <Text className="text-2xl font-black tracking-tight" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-          Documents
-        </Text>
-        <Text className="text-xs font-semibold mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-          Prescriptions, reports & bills — all in one place
-        </Text>
-      </View>
-    </View>
+    <ScreenHeader title="Documents" subtitle="Reports, prescriptions and bills" />
   );
 
   if (subscriptionLoading) {
@@ -529,7 +513,7 @@ export default function DocumentsScreen() {
           <View className="flex-1 items-center justify-center px-6">
             <LockedFeatureCard
               title="Documents & Health Reports"
-              description="Unlock document uploads, AI chat over your reports, and downloadable PDF health reports."
+              description="Upload reports, chat about them, and download PDF summaries."
               onPress={() => setPaywallFeature("health_reports")}
             />
           </View>
@@ -573,7 +557,7 @@ export default function DocumentsScreen() {
                 <MaterialCommunityIcons name="text-box-search-outline" size={17} color={colors.accent} />
               </View>
               <Text
-                className="text-[11px] font-bold"
+                className="text-xs font-bold"
                 style={{ color: colors.foreground, fontFamily: fonts.body }}
                 numberOfLines={1}
               >
@@ -593,7 +577,7 @@ export default function DocumentsScreen() {
                 <Ionicons name="sparkles-outline" size={16} color={colors.primary} />
               </View>
               <Text
-                className="text-[11px] font-bold"
+                className="text-xs font-bold"
                 style={{ color: colors.foreground, fontFamily: fonts.body }}
                 numberOfLines={1}
               >
@@ -619,7 +603,7 @@ export default function DocumentsScreen() {
                 <Feather name="download" size={16} color={colors.secondary} />
               </View>
               <Text
-                className="text-[11px] font-bold"
+                className="text-xs font-bold"
                 style={{ color: colors.foreground, fontFamily: fonts.body }}
                 numberOfLines={1}
               >
@@ -725,16 +709,16 @@ export default function DocumentsScreen() {
                       </Text>
                       <View className="flex-row items-center flex-wrap mt-1.5" style={{ gap: 6 }}>
                         <View className="px-2 py-0.5 rounded-full" style={{ backgroundColor: accent.bg }}>
-                          <Text className="text-[9.5px] font-bold" style={{ color: accent.color, fontFamily: fonts.body }}>
+                          <Text className="text-xs font-bold" style={{ color: accent.color, fontFamily: fonts.body }}>
                             {meta.label}
                           </Text>
                         </View>
-                        <Text className="text-[10.5px] font-semibold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                        <Text className="text-xs font-semibold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                           {formatDateLabel(doc.documentDate)} · {isPdf ? "PDF" : "Image"}
                         </Text>
                       </View>
                       {hasIssue ? (
-                        <Text className="text-[10px] font-bold mt-1.5" style={{ color: colors.warning, fontFamily: fonts.body }}>
+                        <Text className="text-xs font-bold mt-1.5" style={{ color: colors.warning, fontFamily: fonts.body }}>
                           {doc.extractionStatus === "failed" ? "Couldn't read this file" : "Limited text found in this file"}
                         </Text>
                       ) : null}
@@ -773,7 +757,12 @@ export default function DocumentsScreen() {
             </TouchableOpacity>
           </View>
 
-          <ScrollView className="flex-1 px-6" showsVerticalScrollIndicator={false}>
+          <ScrollView
+            className="flex-1 px-6"
+            showsVerticalScrollIndicator={false}
+            automaticallyAdjustKeyboardInsets
+            keyboardShouldPersistTaps="handled"
+          >
             {uploadStep === "source" ? (
               <View className="gap-3 mt-2">
                 {[
@@ -807,7 +796,7 @@ export default function DocumentsScreen() {
                     ) : (
                       <View className="h-24 items-center justify-center" style={{ backgroundColor: softTints.pink }}>
                         <Ionicons name="document-text-outline" size={28} color={colors.primary} />
-                        <Text className="text-[10px] font-bold mt-1" style={{ color: colors.primary, fontFamily: fonts.body }}>
+                        <Text className="text-xs font-bold mt-1" style={{ color: colors.primary, fontFamily: fonts.body }}>
                           {pickedFile.name}
                         </Text>
                       </View>
@@ -988,7 +977,7 @@ export default function DocumentsScreen() {
             {!summaryResult ? (
               <View className="gap-5 mt-2">
                 <Text className="text-xs leading-5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                  Pick a date range and Nura will read your reports from that period and summarize them for you.
+                  Pick a date range to get a summary of those reports.
                 </Text>
 
                 <View>
@@ -1063,7 +1052,7 @@ export default function DocumentsScreen() {
             ) : (
               <View className="gap-4 mt-2">
                 <View className="rounded-2xl border p-4" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
-                  <Text className="text-[11px] font-bold mb-3" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                  <Text className="text-xs font-bold mb-3" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                     Based on {summaryResult.documentCount} document{summaryResult.documentCount === 1 ? "" : "s"} from{" "}
                     {formatDateLabel(summaryStartKey)} to {formatDateLabel(summaryEndKey)}
                   </Text>
@@ -1141,8 +1130,7 @@ export default function DocumentsScreen() {
           <ScrollView className="flex-1 px-6" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
             <View className="gap-5 mt-2">
               <Text className="text-xs leading-5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                Pick a date range and Nura will build a detailed PDF — symptoms, mood, flow, trends, and an AI
-                analysis of your uploaded reports from that period — ready to save or share.
+                Pick a date range to create a PDF you can save or share.
               </Text>
 
               <View>

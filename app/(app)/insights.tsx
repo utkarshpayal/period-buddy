@@ -39,7 +39,7 @@ function SuggestionChips({
         >
           {/* Text uses foreground, not the accent `color`: the chip's bg is a
               soft tint of that same accent, so accent-on-tint was near-invisible. */}
-          <Text className="text-[11px] font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
+          <Text className="text-xs font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
             {item}
           </Text>
         </View>
@@ -145,8 +145,7 @@ export default function DailyInsightsScreen() {
                       Pregnancy mode
                     </Text>
                     <Text className="mt-1 text-xs leading-5 font-medium" style={{ color: colors.foreground, fontFamily: fonts.body }}>
-                      Cycle-phase insights are paused while pregnancy mode is on. The summary below still reflects
-                      your day.
+                      Phase insights are paused in pregnancy mode.
                     </Text>
                   </View>
                 </View>

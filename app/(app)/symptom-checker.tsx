@@ -220,7 +220,7 @@ export default function SymptomCheckerScreen() {
             {locked ? (
               <LockedFeatureCard
                 title="Symptom Checker"
-                description="Unlock a short questionnaire that screens for PCOS, endometriosis, fibroids, and thyroid signs."
+                description="Check for signs of PCOS, endometriosis and more."
                 onPress={() => setPaywallVisible(true)}
               />
             ) : null}
@@ -228,8 +228,7 @@ export default function SymptomCheckerScreen() {
             {!locked && step === "pick" && (
               <>
                 <Text className="text-sm font-semibold leading-5 mb-5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                  Pick a condition to answer a short set of questions. This is an educational screening tool, not a
-                  diagnosis.
+                  Pick a condition and answer a few questions. For education, not diagnosis.
                 </Text>
                 {error ? (
                   <Text className="text-xs font-semibold mb-3" style={{ color: colors.danger, fontFamily: fonts.body }}>
@@ -271,7 +270,7 @@ export default function SymptomCheckerScreen() {
             {!locked && step === "questions" && currentQuestion && (
               <>
                 <View className="flex-row items-center justify-between mb-2">
-                  <Text className="text-[11px] font-black uppercase tracking-widest" style={{ color: colors.primary, fontFamily: fonts.heading }}>
+                  <Text className="text-[12px] font-black uppercase tracking-widest" style={{ color: colors.primary, fontFamily: fonts.heading }}>
                     Question {questionIndex + 1} of {questions.length}
                   </Text>
                 </View>
@@ -401,7 +400,7 @@ export default function SymptomCheckerScreen() {
             {!locked && step === "results" && result && (
               <>
                 {/* Progress header, matching mockup's "Screening complete" bar */}
-                <Text className="text-[11px] font-bold mb-1.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                <Text className="text-xs font-bold mb-1.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                   Screening complete
                 </Text>
                 <View className="h-2 rounded-full overflow-hidden mb-6" style={{ backgroundColor: colors.border }}>
@@ -425,7 +424,7 @@ export default function SymptomCheckerScreen() {
                     style={{ backgroundColor: RISK_META[result.riskLevel]?.bg ?? colors.surfaceSoft }}
                   >
                     <Text
-                      className="text-[11px] font-black"
+                      className="text-xs font-black"
                       style={{ color: RISK_META[result.riskLevel]?.color ?? colors.foreground, fontFamily: fonts.body }}
                     >
                       {RISK_META[result.riskLevel]?.label ?? result.riskLevel} · {result.score}

@@ -56,8 +56,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // that changed after an app update/reinstall). While signed in, also
   // re-upload the token whenever FCM rotates it. Logging out drops the token
   // server-side (POST /api/logout), so a signed-out phone stops getting pushes.
+  // Waits while first-run setup is open: its finish screen explains reminders
+  // and asks for the permission itself, and this re-runs (without prompting
+  // again) once isProfileComplete flips. Partner viewers never see that setup
+  // (their profile stays incomplete), so they register straight away.
+  const setupPending =
+    session?.user?.isProfileComplete === false && session.user.partnerRole !== "viewer";
   useEffect(() => {
-    if (!session?.token) return;
+    if (!session?.token || setupPending) return;
     let cancelled = false;
     let removeListener: (() => void) | null = null;
     import("../lib/notifications")
@@ -71,7 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       cancelled = true;
       removeListener?.();
     };
-  }, [session?.token]);
+  }, [session?.token, setupPending]);
 
   const signOut = useCallback(async () => {
     roleWriteSeq.current += 1;

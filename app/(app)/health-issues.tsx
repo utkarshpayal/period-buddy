@@ -22,6 +22,7 @@ import { SkeletonCard } from "../../components/Skeleton";
 import { getShadow, getSoftTints, HEALTH_ISSUE_COLORS } from "../../components/ui-tokens";
 import { useAsyncLoad } from "../../hooks/useAsyncLoad";
 import { healthIssuesApi, type HealthIssue as ApiHealthIssue } from "../../lib/api";
+import { ScreenHeader } from "../../components/ScreenHeader";
 
 // --- BACKEND API LAYER SCHEMAS & CONTRACTS ---
 interface HealthIssue {
@@ -216,26 +217,7 @@ export default function HealthIssues() {
         className="flex-1"
         style={{ backgroundColor: colors.background }}
       >
-        {/* Navigation Action Header */}
-        <View className="flex-row items-center gap-2 px-6 pt-6">
-          <TouchableOpacity
-            onPress={() => router.back()}
-            activeOpacity={0.7}
-            className="p-2.5 -ml-2 rounded-full border"
-            style={{
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-            }}
-          >
-            <Feather name="arrow-left" size={18} color={colors.foreground} />
-          </TouchableOpacity>
-          <Text
-            className="flex-1 text-2xl font-black tracking-tight ml-2"
-            style={{ color: colors.foreground, fontFamily: fonts.heading }}
-          >
-            Health Concerns
-          </Text>
-        </View>
+        <ScreenHeader title="Health Concerns" />
 
         <LoadingErrorState
           loading={loadingIssues}
@@ -345,7 +327,7 @@ export default function HealthIssues() {
                           {issue.title}
                         </Text>
                         <Text
-                          className="text-[11px] font-semibold mt-0.5"
+                          className="text-xs font-semibold mt-0.5"
                           style={{ color: colors.mutedText, fontFamily: fonts.body }}
                         >
                           {issue.category}
@@ -357,7 +339,7 @@ export default function HealthIssues() {
                       style={{ backgroundColor: `${accentColor}1F` }}
                     >
                       <Text
-                        className="text-[10px] font-black"
+                        className="text-xs font-black"
                         style={{ color: accentColor, fontFamily: fonts.body }}
                       >
                         View
@@ -464,7 +446,7 @@ export default function HealthIssues() {
               >
                 <View>
                   <Text
-                    className="text-[10px] font-black uppercase tracking-widest pt-4"
+                    className="text-[11.5px] font-black uppercase tracking-widest pt-4"
                     style={{
                       color: getIssueAccentColor(selectedIssueData, colors),
                       fontFamily: fonts.body,
@@ -656,7 +638,7 @@ export default function HealthIssues() {
                         Persistent Symptoms?
                       </Text>
                       <Text
-                        className="text-[10px] mt-0.5"
+                        className="text-xs mt-0.5"
                         style={{ color: colors.mutedText, fontFamily: fonts.body }}
                       >
                         Connect privately with specialized OBGYNs instantly.
@@ -671,7 +653,7 @@ export default function HealthIssues() {
                       style={{ backgroundColor: colors.primary }}
                     >
                       <Text
-                        className="text-[11px] font-black"
+                        className="text-xs font-black"
                         style={{ color: colors.buttonText, fontFamily: fonts.body }}
                       >
                         Consult

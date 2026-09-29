@@ -119,7 +119,7 @@ export function VoiceModeOverlay({
               style={{ borderColor: "rgba(255,255,255,0.18)", backgroundColor: "rgba(255,255,255,0.06)" }}
             >
               <Feather name="globe" size={12} color={ORB_TINT} />
-              <Text className="text-[10px] font-black tracking-wide" style={{ color: ORB_TINT, fontFamily: fonts.body }}>
+              <Text className="text-xs font-black tracking-wide" style={{ color: ORB_TINT, fontFamily: fonts.body }}>
                 {languageLabel}
               </Text>
             </View>
@@ -173,7 +173,7 @@ export function VoiceModeOverlay({
                 <Feather name="alert-circle" size={13} color={ERROR_TINT} />
                 <Text
                   numberOfLines={2}
-                  className="flex-1 text-center text-[12px] font-semibold leading-4"
+                  className="flex-1 text-center text-[13px] font-semibold leading-4"
                   style={{ color: ERROR_TINT, fontFamily: fonts.body }}
                 >
                   {errorMessage}
@@ -194,7 +194,7 @@ export function VoiceModeOverlay({
 
           <View className="items-center pb-6 px-10">
             <Text
-              className="text-center text-[11px] font-semibold leading-4 mb-6"
+              className="text-center text-xs font-semibold leading-4 mb-6"
               style={{ color: "rgba(255,255,255,0.55)", fontFamily: fonts.body }}
             >
               Speak naturally — I&apos;ll reply out loud and pause for you when you go quiet for a moment.

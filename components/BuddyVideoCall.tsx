@@ -501,7 +501,7 @@ export const BuddyVideoCall = forwardRef<BuddyVideoCallHandle, Props>(
                     <Ionicons name="person" size={30} color="rgba(255,255,255,0.8)" />
                     <Text
                       style={{ color: "rgba(255,255,255,0.8)", fontFamily: fonts.body }}
-                      className="text-[10px] font-bold mt-1"
+                      className="text-xs font-bold mt-1"
                     >
                       You
                     </Text>
@@ -550,7 +550,7 @@ export const BuddyVideoCall = forwardRef<BuddyVideoCallHandle, Props>(
                       className="absolute -top-0.5 -right-0.5 min-w-5 h-5 px-1 rounded-full items-center justify-center"
                       style={{ backgroundColor: colors.danger }}
                     >
-                      <Text style={{ color: "#fff", fontFamily: fonts.body }} className="text-[10px] font-black">
+                      <Text style={{ color: "#fff", fontFamily: fonts.body }} className="text-[11.5px] font-black">
                         {unread > 9 ? "9+" : unread}
                       </Text>
                     </View>

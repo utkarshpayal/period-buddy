@@ -1,11 +1,10 @@
-import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
   Modal,
-  PanResponder,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -16,7 +15,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop } from "react-native-svg";
 import type { DayEntry as LocalDayEntry } from "../../../components/AppState";
 import { useAppState } from "../../../components/AppState";
@@ -34,9 +33,12 @@ import {
   type Predictions,
 } from "../../../lib/api";
 import { getCyclePhase, type CyclePhase } from "../../../lib/cycle";
-import { buildCalendarModel, dayStatus, type DayStatus } from "../../../lib/cycleCalendar";
-import { CalendarDayCell } from "../../../components/CycleCalendar";
 import { getDateKey, getMonthKey } from "../../../lib/format";
+import { HeaderIconButton, TabHeader } from "../../../components/ScreenHeader";
+import { MonthCalendar } from "../../../components/onboarding/parts";
+import { SkeletonBlock } from "../../../components/Skeleton";
+import { CalendarDayCell, CalendarLegend } from "../../../components/CycleCalendar";
+import type { DayStatus } from "../../../lib/cycleCalendar";
 
 const CYCLE_LENGTH = 28;
 const CURRENT_CYCLE_DAY = 14;
@@ -254,7 +256,7 @@ function SettingsToggleRow({
   onValueChange,
   value,
 }: {
-  description: string;
+  description?: string;
   label: string;
   onValueChange: (next: boolean) => void;
   value: boolean;
@@ -270,12 +272,14 @@ function SettingsToggleRow({
         >
           {label}
         </Text>
-        <Text
-          className="mt-0.5 text-[11px] font-semibold leading-4"
-          style={{ color: colors.mutedText, fontFamily: fonts.body }}
-        >
-          {description}
-        </Text>
+        {description ? (
+          <Text
+            className="mt-0.5 text-xs font-semibold leading-4"
+            style={{ color: colors.mutedText, fontFamily: fonts.body }}
+          >
+            {description}
+          </Text>
+        ) : null}
       </View>
       <Switch
         onValueChange={onValueChange}
@@ -287,30 +291,51 @@ function SettingsToggleRow({
   );
 }
 
+/** Placeholder with the tracker body's shape, shown until the dashboard and
+ *  predictions load, so the ring and stats never flash default values. */
+function TrackerBodySkeleton() {
+  const { colors, isDark } = useTheme();
+  const card = { backgroundColor: colors.surface, borderRadius: 24, ...getShadow(colors, isDark) };
+  return (
+    <View accessibilityLabel="Loading your cycle" accessible>
+      <View className="mx-6 mt-4 items-center px-5 pb-6 pt-5" style={card}>
+        <SkeletonBlock width={150} height={14} />
+        <SkeletonBlock width={200} height={200} radius={100} style={{ marginTop: 16 }} />
+        <View className="mt-5 w-full flex-row" style={{ gap: 12 }}>
+          <SkeletonBlock width="48%" height={48} radius={16} style={{ flex: 1 }} />
+          <SkeletonBlock width="48%" height={48} radius={16} style={{ flex: 1 }} />
+        </View>
+      </View>
+      <View className="mx-6 mt-4 p-5" style={card}>
+        <SkeletonBlock width={140} height={16} />
+        <SkeletonBlock height={260} radius={16} style={{ marginTop: 16 }} />
+      </View>
+    </View>
+  );
+}
+
 const RING_SIZE = 200;
+const daysLabel = (n: number) => `${n} ${n === 1 ? "day" : "days"}`;
 const RING_RADIUS = 44;
 const RING_STROKE_WIDTH = 9;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
-function RingScrubber({
+/** Read-only ring showing where today sits in the current cycle. */
+function CycleRing({
   activeCycleLength,
   activePeriodLength,
   ovulationDayPivot,
   cycleDay,
-  previewCycleDay,
-  setPreviewCycleDay,
   nextPeriodDaysAway,
 }: {
   activeCycleLength: number;
   activePeriodLength: number;
   ovulationDayPivot: number;
   cycleDay: number;
-  previewCycleDay: number | null;
-  setPreviewCycleDay: (day: number | null) => void;
   nextPeriodDaysAway: number;
 }) {
   const { colors, isDark, fonts } = useTheme();
-  const displayDay = previewCycleDay ?? cycleDay;
+  const displayDay = cycleDay;
   const displayPhase = getCyclePhase(
     displayDay,
     activePeriodLength,
@@ -325,41 +350,17 @@ function RingScrubber({
     ovulation: colors.secondary,
     luteal: colors.warning,
   }[displayPhase];
+  // Text-safe version of the phase colour (mint and lavender are too pale
+  // to read as text on a light surface).
+  const labelColor = {
+    period: colors.rose,
+    follicular: colors.accentText,
+    ovulation: colors.info,
+    luteal: colors.warning,
+  }[displayPhase];
   const isHighFertility =
     displayPhase === "ovulation" ||
     (displayDay >= ovulationDayPivot - 5 && displayDay <= ovulationDayPivot);
-
-  const panResponder = useMemo(() => {
-    // Touch coords arrive in the 200x200 real-pixel view; the ring geometry
-    // is defined in the SVG's 100x100 viewBox, hence the /2 scale-down.
-    function dayFromTouch(locationX: number, locationY: number) {
-      const dx = locationX / 2 - 50;
-      const dy = locationY / 2 - 50;
-      const angleDeg = Math.atan2(dy, dx) * (180 / Math.PI);
-      const fraction = ((((angleDeg + 90) % 360) + 360) % 360) / 360;
-      const day = Math.round(fraction * activeCycleLength) || activeCycleLength;
-      return Math.min(activeCycleLength, Math.max(1, day));
-    }
-
-    return PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (event) =>
-        setPreviewCycleDay(
-          dayFromTouch(
-            event.nativeEvent.locationX,
-            event.nativeEvent.locationY,
-          ),
-        ),
-      onPanResponderMove: (event) =>
-        setPreviewCycleDay(
-          dayFromTouch(
-            event.nativeEvent.locationX,
-            event.nativeEvent.locationY,
-          ),
-        ),
-    });
-  }, [activeCycleLength, setPreviewCycleDay]);
 
   const handleFraction = displayDay / activeCycleLength;
   const handleAngleRad = (handleFraction * 360 - 90) * (Math.PI / 180);
@@ -368,8 +369,9 @@ function RingScrubber({
 
   return (
     <View
+      accessible
+      accessibilityLabel={`Cycle day ${displayDay} of ${activeCycleLength}`}
       style={{ position: "relative", width: RING_SIZE, height: RING_SIZE }}
-      {...panResponder.panHandlers}
     >
       <Svg width={RING_SIZE} height={RING_SIZE} viewBox="0 0 100 100">
         <Defs>
@@ -399,7 +401,7 @@ function RingScrubber({
         />
       </Svg>
 
-      {/* Draggable handle marking the currently previewed cycle day */}
+      {/* Marker for today's position in the cycle */}
       <View
         pointerEvents="none"
         style={{
@@ -412,17 +414,9 @@ function RingScrubber({
           backgroundColor: colors.primary,
           borderWidth: 3,
           borderColor: colors.buttonText,
-          alignItems: "center",
-          justifyContent: "center",
           ...getShadow(colors, isDark),
         }}
-      >
-        <MaterialCommunityIcons
-          name="drag"
-          size={10}
-          color={colors.buttonText}
-        />
-      </View>
+      />
 
       <View
         pointerEvents="none"
@@ -438,66 +432,45 @@ function RingScrubber({
           paddingVertical: 20,
         }}
       >
-        <View
-          className="p-1.5 rounded-lg mb-1.5"
-          style={{ backgroundColor: colors.primaryLight }}
-        >
-          <Ionicons name="water" size={16} color={colors.primary} />
-        </View>
         <Text
           numberOfLines={1}
-          className="font-black uppercase tracking-wider text-center"
-          style={{
-            fontSize: 9,
-            color: colors.mutedText,
-            fontFamily: fonts.body,
-            width: "100%",
-          }}
+          style={{ color: labelColor, fontSize: 11.5, fontWeight: "800", letterSpacing: 0.8, fontFamily: fonts.body }}
         >
           {displayPhase === "period"
-            ? "PERIOD DAY"
+            ? "PERIOD"
             : displayPhase === "ovulation"
               ? "OVULATION"
-              : displayDay >= activePeriodLength + 1 &&
-                  displayDay < ovulationDayPivot - 5
-                ? "OVULATION IN"
+              : displayDay >= activePeriodLength + 1 && displayDay < ovulationDayPivot - 5
+                ? "FERTILE IN"
                 : "PERIOD IN"}
         </Text>
         <Text
           numberOfLines={1}
-          className="font-black text-center mt-0.5"
-          style={{
-            fontSize: 22,
-            color: colors.foreground,
-            fontFamily: fonts.heading,
-            width: "100%",
-          }}
+          adjustsFontSizeToFit
+          minimumFontScale={0.75}
+          style={{ color: colors.foreground, fontSize: 32, lineHeight: 38, fontWeight: "800", fontFamily: fonts.heading, marginTop: 2 }}
         >
           {displayPhase === "period"
-            ? `${displayDay}`
-            : displayPhase === "ovulation" && displayDay === cycleDay
+            ? `Day ${displayDay}`
+            : displayPhase === "ovulation"
               ? "Today"
-              : displayDay >= activePeriodLength + 1 &&
-                  displayDay < ovulationDayPivot - 5
-                ? `${Math.max(1, ovulationDayPivot - 5 - displayDay)} Days`
-                : displayDay === cycleDay
-                  ? `${nextPeriodDaysAway} Days`
-                  : `Day ${displayDay}`}
+              : displayDay >= activePeriodLength + 1 && displayDay < ovulationDayPivot - 5
+                ? daysLabel(Math.max(1, ovulationDayPivot - 5 - displayDay))
+                : nextPeriodDaysAway <= 0
+                  ? "Today"
+                  : daysLabel(nextPeriodDaysAway)}
         </Text>
         <Text
-          numberOfLines={2}
-          className="font-bold text-center mt-1"
+          numberOfLines={1}
           style={{
-            fontSize: 8.5,
-            lineHeight: 12,
             color: isHighFertility ? colors.success : colors.mutedText,
+            fontSize: 12.5,
+            fontWeight: "700",
             fontFamily: fonts.body,
-            width: "100%",
+            marginTop: 4,
           }}
         >
-          {isHighFertility
-            ? "High chance\nto get pregnant"
-            : "Lower chance\nto get pregnant"}
+          {isHighFertility ? "High fertility" : "Low fertility"}
         </Text>
       </View>
     </View>
@@ -505,6 +478,7 @@ function RingScrubber({
 }
 
 export default function Tracker() {
+  const insets = useSafeAreaInsets();
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
   // Home's "Symptoms"/"Mood" quick actions deep-link here with ?log=today to
@@ -565,10 +539,10 @@ export default function Tracker() {
   >({});
   const softTints = useMemo(() => getSoftTints(colors), [colors]);
 
-  const { user, updateUser } = useAuth();
+  const { updateUser } = useAuth();
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
   const [predictions, setPredictions] = useState<Predictions | null>(null);
-  const [, setIsDashboardLoading] = useState(true);
+  const [isDashboardLoading, setIsDashboardLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const loadDashboard = useCallback(async () => {
@@ -596,7 +570,6 @@ export default function Tracker() {
     loadDashboard();
   }, [loadDashboard]);
 
-  const loggedDays = Math.max(dashboard?.trackedDays ?? 0, 0);
   const cycleDay = Math.max(
     predictions?.currentCycleDay ??
       dashboard?.predictions?.currentCycleDay ??
@@ -607,27 +580,6 @@ export default function Tracker() {
     predictions?.nextPeriodDaysAway !== undefined
       ? predictions.nextPeriodDaysAway
       : Math.max(1, (cycleSettings?.cycleLength ?? CYCLE_LENGTH) - cycleDay);
-  const treeHealth =
-    dashboard?.forestHealth ?? Math.min(100, Math.max(45, 55 + loggedDays * 6));
-
-  // Lets the user drag the ring handle to preview any day of the cycle
-  // instead of only ever showing today. `null` means "showing today".
-  const [previewCycleDay, setPreviewCycleDay] = useState<number | null>(null);
-  const isPreviewingRing =
-    previewCycleDay !== null && previewCycleDay !== cycleDay;
-
-  const weekDays = useMemo(() => {
-    // Monday-first, like every calendar grid in the app.
-    const today = new Date();
-    const monday = new Date(today);
-    monday.setDate(today.getDate() - getMondayFirstWeekday(today));
-
-    return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(monday);
-      d.setDate(monday.getDate() + i);
-      return d;
-    });
-  }, []);
 
   // Anchor the whole calendar (past AND future months) on the backend's
   // history-aware prediction, so future period days project from the most
@@ -886,12 +838,6 @@ export default function Tracker() {
     };
   }
 
-  // Shared calendar model + lookups (lib/cycleCalendar) for the week strip,
-  // so it paints days exactly like the calendar grids.
-  const calendarModel = useMemo(() => buildCalendarModel(predictions, cycleSettings), [predictions, cycleSettings]);
-  const entryFor = useCallback((dateKey: string) => dayEntries[dateKey] ?? remoteDayEntries[dateKey], [dayEntries, remoteDayEntries]);
-  const noteFor = useCallback((dateKey: string) => dayNotes[dateKey], [dayNotes]);
-  const currentPhase = getCyclePhase(cycleDay, activePeriodLength, activeCycleLength);
 
   // Canonical 4-phase palette — one distinct color per cycle phase, reused
   // everywhere a day/phase is shown (week strip, month grid, legend, modal)
@@ -922,20 +868,8 @@ export default function Tracker() {
     [colors, softTints],
   );
 
-  // Phase key for the calendar: a small dot + label per phase, coloured from
-  // phaseStyles so it always matches the day cells. Kept to one line.
-  const phaseLegendRow = (
-    <View className="flex-row items-center justify-between">
-      {(["period", "follicular", "ovulation", "luteal"] as const).map((phase) => (
-        <View key={phase} className="flex-row items-center" style={{ gap: 5 }}>
-          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: phaseStyles[phase].color }} />
-          <Text numberOfLines={1} style={{ color: colors.mutedText, fontSize: 11, fontWeight: "600", fontFamily: fonts.body }}>
-            {phaseStyles[phase].label}
-          </Text>
-        </View>
-      ))}
-    </View>
-  );
+  // Key for the day cells, one fixed row (components/CycleCalendar.tsx).
+  const phaseLegendRow = <CalendarLegend />;
 
   const buildCalendarDays = useCallback((monthDate: Date): CalendarCell[] => {
     const year = monthDate.getFullYear();
@@ -980,6 +914,26 @@ export default function Tracker() {
    * today a primary ring and the selected day a solid primary circle. Icons
    * appear only for logged flow and the ovulation peak.
    */
+  const openCalendarDay = useCallback((st: DayStatus) => openDateRef.current(st.date), []);
+  // This week (Monday first) for the strip under the header — same cells as the calendar.
+  const weekCells = useMemo<CalendarCell[]>(() => {
+    const today = new Date();
+    const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - getMondayFirstWeekday(today));
+    return Array.from({ length: 7 }, (_, i) => {
+      const date = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
+      const cycleDay = getCycleDay(date, cycleStartDate, activeCycleLength);
+      return {
+        cycleDay,
+        date,
+        dateKey: getDateKey(date),
+        day: date.getDate(),
+        kind: "day" as const,
+        key: `week-${getDateKey(date)}`,
+        phase: getCyclePhase(cycleDay, activePeriodLength, activeCycleLength),
+      };
+    });
+  }, [cycleStartDate, activeCycleLength, activePeriodLength]);
+
   const renderCalendarDay = useCallback((cell: CalendarCell) => {
     if (cell.kind === "blank") {
       return <View key={cell.key} style={{ width: `${100 / 7}%`, height: CAL_CELL }} />;
@@ -993,79 +947,36 @@ export default function Tracker() {
     const hasFlowLog = Boolean(entry?.flow && entry.flow !== "none");
     const isOvulationPeak = cell.cycleDay === ovulationDayPivot;
     const isFertileDay = cell.cycleDay >= ovulationDayPivot - 5 && cell.cycleDay <= ovulationDayPivot + 1;
-    const style = phaseStyles[cell.phase];
     const isPeriod = cell.phase === "period";
     // Predicted highlight is forward-looking only, and never pads past the
     // actually-logged current period.
     const isPredictedPeriod =
       isPeriod && !isLogged && !isPhantomPeriodTail(cell.date) && startOfDay(cell.date) >= todayStart;
 
-    const background = isSelected
-      ? colors.primary
-      : isLogged
-        ? style.bg
-        : isFertileDay && !isPeriod
-          ? /^#[0-9a-f]{6}$/i.test(colors.secondary)
-            ? `${colors.secondary}24`
-            : softTints.lavender
-          : "transparent";
-    const ring = isSelected ? null : isToday ? colors.primary : isPredictedPeriod ? colors.rose : null;
-    const textColor = isSelected
-      ? colors.buttonText
-      : isToday
-        ? colors.primary
-        : isLogged || isPeriod
-          ? style.color
-          : colors.foreground;
-    const markerIcon = hasFlowLog ? "water" : isOvulationPeak ? "egg" : null;
-
+    const status: DayStatus = {
+      date: cell.date,
+      dateKey: cell.dateKey,
+      day: cell.day,
+      cycleDay: cell.cycleDay,
+      phase: cell.phase,
+      isToday,
+      isLogged,
+      hasFlow: hasFlowLog,
+      isPredictedPeriod,
+      isFertile: isFertileDay,
+      isOvulation: isOvulationPeak,
+    };
     return (
-      <TouchableOpacity
+      <CalendarDayCell
         key={cell.key}
-        activeOpacity={0.7}
-        onPress={() => openDateRef.current(cell.date)}
-        accessibilityRole="button"
-        accessibilityLabel={`${cell.date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}, ${style.label} phase${isToday ? ", today" : ""}${isLogged ? ", logged" : ""}${isPredictedPeriod ? ", predicted period" : ""}`}
-        style={{ width: `${100 / 7}%`, height: CAL_CELL, alignItems: "center", justifyContent: "center" }}
-      >
-        <View
-          style={{
-            width: 38,
-            height: 38,
-            borderRadius: 19,
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: background,
-            borderWidth: ring ? 1.5 : 0,
-            borderColor: ring ?? "transparent",
-            borderStyle: isPredictedPeriod && !isToday ? "dashed" : "solid",
-          }}
-        >
-          <Text
-            style={{
-              color: textColor,
-              fontSize: 14,
-              fontWeight: isToday || isSelected || isLogged ? "800" : "500",
-              fontFamily: fonts.body,
-              marginTop: markerIcon ? -4 : 0,
-            }}
-          >
-            {cell.day}
-          </Text>
-          {markerIcon ? (
-            <MaterialCommunityIcons
-              name={markerIcon}
-              size={9}
-              color={isSelected ? colors.buttonText : style.color}
-              style={{ position: "absolute", bottom: 4 }}
-            />
-          ) : !isSelected && !isPeriod && !isLogged ? (
-            <View style={{ position: "absolute", bottom: 5, width: 4, height: 4, borderRadius: 2, backgroundColor: style.color, opacity: 0.4 }} />
-          ) : null}
-        </View>
-      </TouchableOpacity>
+        s={status}
+        selected={isSelected}
+        palette={phaseStyles}
+        height={CAL_CELL}
+        onPress={openCalendarDay}
+      />
     );
-  }, [selectedDate?.dateKey, todayKey, dayEntries, remoteDayEntries, dayNotes, phaseStyles, ovulationDayPivot, isPhantomPeriodTail, todayStart, colors, fonts, softTints]);
+  }, [selectedDate?.dateKey, todayKey, dayEntries, remoteDayEntries, dayNotes, phaseStyles, ovulationDayPivot, isPhantomPeriodTail, todayStart, openCalendarDay]);
 
   function openDate(date: Date) {
     const cycleDay = getCycleDay(date, cycleStartDate, activeCycleLength);
@@ -1083,7 +994,6 @@ export default function Tracker() {
     });
     setDayDetailsVisible(true);
   }
-  const openWeekDay = (st: DayStatus) => openDate(st.date);
   // Latest openDate for the memoised day cells.
   const openDateRef = useRef(openDate);
   openDateRef.current = openDate;
@@ -1121,7 +1031,7 @@ export default function Tracker() {
     const reminderDaysBefore = Number.parseInt(reminderDaysBeforeInput, 10);
 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanedDate)) {
-      setSettingsError("Use YYYY-MM-DD for the last period start date.");
+      setSettingsError("Pick the day your last period started.");
       return;
     }
 
@@ -1185,77 +1095,43 @@ export default function Tracker() {
       >
         {/* FIXED HEADER AND SELECTORS */}
         <View style={{ backgroundColor: colors.background, zIndex: 10 }}>
-          {/* Greeting */}
-          <View className="px-5 pt-4 flex-row items-center">
-            <View
-              className="items-center justify-center rounded-full"
-              style={{ width: 44, height: 44, backgroundColor: colors.primaryLight }}
-            >
-              <Text style={{ color: colors.primary, fontSize: 18, fontWeight: "800", fontFamily: fonts.heading }}>
-                {user?.firstName ? user.firstName.charAt(0).toUpperCase() : "U"}
-              </Text>
-            </View>
-            <View className="flex-1" style={{ marginLeft: 12 }}>
-              <Text style={{ color: colors.mutedText, fontSize: 12.5, fontWeight: "600", fontFamily: fonts.body }}>Hello,</Text>
-              <Text numberOfLines={1} style={{ color: colors.foreground, fontSize: 19, fontWeight: "800", fontFamily: fonts.heading }}>
-                {user?.firstName || "there"}
-              </Text>
-            </View>
-            {(
-              [
-                { icon: "search" as const, label: "Search", onPress: () => { setSearchQuery(""); setSearchVisible(true); } },
-                { icon: "settings" as const, label: "Cycle settings", onPress: openCycleSettings },
-              ]
-            ).map((b) => (
-              <TouchableOpacity
-                key={b.icon}
-                activeOpacity={0.7}
-                onPress={b.onPress}
-                accessibilityRole="button"
-                accessibilityLabel={b.label}
-                className="items-center justify-center rounded-full"
-                style={{ width: 40, height: 40, marginLeft: 8, backgroundColor: colors.surface }}
-              >
-                <Feather name={b.icon} size={18} color={colors.foreground} />
-              </TouchableOpacity>
-            ))}
-          </View>
+          <TabHeader
+            title="Tracker"
+            subtitle={new Date().toLocaleDateString("en-US", { weekday: "long", day: "numeric", month: "long" })}
+            right={
+              <>
+                <HeaderIconButton
+                  icon="search"
+                  accessibilityLabel="Search"
+                  onPress={() => {
+                    setSearchQuery("");
+                    setSearchVisible(true);
+                  }}
+                />
 
-          {/* Today + this week, painted with the same day circles as the calendar. */}
-          <View className="px-5 mt-5 flex-row items-center justify-between">
-            <Text style={{ color: colors.foreground, fontSize: 15.5, fontWeight: "800", fontFamily: fonts.heading }}>
-              {new Date().toLocaleDateString("en-US", { weekday: "long", day: "numeric", month: "long" })}
-            </Text>
-            <View
-              className="flex-row items-center rounded-full"
-              style={{ backgroundColor: phaseStyles[currentPhase].bg, paddingHorizontal: 10, paddingVertical: 4, gap: 5 }}
-            >
-              <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: phaseStyles[currentPhase].color }} />
-              <Text style={{ color: colors.foreground, fontSize: 12, fontWeight: "700", fontFamily: fonts.body }}>
-                {`${phaseStyles[currentPhase].label} · Day ${cycleDay}`}
-              </Text>
-            </View>
-          </View>
+                <HeaderIconButton icon="settings-outline" accessibilityLabel="Cycle settings" onPress={openCycleSettings} />
+              </>
+            }
+          />
+          {/* This week */}
           <View className="flex-row mt-3" style={{ paddingHorizontal: 12 }}>
-            {weekDays.map((d) => (
+            {WEEKDAY_LABELS.map((label, index) => (
               <Text
-                key={`wd-${getDateKey(d)}`}
-                style={{ width: `${100 / 7}%`, textAlign: "center", color: colors.mutedText, fontSize: 11.5, fontWeight: "700", fontFamily: fonts.body }}
+                key={`wk-label-${index}`}
+                style={{ width: `${100 / 7}%`, textAlign: "center", color: colors.mutedText, fontSize: 12.5, fontWeight: "700", fontFamily: fonts.body }}
               >
-                {d.toLocaleDateString("en-US", { weekday: "short" }).charAt(0)}
+                {label}
               </Text>
             ))}
           </View>
           <View className="flex-row pb-2" style={{ paddingHorizontal: 12 }}>
-            {weekDays.map((d) => (
-              <CalendarDayCell
-                key={getDateKey(d)}
-                s={dayStatus(d, calendarModel, entryFor, noteFor, todayKey)}
-                selected={false}
-                palette={phaseStyles}
-                onPress={openWeekDay}
-              />
-            ))}
+            {isDashboardLoading
+              ? weekCells.map((cell) => (
+                  <View key={cell.key} style={{ width: `${100 / 7}%`, height: CAL_CELL, alignItems: "center", justifyContent: "center" }}>
+                    <SkeletonBlock width={38} height={38} radius={19} />
+                  </View>
+                ))
+              : weekCells.map(renderCalendarDay)}
           </View>
         </View>
 
@@ -1268,197 +1144,143 @@ export default function Tracker() {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
           }
         >
-          {/* Today · Cycle day N — surface card framing the ring scrubber */}
-          <View
-            className="mx-5 mt-4 items-center rounded-3xl px-5 pb-6 pt-5"
-            style={{
-              backgroundColor: colors.surface,
-              ...getShadow(colors, isDark),
-            }}
-          >
-            <Text style={{ color: colors.mutedText, fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}>
-              {`Today · Cycle day ${cycleDay}`}
-            </Text>
-
-          {/* Circular progress tracker — drag the handle to preview any cycle day */}
-          <View className="items-center justify-center mt-3">
-            <RingScrubber
-              activeCycleLength={activeCycleLength}
-              activePeriodLength={activePeriodLength}
-              ovulationDayPivot={ovulationDayPivot}
-              cycleDay={cycleDay}
-              previewCycleDay={previewCycleDay}
-              setPreviewCycleDay={setPreviewCycleDay}
-              nextPeriodDaysAway={nextPeriodDaysAway}
-            />
-            {isPreviewingRing && (
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={() => setPreviewCycleDay(null)}
-                className="mt-3 flex-row items-center gap-1.5 rounded-full border px-3.5 py-1.5"
-                style={{
-                  backgroundColor: colors.surfaceSoft,
-                  borderColor: colors.border,
-                }}
-              >
-                <Feather name="rotate-ccw" size={12} color={colors.primary} />
-                <Text
-                  className="text-[11px] font-bold"
-                  style={{ color: colors.primary, fontFamily: fonts.body }}
-                >
-                  Back to today
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-            <Text
-              className="mt-4 text-xs font-semibold text-center"
-              style={{ color: colors.mutedText, fontFamily: fonts.body }}
+          {isDashboardLoading ? (
+            <TrackerBodySkeleton />
+          ) : (
+            <>
+            {/* Today · Cycle day N — surface card framing the ring */}
+            <View
+              className="mx-6 mt-4 items-center rounded-3xl px-5 pb-6 pt-5"
+              style={{
+                backgroundColor: colors.surface,
+                ...getShadow(colors, isDark),
+              }}
             >
-              {loggedDays > 0
-                ? "Keep it up — how are you feeling today?"
-                : "No entries yet — how are you feeling?"}
-            </Text>
+              <Text style={{ color: colors.mutedText, fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}>
+                {`Today · Cycle day ${cycleDay}`}
+              </Text>
 
-            {/* "Log period" / "Symptoms" quick-entry buttons */}
-            <View className="mt-4 w-full flex-row gap-3">
-              <TouchableOpacity
-                activeOpacity={0.85}
-                onPress={() => openToday("flow")}
-                className="flex-1 flex-row items-center justify-center gap-2 rounded-2xl py-3.5"
-                style={{ backgroundColor: colors.primary }}
-              >
-                <Feather name="plus" size={15} color={colors.buttonText} />
-                <Text
-                  className="text-sm font-extrabold"
-                  style={{ color: colors.buttonText, fontFamily: fonts.body }}
-                >
-                  Log period
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                activeOpacity={0.85}
-                onPress={() => openToday("symptoms")}
-                className="flex-1 flex-row items-center justify-center gap-2 rounded-2xl border py-3.5"
-                style={{
-                  backgroundColor: "transparent",
-                  borderColor: colors.border,
-                }}
-              >
-                <Feather name="edit-3" size={15} color={colors.foreground} />
-                <Text
-                  className="text-sm font-extrabold"
-                  style={{ color: colors.foreground, fontFamily: fonts.body }}
-                >
-                  Symptoms
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Three stats */}
-          <View className="mx-5 mt-4 flex-row" style={{ gap: 10 }}>
-            {[
-              { label: "Days logged", val: `${loggedDays}` },
-              { label: "Period length", val: `${activePeriodLength} days` },
-              { label: "Health score", val: `${treeHealth}%` },
-            ].map((stat) => (
-              <View
-                key={stat.label}
-                className="flex-1 items-center justify-center rounded-2xl"
-                style={{ backgroundColor: colors.surface, paddingVertical: 14, paddingHorizontal: 8 }}
-              >
-                <Text style={{ color: colors.foreground, fontSize: 17, fontWeight: "800", fontFamily: fonts.heading }}>{stat.val}</Text>
-                <Text numberOfLines={1} style={{ color: colors.mutedText, fontSize: 11.5, fontWeight: "600", fontFamily: fonts.body, marginTop: 2 }}>
-                  {stat.label}
-                </Text>
+              <View className="items-center justify-center mt-3">
+                <CycleRing
+                  activeCycleLength={activeCycleLength}
+                  activePeriodLength={activePeriodLength}
+                  ovulationDayPivot={ovulationDayPivot}
+                  cycleDay={cycleDay}
+                  nextPeriodDaysAway={nextPeriodDaysAway}
+                />
               </View>
-            ))}
-          </View>
 
-          {/* Calendar — one month at a time, swiped horizontally. */}
-          <View
-            className="mx-5 mt-6 rounded-3xl"
-            style={{ backgroundColor: colors.surface, paddingTop: 18, paddingBottom: 14, ...getShadow(colors, isDark) }}
-          >
-            <View className="flex-row items-center px-5">
-              <TouchableOpacity
-                activeOpacity={0.7}
-                onPress={() => router.push({ pathname: "/(app)/calendar", params: { month: calendarMonthParam } })}
-                accessibilityRole="button"
-                accessibilityLabel={`${MONTH_NAMES[selectedMonthIndex]} ${selectedYear}. Open full calendar`}
-                className="flex-row items-center flex-1"
-                style={{ gap: 5, minWidth: 0 }}
-              >
-                <Text
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.85}
-                  style={{ flexShrink: 1, color: colors.foreground, fontSize: 18, fontWeight: "800", fontFamily: fonts.heading }}
+              {/* "Log period" / "Symptoms" quick-entry buttons */}
+              <View className="mt-5 w-full flex-row gap-3">
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => openToday("flow")}
+                  className="flex-1 flex-row items-center justify-center gap-2 rounded-2xl py-3.5"
+                  style={{ backgroundColor: colors.primary }}
                 >
-                  {MONTH_NAMES[selectedMonthIndex]}
-                  <Text style={{ color: colors.mutedText, fontWeight: "600" }}>{` ${selectedYear}`}</Text>
-                </Text>
-                <MaterialCommunityIcons name="calendar-month-outline" size={16} color={colors.mutedText} />
-              </TouchableOpacity>
+                  <Feather name="plus" size={15} color={colors.buttonText} />
+                  <Text className="text-sm font-extrabold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
+                    Log period
+                  </Text>
+                </TouchableOpacity>
 
-              {!isViewingCurrentMonth && (
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => openToday("symptoms")}
+                  className="flex-1 flex-row items-center justify-center gap-2 rounded-2xl border py-3.5"
+                  style={{ backgroundColor: "transparent", borderColor: colors.border }}
+                >
+                  <Feather name="edit-3" size={15} color={colors.foreground} />
+                  <Text className="text-sm font-extrabold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
+                    Symptoms
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Calendar — one month at a time, swiped horizontally. */}
+            <View
+              className="mx-6 mt-4 rounded-3xl"
+              style={{ backgroundColor: colors.surface, paddingTop: 18, paddingBottom: 14, ...getShadow(colors, isDark) }}
+            >
+              <View className="flex-row items-center px-5">
                 <TouchableOpacity
                   activeOpacity={0.7}
-                  onPress={jumpToToday}
+                  onPress={() => router.push({ pathname: "/(app)/calendar", params: { month: calendarMonthParam } })}
                   accessibilityRole="button"
-                  accessibilityLabel="Go to today"
-                  hitSlop={6}
-                  className="items-center justify-center rounded-full"
-                  style={{ width: 32, height: 32, backgroundColor: colors.primaryLight }}
+                  accessibilityLabel={`${MONTH_NAMES[selectedMonthIndex]} ${selectedYear}. Open full calendar`}
+                  className="flex-row items-center flex-1"
+                  style={{ gap: 5, minWidth: 0 }}
                 >
-                  <MaterialCommunityIcons name="calendar-today" size={16} color={colors.primary} />
+                  <Text
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.85}
+                    style={{ flexShrink: 1, color: colors.foreground, fontSize: 18, fontWeight: "800", fontFamily: fonts.heading }}
+                  >
+                    {MONTH_NAMES[selectedMonthIndex]}
+                    <Text style={{ color: colors.mutedText, fontWeight: "600" }}>{` ${selectedYear}`}</Text>
+                  </Text>
+                  <MaterialCommunityIcons name="calendar-month-outline" size={16} color={colors.mutedText} />
                 </TouchableOpacity>
-              )}
-            </View>
 
-            <View className="px-5 mt-3">{phaseLegendRow}</View>
+                {!isViewingCurrentMonth && (
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={jumpToToday}
+                    accessibilityRole="button"
+                    accessibilityLabel="Go to today"
+                    hitSlop={6}
+                    className="items-center justify-center rounded-full"
+                    style={{ width: 32, height: 32, backgroundColor: colors.primaryLight }}
+                  >
+                    <MaterialCommunityIcons name="calendar-today" size={16} color={colors.primary} />
+                  </TouchableOpacity>
+                )}
+              </View>
 
-            <View className="flex-row px-3 mt-4 mb-1">
-              {WEEKDAY_LABELS.map((day, index) => (
-                <Text
-                  key={`${day}-${index}`}
-                  className="text-center"
-                  style={{ width: `${100 / 7}%`, color: colors.mutedText, fontSize: 11.5, fontWeight: "700", fontFamily: fonts.body }}
-                >
-                  {day}
-                </Text>
-              ))}
-            </View>
+              <View className="px-5 mt-3">{phaseLegendRow}</View>
 
-            {/* Swipeable months: one continuous strip, so swipes and chevrons cross years. */}
-            <View onLayout={(e) => setCalendarWidth(e.nativeEvent.layout.width)} style={{ height: CAL_ROWS * CAL_CELL }}>
-              {calendarWidth > 0 ? (
-                <FlatList
-                  ref={monthListRef}
-                  data={PAGER_MONTHS}
-                  keyExtractor={pagerKey}
-                  horizontal
-                  pagingEnabled
-                  nestedScrollEnabled
-                  decelerationRate="fast"
-                  showsHorizontalScrollIndicator={false}
-                  initialScrollIndex={pagerIndexOf(selectedYear, selectedMonthIndex)}
-                  getItemLayout={getPagerLayout}
-                  initialNumToRender={1}
-                  maxToRenderPerBatch={2}
-                  windowSize={3}
-                  extraData={renderCalendarDay}
-                  viewabilityConfig={pagerViewability}
-                  onViewableItemsChanged={onPagerViewable}
-                  onMomentumScrollEnd={onPagerSettled}
-                  renderItem={renderMonthPage}
-                />
-              ) : null}
+              <View className="flex-row px-3 mt-4 mb-1">
+                {WEEKDAY_LABELS.map((day, index) => (
+                  <Text
+                    key={`${day}-${index}`}
+                    className="text-center"
+                    style={{ width: `${100 / 7}%`, color: colors.mutedText, fontSize: 12.5, fontWeight: "700", fontFamily: fonts.body }}
+                  >
+                    {day}
+                  </Text>
+                ))}
+              </View>
+
+              {/* Swipeable months: one continuous strip, so swipes and chevrons cross years. */}
+              <View onLayout={(e) => setCalendarWidth(e.nativeEvent.layout.width)} style={{ height: CAL_ROWS * CAL_CELL }}>
+                {calendarWidth > 0 ? (
+                  <FlatList
+                    ref={monthListRef}
+                    data={PAGER_MONTHS}
+                    keyExtractor={pagerKey}
+                    horizontal
+                    pagingEnabled
+                    nestedScrollEnabled
+                    decelerationRate="fast"
+                    showsHorizontalScrollIndicator={false}
+                    initialScrollIndex={pagerIndexOf(selectedYear, selectedMonthIndex)}
+                    getItemLayout={getPagerLayout}
+                    initialNumToRender={1}
+                    maxToRenderPerBatch={2}
+                    windowSize={3}
+                    extraData={renderCalendarDay}
+                    viewabilityConfig={pagerViewability}
+                    onViewableItemsChanged={onPagerViewable}
+                    onMomentumScrollEnd={onPagerSettled}
+                    renderItem={renderMonthPage}
+                  />
+                ) : null}
+              </View>
             </View>
-          </View>
+            </>
+          )}
         </ScrollView>
       </SafeAreaView>
 
@@ -1557,7 +1379,7 @@ export default function Tracker() {
                 {
                   icon: "sun",
                   title: "Follicular phase",
-                  desc: "After period · energy rising, estrogen building",
+                  desc: "After your period · energy rising",
                   action: () => {
                     setSearchVisible(false);
                   },
@@ -1565,7 +1387,7 @@ export default function Tracker() {
                 {
                   icon: "activity",
                   title: "Ovulation",
-                  desc: "Peak fertility window · highest chance of pregnancy",
+                  desc: "Peak fertility window",
                   action: () => {
                     setSearchVisible(false);
                   },
@@ -1682,7 +1504,7 @@ export default function Tracker() {
                 {
                   icon: "message-circle",
                   title: "Gynecologist Consultation",
-                  desc: "Private specialist booking, secure chat, video call",
+                  desc: "Book a specialist, chat or video call",
                   action: () => {
                     setSearchVisible(false);
                     router.push("/(app)/consultation");
@@ -1754,7 +1576,7 @@ export default function Tracker() {
                 {
                   icon: "git-merge",
                   title: "Partner Sync",
-                  desc: "Share cycle info with your partner, chat, video call",
+                  desc: "Share your cycle with your partner",
                   action: () => {
                     setSearchVisible(false);
                     router.push("/(app)/partner");
@@ -1772,7 +1594,7 @@ export default function Tracker() {
                 {
                   icon: "star",
                   title: "Period Buddy",
-                  desc: "Anonymous cycle-matched peer chat & video call",
+                  desc: "Chat with someone on a similar cycle",
                   action: () => {
                     setSearchVisible(false);
                     router.push("/(app)/buddy-nomination");
@@ -1838,7 +1660,7 @@ export default function Tracker() {
                 <>
                   <Text
                     style={{
-                      fontSize: 11,
+                      fontSize: 12.5,
                       fontWeight: "700",
                       color: colors.mutedText,
                       fontFamily: fonts.body,
@@ -1913,7 +1735,7 @@ export default function Tracker() {
                         </Text>
                         <Text
                           style={{
-                            fontSize: 11,
+                            fontSize: 12.5,
                             color: colors.mutedText,
                             fontFamily: fonts.body,
                             marginTop: 1,
@@ -1968,12 +1790,12 @@ export default function Tracker() {
             <ScrollView
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ padding: 24, paddingBottom: 32 }}
+              contentContainerStyle={{ padding: 24, paddingBottom: Math.max(insets.bottom, 12) + 20 }}
             >
               <View className="flex-row items-start justify-between gap-4">
                 <View className="flex-1">
                   <Text
-                    className="text-[11px] font-black uppercase tracking-widest"
+                    className="text-[12px] font-black uppercase tracking-widest"
                     style={{ color: colors.primary, fontFamily: fonts.body }}
                   >
                     Cycle Settings
@@ -1986,13 +1808,6 @@ export default function Tracker() {
                     }}
                   >
                     Set your baseline
-                  </Text>
-                  <Text
-                    className="mt-2 text-xs font-semibold leading-5"
-                    style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                  >
-                    These values power cycle day, phase colors, reminders, and
-                    predictions.
                   </Text>
                 </View>
 
@@ -2024,15 +1839,6 @@ export default function Tracker() {
                         >
                           Cycle length
                         </Text>
-                        <Text
-                          className="mt-0.5 text-[11px] font-semibold leading-4"
-                          style={{
-                            color: colors.mutedText,
-                            fontFamily: fonts.body,
-                          }}
-                        >
-                          Most cycles are usually between 24 and 35 days.
-                        </Text>
                       </View>
                       <PillStepper
                         max={45}
@@ -2054,15 +1860,6 @@ export default function Tracker() {
                         >
                           Period length
                         </Text>
-                        <Text
-                          className="mt-0.5 text-[11px] font-semibold leading-4"
-                          style={{
-                            color: colors.mutedText,
-                            fontFamily: fonts.body,
-                          }}
-                        >
-                          This marks period phase days on your calendar.
-                        </Text>
                       </View>
                       <PillStepper
                         max={10}
@@ -2076,45 +1873,17 @@ export default function Tracker() {
                 </SettingsSectionCard>
 
                 {/* Last Period */}
-                <SettingsSectionCard title="Last Period">
-                  <Text
-                    className="mb-2 text-xs font-bold"
-                    style={{ color: colors.foreground, fontFamily: fonts.body }}
-                  >
-                    Last period start date
-                  </Text>
-                  <View
-                    className="flex-row items-center rounded-2xl px-4 py-3.5"
-                    style={{ backgroundColor: colors.surface }}
-                  >
-                    <MaterialCommunityIcons
-                      name="calendar-start"
-                      size={18}
-                      color={colors.primary}
-                    />
-                    <TextInput
-                      autoCapitalize="none"
-                      keyboardType="numbers-and-punctuation"
-                      onChangeText={(text) => {
-                        setSettingsError("");
-                        setLastPeriodStartDate(text);
-                      }}
-                      placeholder="YYYY-MM-DD"
-                      placeholderTextColor={colors.mutedText}
-                      className="ml-3 flex-1 text-sm font-bold outline-none"
-                      style={{
-                        color: colors.foreground,
-                        fontFamily: fonts.body,
-                      }}
-                      value={lastPeriodStartDate}
-                    />
-                  </View>
-                  <Text
-                    className="mt-2 text-[11px] font-semibold"
-                    style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                  >
-                    Example: 2026-07-01
-                  </Text>
+                <SettingsSectionCard title="Last period started">
+                  <MonthCalendar
+                    selectedKey={lastPeriodStartDate}
+                    highlightLength={Number.parseInt(periodLengthInput, 10) || 5}
+                    minDate={addDays(new Date(), -365)}
+                    maxDate={new Date()}
+                    onSelect={(dateKey) => {
+                      setSettingsError("");
+                      setLastPeriodStartDate(dateKey);
+                    }}
+                  />
                 </SettingsSectionCard>
 
                 {/* Tracking Goal */}
@@ -2141,7 +1910,7 @@ export default function Tracker() {
                           }}
                         >
                           <Text
-                            className="text-[11px] font-black"
+                            className="text-xs font-black"
                             style={{
                               color: isSelected
                                 ? colors.buttonText
@@ -2161,7 +1930,6 @@ export default function Tracker() {
                 <SettingsSectionCard title="Notifications">
                   <View style={{ gap: 16 }}>
                     <SettingsToggleRow
-                      description="Show reminders before your expected next period."
                       label="Period reminders"
                       onValueChange={setRemindersEnabled}
                       value={remindersEnabled}
@@ -2193,14 +1961,12 @@ export default function Tracker() {
                     ) : null}
 
                     <SettingsToggleRow
-                      description="Receive notifications for ovulation day."
                       label="Ovulation reminders"
                       onValueChange={setOvulationReminder}
                       value={ovulationReminder}
                     />
 
                     <SettingsToggleRow
-                      description="Get notified when your fertile window starts."
                       label="Fertility window reminders"
                       onValueChange={setFertilityReminder}
                       value={fertilityReminder}
@@ -2208,7 +1974,7 @@ export default function Tracker() {
 
                     {/* Pregnancy Mode — kept here, below Fertility reminders */}
                     <SettingsToggleRow
-                      description="Pause cycle predictions and track pregnancy."
+                      description="Pauses cycle predictions."
                       label="Pregnancy Mode"
                       onValueChange={setPregnancyMode}
                       value={pregnancyMode}

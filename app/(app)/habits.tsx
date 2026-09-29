@@ -1,5 +1,4 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useEffect, useState } from "react";
 import {
@@ -17,6 +16,7 @@ import { useTheme } from "../../components/theme";
 import { SkeletonList } from "../../components/Skeleton";
 import { getHeroGradient, getShadow, HABIT_CATEGORY_COLORS } from "../../components/ui-tokens";
 import { habitsApi, type Habit } from "../../lib/api";
+import { HeaderIconButton, ScreenHeader } from "../../components/ScreenHeader";
 
 const HABIT_IDEAS = [
   { title: "Sleep 8 Hours", icon: "moon-outline", color: HABIT_CATEGORY_COLORS.sleep, tokens: 45 },
@@ -33,7 +33,6 @@ function computeTreeState(pct: number) {
 
 export default function Habits() {
   const { colors, isDark, fonts } = useTheme();
-  const router = useRouter();
 
   const [habits, setHabits] = useState<Habit[]>([]);
   const [loading, setLoading] = useState(true);
@@ -109,23 +108,10 @@ export default function Habits() {
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
 
       <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
-        {/* Header */}
-        <View className="flex-row items-center gap-2 px-6 pt-6">
-          <TouchableOpacity
-            onPress={() => router.back()}
-            activeOpacity={0.7}
-            className="p-2.5 -ml-2 rounded-full border"
-            style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-          >
-            <Feather name="arrow-left" size={18} color={colors.foreground} />
-          </TouchableOpacity>
-          <Text className="flex-1 text-2xl font-black tracking-tight ml-2" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-            Habit Tracker
-          </Text>
-          <TouchableOpacity onPress={() => load(true)} className="p-2.5 rounded-full border" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
-            <Feather name="refresh-cw" size={16} color={colors.mutedText} />
-          </TouchableOpacity>
-        </View>
+        <ScreenHeader
+          title="Habit Tracker"
+          right={<HeaderIconButton icon="refresh" accessibilityLabel="Refresh" onPress={() => load(true)} />}
+        />
 
         {loading ? (
           <SkeletonList count={6} style={{ marginTop: 16 }} />
@@ -153,7 +139,7 @@ export default function Habits() {
                   <Text className="mt-1 text-2xl font-black tracking-tight" style={{ color: colors.buttonText, fontFamily: fonts.heading }}>
                     {completedCount} of {habits.length || 0} done
                   </Text>
-                  <Text className="mt-1 text-[11px] font-semibold leading-4" style={{ color: colors.buttonText, opacity: 0.85, fontFamily: fonts.body }}>
+                  <Text className="mt-1 text-xs font-semibold leading-4" style={{ color: colors.buttonText, opacity: 0.85, fontFamily: fonts.body }}>
                     {treeState.label} · {treeState.motivation}
                   </Text>
                 </View>
@@ -241,7 +227,7 @@ export default function Habits() {
                           {habit.title}
                         </Text>
                         <Text
-                          className="text-[10px] font-bold mt-0.5"
+                          className="text-xs font-bold mt-0.5"
                           numberOfLines={1}
                           ellipsizeMode="tail"
                           style={{ color: colors.mutedText, fontFamily: fonts.body }}

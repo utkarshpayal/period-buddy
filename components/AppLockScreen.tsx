@@ -97,7 +97,7 @@ export function AppLockScreen() {
 
         <TouchableOpacity onPress={handleForgot} className="mt-8 py-2 px-4">
           <Text
-            className="text-center text-[11px] font-bold underline"
+            className="text-center text-xs font-bold underline"
             style={{ color: colors.mutedText, fontFamily: fonts.body }}
           >
             Can&apos;t unlock? Sign out instead

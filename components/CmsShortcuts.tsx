@@ -103,7 +103,7 @@ function Shortcut({ tile }: { tile: HubTile }) {
               borderColor: colors.background,
             }}
           >
-            <Text style={{ fontSize: 9, fontWeight: "800", color: pillTint.fg, fontFamily: fonts.body }} numberOfLines={1}>
+            <Text style={{ fontSize: 10.5, fontWeight: "800", color: pillTint.fg, fontFamily: fonts.body }} numberOfLines={1}>
               {pill.text}
             </Text>
           </View>

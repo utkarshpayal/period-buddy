@@ -139,7 +139,7 @@ export function CalendarModal({
             {WEEKDAY_LABELS.map((label, index) => (
               <View key={index} style={{ width: 40 }} className="items-center">
                 <Text
-                  className="text-[11px] font-black uppercase"
+                  className="text-[12px] font-black uppercase"
                   style={{ color: colors.mutedText }}
                 >
                   {label}

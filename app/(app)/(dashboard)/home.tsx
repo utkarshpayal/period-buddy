@@ -8,7 +8,6 @@ import {
   StatusBar,
   Text,
   TouchableOpacity,
-  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -34,6 +33,7 @@ import { PromoPopup } from "../../../components/PromoPopup";
 import { CmsShortcuts } from "../../../components/CmsShortcuts";
 import { useAppConfig } from "../../../components/app-config";
 import { PromoBanners } from "../../../components/PromoBanners";
+import { useContentWidth } from "../../../lib/layout";
 
 type AnalyticsBar = {
   length: number;
@@ -326,7 +326,7 @@ export default function Home() {
   // than memoizing with an empty dep array, which would freeze it at
   // whatever greeting was correct the moment this screen first mounted.
   const greeting = getGreeting(new Date().getHours());
-  const { width: screenWidth } = useWindowDimensions();
+  const screenWidth = useContentWidth();
   // Leaves the next card peeking in at the right edge — the standard
   // "there's more, swipe" affordance instead of two full-width blocks
   // stacked back to back.
@@ -378,7 +378,7 @@ export default function Home() {
       <View className="mx-6 mb-4 flex-row justify-between">
         {weekStrip.map((day, idx) => (
           <View key={idx} className="items-center" style={{ width: 34 }}>
-            <Text style={{ fontSize: 11, fontWeight: "700", color: colors.mutedText, fontFamily: fonts.body, marginBottom: 6 }}>
+            <Text style={{ fontSize: 12.5, fontWeight: "700", color: colors.mutedText, fontFamily: fonts.body, marginBottom: 6 }}>
               {day.letter}
             </Text>
             <View
@@ -452,7 +452,7 @@ export default function Home() {
             <View className="flex-1 pr-3">
               <Text
                 style={{
-                  fontSize: 10,
+                  fontSize: 12.5,
                   fontWeight: "800",
                   color: "#fff",
                   letterSpacing: 0.8,
@@ -535,7 +535,7 @@ export default function Home() {
               />
             </View>
             <Text
-              style={{ fontSize: 11, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body, marginTop: 6 }}
+              style={{ fontSize: 12.5, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body, marginTop: 6 }}
             >
               {genZLabel(action.label, genZModeEnabled)}
             </Text>
@@ -587,7 +587,7 @@ export default function Home() {
           <View className="border p-5" style={{ width: insightCardWidth, backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 22, ...getShadow(colors, isDark) }}>
             <View className="flex-row items-center justify-between">
               <View className="flex-1 pr-4">
-                <Text style={{ fontSize: 10, fontWeight: "800", color: colors.primary, letterSpacing: 0.6, fontFamily: fonts.body, textTransform: "uppercase" }}>
+                <Text style={{ fontSize: 11.5, fontWeight: "800", color: colors.primary, letterSpacing: 0.6, fontFamily: fonts.body, textTransform: "uppercase" }}>
                   CYCLE HEALTH
                 </Text>
                 <View className="flex-row items-baseline mt-1" style={{ gap: 6 }}>
@@ -606,7 +606,7 @@ export default function Home() {
                   <Circle cx="32" cy="32" r="27" fill="none" stroke={colors.primary} strokeWidth={6} strokeLinecap="round" strokeDasharray={`${(treeHealth / 100) * 170} 170`} transform="rotate(-90 32 32)" />
                 </Svg>
                 <View style={{ position: "absolute", inset: 0, justifyContent: "center", alignItems: "center" }}>
-                  <Text style={{ fontSize: 11, fontWeight: "600", color: colors.foreground, fontFamily: fonts.mono }}>
+                  <Text style={{ fontSize: 12.5, fontWeight: "600", color: colors.foreground, fontFamily: fonts.mono }}>
                     {treeHealth}%
                   </Text>
                 </View>
@@ -625,7 +625,7 @@ export default function Home() {
                   <Text style={{ fontSize: 18, fontWeight: "800", color: colors.foreground, fontFamily: fonts.mono }}>
                     {stat.value}
                   </Text>
-                  <Text style={{ fontSize: 10, color: colors.mutedText, fontFamily: fonts.body, marginTop: 2, textAlign: "center" }}>
+                  <Text style={{ fontSize: 12.5, color: colors.mutedText, fontFamily: fonts.body, marginTop: 2, textAlign: "center" }}>
                     {stat.label}
                   </Text>
                 </View>
@@ -639,7 +639,7 @@ export default function Home() {
               <Text style={{ fontSize: 14, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
                 Cycle length trend
               </Text>
-              <Text style={{ fontSize: 11.5, color: colors.mutedText, fontFamily: fonts.body }}>
+              <Text style={{ fontSize: 12.5, color: colors.mutedText, fontFamily: fonts.body }}>
                 Avg {predictions?.cycleLength ?? 28} days
               </Text>
             </View>
@@ -650,13 +650,13 @@ export default function Home() {
                 const isLatest = idx === analyticGraphData.length - 1;
                 return (
                   <View key={`${data.month}-${idx}`} className="items-center" style={{ width: 44 }}>
-                    <Text style={{ fontSize: 9.5, fontWeight: "600", color: isLatest ? colors.primary : colors.mutedText, fontFamily: fonts.mono, marginBottom: 6 }}>
+                    <Text style={{ fontSize: 12.5, fontWeight: "600", color: isLatest ? colors.primary : colors.mutedText, fontFamily: fonts.mono, marginBottom: 6 }}>
                       {data.length > 0 ? `${data.length}d` : "—"}
                     </Text>
                     <View style={{ height: 80, width: 14, backgroundColor: colors.track, borderRadius: 99, justifyContent: "flex-end", overflow: "hidden" }}>
                       <View style={{ height: barHeight, width: "100%", backgroundColor: colors.primary, opacity: isLatest ? 1 : 0.5, borderRadius: 99 }} />
                     </View>
-                    <Text style={{ fontSize: 10, fontWeight: "600", color: isLatest ? colors.foreground : colors.mutedText, fontFamily: fonts.body, marginTop: 8 }}>
+                    <Text style={{ fontSize: 12.5, fontWeight: "600", color: isLatest ? colors.foreground : colors.mutedText, fontFamily: fonts.body, marginTop: 8 }}>
                       {data.month}
                     </Text>
                   </View>
@@ -759,7 +759,7 @@ export default function Home() {
                 {greeting}, {user?.firstName || "there"} 👋
               </Text>
               <Text
-                style={{ fontSize: 12, color: colors.mutedText, fontFamily: fonts.body, marginTop: 1 }}
+                style={{ fontSize: 13, color: colors.mutedText, fontFamily: fonts.body, marginTop: 1 }}
                 numberOfLines={1}
               >
                 You&apos;ve got this today

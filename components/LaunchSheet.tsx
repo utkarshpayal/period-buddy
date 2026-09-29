@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import React, { useState } from "react";
 import { ActivityIndicator, Modal, Pressable, Text, TouchableOpacity, View } from "react-native";
 import { useAppConfig } from "./app-config";
@@ -30,6 +31,7 @@ export function LaunchSheet({ request, onClose }: { request: LaunchSheetRequest;
   const { enabled: genZ } = useGenZMode();
   const { refresh } = useAppConfig();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { sheet, access } = request;
   const [onList, setOnList] = useState(sheet.onList || joined.has(request.itemKey));
   const [saving, setSaving] = useState(false);
@@ -84,7 +86,7 @@ export function LaunchSheet({ request, onClose }: { request: LaunchSheetRequest;
             borderWidth: 1,
             paddingHorizontal: 24,
             paddingTop: 10,
-            paddingBottom: 34,
+            paddingBottom: Math.max(insets.bottom, 12) + 22,
             alignItems: "center",
           }}
         >

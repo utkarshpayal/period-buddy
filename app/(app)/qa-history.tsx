@@ -1,44 +1,40 @@
-import { Feather } from "@expo/vector-icons";
+import { Feather, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { RefreshControl, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { Image, RefreshControl, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { EmptyState } from "../../components/EmptyState";
-import { LoadingErrorState } from "../../components/LoadingErrorState";
-import { SkeletonList } from "../../components/Skeleton";
-import { ScreenHeader } from "../../components/ScreenHeader";
+import { useAuth } from "../../components/auth-context";
+import { LoadMoreButton } from "../../components/LoadMoreButton";
+import { ScreenHeader, SectionHeader } from "../../components/ScreenHeader";
+import { SkeletonBlock } from "../../components/Skeleton";
+import { LockedFeatureCard } from "../../components/subscription/LockedFeatureCard";
+import { PaywallModal } from "../../components/subscription/PaywallModal";
 import { useTheme } from "../../components/theme";
 import { getLogCategoryTints, getShadow, getSoftTints } from "../../components/ui-tokens";
 import { usePaginatedList } from "../../hooks/usePaginatedList";
-import { LoadMoreButton } from "../../components/LoadMoreButton";
 import { useSubscriptionAccess } from "../../hooks/useSubscriptionAccess";
-import { LockedFeatureCard } from "../../components/subscription/LockedFeatureCard";
-import { PaywallModal } from "../../components/subscription/PaywallModal";
 import { alert } from "../../lib/alert";
+import { questionAnswerApi, type ChatTopicId, type QaChatSessionSummary } from "../../lib/api";
+import { CHAT_TOPICS, getChatTopic, isTopicLocked } from "../../lib/chatTopics";
 import { formatShortDate } from "../../lib/format";
-import { questionAnswerApi, type QaChatSessionSummary } from "../../lib/api";
-import { getChatTopic } from "../../lib/chatTopics";
 
-// Chat history — every past Nura AI conversation, most recent first. Opening
-// one resumes it (app/(app)/qa.tsx loads the session via ?sessionId=...);
-// "New chat" drops back into qa.tsx fresh so the topic-picker grid there
-// handles starting a chat on any topic.
-export default function QaHistory() {
+/**
+ * Nura AI home — the entry to the assistant. One primary action (start a new
+ * chat), then topics to start from, then recent chats to pick back up.
+ * Opening a chat or topic goes to app/(app)/qa.tsx (?new=1[&topic=id] or
+ * ?sessionId=...). qa.tsx redirects a bare open here.
+ */
+export default function NuraAiHome() {
   const { colors, fonts, isDark } = useTheme();
   const router = useRouter();
+  const { user } = useAuth();
   const softTints = getSoftTints(colors);
   const categoryTints = getLogCategoryTints(colors);
-  const shadow = getShadow(colors, isDark);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [paywallVisible, setPaywallVisible] = useState(false);
-  const {
-    hasAccess,
-    isLoading: subscriptionLoading,
-    refresh: refreshSubscriptionAccess,
-  } = useSubscriptionAccess();
-  // Whole-screen gate — Nura AI (persisted chat) is the premium part of Ask
-  // Nura AI, so block reaching the history list at all when locked, not
-  // just starting a new chat.
+  const [pendingTopic, setPendingTopic] = useState<ChatTopicId | null>(null);
+  const { hasAccess, isLoading: subscriptionLoading, refresh: refreshSubscriptionAccess } = useSubscriptionAccess();
+  // Persisted AI chat is the premium part of Nura AI, so gate the whole home.
   const locked = !subscriptionLoading && !hasAccess("ai_assistant");
 
   useEffect(() => {
@@ -50,8 +46,6 @@ export default function QaHistory() {
     setItems: setSessions,
     loading,
     refreshing,
-    error,
-    offline,
     reload,
     hasMore,
     loadingMore,
@@ -66,16 +60,13 @@ export default function QaHistory() {
     { getKey: (session) => session.id, refreshOn: ["qaSessions"] },
   );
 
-  // Gated right here, before ever navigating into qa.tsx — "New chat" is an
-  // explicit request to start a *persisted* AI session (the premium part of
-  // Ask Nura AI), so this is the earliest point to show the paywall instead
-  // of letting the user open the topic picker and type a message first.
-  function startNewChat() {
+  function openNewChat(topicId?: ChatTopicId) {
     if (!hasAccess("ai_assistant")) {
+      setPendingTopic(topicId ?? null);
       setPaywallVisible(true);
       return;
     }
-    router.push({ pathname: "/(app)/qa", params: { new: "1" } });
+    router.push({ pathname: "/(app)/qa", params: topicId ? { new: "1", topic: topicId } : { new: "1" } });
   }
 
   function handleDelete(session: QaChatSessionSummary) {
@@ -86,8 +77,7 @@ export default function QaHistory() {
           setDeletingId(session.id);
           try {
             await questionAnswerApi.deleteSession(session.id);
-            // Drop it in place — a reload would collapse pages opened with
-            // "Show more".
+            // Drop it in place; a reload would collapse pages opened with "Show more".
             setSessions((prev) => prev.filter((s) => s.id !== session.id));
           } catch (err) {
             alert("Couldn't delete chat", err instanceof Error ? err.message : "Please try again.");
@@ -101,144 +91,178 @@ export default function QaHistory() {
     ]);
   }
 
-  if (subscriptionLoading) {
-    return (
-      <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
-        <ScreenHeader title="Chat History" />
-        <SkeletonList count={6} style={{ paddingTop: 16 }} />
-      </SafeAreaView>
-    );
-  }
+  const paywall = (
+    <PaywallModal
+      visible={paywallVisible}
+      onClose={() => setPaywallVisible(false)}
+      featureKey="ai_assistant"
+      onUnlocked={() => {
+        refreshSubscriptionAccess();
+        router.push({ pathname: "/(app)/qa", params: pendingTopic ? { new: "1", topic: pendingTopic } : { new: "1" } });
+      }}
+    />
+  );
 
   if (locked) {
     return (
       <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
-        <ScreenHeader title="Chat History" />
+        <ScreenHeader title="Nura AI" />
         <View className="flex-1 items-center justify-center px-6">
           <LockedFeatureCard
-            title="Nura AI Chat"
-            description="Unlock persisted, topic-scoped chats with Nura AI, saved so you can pick up any conversation later."
+            title="Nura AI"
+            description="Private answers about your cycle, body and health, any time."
             onPress={() => setPaywallVisible(true)}
           />
         </View>
-        <PaywallModal
-          visible={paywallVisible}
-          onClose={() => setPaywallVisible(false)}
-          featureKey="ai_assistant"
-          onUnlocked={refreshSubscriptionAccess}
-        />
+        {paywall}
       </SafeAreaView>
     );
   }
 
+  const firstName = user?.firstName && user.firstName !== "Nura" ? user.firstName : "";
+
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
-      <ScreenHeader
-        title="Chat History"
-        right={
-          <TouchableOpacity
-            onPress={startNewChat}
-            activeOpacity={0.8}
-            className="flex-row items-center gap-1.5 px-3.5 py-2 rounded-full"
-            style={{ backgroundColor: colors.primary }}
-          >
-            <Feather name="plus" size={14} color={colors.buttonText} />
-            <Text className="text-xs font-black" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-              New
-            </Text>
-          </TouchableOpacity>
-        }
-      />
+      <ScreenHeader title="Nura AI" />
 
-      <LoadingErrorState
-        loading={loading}
-        error={error}
-        offline={offline}
-        onRetry={() => reload()}
-        skeleton={<SkeletonList count={6} style={{ paddingTop: 16 }} />}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 40 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => reload(true)} tintColor={colors.primary} />}
       >
-        {!sessions?.length ? (
-          <EmptyState
-            icon="chat-question-outline"
-            title="No chats yet"
-            message="Start a conversation with Nura AI and it'll show up here so you can pick it back up any time."
-            actionLabel="Start a chat"
-            onAction={startNewChat}
-          />
-        ) : (
-          <ScrollView
-            className="flex-1 px-5 pt-4"
-            contentContainerStyle={{ paddingBottom: 32 }}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => reload(true)} tintColor={colors.primary} />}
+        {/* Primary action */}
+        <TouchableOpacity
+          activeOpacity={0.9}
+          onPress={() => openNewChat()}
+          disabled={subscriptionLoading}
+          accessibilityRole="button"
+          accessibilityLabel="Start a new chat"
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 14,
+            padding: 18,
+            borderRadius: 24,
+            backgroundColor: colors.primary,
+            ...getShadow(colors, isDark),
+          }}
+        >
+          <View
+            className="items-center justify-start overflow-hidden rounded-full"
+            style={{ width: 52, height: 52, backgroundColor: softTints.pink, borderWidth: 2, borderColor: colors.buttonText }}
           >
-            <View className="gap-3">
-              {sessions.map((session) => {
+            <Image
+              source={require("../../assets/images/illustrations/nura-avatar.png")}
+              style={{ width: 52, height: 52 * (1294 / 871) }}
+              resizeMode="cover"
+            />
+          </View>
+          <View className="flex-1">
+            <Text style={{ color: colors.buttonText, fontSize: 17, fontWeight: "800", fontFamily: fonts.heading }}>
+              {firstName ? `Ask anything, ${firstName}` : "Ask anything"}
+            </Text>
+            <Text style={{ color: colors.buttonText, opacity: 0.85, fontSize: 13, marginTop: 2, fontFamily: fonts.body }}>
+              Private, anonymous answers
+            </Text>
+          </View>
+          <View className="items-center justify-center rounded-full" style={{ width: 36, height: 36, backgroundColor: colors.buttonText }}>
+            <Ionicons name="add" size={22} color={colors.primary} />
+          </View>
+        </TouchableOpacity>
+
+        {/* Topics */}
+        <SectionHeader title="Start with a topic" style={{ marginTop: 28 }} />
+        <View className="flex-row flex-wrap" style={{ gap: 10 }}>
+          {CHAT_TOPICS.map((topic) => {
+            const tint = categoryTints[topic.tint];
+            const topicLocked = isTopicLocked(topic, user?.dateOfBirth);
+            return (
+              <TouchableOpacity
+                key={topic.id}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel={topicLocked ? `${topic.label}, locked` : topic.label}
+                onPress={() => {
+                  if (topicLocked) {
+                    alert(
+                      "Age verification needed",
+                      `${topic.label} unlocks once your profile shows you're ${topic.minAge}+. Add your birthday in Profile → Edit profile.`,
+                    );
+                    return;
+                  }
+                  openNewChat(topic.id);
+                }}
+                style={{ width: "47%", flexGrow: 1, padding: 14, borderRadius: 18, backgroundColor: colors.surface, opacity: topicLocked ? 0.55 : 1 }}
+              >
+                <View className="items-center justify-center rounded-xl" style={{ width: 36, height: 36, backgroundColor: tint.light }}>
+                  <Feather name={topicLocked ? "lock" : topic.icon} size={17} color={tint.color} />
+                </View>
+                <Text numberOfLines={2} style={{ color: colors.foreground, fontSize: 14, lineHeight: 19, fontWeight: "700", marginTop: 10, fontFamily: fonts.body }}>
+                  {topic.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* Recent chats */}
+        {loading ? (
+          <View style={{ marginTop: 28, gap: 10 }}>
+            <SkeletonBlock width={120} height={16} />
+            <SkeletonBlock height={64} radius={18} />
+            <SkeletonBlock height={64} radius={18} />
+          </View>
+        ) : sessions?.length ? (
+          <>
+            <SectionHeader title="Recent chats" barColor={colors.secondary} style={{ marginTop: 28 }} />
+            <View style={{ borderRadius: 20, backgroundColor: colors.surface, overflow: "hidden" }}>
+              {sessions.map((session, index) => {
                 const topic = getChatTopic(session.topicId);
                 const tint = topic ? categoryTints[topic.tint] : { color: colors.primary, light: softTints.pink };
                 return (
-                  <TouchableOpacity
-                    key={session.id}
-                    activeOpacity={0.75}
-                    disabled={deletingId === session.id}
-                    onPress={() => router.push({ pathname: "/(app)/qa", params: { sessionId: session.id } })}
-                    className="flex-row items-center gap-3 p-4 rounded-3xl border"
-                    style={[{ backgroundColor: colors.surface, borderColor: colors.border }, shadow]}
-                  >
-                    <View
-                      className="w-11 h-11 items-center justify-center rounded-full"
-                      style={{ backgroundColor: tint.light }}
-                    >
-                      <Feather name={topic?.icon ?? "message-circle"} size={18} color={tint.color} />
-                    </View>
-
-                    <View className="flex-1 min-w-0">
-                      <Text
-                        numberOfLines={1}
-                        ellipsizeMode="tail"
-                        className="text-sm font-black"
-                        style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                      >
-                        {session.title}
-                      </Text>
-                      <Text
-                        numberOfLines={1}
-                        className="text-[11px] font-bold mt-0.5"
-                        style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                      >
-                        {session.topicLabel} · {formatShortDate(session.lastMessageAt)} · {session.messageCount} msg
-                        {session.messageCount === 1 ? "" : "s"}
-                      </Text>
-                    </View>
-
+                  <View key={session.id}>
+                    {index > 0 ? <View style={{ height: 1, marginLeft: 68, backgroundColor: colors.border }} /> : null}
                     <TouchableOpacity
-                      onPress={() => handleDelete(session)}
-                      disabled={deletingId === session.id}
                       activeOpacity={0.7}
+                      disabled={deletingId === session.id}
+                      onPress={() => router.push({ pathname: "/(app)/qa", params: { sessionId: session.id } })}
+                      onLongPress={() => handleDelete(session)}
                       accessibilityRole="button"
-                      accessibilityLabel="Delete chat"
-                      className="w-8 h-8 items-center justify-center rounded-full"
-                      style={{ backgroundColor: colors.input }}
+                      accessibilityHint="Long press to delete"
+                      className="flex-row items-center"
+                      style={{ gap: 12, paddingHorizontal: 16, paddingVertical: 14, opacity: deletingId === session.id ? 0.5 : 1 }}
                     >
-                      <Feather name="trash-2" size={13} color={colors.mutedText} />
+                      <View className="items-center justify-center rounded-full" style={{ width: 40, height: 40, backgroundColor: tint.light }}>
+                        <Feather name={topic?.icon ?? "message-circle"} size={17} color={tint.color} />
+                      </View>
+                      <View className="flex-1" style={{ minWidth: 0 }}>
+                        <Text numberOfLines={1} style={{ color: colors.foreground, fontSize: 14.5, fontWeight: "700", fontFamily: fonts.body }}>
+                          {session.title}
+                        </Text>
+                        <Text numberOfLines={1} style={{ color: colors.mutedText, fontSize: 13, marginTop: 2, fontFamily: fonts.body }}>
+                          {session.topicLabel} · {formatShortDate(session.lastMessageAt)}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => handleDelete(session)}
+                        disabled={deletingId === session.id}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Delete chat ${session.title}`}
+                        hitSlop={10}
+                      >
+                        <Ionicons name="trash-outline" size={17} color={colors.mutedText} />
+                      </TouchableOpacity>
                     </TouchableOpacity>
-                  </TouchableOpacity>
+                  </View>
                 );
               })}
             </View>
             <LoadMoreButton hasMore={hasMore} loading={loadingMore} onPress={loadMore} />
-          </ScrollView>
-        )}
-      </LoadingErrorState>
+          </>
+        ) : null}
+      </ScrollView>
 
-      <PaywallModal
-        visible={paywallVisible}
-        onClose={() => setPaywallVisible(false)}
-        featureKey="ai_assistant"
-        onUnlocked={() => {
-          refreshSubscriptionAccess();
-          router.push({ pathname: "/(app)/qa", params: { new: "1" } });
-        }}
-      />
+      {paywall}
     </SafeAreaView>
   );
 }

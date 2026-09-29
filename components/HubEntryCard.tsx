@@ -72,7 +72,7 @@ export default function HubEntryCard({
           {title}
         </Text>
         <Text
-          style={{ fontSize: 11, color: colors.mutedText, marginTop: 1.5, fontFamily: fonts.body }}
+          style={{ fontSize: 12.5, color: colors.mutedText, marginTop: 1.5, fontFamily: fonts.body }}
           numberOfLines={1}
         >
           {description}

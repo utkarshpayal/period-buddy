@@ -180,7 +180,7 @@ export default function PartnerViewOverview() {
               </Text>
               <Text
                 numberOfLines={1}
-                style={{ fontSize: 11, fontWeight: "700", color: colors.mutedText, fontFamily: fonts.body }}
+                style={{ fontSize: 12.5, fontWeight: "700", color: colors.mutedText, fontFamily: fonts.body }}
               >
                 {isConnected && partnerName !== "your partner"
                   ? `Here's how ${partnerName}'s doing`
@@ -196,7 +196,7 @@ export default function PartnerViewOverview() {
               >
                 <Ionicons name="flame" size={13} color={colors.primary} style={{ marginRight: 4 }} />
                 <Text
-                  style={{ fontSize: 11, fontWeight: "800", color: colors.foreground, fontFamily: fonts.body }}
+                  style={{ fontSize: 12.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.body }}
                 >
                   {data.streak.count}
                 </Text>
@@ -293,7 +293,7 @@ export default function PartnerViewOverview() {
                     Talk to a gynaecologist
                   </Text>
                   <Text
-                    className="text-[10.5px] mt-0.5 font-semibold"
+                    className="text-xs mt-0.5 font-semibold"
                     style={{ color: colors.mutedText, fontFamily: fonts.body }}
                   >
                     Book your own video consultation
@@ -311,7 +311,7 @@ export default function PartnerViewOverview() {
                   style={{ borderRadius: 22, padding: 20, marginBottom: 14 }}
                 >
                   <Text
-                    className="text-[11px] font-bold uppercase"
+                    className="text-[12px] font-bold uppercase"
                     style={{ color: "rgba(255,255,255,0.85)", fontFamily: fonts.body }}
                   >
                     {(partnerName !== "your partner" ? partnerName.toUpperCase() : "CYCLE")} · DAY{" "}
@@ -351,7 +351,7 @@ export default function PartnerViewOverview() {
                       {data?.cycle?.nextPeriodDate && (
                         <View className="flex-1 min-w-[45%]">
                           <Text
-                            className="text-[9.5px] font-black uppercase tracking-wider mb-0.5"
+                            className="text-[11.5px] font-black uppercase tracking-wider mb-0.5"
                             style={{ color: "rgba(255,255,255,0.75)", fontFamily: fonts.body }}
                           >
                             Next period
@@ -367,7 +367,7 @@ export default function PartnerViewOverview() {
                       {data?.cycle?.fertileWindowRange && (
                         <View className="flex-1 min-w-[45%]">
                           <Text
-                            className="text-[9.5px] font-black uppercase tracking-wider mb-0.5"
+                            className="text-[11.5px] font-black uppercase tracking-wider mb-0.5"
                             style={{ color: "rgba(255,255,255,0.75)", fontFamily: fonts.body }}
                           >
                             Fertile window
@@ -449,7 +449,7 @@ export default function PartnerViewOverview() {
                   }}
                 >
                   <Text
-                    className="text-[10px] font-black uppercase tracking-widest mb-3"
+                    className="text-[11.5px] font-black uppercase tracking-widest mb-3"
                     style={{ color: colors.primary, fontFamily: fonts.body }}
                   >
                     Alerts
@@ -487,7 +487,7 @@ export default function PartnerViewOverview() {
                   }}
                 >
                   <Text
-                    className="text-[10px] font-black uppercase tracking-widest mb-3"
+                    className="text-[11.5px] font-black uppercase tracking-widest mb-3"
                     style={{ color: colors.primary, fontFamily: fonts.body }}
                   >
                     Recent symptoms
@@ -517,7 +517,7 @@ export default function PartnerViewOverview() {
                             {formatDateKey(log.dateKey)}
                           </Text>
                           <Text
-                            className="text-[11px] font-semibold flex-1 text-right"
+                            className="text-xs font-semibold flex-1 text-right"
                             numberOfLines={1}
                             style={{ color: colors.mutedText, fontFamily: fonts.body }}
                           >
@@ -529,7 +529,7 @@ export default function PartnerViewOverview() {
                         {wellbeingBits.length > 0 && (
                           isExpanded ? (
                             <Text
-                              className="text-[10px] font-semibold mt-1"
+                              className="text-xs font-semibold mt-1"
                               style={{ color: colors.mutedText, fontFamily: fonts.body }}
                             >
                               {wellbeingBits.join(" · ")}
@@ -540,7 +540,7 @@ export default function PartnerViewOverview() {
                               className="mt-1"
                             >
                               <Text
-                                className="text-[10px] font-bold underline"
+                                className="text-xs font-bold underline"
                                 style={{ color: colors.primary, fontFamily: fonts.body }}
                               >
                                 Show details
@@ -568,7 +568,7 @@ export default function PartnerViewOverview() {
                     <View className="flex-row items-center gap-1.5">
                       <Ionicons name="heart-outline" size={15} color={colors.primary} />
                       <Text
-                        className="text-[10px] font-black uppercase tracking-widest"
+                        className="text-[11.5px] font-black uppercase tracking-widest"
                         style={{ color: colors.primary, fontFamily: fonts.body }}
                       >
                         Intimacy Notes
@@ -587,7 +587,7 @@ export default function PartnerViewOverview() {
                         }}
                       >
                         <Text
-                          className="text-[11.5px] font-black mb-1"
+                          className="text-xs font-black mb-1"
                           style={{ color: colors.foreground, fontFamily: fonts.body }}
                         >
                           {formatDateKey(log.dateKey)}
@@ -617,7 +617,7 @@ export default function PartnerViewOverview() {
                   <View className="flex-row items-center gap-1.5 mb-3">
                     <Ionicons name="rose-outline" size={15} color={colors.primary} />
                     <Text
-                      className="text-[10px] font-black uppercase tracking-widest"
+                      className="text-[11.5px] font-black uppercase tracking-widest"
                       style={{ color: colors.primary, fontFamily: fonts.body }}
                     >
                       Partner Caring Guide
@@ -650,7 +650,7 @@ export default function PartnerViewOverview() {
                                 }}
                               >
                                 <Text
-                                  className="text-[9px] font-bold uppercase tracking-wider"
+                                  className="text-[11.5px] font-bold uppercase tracking-wider"
                                   style={{ color: colors.primary }}
                                 >
                                   {suggestion.category}
@@ -664,7 +664,7 @@ export default function PartnerViewOverview() {
                               {suggestion.title}
                             </Text>
                             <Text
-                              className="text-[11.5px] leading-5 font-medium"
+                              className="text-xs leading-5 font-medium"
                               style={{ color: colors.mutedText, fontFamily: fonts.body }}
                             >
                               {suggestion.message}
@@ -696,7 +696,7 @@ export default function PartnerViewOverview() {
                                   style={{ marginTop: 1 }}
                                 />
                                 <Text
-                                  className="flex-1 text-[11.5px] leading-5 font-semibold"
+                                  className="flex-1 text-xs leading-5 font-semibold"
                                   style={{ color: colors.foreground, fontFamily: fonts.body }}
                                 >
                                   {item}
@@ -725,7 +725,7 @@ export default function PartnerViewOverview() {
                                   style={{ marginTop: 1 }}
                                 />
                                 <Text
-                                  className="flex-1 text-[11.5px] leading-5 font-semibold"
+                                  className="flex-1 text-xs leading-5 font-semibold"
                                   style={{ color: colors.foreground, fontFamily: fonts.body }}
                                 >
                                   {item}
@@ -772,7 +772,7 @@ export default function PartnerViewOverview() {
                 }}
               >
                 <Text
-                  className="text-[10px] font-black uppercase tracking-widest mb-3"
+                  className="text-[11.5px] font-black uppercase tracking-widest mb-3"
                   style={{ color: colors.primary, fontFamily: fonts.body }}
                 >
                   Knowledge & resources
@@ -810,7 +810,7 @@ export default function PartnerViewOverview() {
                         {link.title}
                       </Text>
                       <Text
-                        className="text-[10px] mt-0.5 font-semibold"
+                        className="text-xs mt-0.5 font-semibold"
                         style={{ color: colors.mutedText, fontFamily: fonts.body }}
                         numberOfLines={1}
                       >

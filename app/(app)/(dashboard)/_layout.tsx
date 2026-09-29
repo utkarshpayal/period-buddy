@@ -1,11 +1,7 @@
 import { Tabs, useRouter } from "expo-router";
-import React, { useCallback, useState, useEffect } from "react";
+import React, { useCallback, useRef, useState, useEffect } from "react";
 import {
   Image,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StatusBar,
   StyleSheet,
   TouchableOpacity,
   View,
@@ -16,11 +12,12 @@ import { genZLabel, useGenZMode } from "../../../components/genz-mode";
 import { TabBarItem } from "../../../components/TabBarItem";
 
 import { useAuth } from "../../../components/auth-context";
-import { ProfileOnboarding } from "../../../components/profile-onboarding";
-import { submitCycleSettings, submitOnboarding } from "../../../lib/auth";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { OnboardingFlow, type OnboardingValues } from "../../../components/onboarding/OnboardingFlow";
+import { submitCycleSettings, submitOnboarding, type AuthUser } from "../../../lib/auth";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { showPermissionModal } from "../../../lib/modal-host";
 import { useRealtimeSocket, type RealtimeMessage } from "../../../hooks/useRealtimeSocket";
+import { authApi } from "../../../lib/api";
 
 const CENTER_AVATAR_SOURCE = require("../../../assets/images/illustrations/nura-avatar.png");
 
@@ -103,7 +100,7 @@ const styles = StyleSheet.create({
 export default function DashboardLayout() {
   const { colors, isDark } = useTheme();
   const { enabled: genZModeEnabled } = useGenZMode();
-  const { token, user, signIn } = useAuth();
+  const { token, user, signIn, updateUser } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [unreadCommunity, setUnreadCommunity] = useState(false);
@@ -135,65 +132,80 @@ export default function DashboardLayout() {
     rooms: token && userId ? [`user_${userId}`, "community"] : [],
   });
 
-  async function handleOnboardingSubmit(values: any) {
-    if (!token) return;
-    try {
-      const response = await submitOnboarding(values, token);
-      const updatedUser = response.data ?? response.user;
-      const isProfileComplete =
-        response.isProfileComplete ?? updatedUser?.isProfileComplete ?? true;
+  // The local flag can be stale: setup may have been finished on another
+  // device, or the app closed after the answers saved but before the finish
+  // screen. Ask the server once so setup never runs twice.
+  const setupPending = Boolean(token) && user?.isProfileComplete === false;
+  useEffect(() => {
+    if (!setupPending) return;
+    let cancelled = false;
+    authApi
+      .getProfile()
+      .then((fresh) => {
+        if (!cancelled && fresh?.isProfileComplete) updateUser(fresh);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // Only on entering setup, not on every profile change during it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setupPending]);
 
-      try {
-        await submitCycleSettings(
-          {
-            cycleLength: values.cycleLength,
-            lastPeriodStartDate: values.lastPeriodStartDate,
-            periodLength: values.periodLength,
-            trackingGoal: values.trackingGoal,
-            trackingGoals: values.trackingGoals,
-          },
-          token,
-        );
-      } catch (error) {
-        console.error("Failed to save cycle settings:", error);
-      }
+  // Saved by the onboarding flow's last question; applied to the session only
+  // when the user taps through its finish screen, since flipping
+  // isProfileComplete swaps this layout straight to the tabs.
+  const onboardedUserRef = useRef<Partial<AuthUser> | null>(null);
 
-      await signIn({
-        token,
-        user: {
-          ...user,
-          ...values,
-          ...updatedUser,
-          isProfileComplete,
-        },
-      });
-    } catch (err) {
-      console.error("Onboarding failed:", err);
-      throw err;
-    }
+  async function handleOnboardingSubmit(values: OnboardingValues) {
+    if (!token) throw new Error("Your session has expired. Please log in again.");
+
+    const response = await submitOnboarding(
+      // Gender isn't asked; the backend requires a value, so send its
+      // "prefer not to say" default. Phone and photo are optional and
+      // collected later from Profile → Edit profile.
+      { dateOfBirth: values.dateOfBirth, gender: "prefer_not_to_say" },
+      token,
+    );
+    const updatedUser = response.data ?? response.user;
+
+    // Predictions depend on this, so a failure is surfaced (with a retry)
+    // rather than logged and skipped.
+    await submitCycleSettings(
+      {
+        cycleLength: values.cycleLength,
+        lastPeriodStartDate: values.lastPeriodStartDate,
+        periodLength: values.periodLength,
+        trackingGoal: values.trackingGoal,
+        trackingGoals: values.trackingGoals,
+      },
+      token,
+    );
+
+    onboardedUserRef.current = {
+      ...updatedUser,
+      dateOfBirth: values.dateOfBirth,
+      isProfileComplete: response.isProfileComplete ?? updatedUser?.isProfileComplete ?? true,
+    };
   }
 
-  if (user && user.isProfileComplete === false) {
+  async function handleOnboardingFinish() {
+    if (!token) return;
+    await signIn({
+      token,
+      user: { ...user, ...onboardedUserRef.current, isProfileComplete: true },
+    });
+  }
+
+  // Partner viewers never do setup (the guard above sends them to their view).
+  if (user && user.isProfileComplete === false && user.partnerRole !== "viewer") {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
-        <StatusBar
-          barStyle={isDark ? "light-content" : "dark-content"}
-          backgroundColor={colors.background}
-        />
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={{ flex: 1 }}
-          keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
-        >
-          <ScrollView
-            contentContainerStyle={{ flexGrow: 1, justifyContent: "center", paddingHorizontal: 24, paddingVertical: 40 }}
-            keyboardDismissMode="on-drag"
-            keyboardShouldPersistTaps="handled"
-          >
-            <ProfileOnboarding onSubmit={handleOnboardingSubmit} />
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
+      <OnboardingFlow
+        userId={user._id}
+        firstName={user.firstName}
+        onSubmit={handleOnboardingSubmit}
+        onFinish={handleOnboardingFinish}
+      />
     );
   }
 

@@ -1,5 +1,4 @@
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -38,6 +37,7 @@ import {
   type Doctor,
   type DoctorAvailability,
 } from "../../lib/api";
+import { ScreenHeader } from "../../components/ScreenHeader";
 
 function getDoctorDisplayName(doctor: Doctor) {
   const legacyName = (doctor as Doctor & { name?: string }).name;
@@ -132,7 +132,6 @@ function dedupeMessages(messages: ConsultationMessage[]): ConsultationMessage[] 
 
 export default function ConsultationScreen() {
   const { colors, isDark, fonts } = useTheme();
-  const router = useRouter();
   const chatScrollRef = useRef<ScrollView>(null);
   const insets = useSafeAreaInsets();
 
@@ -519,27 +518,7 @@ export default function ConsultationScreen() {
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
 
       <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
-        {/* Nav Header */}
-        <View className="flex-row items-center gap-3 px-6 pt-6">
-          <TouchableOpacity
-            onPress={() => router.back()}
-            activeOpacity={0.7}
-            className="h-9 w-9 items-center justify-center rounded-full"
-            style={{
-              backgroundColor: colors.surface,
-              shadowColor: colors.shadow,
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.15,
-              shadowRadius: 8,
-              elevation: 2,
-            }}
-          >
-            <Feather name="chevron-left" size={20} color={colors.foreground} />
-          </TouchableOpacity>
-          <Text className="text-xl font-extrabold tracking-tight" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-            Consultation
-          </Text>
-        </View>
+        <ScreenHeader title="Consultation" />
 
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -593,7 +572,7 @@ export default function ConsultationScreen() {
                     >
                       <View className="flex-1 pr-3">
                         <Text
-                          className="text-[11px] font-black uppercase tracking-widest"
+                          className="text-[12px] font-black uppercase tracking-widest"
                           style={{ color: "rgba(255,255,255,0.85)", fontFamily: fonts.heading }}
                         >
                           Active session · tap to chat
@@ -706,7 +685,7 @@ export default function ConsultationScreen() {
                         <Text className="text-[13.5px] font-bold" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
                           {getDoctorDisplayName(doctor)}
                         </Text>
-                        <Text className="text-[11px] font-semibold mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                        <Text className="text-xs font-semibold mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                           {doctor.specialty} · ★ {doctor.rating}
                         </Text>
                       </View>
@@ -722,7 +701,7 @@ export default function ConsultationScreen() {
                         className="rounded-xl px-3.5 py-2"
                         style={{ backgroundColor: colors.primary, opacity: booking ? 0.7 : 1 }}
                       >
-                        <Text className="text-[11.5px] font-bold" style={{ color: colors.buttonText, fontFamily: fonts.heading }}>
+                        <Text className="text-xs font-bold" style={{ color: colors.buttonText, fontFamily: fonts.heading }}>
                           {getConsultationForDoctor(doctor._id) ? "Chat" : "Book"}
                         </Text>
                       </TouchableOpacity>
@@ -736,7 +715,7 @@ export default function ConsultationScreen() {
             {selectedDoctor && !loadingDoctors && (
               <View className="mt-8">
                 <Text
-                  className="text-[10px] font-black uppercase tracking-widest mb-3"
+                  className="text-[11.5px] font-black uppercase tracking-widest mb-3"
                   style={{ color: colors.mutedText, fontFamily: fonts.body }}
                 >
                   Select a date
@@ -785,7 +764,7 @@ export default function ConsultationScreen() {
                             }}
                           >
                             <Text
-                              className="text-[10px] font-bold uppercase tracking-wide"
+                              className="text-[11.5px] font-bold uppercase tracking-wide"
                               style={{
                                 color: isDateSelected ? colors.buttonText : colors.mutedText,
                                 fontFamily: fonts.body,
@@ -803,7 +782,7 @@ export default function ConsultationScreen() {
                               {date.getDate()}
                             </Text>
                             <Text
-                              className="text-[9px] font-bold uppercase"
+                              className="text-[11.5px] font-bold uppercase"
                               style={{
                                 color: isDateSelected ? colors.buttonText : colors.mutedText,
                                 fontFamily: fonts.body,
@@ -818,7 +797,7 @@ export default function ConsultationScreen() {
 
                     {/* Time slots for the chosen date */}
                     <Text
-                      className="text-[10px] font-black uppercase tracking-widest mt-6 mb-3"
+                      className="text-[11.5px] font-black uppercase tracking-widest mt-6 mb-3"
                       style={{ color: colors.mutedText, fontFamily: fonts.body }}
                     >
                       Select a time
@@ -867,7 +846,7 @@ export default function ConsultationScreen() {
             {/* Privacy footer */}
             <View className="flex-row items-center justify-center gap-2 mt-8 opacity-75">
               <MaterialCommunityIcons name="shield-check-outline" size={14} color={colors.mutedText} />
-              <Text className="text-[11px] font-semibold tracking-wide text-center" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+              <Text className="text-xs font-semibold tracking-wide text-center" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                 Private consultation chat for sensitive health questions.
               </Text>
             </View>
@@ -881,7 +860,8 @@ export default function ConsultationScreen() {
             style={{
               backgroundColor: colors.surface,
               borderColor: colors.border,
-              paddingBottom: Math.max(16, insets.bottom + 8),
+              // The screen's SafeAreaView already pads the home-indicator inset.
+              paddingBottom: 16,
             }}
           >
             <TouchableOpacity
@@ -952,7 +932,7 @@ export default function ConsultationScreen() {
                     </Text>
                     <View className="flex-row items-center gap-1.5 mt-0.5">
                       <View className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: colors.success }} />
-                      <Text className="text-[10px] font-bold uppercase tracking-widest" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                      <Text className="text-[11.5px] font-bold uppercase tracking-widest" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                         Online now
                       </Text>
                     </View>
@@ -992,7 +972,7 @@ export default function ConsultationScreen() {
                       className="text-xs font-semibold text-center leading-5"
                       style={{ color: colors.mutedText, fontFamily: fonts.body }}
                     >
-                      No messages yet. Send a message to start the conversation with your specialist.
+                      No messages yet. Say hello to your specialist.
                     </Text>
                   </View>
                 ) : (

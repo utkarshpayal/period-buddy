@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { type AudioPlayer, createAudioPlayer } from "expo-audio";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
@@ -14,11 +14,10 @@ import {
   View,
 } from "react-native";
 import Markdown from "react-native-markdown-display";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { LanguagePickerSheet } from "../../components/LanguagePickerSheet";
 import { SkeletonBlock } from "../../components/Skeleton";
 import { useTheme } from "../../components/theme";
-import { getSoftTints } from "../../components/ui-tokens";
 import { VoiceModeOverlay, type VoiceStatus } from "../../components/VoiceModeOverlay";
 import { useVoiceInput } from "../../hooks/useVoiceInput";
 import { alert } from "../../lib/alert";
@@ -34,6 +33,8 @@ import {
 } from "../../lib/api";
 import { resolveAudioUri } from "../../lib/audio";
 import { SUPPORTED_LANGUAGES } from "../../lib/languages";
+import { HeaderIconButton } from "../../components/ScreenHeader";
+import { TypingDots } from "../../components/TypingDots";
 
 function formatTime(dateString: string) {
   return new Date(dateString).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
@@ -43,8 +44,6 @@ export default function DocumentChatScreen() {
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
   const scrollViewRef = useRef<ScrollView>(null);
-  const insets = useSafeAreaInsets();
-  const softTints = getSoftTints(colors);
 
   const [messages, setMessages] = useState<DocumentChatMessage[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
@@ -220,94 +219,40 @@ export default function DocumentChatScreen() {
           className="flex-1"
           keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
         >
-          <View className="px-5 pt-6 pb-3 flex-row justify-between items-center gap-2">
-            <View className="flex-row items-center gap-3 flex-1 min-w-0">
-              <TouchableOpacity
-                onPress={() => router.back()}
-                activeOpacity={0.7}
-                className="p-2.5 -ml-1 rounded-full border"
-                style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-              >
-                <Feather name="arrow-left" size={18} color={colors.foreground} />
-              </TouchableOpacity>
-
-              <View className="flex-1 min-w-0">
-                <Text
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                  className="text-sm font-black tracking-tight"
-                  style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                >
-                  Document Assistant
-                </Text>
-                <Text
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                  className="text-[10px] font-bold tracking-wider uppercase mt-0.5"
-                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                >
-                  Ask Buddy about this report
-                </Text>
-              </View>
-            </View>
-
-            <View className="flex-row items-center gap-1.5 flex-shrink-0">
-              <TouchableOpacity
-                onPress={() => setVoiceMode((prev) => !prev)}
-                activeOpacity={0.7}
-                className="flex-row items-center gap-1 px-2.5 py-1.5 rounded-full border"
-                style={{
-                  backgroundColor: voiceMode ? colors.primary : softTints.pink,
-                  borderColor: colors.border,
-                }}
-              >
-                <Feather name="headphones" size={13} color={voiceMode ? colors.buttonText : colors.primary} />
-                <Text
-                  numberOfLines={1}
-                  className="text-[10px] font-black tracking-wide"
-                  style={{ color: voiceMode ? colors.buttonText : colors.primary, fontFamily: fonts.body }}
-                >
-                  Voice
-                </Text>
-              </TouchableOpacity>
-
+          <View className="flex-row items-center px-6 pt-3 pb-2" style={{ gap: 12 }}>
+            <HeaderIconButton icon="chevron-back" accessibilityLabel="Go back" onPress={() => router.back()} />
+            <View className="flex-1" style={{ minWidth: 0 }}>
+              <Text accessibilityRole="header" numberOfLines={1} style={{ color: colors.foreground, fontSize: 16, fontWeight: "800", fontFamily: fonts.heading }}>
+                Document Assistant
+              </Text>
               <TouchableOpacity
                 onPress={() => setLanguagePickerVisible(true)}
                 activeOpacity={0.7}
-                className="flex-row items-center gap-1 px-2.5 py-1.5 rounded-full border"
-                style={{ backgroundColor: softTints.pink, borderColor: colors.border, maxWidth: 92 }}
+                accessibilityRole="button"
+                accessibilityLabel={`Change language, currently ${selectedLanguage.label}`}
+                hitSlop={6}
+                className="flex-row items-center self-start"
+                style={{ gap: 3, marginTop: 1 }}
               >
-                <Feather name="globe" size={13} color={colors.primary} />
-                <Text
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                  className="text-[10px] font-black tracking-wide flex-shrink"
-                  style={{ color: colors.primary, fontFamily: fonts.body }}
-                >
-                  {selectedLanguage.label}
+                <Text numberOfLines={1} style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body, flexShrink: 1 }}>
+                  Ask about your reports · {selectedLanguage.label}
                 </Text>
+                <Ionicons name="chevron-down" size={13} color={colors.mutedText} />
               </TouchableOpacity>
             </View>
+            <HeaderIconButton
+              icon="headset-outline"
+              accessibilityLabel={voiceMode ? "Turn off voice mode" : "Talk about your reports"}
+              active={voiceMode}
+              onPress={() => setVoiceMode((prev) => !prev)}
+            />
           </View>
-
-          {voiceMode ? (
-            <View
-              className="px-5 py-2 flex-row items-start gap-1.5"
-              style={{ backgroundColor: softTints.pink }}
-            >
-              <Feather name="mic" size={11} color={colors.primary} style={{ marginTop: 1.5 }} />
-              <Text className="text-[10px] font-bold flex-1 flex-shrink" style={{ color: colors.primary, fontFamily: fonts.body }}>
-                Voice mode on — tap the mic, speak, and I&apos;ll reply out loud in {selectedLanguage.label}. Pause
-              for 3 seconds and I&apos;ll send it automatically.
-              </Text>
-            </View>
-          ) : null}
 
           <ScrollView
             ref={scrollViewRef}
             showsVerticalScrollIndicator={false}
-            className="flex-1 px-5 pt-4"
-            contentContainerStyle={{ paddingBottom: 72 }}
+            className="flex-1 px-5 pt-2"
+            contentContainerStyle={{ paddingBottom: 24 }}
             keyboardDismissMode="on-drag"
             keyboardShouldPersistTaps="handled"
             onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
@@ -322,12 +267,10 @@ export default function DocumentChatScreen() {
               ) : null}
               {!loadingHistory && messages.length === 0 ? (
                 <View
-                  className="max-w-[90%] p-4 rounded-2xl self-start rounded-tl-none border"
-                  style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+                  style={{ maxWidth: "85%", alignSelf: "flex-start", padding: 16, borderRadius: 20, borderBottomLeftRadius: 6, backgroundColor: colors.surface }}
                 >
-                  <Text className="text-[15px] font-medium leading-6" style={{ color: colors.foreground, fontFamily: fonts.body }}>
-                    Hi! Upload a report, prescription, or bill from the Documents screen, then ask me anything about
-                    it — dates, values, medications, or what a term means.
+                  <Text style={{ color: colors.foreground, fontSize: 15, lineHeight: 22, fontFamily: fonts.body }}>
+                    Hi! Upload a report in Documents, then ask me anything about it.
                   </Text>
                 </View>
               ) : null}
@@ -338,14 +281,15 @@ export default function DocumentChatScreen() {
                   <View key={message._id}>
                     {isAssistant ? (
                       <View
-                        className="max-w-[85%] p-4 self-start border"
                         style={{
+                          maxWidth: "85%",
+                          alignSelf: "flex-start",
+                          paddingHorizontal: 16,
+                          paddingTop: 12,
+                          paddingBottom: 10,
+                          borderRadius: 20,
+                          borderBottomLeftRadius: 6,
                           backgroundColor: colors.surface,
-                          borderColor: colors.border,
-                          borderTopLeftRadius: 4,
-                          borderTopRightRadius: 16,
-                          borderBottomLeftRadius: 16,
-                          borderBottomRightRadius: 16,
                         }}
                       >
                         <Markdown
@@ -363,52 +307,43 @@ export default function DocumentChatScreen() {
                         >
                           {message.text}
                         </Markdown>
-                        <View className="flex-row items-center justify-between mt-1.5">
+                        <View className="flex-row items-center justify-between" style={{ marginTop: 6 }}>
                           <TouchableOpacity
                             onPress={() => handleListen(message)}
                             activeOpacity={0.7}
                             disabled={synthesizingMessageId === message._id}
-                            className="flex-row items-center gap-1 -ml-1 px-1.5 py-0.5"
+                            accessibilityRole="button"
+                            accessibilityLabel={playingMessageId === message._id ? "Pause" : "Listen to this reply"}
+                            hitSlop={8}
                           >
                             {synthesizingMessageId === message._id ? (
                               <ActivityIndicator size="small" color={colors.primary} />
                             ) : (
-                              <Feather
-                                name={playingMessageId === message._id ? "pause-circle" : "volume-2"}
-                                size={13}
+                              <Ionicons
+                                name={playingMessageId === message._id ? "pause-circle-outline" : "volume-high-outline"}
+                                size={17}
                                 color={colors.primary}
                               />
                             )}
-                            <Text className="text-[10px] font-bold uppercase tracking-wide" style={{ color: colors.primary, fontFamily: fonts.body }}>
-                              {playingMessageId === message._id ? "Playing" : "Listen"}
-                            </Text>
                           </TouchableOpacity>
-                          <Text
-                            className="text-[10px] font-bold opacity-70"
-                            style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                          >
-                            {formatTime(message.createdAt)}
-                          </Text>
+                          <Text style={{ color: colors.mutedText, fontSize: 12, fontFamily: fonts.body }}>{formatTime(message.createdAt)}</Text>
                         </View>
                       </View>
                     ) : (
                       <View
-                        className="max-w-[85%] self-end overflow-hidden shadow-md p-4"
                         style={{
-                          backgroundColor: colors.primaryDark,
-                          borderTopLeftRadius: 16,
-                          borderTopRightRadius: 16,
-                          borderBottomLeftRadius: 16,
-                          borderBottomRightRadius: 4,
+                          maxWidth: "85%",
+                          alignSelf: "flex-end",
+                          paddingHorizontal: 16,
+                          paddingTop: 12,
+                          paddingBottom: 8,
+                          borderRadius: 20,
+                          borderBottomRightRadius: 6,
+                          backgroundColor: colors.primary,
                         }}
                       >
-                        <Text className="text-[15px] font-medium leading-6" style={{ color: "#FFFFFF", fontFamily: fonts.body }}>
-                          {message.text}
-                        </Text>
-                        <Text
-                          className="text-[10px] font-bold text-right mt-1.5 opacity-70"
-                          style={{ color: "#FFFFFF", fontFamily: fonts.body }}
-                        >
+                        <Text style={{ color: colors.buttonText, fontSize: 15, lineHeight: 22, fontFamily: fonts.body }}>{message.text}</Text>
+                        <Text style={{ color: colors.buttonText, opacity: 0.75, fontSize: 12, textAlign: "right", marginTop: 4, fontFamily: fonts.body }}>
                           {formatTime(message.createdAt)}
                         </Text>
                       </View>
@@ -417,74 +352,68 @@ export default function DocumentChatScreen() {
                 );
               })}
 
-              {isReplying && (
-                <View
-                  className="self-start rounded-2xl rounded-tl-none border px-4 py-3.5 items-center justify-center flex-row gap-1"
-                  style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-                >
-                  <Text className="text-xs font-bold tracking-widest animate-pulse" style={{ color: colors.primary, fontFamily: fonts.body }}>
-                    Reading your documents...
-                  </Text>
-                </View>
-              )}
+              {isReplying && <TypingDots />}
             </View>
           </ScrollView>
 
+          {/* Composer — same as Nura AI chat */}
           <View
-            className="px-4 py-3.5 border-t flex-row items-center gap-3"
-            style={{
-              borderColor: colors.border,
-              backgroundColor: colors.surface,
-              paddingBottom: Math.max(14, insets.bottom + 8),
-            }}
+            className="flex-row items-end px-4 pt-2"
+            style={{ gap: 8, paddingBottom: 8, backgroundColor: colors.background }}
           >
-            <TextInput
-              placeholder={isRecording ? "Listening..." : "Ask about your documents..."}
-              placeholderTextColor={colors.mutedText}
-              value={typedMessage}
-              onChangeText={setTypedMessage}
-              onSubmitEditing={() => handleSend()}
-              maxLength={1000}
-              returnKeyType="send"
-              submitBehavior="submit"
-              editable={!isRecording && !isTranscribing}
-              className="flex-1 px-4 py-3 rounded-xl text-sm"
-              style={{ color: colors.foreground, backgroundColor: colors.input, fontFamily: fonts.body }}
-            />
-            <TouchableOpacity
-              disabled={isTranscribing}
-              onPress={handleMicPress}
-              activeOpacity={0.8}
-              className="rounded-full overflow-hidden"
+            <View
+              className="flex-1 flex-row items-center"
+              style={{
+                minHeight: 48,
+                borderRadius: 24,
+                paddingLeft: 18,
+                paddingRight: 6,
+                backgroundColor: colors.surface,
+                borderWidth: 1,
+                borderColor: isRecording ? colors.danger : colors.border,
+              }}
             >
-              <View
-                className="p-2.5 items-center justify-center"
-                style={{ backgroundColor: isRecording ? colors.danger : colors.border }}
+              <TextInput
+                placeholder={isRecording ? "Listening…" : isTranscribing ? "Transcribing…" : "Ask about your documents"}
+                placeholderTextColor={colors.mutedText}
+                value={typedMessage}
+                onChangeText={setTypedMessage}
+                onSubmitEditing={() => handleSend()}
+                maxLength={1000}
+                multiline
+                returnKeyType="send"
+                submitBehavior="submit"
+                editable={!isRecording && !isTranscribing}
+                className="flex-1 outline-none"
+                style={{ color: colors.foreground, fontSize: 15, fontFamily: fonts.body, paddingVertical: 12, maxHeight: 120 }}
+              />
+              <TouchableOpacity
+                disabled={isTranscribing}
+                onPress={handleMicPress}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel={isTranscribing ? "Transcribing" : isRecording ? "Stop recording" : "Speak your question"}
+                hitSlop={6}
+                className="items-center justify-center rounded-full"
+                style={{ width: 36, height: 36, backgroundColor: isRecording ? colors.danger : "transparent" }}
               >
                 {isTranscribing ? (
-                  <ActivityIndicator size="small" color={colors.mutedText} />
+                  <ActivityIndicator size="small" color={colors.primary} />
                 ) : (
-                  <Feather name="mic" size={15} color={isRecording ? "#fff" : colors.mutedText} />
+                  <Ionicons name={isRecording ? "stop" : "mic-outline"} size={20} color={isRecording ? "#FFFFFF" : colors.mutedText} />
                 )}
-              </View>
-            </TouchableOpacity>
+              </TouchableOpacity>
+            </View>
             <TouchableOpacity
               disabled={!typedMessage.trim() || isReplying}
               onPress={() => handleSend()}
               activeOpacity={0.8}
               accessibilityRole="button"
-              accessibilityLabel="Send message"
-              className="rounded-full overflow-hidden"
+              accessibilityLabel="Send"
+              className="items-center justify-center rounded-full"
+              style={{ width: 48, height: 48, backgroundColor: typedMessage.trim() && !isReplying ? colors.primary : colors.primaryLight }}
             >
-              {typedMessage.trim() && !isReplying ? (
-                <View className="p-2.5 items-center justify-center" style={{ backgroundColor: colors.primary }}>
-                  <Feather name="send" size={15} color={colors.buttonText} />
-                </View>
-              ) : (
-                <View className="p-2.5 items-center justify-center" style={{ backgroundColor: colors.border }}>
-                  <Feather name="send" size={15} color={colors.mutedText} />
-                </View>
-              )}
+              <Ionicons name="arrow-up" size={22} color={typedMessage.trim() && !isReplying ? colors.buttonText : colors.primary} />
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>

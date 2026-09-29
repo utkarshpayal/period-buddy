@@ -98,7 +98,7 @@ export function TabBarItem({
         style={{
           marginTop: 2,
           fontFamily: fonts.body,
-          fontSize: 10,
+          fontSize: 11,
           fontWeight: focused ? "700" : "600",
           color: focused ? colors.primary : colors.mutedText,
         }}

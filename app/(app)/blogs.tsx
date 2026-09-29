@@ -4,7 +4,7 @@ import {
   createAudioPlayer,
 } from "expo-audio";
 import { LinearGradient } from "expo-linear-gradient";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -38,6 +38,7 @@ import {
 import { resolveAudioUri } from "../../lib/audio";
 import { SUPPORTED_LANGUAGES } from "../../lib/languages";
 import { shareWithAppLink } from "../../lib/share";
+import { HeaderIconButton, ScreenHeader } from "../../components/ScreenHeader";
 
 // --- BACKEND REST API PAYLOAD CONTRACTS ---
 interface ContentItem {
@@ -166,7 +167,6 @@ function mapBlogToContentItem(blog: Blog): ContentItem {
 
 export default function Blogs() {
   const { colors, isDark, fonts } = useTheme();
-  const router = useRouter();
   const { slug: deepLinkedSlug } = useLocalSearchParams<{ slug?: string }>();
   const { earnTokens } = useAppState();
 
@@ -495,41 +495,17 @@ export default function Blogs() {
         className="flex-1"
         style={{ backgroundColor: colors.background }}
       >
-        {/* Navigation Action Bar */}
-        <View className="flex-row items-center gap-2 px-6 pt-6">
-          <TouchableOpacity
-            onPress={() => router.back()}
-            activeOpacity={0.7}
-            className="p-2.5 -ml-2 rounded-full border"
-            style={{
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-            }}
-          >
-            <Feather name="arrow-left" size={18} color={colors.foreground} />
-          </TouchableOpacity>
-          <Text
-            className="flex-1 text-2xl font-black tracking-tight ml-2"
-            style={{ color: colors.foreground, fontFamily: fonts.heading }}
-          >
-            {showBookmarksOnly ? "Bookmarked" : "Insights Feed"}
-          </Text>
-          <TouchableOpacity
-            onPress={handleToggleBookmarksView}
-            activeOpacity={0.7}
-            className="p-2.5 rounded-full border"
-            style={{
-              backgroundColor: showBookmarksOnly ? softTints.pink : colors.surface,
-              borderColor: showBookmarksOnly ? colors.primary : colors.border,
-            }}
-          >
-            <Ionicons
-              name={showBookmarksOnly ? "bookmark" : "bookmark-outline"}
-              size={18}
-              color={showBookmarksOnly ? colors.primary : colors.foreground}
+        <ScreenHeader
+          title={showBookmarksOnly ? "Bookmarked" : "Insights Feed"}
+          right={
+            <HeaderIconButton
+              icon={showBookmarksOnly ? "bookmark" : "bookmark-outline"}
+              accessibilityLabel={showBookmarksOnly ? "Show all articles" : "Show bookmarks"}
+              active={showBookmarksOnly}
+              onPress={handleToggleBookmarksView}
             />
-          </TouchableOpacity>
-        </View>
+          }
+        />
 
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -659,7 +635,7 @@ export default function Blogs() {
                     {isVideo && (
                       <View className="absolute bottom-2 right-2 flex-row items-center gap-1 px-1.5 py-0.5 rounded-md bg-black/55">
                         <Feather name="eye" size={9} color="white" />
-                        <Text className="text-[9px] font-black text-white" style={{ fontFamily: fonts.body }}>
+                        <Text className="text-xs font-black text-white" style={{ fontFamily: fonts.body }}>
                           {formatCount(item.viewCount)}
                         </Text>
                       </View>
@@ -680,7 +656,7 @@ export default function Blogs() {
 
                   <View className="p-2.5">
                     <Text
-                      className="text-[11.5px] font-black leading-4"
+                      className="text-xs font-black leading-4"
                       numberOfLines={2}
                       style={{ color: colors.foreground, fontFamily: fonts.heading }}
                     >
@@ -688,7 +664,7 @@ export default function Blogs() {
                     </Text>
                     <View className="flex-row items-center gap-1 mt-1.5">
                       <Text
-                        className="text-[10px] font-bold"
+                        className="text-xs font-bold"
                         style={{ color: colors.mutedText, fontFamily: fonts.body, }}
                       >
                         {isVideo ? "Reel" : "Blog"} · {item.time}
@@ -704,7 +680,7 @@ export default function Blogs() {
                           style={{ backgroundColor: isVideo ? softTints.purple : softTints.pink }}
                         >
                           <Text
-                            className="text-[8.5px] font-bold uppercase"
+                            className="text-[11.5px] font-bold uppercase"
                             style={{ color: isVideo ? colors.accent : colors.primary, fontFamily: fonts.body }}
                           >
                             {CATEGORY_LABELS[item.category]}
@@ -854,7 +830,7 @@ export default function Blogs() {
                 <View className="flex-row items-center gap-2">
                   <View className="px-2.5 py-0.5 rounded-md bg-neutral-100 dark:bg-neutral-800">
                     <Text
-                      className="text-[9px] font-black uppercase tracking-wider"
+                      className="text-[11.5px] font-black uppercase tracking-wider"
                       style={{ color: !isDark ? "white" : "black", fontFamily: fonts.body }}
                     >
                       {selectedItem.type === "blog" ? "Journal" : "Video"}
@@ -916,7 +892,7 @@ export default function Blogs() {
                           style={{ backgroundColor: softTints.pink }}
                         >
                           <Text
-                            className="text-[10px] font-bold uppercase"
+                            className="text-[11.5px] font-bold uppercase"
                             style={{ color: colors.primary, fontFamily: fonts.body }}
                           >
                             {
@@ -930,7 +906,7 @@ export default function Blogs() {
                       {(fullBlog?.tags ?? selectedItem.tags ?? []).map((tag) => (
                         <Text
                           key={tag}
-                          className="text-[10px] font-semibold"
+                          className="text-xs font-semibold"
                           style={{ color: colors.mutedText, fontFamily: fonts.body }}
                         >
                           #{tag}
@@ -944,7 +920,7 @@ export default function Blogs() {
                       <View className="flex-row items-center gap-1">
                         <Feather name="eye" size={12} color={colors.mutedText} />
                         <Text
-                          className="text-[11px] font-bold"
+                          className="text-xs font-bold"
                           style={{ color: colors.mutedText, fontFamily: fonts.body }}
                         >
                           {formatCount(fullBlog?.viewCount ?? selectedItem.viewCount)} views
@@ -953,7 +929,7 @@ export default function Blogs() {
                       <View className="flex-row items-center gap-1">
                         <Ionicons name="heart" size={12} color={colors.mutedText} />
                         <Text
-                          className="text-[11px] font-bold"
+                          className="text-xs font-bold"
                           style={{ color: colors.mutedText, fontFamily: fonts.body }}
                         >
                           {formatCount(fullBlog?.likeCount ?? selectedItem.likeCount)} likes
@@ -979,7 +955,7 @@ export default function Blogs() {
                           style={{ backgroundColor: softTints.pink, borderColor: colors.border }}
                         >
                           <Feather name="globe" size={12} color={colors.primary} />
-                          <Text className="text-[9px] font-black" style={{ color: colors.primary, fontFamily: fonts.body }}>
+                          <Text className="text-xs font-black" style={{ color: colors.primary, fontFamily: fonts.body }}>
                             {languages.find((l) => l.code === language)?.label ?? "English"}
                           </Text>
                         </TouchableOpacity>

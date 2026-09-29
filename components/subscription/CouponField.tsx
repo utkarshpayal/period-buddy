@@ -43,7 +43,7 @@ export function CouponField({
           <Text className="text-xs font-black" style={{ color: colors.success, fontFamily: fonts.heading }}>
             {preview.code} applied
           </Text>
-          <Text className="text-[11px] mt-0.5 font-semibold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
+          <Text className="text-xs mt-0.5 font-semibold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
             {preview.free
               ? "Fully covered — unlock for free"
               : `₹${preview.discountAmount} off — now ₹${preview.finalAmount}`}
@@ -91,7 +91,7 @@ export function CouponField({
         </TouchableOpacity>
       </View>
       {error ? (
-        <Text className="text-[11px] font-semibold mt-1.5 ml-1" style={{ color: colors.danger, fontFamily: fonts.body }}>
+        <Text className="text-xs font-semibold mt-1.5 ml-1" style={{ color: colors.danger, fontFamily: fonts.body }}>
           {error}
         </Text>
       ) : null}

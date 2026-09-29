@@ -208,6 +208,8 @@ export default function SubscriptionScreen() {
           ) : (
           <ScrollView
             showsVerticalScrollIndicator={false}
+            automaticallyAdjustKeyboardInsets
+            keyboardShouldPersistTaps="handled"
             contentContainerStyle={{ paddingBottom: 48 }}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
           >
@@ -258,7 +260,7 @@ export default function SubscriptionScreen() {
                       </Text>
                     </View>
                     <View className="rounded-full px-2.5 py-1" style={{ backgroundColor: softTints.emerald }}>
-                      <Text className="text-[10px] font-bold" style={{ color: colors.success, fontFamily: fonts.body }}>
+                      <Text className="text-xs font-bold" style={{ color: colors.success, fontFamily: fonts.body }}>
                         Active
                       </Text>
                     </View>
@@ -290,7 +292,7 @@ export default function SubscriptionScreen() {
               />
             </View>
             {couponCode.trim() ? (
-              <Text className="mx-6 mt-1.5 text-[11px] font-semibold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+              <Text className="mx-6 mt-1.5 text-xs font-semibold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                 We&apos;ll check this against whichever plan or feature you choose below.
               </Text>
             ) : null}
@@ -319,7 +321,7 @@ export default function SubscriptionScreen() {
                             </Text>
                             {plan.badge ? (
                               <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: colors.primaryLight }}>
-                                <Text className="text-[10px] font-bold" style={{ color: colors.primaryDark, fontFamily: fonts.body }}>
+                                <Text className="text-xs font-bold" style={{ color: colors.primaryDark, fontFamily: fonts.body }}>
                                   {plan.badge}
                                 </Text>
                               </View>

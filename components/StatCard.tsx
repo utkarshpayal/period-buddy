@@ -64,7 +64,7 @@ export default function StatCard({
           </Text>
           {label ? (
             <Text
-              className="text-[10px] font-bold mt-0.5"
+              className="text-xs font-bold mt-0.5"
               style={{ color: labelColor, fontFamily: labelFontFamily }}
             >
               {label}
@@ -98,7 +98,7 @@ export default function StatCard({
         </Text>
         {label ? (
           <Text
-            className="text-[10px] font-bold mt-0.5 text-center"
+            className="text-xs font-bold mt-0.5 text-center"
             style={{ color: labelColor, fontFamily: labelFontFamily }}
             numberOfLines={1}
             adjustsFontSizeToFit
@@ -124,7 +124,7 @@ export default function StatCard({
       <Ionicons name={icon} size={12} color={iconColor} style={{ marginRight: 5 }} />
       <Text
         style={{
-          fontSize: 11,
+          fontSize: 12.5,
           fontWeight: "800",
           color: valueColor,
           fontFamily: valueFontFamily,

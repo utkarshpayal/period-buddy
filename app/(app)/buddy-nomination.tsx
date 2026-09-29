@@ -1,5 +1,4 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -32,6 +31,7 @@ import {
   type BuddyMatch as ApiBuddyMatch,
   type BuddyMessage as ApiBuddyMessage,
 } from "../../lib/api";
+import { ScreenHeader } from "../../components/ScreenHeader";
 
 // --- STRUCTURAL BACKEND REGISTRY CONTRACTS ---
 interface PeriodBuddy {
@@ -141,7 +141,6 @@ function mergeBuddyMessages(prev: BuddyMessage[], newMsgs: ApiBuddyMessage[]): B
 
 function BuddyNomination() {
   const { colors, isDark, fonts } = useTheme();
-  const router = useRouter();
   const { earnTokens } = useAppState();
   const scrollViewRef = useRef<ScrollView>(null);
   const insets = useSafeAreaInsets();
@@ -550,26 +549,7 @@ function BuddyNomination() {
             )
           }
         >
-          {/* Header Action Row Bar */}
-          <View className="flex-row items-center gap-2 px-6 pt-6">
-            <TouchableOpacity
-              onPress={() => router.back()}
-              activeOpacity={0.7}
-              className="p-2.5 -ml-2 rounded-full border"
-              style={{
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-              }}
-            >
-              <Feather name="arrow-left" size={18} color={colors.foreground} />
-            </TouchableOpacity>
-            <Text
-              className="flex-1 text-2xl font-black tracking-tight ml-2"
-              style={{ color: colors.foreground, fontFamily: fonts.heading }}
-            >
-              Period Buddy
-            </Text>
-          </View>
+          <ScreenHeader title="Period Buddy" />
 
           <View className="mx-6 mt-6">
             {/* Intro copy — mirrors the mockup's plain subtitle under the header */}
@@ -578,8 +558,7 @@ function BuddyNomination() {
                 className="text-xs font-semibold leading-5 mb-5"
                 style={{ color: colors.mutedText, fontFamily: fonts.body }}
               >
-                Choose someone who checks in on you — sync timelines with a member who has similar cycle
-                milestones and chat with privacy in mind.
+                Pair with someone on a similar cycle and chat privately.
               </Text>
             )}
 
@@ -666,7 +645,7 @@ function BuddyNomination() {
                               {buddy.name}
                             </Text>
                             <Text
-                              className="text-[11px] font-semibold mt-0.5"
+                              className="text-xs font-semibold mt-0.5"
                               style={{ color: colors.mutedText, fontFamily: fonts.body }}
                               numberOfLines={1}
                             >
@@ -692,7 +671,7 @@ function BuddyNomination() {
                             }
                           >
                             <Text
-                              className="text-[11.5px] font-extrabold"
+                              className="text-xs font-extrabold"
                               style={{ color: isSelectedBuddy ? "#fff" : colors.primary, fontFamily: fonts.body }}
                             >
                               {isSelectedBuddy ? "Added" : "Invite"}
@@ -703,7 +682,7 @@ function BuddyNomination() {
                         {/* Similarity tags — compact, single line under the row */}
                         {buddy.similarities.length > 0 && (
                           <Text
-                            className="text-[10px] font-semibold mt-2.5 pl-[52px]"
+                            className="text-xs font-semibold mt-2.5 pl-[52px]"
                             style={{ color: colors.mutedText, fontFamily: fonts.body }}
                             numberOfLines={1}
                           >
@@ -745,7 +724,7 @@ function BuddyNomination() {
                             style={{ backgroundColor: isBuddyOnline ? colors.success : colors.mutedText }}
                           />
                           <Text
-                            className="text-[10px] font-bold uppercase tracking-wide"
+                            className="text-[11.5px] font-bold uppercase tracking-wide"
                             style={{ color: isBuddyOnline ? colors.success : colors.mutedText, fontFamily: fonts.body }}
                           >
                             {isBuddyOnline ? "Online now" : "Offline"}
@@ -784,7 +763,7 @@ function BuddyNomination() {
                         style={{ backgroundColor: colors.surfaceSoft }}
                       >
                         <Text
-                          className="text-[10px] font-black"
+                          className="text-xs font-black"
                           style={{ color: colors.foreground, fontFamily: fonts.body }}
                         >
                           View Stack
@@ -842,7 +821,8 @@ function BuddyNomination() {
               borderTopWidth: 1,
               borderTopColor: colors.border,
               backgroundColor: colors.surface,
-              paddingBottom: Math.max(14, insets.bottom + 8),
+              // The screen's SafeAreaView already pads the home-indicator inset.
+              paddingBottom: 14,
             }}
           >
             <TextInput

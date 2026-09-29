@@ -1,7 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useRef, useState } from "react";
 import {
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Text,
   TextInput,
   TouchableOpacity,
@@ -141,7 +143,9 @@ export function OtpModal({ email, onClose, onVerified, visible }: OtpModalProps)
 
   return (
     <Modal animationType="fade" transparent visible={visible} onRequestClose={onClose}>
-      <View
+      {/* Lifts the card above the keyboard so Verify stays reachable on small phones. */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
         className="flex-1 items-center justify-center px-6"
         style={{ backgroundColor: colors.overlay }}
       >
@@ -263,7 +267,7 @@ export function OtpModal({ email, onClose, onVerified, visible }: OtpModalProps)
             </TouchableOpacity>
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

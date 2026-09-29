@@ -169,7 +169,7 @@ export function CashfreeUpiCollectModal({
                   />
                 </View>
                 {error ? (
-                  <Text className="text-[11px] font-semibold mt-1.5 ml-1" style={{ color: colors.danger, fontFamily: fonts.body }}>
+                  <Text className="text-xs font-semibold mt-1.5 ml-1" style={{ color: colors.danger, fontFamily: fonts.body }}>
                     {error}
                   </Text>
                 ) : null}
@@ -215,7 +215,7 @@ export function CashfreeUpiCollectModal({
                   className="rounded-full px-3.5 py-1.5 mt-4"
                   style={{ backgroundColor: colors.input }}
                 >
-                  <Text className="text-[11px] font-bold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                  <Text className="text-xs font-bold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                     Waiting for your bank · up to {Math.ceil(secondsLeft / 60) || 1} min left
                   </Text>
                 </View>

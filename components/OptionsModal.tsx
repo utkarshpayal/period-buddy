@@ -108,7 +108,7 @@ export default function OptionsModal({
               style={{
                 color: colors.mutedText,
                 fontFamily: fonts.body,
-                fontSize: 11,
+                fontSize: 12.5,
                 fontWeight: "600",
                 lineHeight: 16,
                 marginTop: 2,
@@ -132,7 +132,7 @@ export default function OptionsModal({
                 style={{
                   color: colors.mutedText,
                   fontFamily: fonts.body,
-                  fontSize: 10,
+                  fontSize: 12.5,
                   fontWeight: "800",
                 }}
               >
@@ -202,7 +202,7 @@ export default function OptionsModal({
 
           {renderAction({
             action: "share",
-            description: "Open your device share sheet for this community post.",
+            description: "Share this post.",
             icon: "share-social-outline",
             label: "Share",
             onPress: onShare,
@@ -238,7 +238,7 @@ export default function OptionsModal({
           {onDelete && renderAction({
             action: "delete",
             color: colors.danger,
-            description: "Permanently remove this post from the community.",
+            description: "This can't be undone.",
             icon: "trash-outline",
             iconBackground: colors.dangerLight,
             label: "Delete Post",
@@ -270,7 +270,7 @@ export default function OptionsModal({
               style={{
                 color: colors.mutedText,
                 fontFamily: fonts.body,
-                fontSize: 11,
+                fontSize: 12.5,
                 fontWeight: "600",
                 lineHeight: 16,
                 marginTop: 4,

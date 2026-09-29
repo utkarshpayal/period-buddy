@@ -124,7 +124,7 @@ export default function AppLockSettings() {
                       Turn On App Lock
                     </Text>
                     <Text
-                      className="text-[10px] mt-0.5"
+                      className="text-xs mt-0.5"
                       style={{ color: colors.mutedText, fontFamily: fonts.body }}
                     >
                       Uses your device&apos;s {deviceLockLabel} — no separate pattern to set up

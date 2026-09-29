@@ -30,6 +30,7 @@ import {
   type CheckinCallRecord,
   type CheckinCallSchedule,
 } from "../../lib/api";
+import { isPlausiblePhone, normalizePhone } from "../../lib/onboarding";
 
 const DAY_OFFSET_MIN = -5;
 const DAY_OFFSET_MAX = 5;
@@ -113,10 +114,11 @@ function describeCall(call: CheckinCallRecord): OutcomeStyle {
 }
 
 /**
- * "Call me now" cycle check-in — the user asks Buddy (via Sarvam's Instant
- * Outbound voice agent) to phone them and walk through logging today's
- * entry hands-free. Also hosts the recurring schedule (every period day, or
- * once a cycle) and the recent call history. The automatic calls, retries
+ * Automatic cycle check-in calls — Buddy (Sarvam's Instant Outbound voice
+ * agent) phones the user and logs the day hands-free. Hosts the phone number
+ * those calls go to, the recurring schedule (every period day, or once a
+ * cycle) and the recent call history. There's no on-demand "call me now"
+ * button any more; the backend endpoint still exists for older builds. The automatic calls, retries
  * after a missed call and callbacks all run server-side
  * (period-buddy-be's utils/checkinCallScheduler.js); this screen only reads
  * and writes the preference.
@@ -127,7 +129,7 @@ export default function CheckinCallScreen() {
 
   const [phone, setPhone] = useState(user?.phone ?? "");
   const [isFocused, setIsFocused] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSavingPhone, setIsSavingPhone] = useState(false);
 
   const [scheduleLoading, setScheduleLoading] = useState(true);
   // false only when this user has no CycleSettings yet — scheduling needs a
@@ -146,9 +148,8 @@ export default function CheckinCallScreen() {
   const { hasAccess, isLoading: subscriptionLoading, refresh: refreshSubscriptionAccess } =
     useSubscriptionAccess();
 
-  // This whole screen is the premium feature (both "call me now" and the
-  // auto-schedule toggle) — show the paywall as soon as it's clear the user
-  // can't use it, not after they've typed a phone number and tapped Call.
+  // This whole screen is the premium feature — show the paywall as soon as
+  // it's clear the user can't use it, not after they've set everything up.
   useEffect(() => {
     if (!subscriptionLoading && !hasAccess("voice_checkin_calls")) {
       setPaywallVisible(true);
@@ -203,50 +204,29 @@ export default function CheckinCallScreen() {
     }
   }
 
-  async function handleCallMeNow() {
-    const trimmedPhone = phone.trim();
-    if (!trimmedPhone) {
-      alert("Add a phone number", "We need a number to reach you on before Buddy can call.");
-      return;
+  // The backend always calls the number on the user's profile, so the field
+  // saves itself when the user leaves it (or before turning calls on).
+  async function savePhoneIfChanged(): Promise<boolean> {
+    const next = normalizePhone(phone);
+    if (next === normalizePhone(user?.phone ?? "")) return true;
+    if (!next && scheduleEnabled) {
+      setPhone(user?.phone ?? "");
+      alert("Number needed", "Turn off auto check-in calls before removing your number.");
+      return false;
     }
-    if (!hasAccess("voice_checkin_calls")) {
-      setPaywallVisible(true);
-      return;
+    if (!isPlausiblePhone(next)) {
+      alert("Check your number", "Enter a 10-digit mobile number.");
+      return false;
     }
-
-    setIsSubmitting(true);
+    setIsSavingPhone(true);
     try {
-      // The backend always calls the number on the user's own profile, not
-      // an ad hoc one — persist an edited number first so the call actually
-      // reaches it.
-      if (trimmedPhone !== (user?.phone ?? "")) {
-        const updatedUser = await authApi.updateProfile({ phone: trimmedPhone });
-        updateUser(updatedUser);
-      }
-
-      const result = await voiceAgentApi.checkinCall();
-      const left =
-        result.callsLeftToday === 0
-          ? "That's your last call-now for today."
-          : `You can request ${result.callsLeftToday} more today.`;
-      alert(
-        "Calling you now 📞",
-        `Buddy is calling ${trimmedPhone}. Pick up for a quick check-in of up to 5 minutes. ${left}`,
-      );
-      voiceAgentApi
-        .getCheckinCallHistory(5)
-        .then(({ calls }) => setHistory(calls))
-        .catch(() => {});
+      updateUser(await authApi.updateProfile({ phone: next }));
+      return true;
     } catch (err) {
-      if (isFeatureLockedError(err)) {
-        setPaywallVisible(true);
-      } else if (err instanceof ApiError && (err.status === 429 || err.status === 409)) {
-        alert("Hang on a moment", getFriendlyErrorMessage(err));
-      } else {
-        alert("Couldn't start the call", getFriendlyErrorMessage(err));
-      }
+      alert("Couldn't save your number", getFriendlyErrorMessage(err));
+      return false;
     } finally {
-      setIsSubmitting(false);
+      setIsSavingPhone(false);
     }
   }
 
@@ -254,6 +234,15 @@ export default function CheckinCallScreen() {
     if (nextEnabled && !hasAccess("voice_checkin_calls")) {
       setScheduleEnabled(false);
       setPaywallVisible(true);
+      return;
+    }
+    if (nextEnabled && !phone.trim()) {
+      setScheduleEnabled(false);
+      alert("Add your number first", "Buddy needs a number to call you on.");
+      return;
+    }
+    if (nextEnabled && !(await savePhoneIfChanged())) {
+      setScheduleEnabled(false);
       return;
     }
     setIsSavingSchedule(true);
@@ -289,7 +278,6 @@ export default function CheckinCallScreen() {
     }
   }
 
-  const limits = schedule?.limits;
   const periodLength = schedule?.periodLength ?? 5;
   const toneColor = (tone: OutcomeStyle["tone"]) =>
     tone === "good" ? colors.success : tone === "warn" ? colors.warning : colors.mutedText;
@@ -323,56 +311,48 @@ export default function CheckinCallScreen() {
             <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />
           }
         >
-          {/* Call me now */}
-          <View className="mx-6 mt-4 items-center border" style={{ ...cardStyle, padding: 24 }}>
-            <View
-              style={{
-                width: 56,
-                height: 56,
-                borderRadius: 18,
-                backgroundColor: colors.skyLight,
-                alignItems: "center",
-                justifyContent: "center",
-                marginBottom: 16,
-              }}
-            >
-              <Ionicons name="call-outline" size={26} color={colors.sky} />
+          {/* Number Buddy calls */}
+          <View className="mx-6 mt-4 border" style={{ ...cardStyle, padding: 20 }}>
+            <View className="flex-row items-center" style={{ gap: 12 }}>
+              <View
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 14,
+                  backgroundColor: colors.skyLight,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Ionicons name="call-outline" size={20} color={colors.sky} />
+              </View>
+              <View className="flex-1">
+                <Text style={{ fontSize: 14.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
+                  Your phone number
+                </Text>
+              </View>
             </View>
 
-            <Text
-              className="text-center"
-              style={{ fontSize: 17, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}
-            >
-              Get a call from Buddy
-            </Text>
-            <Text
-              className="mt-2 text-center"
-              style={{ fontSize: 12.5, color: colors.mutedText, fontFamily: fonts.body, lineHeight: 18 }}
-            >
-              Buddy phones you, asks how today is going and saves your flow, mood and symptoms for
-              you. Hands-free, in your language, never more than 5 minutes.
-            </Text>
-
             <View
-              className="mt-6 w-full flex-row items-center rounded-2xl border px-4 h-14"
+              className="mt-4 w-full flex-row items-center rounded-2xl border px-4 h-14"
               style={{
                 backgroundColor: colors.input,
                 borderColor: isFocused ? colors.primary : colors.border,
                 borderWidth: isFocused ? 1.5 : 1,
               }}
             >
-              <Ionicons
-                name="call-outline"
-                size={20}
-                color={isFocused ? colors.primary : colors.mutedText}
-              />
+              <Ionicons name="call-outline" size={18} color={isFocused ? colors.primary : colors.mutedText} />
               <TextInput
+                accessibilityLabel="Phone number"
                 autoComplete="tel"
-                editable={!isSubmitting}
+                editable={!isSavingPhone}
                 keyboardType="phone-pad"
                 onChangeText={setPhone}
                 onFocus={() => setIsFocused(true)}
-                onBlur={() => setIsFocused(false)}
+                onBlur={() => {
+                  setIsFocused(false);
+                  savePhoneIfChanged();
+                }}
                 placeholder="98765 43210"
                 placeholderTextColor={colors.mutedText}
                 returnKeyType="done"
@@ -381,43 +361,8 @@ export default function CheckinCallScreen() {
                 textContentType="telephoneNumber"
                 value={phone}
               />
+              {isSavingPhone ? <ActivityIndicator size="small" color={colors.primary} /> : null}
             </View>
-            <Text
-              className="mt-2 w-full text-left"
-              style={{ fontSize: 11, color: colors.mutedText, fontFamily: fonts.body }}
-            >
-              Indian numbers only — enter 10 digits, no country code needed.
-            </Text>
-
-            <TouchableOpacity
-              activeOpacity={0.9}
-              disabled={isSubmitting}
-              onPress={handleCallMeNow}
-              className="mt-5 w-full flex-row items-center justify-center rounded-full py-4"
-              style={{ backgroundColor: colors.primary, opacity: isSubmitting ? 0.65 : 1 }}
-            >
-              {isSubmitting ? (
-                <ActivityIndicator color={colors.buttonText} />
-              ) : (
-                <>
-                  <Ionicons name="call" size={16} color={colors.buttonText} />
-                  <Text
-                    className="ml-2 text-center text-sm font-bold"
-                    style={{ color: colors.buttonText, fontFamily: fonts.body }}
-                  >
-                    Call me now
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
-            {limits ? (
-              <Text
-                className="mt-3 text-center"
-                style={{ fontSize: 11, color: colors.mutedText, fontFamily: fonts.body }}
-              >
-                Up to {limits.manualCallsPerDay} calls a day, {limits.manualCooldownMinutes} minutes apart
-              </Text>
-            ) : null}
           </View>
 
           {/* Auto check-in calls */}
@@ -427,8 +372,8 @@ export default function CheckinCallScreen() {
                 <Text style={{ fontSize: 14.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
                   Auto check-in calls
                 </Text>
-                <Text style={{ fontSize: 11.5, color: colors.mutedText, marginTop: 2, fontFamily: fonts.body, lineHeight: 16 }}>
-                  Buddy calls you around your period, no need to remember
+                <Text style={{ fontSize: 12.5, color: colors.mutedText, marginTop: 2, fontFamily: fonts.body, lineHeight: 16 }}>
+                  Buddy calls you around your period
                 </Text>
               </View>
               {scheduleLoading ? (
@@ -448,9 +393,8 @@ export default function CheckinCallScreen() {
             </View>
 
             {!scheduleLoading && !scheduleAvailable ? (
-              <Text style={{ fontSize: 11.5, color: colors.mutedText, marginTop: 12, fontFamily: fonts.body, lineHeight: 16 }}>
-                Set up your cycle tracking first (last period date, cycle length) — auto check-in
-                calls need that to know which days to call you on.
+              <Text style={{ fontSize: 12.5, color: colors.mutedText, marginTop: 12, fontFamily: fonts.body, lineHeight: 16 }}>
+                Set up cycle tracking first so we know which days to call.
               </Text>
             ) : null}
 
@@ -501,7 +445,7 @@ export default function CheckinCallScreen() {
                 </View>
 
                 {mode === "period_daily" ? (
-                  <Text style={{ fontSize: 11.5, color: colors.mutedText, fontFamily: fonts.body, lineHeight: 16 }}>
+                  <Text style={{ fontSize: 12.5, color: colors.mutedText, fontFamily: fonts.body, lineHeight: 16 }}>
                     One call on each day of your period ({periodLength} days), so each day gets
                     logged while you rest.
                   </Text>
@@ -553,9 +497,8 @@ export default function CheckinCallScreen() {
 
                 <View className="flex-row" style={{ gap: 8 }}>
                   <Ionicons name="information-circle-outline" size={16} color={colors.mutedText} />
-                  <Text style={{ flex: 1, fontSize: 11, color: colors.mutedText, fontFamily: fonts.body, lineHeight: 16 }}>
-                    Missed it? Buddy tries again later that day (up to 2 more times, never after
-                    9:30 PM). Busy? Tell Buddy a better time and it will call back then.
+                  <Text style={{ flex: 1, fontSize: 12.5, color: colors.mutedText, fontFamily: fonts.body, lineHeight: 16 }}>
+                    Missed it? Buddy retries up to 2 times, never after 9:30 PM.
                   </Text>
                 </View>
 
@@ -596,19 +539,19 @@ export default function CheckinCallScreen() {
                           <Text style={{ fontSize: 13, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>
                             {look.label}
                           </Text>
-                          <Text style={{ fontSize: 11, color: colors.mutedText, fontFamily: fonts.body }}>
+                          <Text style={{ fontSize: 12.5, color: colors.mutedText, fontFamily: fonts.body }}>
                             {formatWhen(call.createdAt)}
                           </Text>
                         </View>
                         {call.summary ? (
                           <Text
                             numberOfLines={2}
-                            style={{ fontSize: 12, color: colors.mutedText, fontFamily: fonts.body, lineHeight: 17, marginTop: 2 }}
+                            style={{ fontSize: 13, color: colors.mutedText, fontFamily: fonts.body, lineHeight: 17, marginTop: 2 }}
                           >
                             {call.summary}
                           </Text>
                         ) : null}
-                        <Text style={{ fontSize: 11, color: colors.mutedText, fontFamily: fonts.body, marginTop: 2 }}>
+                        <Text style={{ fontSize: 12.5, color: colors.mutedText, fontFamily: fonts.body, marginTop: 2 }}>
                           {[
                             duration,
                             call.retryAt ? `Buddy will try again ${formatWhen(call.retryAt).toLowerCase()}` : null,
@@ -622,8 +565,8 @@ export default function CheckinCallScreen() {
                   );
                 })}
               </View>
-              <Text style={{ fontSize: 11, color: colors.mutedText, fontFamily: fonts.body, marginTop: 14 }}>
-                Everything Buddy saves shows up in your tracker for that day, where you can edit it.
+              <Text style={{ fontSize: 12.5, color: colors.mutedText, fontFamily: fonts.body, marginTop: 14 }}>
+                Saved entries appear in your tracker, where you can edit them.
               </Text>
             </View>
           ) : null}

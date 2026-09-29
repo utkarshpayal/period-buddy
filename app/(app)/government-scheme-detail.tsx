@@ -3,15 +3,17 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Linking,
   Modal,
+  Platform,
   ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { EmptyState } from "../../components/EmptyState";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
 import { SkeletonBlock, SkeletonCard } from "../../components/Skeleton";
@@ -86,6 +88,7 @@ function Bullet({ text }: { text: string }) {
 }
 
 export default function GovernmentSchemeDetail() {
+  const insets = useSafeAreaInsets();
   const { colors, fonts, isDark } = useTheme();
   const router = useRouter();
   const { user, updateUser } = useAuth();
@@ -334,7 +337,7 @@ export default function GovernmentSchemeDetail() {
             <View className="flex-1 items-center justify-center px-6">
               <LockedFeatureCard
                 title={scheme.name}
-                description="Unlock Government Schemes & Benefits to view full details and apply."
+                description="Unlock to see details and apply."
                 onPress={() => setPaywallVisible(true)}
               />
             </View>
@@ -351,7 +354,7 @@ export default function GovernmentSchemeDetail() {
                   style={{ backgroundColor: softTints.lavender }}
                 >
                   <Text
-                    className="text-[10px] font-bold"
+                    className="text-xs font-bold"
                     style={{ color: colors.accentText, fontFamily: fonts.body }}
                   >
                     {scheme.governmentLevel === "central"
@@ -365,7 +368,7 @@ export default function GovernmentSchemeDetail() {
                     style={{ backgroundColor: softTints.amber }}
                   >
                     <Text
-                      className="text-[10px] font-bold"
+                      className="text-xs font-bold"
                       style={{ color: colors.warning, fontFamily: fonts.mono }}
                     >
                       {scheme.shortName}
@@ -466,7 +469,7 @@ export default function GovernmentSchemeDetail() {
                       </Text>
                     </View>
                     <Text
-                      className="text-[11px]"
+                      className="text-xs"
                       style={{ color: colors.foreground, fontFamily: fonts.body }}
                     >
                       {eligibility.message}
@@ -498,7 +501,7 @@ export default function GovernmentSchemeDetail() {
                         style={{ backgroundColor: softTints.pink }}
                       >
                         <Text
-                          className="text-[10px] font-bold"
+                          className="text-[11.5px] font-bold"
                           style={{ color: colors.primary, fontFamily: fonts.mono }}
                         >
                           {i + 1}
@@ -516,7 +519,7 @@ export default function GovernmentSchemeDetail() {
                         </Text>
                         {s.detail ? (
                           <Text
-                            className="text-[11px]"
+                            className="text-xs"
                             style={{
                               color: colors.mutedText,
                               fontFamily: fonts.body,
@@ -586,7 +589,7 @@ export default function GovernmentSchemeDetail() {
                   >
                     <Ionicons name="call-outline" size={14} color={colors.primary} />
                     <Text
-                      className="text-[11px] font-bold ml-1.5"
+                      className="text-xs font-bold ml-1.5"
                       style={{ color: colors.foreground, fontFamily: fonts.body }}
                     >
                       Helpline
@@ -602,7 +605,7 @@ export default function GovernmentSchemeDetail() {
                   >
                     <Ionicons name="globe-outline" size={14} color={colors.primary} />
                     <Text
-                      className="text-[11px] font-bold ml-1.5"
+                      className="text-xs font-bold ml-1.5"
                       style={{ color: colors.foreground, fontFamily: fonts.body }}
                     >
                       Official Website
@@ -620,7 +623,7 @@ export default function GovernmentSchemeDetail() {
                   style={{ marginTop: 1 }}
                 />
                 <Text
-                  className="text-[10px] ml-1.5 flex-1"
+                  className="text-xs ml-1.5 flex-1"
                   style={{ color: colors.mutedText, fontFamily: fonts.body }}
                 >
                   Source: {scheme.source || "Government of India"}
@@ -684,10 +687,14 @@ export default function GovernmentSchemeDetail() {
         animationType="slide"
         onRequestClose={() => setCheckerOpen(false)}
       >
-        <View className="flex-1 justify-end" style={{ backgroundColor: "rgba(0,0,0,0.4)" }}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          className="flex-1 justify-end"
+          style={{ backgroundColor: "rgba(0,0,0,0.4)" }}
+        >
           <View
-            className="rounded-t-3xl px-6 pt-5 pb-8"
-            style={{ backgroundColor: colors.background }}
+            className="rounded-t-3xl px-6 pt-5"
+            style={{ backgroundColor: colors.background, paddingBottom: Math.max(insets.bottom, 12) + 20 }}
           >
             <View className="flex-row items-center justify-between mb-1">
               <Text
@@ -808,7 +815,7 @@ export default function GovernmentSchemeDetail() {
               )}
             </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <PaywallModal

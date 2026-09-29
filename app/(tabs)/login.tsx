@@ -276,7 +276,7 @@ export default function Login() {
               {/* Bottom Sign Up text */}
               <View className="flex-row justify-center mt-7">
                 <Text
-                  style={{ fontSize: 12.5, color: colors.mutedText, fontFamily: fonts.body }}
+                  style={{ fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}
                 >
                   New here?{" "}
                 </Text>
@@ -307,7 +307,7 @@ export default function Login() {
                 <TouchableOpacity className="mt-4 flex-row justify-center items-center">
                   <Text
                     style={{
-                      fontSize: 12,
+                      fontSize: 13,
                       fontWeight: "700",
                       color: colors.mutedText,
                       fontFamily: fonts.body,
