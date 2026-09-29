@@ -1,4 +1,5 @@
 import { showAlert } from "./modal-host";
+import { getFriendlyErrorMessage } from "./api";
 
 type AlertButton = {
   text?: string;
@@ -21,4 +22,13 @@ export function alert(title: string, message?: string, buttons?: AlertButton[]) 
   }));
 
   showAlert(title, message, normalized);
+}
+
+/**
+ * A day log the server didn't accept. The entry still shows on screen, but on
+ * a phone that copy lives only in memory, so saying nothing meant a log made
+ * offline quietly vanished on the next launch.
+ */
+export function alertLogNotSaved(err: unknown) {
+  alert("Log not saved", `${getFriendlyErrorMessage(err)}\nPlease try saving it again.`);
 }

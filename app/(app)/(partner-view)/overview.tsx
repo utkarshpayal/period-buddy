@@ -15,7 +15,7 @@ import { useAuth } from "../../../components/auth-context";
 import { SkeletonBlock, SkeletonCard } from "../../../components/Skeleton";
 import { useTheme } from "../../../components/theme";
 import { getShadow, getScreenGradient } from "../../../components/ui-tokens";
-import { formatShortDate } from "../../../lib/format";
+import { formatShortDate, getDateKey } from "../../../lib/format";
 import { partnerApi, type PartnerSharedData } from "../../../lib/api";
 import { usePartnerViewState } from "../../../components/partner-view-state";
 import { getSharedHubTiles } from "../../../lib/hubTiles";
@@ -45,8 +45,10 @@ function formatDateKey(dateKey?: string) {
   const date = new Date(`${dateKey}T00:00:00`);
   if (Number.isNaN(date.getTime())) return dateKey;
 
-  const todayKey = new Date().toISOString().slice(0, 10);
-  const yesterdayKey = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  // Local dates: toISOString() is UTC, which in India called yesterday "Today" until 5:30am.
+  const now = new Date();
+  const todayKey = getDateKey(now);
+  const yesterdayKey = getDateKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
   if (dateKey === todayKey) return "Today";
   if (dateKey === yesterdayKey) return "Yesterday";
 

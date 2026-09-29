@@ -34,6 +34,7 @@ import { CmsShortcuts } from "../../../components/CmsShortcuts";
 import { useAppConfig } from "../../../components/app-config";
 import { PromoBanners } from "../../../components/PromoBanners";
 import { useContentWidth } from "../../../lib/layout";
+import { getCycleDay } from "../../../lib/cycleCalendar";
 
 type AnalyticsBar = {
   length: number;
@@ -125,11 +126,6 @@ const PHASE_WATERMARK_ICONS: Record<string, React.ComponentProps<typeof Ionicons
 };
 
 const WEEKDAY_LETTERS = ["M", "T", "W", "T", "F", "S", "S"];
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
-function startOfDay(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-}
 
 function addDays(date: Date, days: number) {
   const next = new Date(date);
@@ -137,15 +133,6 @@ function addDays(date: Date, days: number) {
   return next;
 }
 
-// Mirrors tracker.tsx's getCycleDay so the home week-strip's period/fertile
-// dots agree with the full calendar instead of drifting from a second,
-// slightly different definition.
-function getCycleDayForDate(date: Date, cycleStartDate: Date, cycleLength: number) {
-  const diff = Math.floor(
-    (startOfDay(date).getTime() - startOfDay(cycleStartDate).getTime()) / MS_PER_DAY,
-  );
-  return (((diff % cycleLength) + cycleLength) % cycleLength) + 1;
-}
 
 // Builds the current Mon–Sun week (day letter + date number), plus, for each
 // day, whether it falls in the period or fertile window — same thresholds
@@ -169,7 +156,7 @@ function buildCurrentWeekStrip(
   return Array.from({ length: 7 }, (_, i) => {
     const date = new Date(monday);
     date.setDate(monday.getDate() + i);
-    const cycleDayForDate = getCycleDayForDate(date, cycleStartDate, cycleLength);
+    const cycleDayForDate = getCycleDay(date, cycleStartDate, cycleLength);
     return {
       letter: WEEKDAY_LETTERS[i],
       dayNumber: date.getDate(),

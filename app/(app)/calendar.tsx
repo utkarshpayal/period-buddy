@@ -20,6 +20,7 @@ import { mapApiDayEntry, type DayStatus } from "../../lib/cycleCalendar";
 import { HeaderIconButton } from "../../components/ScreenHeader";
 import { useContentWidth } from "../../lib/layout";
 import { getShadow } from "../../components/ui-tokens";
+import { alertLogNotSaved } from "../../lib/alert";
 
 /**
  * Full-screen cycle calendar, Flo-style: a Month view (months scroll
@@ -125,7 +126,7 @@ export default function CalendarScreen() {
         setRemoteEntry(dateKey, mapApiDayEntry(result.cycleLog));
         if (result.tokensEarned) earnTokens(result.tokensEarned);
       })
-      .catch(() => {});
+      .catch(alertLogNotSaved);
   };
 
   return (
