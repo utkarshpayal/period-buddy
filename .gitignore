@@ -39,6 +39,15 @@ yarn-error.*
 *.tsbuildinfo
 
 
+# build outputs (`eas build --local` drops build-<timestamp>.apk/.aab in the root)
+build/
+build-*.apk
+build-*.aab
+build-*.ipa
+*.apk
+*.aab
+*.ipa
+
 # generated native folders
 /ios
 /android
