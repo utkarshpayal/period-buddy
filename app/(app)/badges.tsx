@@ -101,7 +101,7 @@ function Unlocked({ badges, onDone }: { badges: Badge[]; onDone: () => void }) {
               <Text style={{ color: WHITE, fontSize: 14, fontFamily: fonts.body, fontWeight: "600", marginTop: 6, textAlign: "center", opacity: 0.95 }}>
                 {badge.description}
               </Text>
-              <Text style={{ color: WHITE, opacity: 0.75, fontSize: 11, marginTop: 18, fontFamily: fonts.heading, fontWeight: "800", letterSpacing: 1 }}>🌸 THE NURA</Text>
+              <Text style={{ color: WHITE, opacity: 0.75, fontSize: 12.5, marginTop: 18, fontFamily: fonts.heading, fontWeight: "800", letterSpacing: 1 }}>🌸 THE NURA</Text>
             </LinearGradient>
           </View>
         </Animated.View>
@@ -258,13 +258,13 @@ export default function BadgesScreen() {
                       >
                         <Text style={{ fontSize: 34, opacity: b.earned ? 1 : 0.3 }}>{b.earned ? b.emoji : "🔒"}</Text>
                         <Text
-                          style={{ color: b.earned ? colors.foreground : colors.mutedText, fontSize: 12, fontFamily: fonts.heading, fontWeight: "800", marginTop: 6, textAlign: "center" }}
+                          style={{ color: b.earned ? colors.foreground : colors.mutedText, fontSize: 13, fontFamily: fonts.heading, fontWeight: "800", marginTop: 6, textAlign: "center" }}
                           numberOfLines={2}
                         >
                           {b.title}
                         </Text>
                         {b.earned ? (
-                          <Text style={{ color: colors.mutedText, fontSize: 10.5, fontFamily: fonts.body, marginTop: 2, textAlign: "center" }} numberOfLines={2}>
+                          <Text style={{ color: colors.mutedText, fontSize: 12.5, fontFamily: fonts.body, marginTop: 2, textAlign: "center" }} numberOfLines={2}>
                             {b.description}
                           </Text>
                         ) : (
@@ -272,7 +272,7 @@ export default function BadgesScreen() {
                             <View className="mt-2 w-full overflow-hidden rounded-full" style={{ height: 5, backgroundColor: colors.border }}>
                               <View style={{ height: 5, width: `${pct}%`, backgroundColor: colors.primary }} />
                             </View>
-                            <Text style={{ color: colors.mutedText, fontSize: 10, fontFamily: fonts.mono, marginTop: 4 }}>
+                            <Text style={{ color: colors.mutedText, fontSize: 12.5, fontFamily: fonts.mono, marginTop: 4 }}>
                               {`${b.progress.current}/${b.progress.target}`}
                             </Text>
                           </>

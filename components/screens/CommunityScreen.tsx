@@ -215,7 +215,7 @@ function PostPollView({
         </Text>
         {poll.allowMultiple ? (
           <Text
-            className="text-[9px] font-black uppercase tracking-wide"
+            className="text-[11.5px] font-black uppercase tracking-wide"
             style={{ color: colors.mutedText, fontFamily: fonts.body }}
           >
             Multi
@@ -258,7 +258,7 @@ function PostPollView({
                     </Text>
                   </View>
                   <Text
-                    className="text-[12px] font-bold"
+                    className="text-[13px] font-bold"
                     style={{ color: colors.mutedText, fontFamily: fonts.mono }}
                   >
                     {pct}%
@@ -325,7 +325,7 @@ function PostPollView({
       ) : null}
 
       <Text
-        className="mt-3 text-[11px] font-semibold"
+        className="mt-3 text-xs font-semibold"
         style={{ color: colors.mutedText, fontFamily: fonts.body }}
       >
         {poll.totalVotes} {poll.totalVotes === 1 ? "vote" : "votes"}
@@ -526,13 +526,13 @@ function PostAudioAttachment({ url }: { url: string }) {
         </View>
         <View className="flex-row justify-between mt-1">
           <Text
-            className="text-[10px] font-bold"
+            className="text-xs font-bold"
             style={{ color: colors.mutedText, fontFamily: fonts.mono }}
           >
             {formatAudioTime(status.currentTime)}
           </Text>
           <Text
-            className="text-[10px] font-bold"
+            className="text-xs font-bold"
             style={{ color: colors.mutedText, fontFamily: fonts.mono }}
           >
             {formatAudioTime(status.duration)}
@@ -1422,7 +1422,7 @@ export default function CommunityScreen() {
                 </Text>
                 <View className="flex-row items-center gap-1.5 mt-0.5">
                   <Text
-                    className="text-[11px] font-semibold"
+                    className="text-xs font-semibold"
                     style={{ color: colors.mutedText, fontFamily: fonts.body }}
                   >
                     {post.time}
@@ -1433,7 +1433,7 @@ export default function CommunityScreen() {
                       style={{ backgroundColor: colors.primaryLight }}
                     >
                       <Text
-                        className="text-[9px] font-black uppercase tracking-wide"
+                        className="text-[11.5px] font-black uppercase tracking-wide"
                         style={{ color: colors.primary, fontFamily: fonts.body }}
                       >
                         {post.category}
@@ -1563,7 +1563,7 @@ export default function CommunityScreen() {
                   style={{ backgroundColor: colors.primaryLight }}
                 >
                   <Text
-                    className="text-[10px] font-bold"
+                    className="text-xs font-bold"
                     style={{ color: colors.primary, fontFamily: fonts.body }}
                   >
                     Saved
@@ -1576,7 +1576,7 @@ export default function CommunityScreen() {
                   style={{ backgroundColor: colors.dangerLight }}
                 >
                   <Text
-                    className="text-[10px] font-bold"
+                    className="text-xs font-bold"
                     style={{ color: colors.danger, fontFamily: fonts.body }}
                   >
                     Reported
@@ -1631,19 +1631,18 @@ export default function CommunityScreen() {
             ListHeaderComponent={
               <View>
             {/* Header */}
-            <View className="px-6 pt-6 flex-row items-start justify-between">
+            <View className="px-6 pt-3 flex-row items-center justify-between">
               <View className="flex-1 pr-3">
                 <Text
-                  className="text-[22px] font-bold tracking-tight"
-                  style={{ color: colors.foreground, fontFamily: fonts.heading }}
+                  accessibilityRole="header"
+                  style={{ color: colors.foreground, fontSize: 22, fontWeight: "800", letterSpacing: -0.3, fontFamily: fonts.heading }}
                 >
                   Community
                 </Text>
                 <Text
-                  className="text-xs font-semibold mt-1"
-                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                  style={{ color: colors.mutedText, fontSize: 13, marginTop: 1, fontFamily: fonts.body }}
                 >
-                  Share experiences and ask questions anonymously, safely.
+                  Share and ask, anonymously.
                 </Text>
               </View>
               <TouchableOpacity
@@ -1868,7 +1867,7 @@ export default function CommunityScreen() {
                     }}
                   >
                     <Text
-                      className="text-[11px] font-bold"
+                      className="text-xs font-bold"
                       style={{
                         color: isActive ? colors.buttonText : colors.mutedText,
                         fontFamily: fonts.body,
@@ -2147,7 +2146,7 @@ export default function CommunityScreen() {
                         </Text>
                         <View className="flex-row items-center gap-2">
                           <Text
-                            className="text-[10px] font-semibold"
+                            className="text-xs font-semibold"
                             style={{ color: colors.mutedText, fontFamily: fonts.body }}
                           >
                             {comment.time}

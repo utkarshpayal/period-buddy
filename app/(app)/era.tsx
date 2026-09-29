@@ -203,18 +203,18 @@ export default function EraScreen() {
                           <Text style={{ color: WHITE, fontSize: 16, fontFamily: fonts.monoSemiBold }}>
                             {data.era.daysLeftInPhase === 0 ? "Last day" : `${data.era.daysLeftInPhase} ${data.era.daysLeftInPhase === 1 ? "day" : "days"}`}
                           </Text>
-                          <Text style={{ color: WHITE, opacity: 0.85, fontSize: 11.5, fontFamily: fonts.body, fontWeight: "600" }}>left in this era</Text>
+                          <Text style={{ color: WHITE, opacity: 0.85, fontSize: 12.5, fontFamily: fonts.body, fontWeight: "600" }}>left in this era</Text>
                         </View>
                         <View style={{ width: 1, alignSelf: "stretch", backgroundColor: "rgba(255,255,255,0.35)", marginHorizontal: 14 }} />
                         <View className="flex-1">
                           <Text style={{ color: WHITE, fontSize: 14.5, fontFamily: fonts.body, fontWeight: "700" }} numberOfLines={1}>
                             {`${data.era.nextEra.emoji} ${data.era.nextEra.name.replace(" Era", "")}`}
                           </Text>
-                          <Text style={{ color: WHITE, opacity: 0.85, fontSize: 11.5, fontFamily: fonts.body, fontWeight: "600" }}>up next</Text>
+                          <Text style={{ color: WHITE, opacity: 0.85, fontSize: 12.5, fontFamily: fonts.body, fontWeight: "600" }}>up next</Text>
                         </View>
                       </View>
 
-                      <Text style={{ color: WHITE, opacity: 0.7, fontSize: 10.5, marginTop: 14, fontFamily: fonts.body, fontWeight: "700", letterSpacing: 1 }}>
+                      <Text style={{ color: WHITE, opacity: 0.7, fontSize: 12.5, marginTop: 14, fontFamily: fonts.body, fontWeight: "700", letterSpacing: 1 }}>
                         🌸 THE NURA
                       </Text>
                     </LinearGradient>
@@ -245,7 +245,7 @@ export default function EraScreen() {
                               numberOfLines={1}
                               style={{
                                 color: active ? colors.foreground : colors.mutedText,
-                                fontSize: 11.5,
+                                fontSize: 12.5,
                                 fontFamily: fonts.body,
                                 fontWeight: active ? "800" : "600",
                                 marginTop: 5,
@@ -265,7 +265,7 @@ export default function EraScreen() {
                   <View className="flex-row items-baseline justify-between">
                     <Text style={{ color: colors.foreground, fontSize: 17, fontFamily: fonts.heading, fontWeight: "800" }}>Sync with your cycle</Text>
                     {allTips.length ? (
-                      <Text style={{ color: colors.mutedText, fontSize: 12.5, fontFamily: fonts.body, fontWeight: "600" }}>{`${triedCount}/${allTips.length} today`}</Text>
+                      <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body, fontWeight: "600" }}>{`${triedCount}/${allTips.length} today`}</Text>
                     ) : null}
                   </View>
                   {allTips.length ? (
@@ -273,7 +273,7 @@ export default function EraScreen() {
                       <View className="mt-2.5 rounded-full overflow-hidden" style={{ height: 5, backgroundColor: colors.border }}>
                         <View style={{ width: `${(triedCount / allTips.length) * 100}%`, height: "100%", backgroundColor: data.era.era.aura[0], borderRadius: 999 }} />
                       </View>
-                      <Text style={{ color: colors.mutedText, fontSize: 12.5, fontFamily: fonts.body, marginTop: 6 }}>
+                      <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body, marginTop: 6 }}>
                         {triedCount === allTips.length
                           ? "You tried every tip today. Proud of you 🎉"
                           : "Tick a tip once you've tried it. Resets every day."}
@@ -345,7 +345,7 @@ export default function EraScreen() {
                   )}
                 </View>
 
-                <Text className="mt-6 text-center" style={{ color: colors.mutedText, fontSize: 11.5, fontFamily: fonts.body, lineHeight: 16, paddingHorizontal: 32 }}>
+                <Text className="mt-6 text-center" style={{ color: colors.mutedText, fontSize: 12.5, fontFamily: fonts.body, lineHeight: 16, paddingHorizontal: 32 }}>
                   General wellness ideas, not medical advice. Listen to your body first.
                 </Text>
               </ScrollView>

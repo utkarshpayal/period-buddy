@@ -1,7 +1,6 @@
-import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { FlatList, StatusBar, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions, type ViewToken } from "react-native";
+import { FlatList, StatusBar, StyleSheet, Text, TouchableOpacity, View, type ViewToken } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppState } from "../../components/AppState";
 import DayDetailsModal from "../../components/DayDetailsModal";
@@ -11,13 +10,16 @@ import {
   MiniMonth,
   MonthBlock,
   WeekdayHeader,
-  fertileWash,
+  CalendarLegend,
   usePhasePalette,
 } from "../../components/CycleCalendar";
 import { useTheme } from "../../components/theme";
 import { useCycleCalendar } from "../../hooks/useCycleCalendar";
 import { cycleApi } from "../../lib/api";
 import { mapApiDayEntry, type DayStatus } from "../../lib/cycleCalendar";
+import { HeaderIconButton } from "../../components/ScreenHeader";
+import { useContentWidth } from "../../lib/layout";
+import { getShadow } from "../../components/ui-tokens";
 
 /**
  * Full-screen cycle calendar, Flo-style: a Month view (months scroll
@@ -33,7 +35,7 @@ const MONTHS = Array.from({ length: (LAST_YEAR - FIRST_YEAR + 1) * 12 }, (_, i) 
 const YEARS = Array.from({ length: LAST_YEAR - FIRST_YEAR + 1 }, (_, i) => FIRST_YEAR + i);
 const monthIndexOf = (d: Date) => Math.min(MONTHS.length - 1, Math.max(0, (d.getFullYear() - FIRST_YEAR) * 12 + d.getMonth()));
 
-const SIDE = 20;
+const SIDE = 24;
 const MINI_GAP = 16;
 const MINI_ROW_GAP = 18;
 const YEAR_TITLE = 56;
@@ -49,7 +51,7 @@ function parseMonthParam(value?: string) {
 export default function CalendarScreen() {
   const router = useRouter();
   const { colors, fonts, isDark } = useTheme();
-  const { width } = useWindowDimensions();
+  const width = useContentWidth();
   const palette = usePhasePalette();
   const params = useLocalSearchParams<{ view?: string; month?: string }>();
   const { model, entryFor, noteFor, loadYear, setRemoteEntry, todayKey } = useCycleCalendar();
@@ -91,7 +93,7 @@ export default function CalendarScreen() {
     ({ item: year }: { item: number }) => (
       <View style={{ height: YEAR_BLOCK_HEIGHT, paddingHorizontal: SIDE }}>
         <View style={{ height: YEAR_TITLE, justifyContent: "flex-end", paddingBottom: 12 }}>
-          <Text style={{ color: year === new Date().getFullYear() ? colors.primary : colors.foreground, fontSize: 24, fontWeight: "900", fontFamily: fonts.heading }}>{year}</Text>
+          <Text style={{ color: year === new Date().getFullYear() ? colors.primary : colors.foreground, fontSize: 22, fontWeight: "800", fontFamily: fonts.heading }}>{year}</Text>
         </View>
         <View style={{ flexDirection: "row", flexWrap: "wrap", columnGap: MINI_GAP, rowGap: MINI_ROW_GAP }}>
           {Array.from({ length: 12 }, (_, m) => (
@@ -131,12 +133,10 @@ export default function CalendarScreen() {
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
 
       {/* Header */}
-      <View className="flex-row items-center" style={{ paddingHorizontal: 12, paddingTop: 8, height: 52 }}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={10} accessibilityRole="button" accessibilityLabel="Back" className="items-center justify-center" style={{ width: 40, height: 40 }}>
-          <Feather name="chevron-left" size={24} color={colors.foreground} />
-        </TouchableOpacity>
+      <View className="flex-row items-center" style={{ paddingHorizontal: 24, paddingTop: 12, height: 56 }}>
+        <HeaderIconButton icon="chevron-back" accessibilityLabel="Go back" onPress={() => router.back()} />
         <View className="flex-1 items-center">
-          <View className="flex-row rounded-full" style={{ backgroundColor: colors.surface, padding: 3 }}>
+          <View className="flex-row rounded-full" style={{ backgroundColor: colors.surface, padding: 4, ...getShadow(colors, isDark) }}>
             {(["month", "year"] as const).map((v) => {
               const active = view === v;
               return (
@@ -146,7 +146,7 @@ export default function CalendarScreen() {
                   accessibilityRole="tab"
                   accessibilityState={{ selected: active }}
                   className="items-center justify-center rounded-full"
-                  style={{ width: 86, height: 32, backgroundColor: active ? colors.primary : "transparent" }}
+                  style={{ width: 88, height: 32, backgroundColor: active ? colors.primary : "transparent" }}
                 >
                   <Text style={{ color: active ? colors.buttonText : colors.mutedText, fontSize: 13.5, fontWeight: "700", fontFamily: fonts.body }}>
                     {v === "month" ? "Month" : "Year"}
@@ -156,17 +156,7 @@ export default function CalendarScreen() {
             })}
           </View>
         </View>
-        <TouchableOpacity
-          onPress={goToday}
-          disabled={showingToday}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="Go to today"
-          className="items-center justify-center rounded-full"
-          style={{ width: 40, height: 40, opacity: showingToday ? 0.35 : 1 }}
-        >
-          <MaterialCommunityIcons name="calendar-today" size={21} color={colors.primary} />
-        </TouchableOpacity>
+        <HeaderIconButton icon="today-outline" accessibilityLabel="Go to today" color={colors.primary} disabled={showingToday} onPress={goToday} />
       </View>
 
       {view === "month" ? (
@@ -210,22 +200,8 @@ export default function CalendarScreen() {
       )}
 
       {/* Legend */}
-      <View
-        className="flex-row items-center justify-between"
-        style={{ paddingHorizontal: SIDE, paddingVertical: 12, borderTopWidth: StyleSheet.hairlineWidth, borderColor: colors.border, backgroundColor: colors.background }}
-      >
-        <LegendItem label="Period">
-          <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: palette.period.color }} />
-        </LegendItem>
-        <LegendItem label="Predicted">
-          <View style={{ width: 12, height: 12, borderRadius: 6, borderWidth: 1.5, borderStyle: "dashed", borderColor: colors.rose }} />
-        </LegendItem>
-        <LegendItem label="Fertile">
-          <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: fertileWash(colors), borderWidth: 1, borderColor: palette.ovulation.color }} />
-        </LegendItem>
-        <LegendItem label="Ovulation">
-          <MaterialCommunityIcons name="egg" size={12} color={palette.ovulation.color} />
-        </LegendItem>
+      <View style={{ paddingHorizontal: SIDE, paddingVertical: 12, borderTopWidth: StyleSheet.hairlineWidth, borderColor: colors.border, backgroundColor: colors.background }}>
+        <CalendarLegend />
       </View>
 
       <DayDetailsModal
@@ -253,15 +229,5 @@ export default function CalendarScreen() {
         }}
       />
     </SafeAreaView>
-  );
-}
-
-function LegendItem({ label, children }: { label: string; children: React.ReactNode }) {
-  const { colors, fonts } = useTheme();
-  return (
-    <View className="flex-row items-center" style={{ gap: 6 }}>
-      {children}
-      <Text style={{ color: colors.mutedText, fontSize: 11.5, fontWeight: "600", fontFamily: fonts.body }}>{label}</Text>
-    </View>
   );
 }

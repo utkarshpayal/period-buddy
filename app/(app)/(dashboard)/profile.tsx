@@ -1,4 +1,4 @@
-import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Feather, Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
@@ -17,8 +17,10 @@ import { useAuth } from "../../../components/auth-context";
 import { useGenZMode } from "../../../components/genz-mode";
 import { alert } from "../../../lib/alert";
 import { ThemeToggle, useTheme } from "../../../components/theme";
-import { getSoftTints } from "../../../components/ui-tokens";
-import { authApi, type DashboardSummary } from "../../../lib/api";
+import { getShadow, getSoftTints } from "../../../components/ui-tokens";
+import { authApi, genzApi, type BadgesSummary, type DashboardSummary } from "../../../lib/api";
+import { EmptyState } from "../../../components/EmptyState";
+import { Loader } from "../../../components/Loader";
 import {
   enablePushOnDeviceAsync,
   getCurrentPushTokenQuietlyAsync,
@@ -28,6 +30,10 @@ import { CmsShortcuts } from "../../../components/CmsShortcuts";
 import { PromoBanners } from "../../../components/PromoBanners";
 import { useUserStats } from "../../../hooks/useUserStats";
 import { useDataRefresh } from "../../../hooks/useDataRefresh";
+import { SectionHeader, TabHeader } from "../../../components/ScreenHeader";
+
+// Rotated across earned badge cards, like the hub tiles' per-feature colours.
+const BADGE_TINTS = ["primary", "secondary", "accent", "warning", "sky", "success"] as const;
 
 export default function Profile() {
   const { colors, isDark, fonts } = useTheme();
@@ -45,6 +51,8 @@ export default function Profile() {
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [achievementsModalVisible, setAchievementsModalVisible] =
     useState(false);
+  const [badges, setBadges] = useState<BadgesSummary | null>(null);
+  const [badgesError, setBadgesError] = useState(false);
   const [supportModalVisible, setSupportModalVisible] = useState(false);
   const [privacyModalVisible, setPrivacyModalVisible] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -92,6 +100,26 @@ export default function Profile() {
       isMounted = false;
     };
   }, [updateUser]);
+
+  // Earned badges for the Achievements sheet, fetched each time it opens so a
+  // badge earned since the last look shows up. Keeps the last result on failure.
+  React.useEffect(() => {
+    if (!achievementsModalVisible) return;
+    let isMounted = true;
+    setBadgesError(false);
+    genzApi.getBadges()
+      .then((summary) => {
+        if (isMounted) setBadges(summary);
+      })
+      .catch(() => {
+        if (isMounted) setBadgesError(true);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [achievementsModalVisible]);
+
+  const earnedBadges = badges?.badges.filter((b) => b.earned) ?? [];
 
   // Profile is a tab: pick up profile edits made on other screens (edit
   // profile, check-in call phone number, scheme eligibility details).
@@ -202,25 +230,23 @@ export default function Profile() {
   const preferenceRows: { label: string; hint: string; value: boolean; disabled?: boolean; onChange: (v: boolean) => void }[] = [
     {
       label: "Cycle notifications",
-      hint: "Remind me before my next expected period",
+      hint: "",
       value: notificationsEnabled,
       disabled: savingPreference === "notificationsEnabled",
       onChange: (next) => handleTogglePreference("notificationsEnabled", next),
     },
     {
       label: "Anonymous community mode",
-      hint: "Hide my name on community posts",
+      hint: "Hide my name on posts",
       value: anonymousMode,
       disabled: savingPreference === "anonymousCommunityMode",
       onChange: (next) => handleTogglePreference("anonymousCommunityMode", next),
     },
-    { label: "Gen Z mode", hint: "Swap a few labels for Gen Z slang, no cap", value: genZModeEnabled, onChange: setGenZModeEnabled },
+    { label: "Gen Z mode", hint: "Fun slang labels", value: genZModeEnabled, onChange: setGenZModeEnabled },
   ];
 
-  const sectionLabel = (text: string) => (
-    <Text style={{ color: colors.mutedText, fontSize: 12.5, fontWeight: "700", fontFamily: fonts.body, marginTop: 24, marginBottom: 8, marginLeft: 24 }}>{text}</Text>
-  );
-  const card = { marginHorizontal: 20, backgroundColor: colors.surface, borderRadius: 20, overflow: "hidden" as const };
+  const sectionLabel = (text: string) => <SectionHeader title={text} style={{ marginHorizontal: 24, marginTop: 24 }} />;
+  const card = { marginHorizontal: 24, backgroundColor: colors.surface, borderRadius: 20, overflow: "hidden" as const };
   const divider = <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: 16 + 36 + 14 }} />;
   const menuRow = (row: (typeof accountRows)[number], last: boolean, right?: React.ReactNode) => (
     <View key={row.label}>
@@ -264,10 +290,7 @@ export default function Profile() {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
         >
           {/* Header */}
-          <View className="flex-row items-center justify-between" style={{ paddingHorizontal: 20, paddingTop: 16 }}>
-            <Text style={{ color: colors.foreground, fontSize: 22, fontWeight: "800", fontFamily: fonts.heading }}>Profile</Text>
-            <ThemeToggle />
-          </View>
+          <TabHeader title="Profile" right={<ThemeToggle />} />
 
           {/* Identity */}
           <View className="items-center" style={{ paddingHorizontal: 24, marginTop: 20 }}>
@@ -285,10 +308,46 @@ export default function Profile() {
             <Text numberOfLines={1} style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body, marginTop: 2 }}>
               {displayEmail}
             </Text>
+            <TouchableOpacity
+              accessibilityRole="button"
+              activeOpacity={0.8}
+              onPress={() => router.push("/edit-profile")}
+              className="flex-row items-center rounded-full"
+              style={{ marginTop: 12, gap: 6, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}
+            >
+              <Feather name="edit-2" size={13} color={colors.foreground} />
+              <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}>Edit profile</Text>
+            </TouchableOpacity>
           </View>
 
+          {/* Optional details that used to be onboarding steps. */}
+          {!user?.profilePicture || !user?.phone ? (
+            <TouchableOpacity
+              accessibilityRole="button"
+              activeOpacity={0.85}
+              onPress={() => router.push("/edit-profile")}
+              className="flex-row items-center rounded-2xl"
+              style={{ marginHorizontal: 24, marginTop: 18, padding: 14, gap: 12, backgroundColor: colors.primaryLight }}
+            >
+              <View className="items-center justify-center rounded-xl" style={{ width: 38, height: 38, backgroundColor: colors.surface }}>
+                <Ionicons name={!user?.profilePicture ? "camera-outline" : "call-outline"} size={18} color={colors.primary} />
+              </View>
+              <View className="flex-1">
+                <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "800", fontFamily: fonts.body }}>Complete your profile</Text>
+                <Text style={{ color: colors.mutedText, fontSize: 13, marginTop: 2, fontFamily: fonts.body }}>
+                  {!user?.profilePicture && !user?.phone
+                    ? "Add a photo and phone number. Both optional."
+                    : !user?.profilePicture
+                      ? "Add a photo so your circles recognise you."
+                      : "Add a phone number for check-in calls."}
+                </Text>
+              </View>
+              <Feather name="chevron-right" size={18} color={colors.mutedText} />
+            </TouchableOpacity>
+          ) : null}
+
           {/* Stats — same flat style as the Tracker's */}
-          <View className="flex-row" style={{ marginHorizontal: 20, marginTop: 20, gap: 10 }}>
+          <View className="flex-row" style={{ marginHorizontal: 24, marginTop: 20, gap: 10 }}>
             {[
               { label: "Days tracked", value: dashboard?.trackedDays ?? 0, icon: "calendar-outline" as const, color: colors.primary },
               { label: "Care points", value: walletBalance, icon: "star" as const, color: colors.accent },
@@ -305,7 +364,7 @@ export default function Profile() {
                   <Ionicons name={m.icon} size={15} color={m.color} />
                   <Text style={{ color: colors.foreground, fontSize: 17, fontWeight: "800", fontFamily: fonts.heading }}>{m.value}</Text>
                 </View>
-                <Text numberOfLines={1} style={{ color: colors.mutedText, fontSize: 11.5, fontWeight: "600", fontFamily: fonts.body, marginTop: 3 }}>
+                <Text numberOfLines={1} style={{ color: colors.mutedText, fontSize: 12.5, fontWeight: "600", fontFamily: fonts.body, marginTop: 3 }}>
                   {m.label}
                 </Text>
               </View>
@@ -334,7 +393,7 @@ export default function Profile() {
                     <View className="flex-row items-center" style={{ paddingLeft: 16 + 36 + 14, paddingRight: 16, paddingVertical: 12, gap: 12 }}>
                       <View className="flex-1">
                         <Text style={{ color: colors.foreground, fontSize: 14.5, fontWeight: "600", fontFamily: fonts.body }}>{p.label}</Text>
-                        <Text style={{ color: colors.mutedText, fontSize: 12.5, fontFamily: fonts.body, marginTop: 1 }}>{p.hint}</Text>
+                        {p.hint ? <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body, marginTop: 1 }}>{p.hint}</Text> : null}
                       </View>
                       <Switch
                         value={p.value}
@@ -378,17 +437,47 @@ export default function Profile() {
       {/* Achievements */}
       <Modal visible={achievementsModalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setAchievementsModalVisible(false)}>
         {/* Android ignores pageSheet and renders fullscreen, so SafeAreaView keeps the header clear. */}
-        <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background, paddingHorizontal: 20, paddingTop: 20 }}>
+        <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background, paddingHorizontal: 24, paddingTop: 20 }}>
           {sheetHeader("Your achievements", () => setAchievementsModalVisible(false))}
-          <View className="items-center rounded-3xl" style={{ backgroundColor: colors.surface, padding: 24 }}>
-            <View className="items-center justify-center rounded-full" style={{ width: 72, height: 72, backgroundColor: softTints.amber }}>
-              <MaterialCommunityIcons name="medal-outline" size={36} color={colors.warning} />
-            </View>
-            <Text style={{ color: colors.foreground, fontSize: 16, fontWeight: "800", fontFamily: fonts.heading, marginTop: 14 }}>Consistency Champion</Text>
-            <Text style={{ color: colors.mutedText, fontSize: 13.5, lineHeight: 20, fontFamily: fonts.body, marginTop: 6, textAlign: "center" }}>
-              Unlocked for steady symptom logging and habit care across your recent cycle.
-            </Text>
-          </View>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 12 }} style={{ flexGrow: 0, flexShrink: 1 }}>
+            {!badges && !badgesError ? (
+              <Loader style={{ paddingVertical: 40 }} />
+            ) : !badges ? (
+              <EmptyState compact icon="wifi-off" title="Couldn't load your badges" message="Check your connection and try again." />
+            ) : earnedBadges.length === 0 ? (
+              <EmptyState compact icon="medal-outline" title="No badges yet" message="Log your cycle to start earning them." />
+            ) : (
+              <>
+                <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.mono, marginBottom: 12 }}>
+                  {`${badges.earnedCount} of ${badges.badges.length} earned`}
+                </Text>
+                {/* Same card as the hubs' small feature tiles (components/HubFeatureTiles.tsx). */}
+                <View className="flex-row flex-wrap" style={{ gap: 10 }}>
+                  {earnedBadges.map((b, i) => {
+                    const tintKey = BADGE_TINTS[i % BADGE_TINTS.length];
+                    return (
+                      <View
+                        key={b.key}
+                        className="border"
+                        style={{ width: "48%", backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 20, padding: 16, ...getShadow(colors, isDark) }}
+                        accessibilityLabel={`${b.title}, earned`}
+                      >
+                        <View style={{ width: 40, height: 40, borderRadius: 13, backgroundColor: colors[`${tintKey}Light`], alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
+                          <Text style={{ fontSize: 20 }}>{b.emoji}</Text>
+                        </View>
+                        <Text style={{ fontSize: 13.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.body }} numberOfLines={1}>
+                          {b.title}
+                        </Text>
+                        <Text style={{ fontSize: 12.5, color: colors.mutedText, marginTop: 3, fontFamily: fonts.body }} numberOfLines={2}>
+                          {b.description}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              </>
+            )}
+          </ScrollView>
           <TouchableOpacity
             onPress={() => {
               setAchievementsModalVisible(false);
@@ -405,7 +494,7 @@ export default function Profile() {
 
       {/* Help & support */}
       <Modal visible={supportModalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setSupportModalVisible(false)}>
-        <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background, paddingHorizontal: 20, paddingTop: 20 }}>
+        <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background, paddingHorizontal: 24, paddingTop: 20 }}>
           {sheetHeader("Help & support", () => setSupportModalVisible(false))}
           <Text style={{ color: colors.foreground, fontSize: 14.5, lineHeight: 22, fontFamily: fonts.body, marginBottom: 20 }}>
             Need help with predictions, account access, cycle logs or partner sharing? Send a support request and we&apos;ll guide you through it.
@@ -423,7 +512,7 @@ export default function Profile() {
 
       {/* Data privacy */}
       <Modal visible={privacyModalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setPrivacyModalVisible(false)}>
-        <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background, paddingHorizontal: 20, paddingTop: 20 }}>
+        <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background, paddingHorizontal: 24, paddingTop: 20 }}>
           {sheetHeader("Data privacy & security", () => setPrivacyModalVisible(false))}
           <View className="rounded-3xl" style={{ backgroundColor: colors.surface, padding: 20, gap: 14 }}>
             {[

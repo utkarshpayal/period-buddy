@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Link, useLocalSearchParams, useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
+import * as WebBrowser from "expo-web-browser";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -29,9 +30,13 @@ import { Loader } from "../../components/Loader";
 import { OtpModal } from "../../components/OtpModal";
 import { useTheme } from "../../components/theme";
 import { connectPartnerAndResolveRoute, signupUser } from "../../lib/auth";
+import { isStrongPassword, PASSWORD_RULES } from "../../lib/password";
 import type { AuthUser } from "../../lib/api";
 import { alert } from "../../lib/alert";
 import { getScreenGradient, getShadow } from "../../components/ui-tokens";
+
+const TERMS_URL = "https://thenura.care/terms";
+const PRIVACY_URL = "https://thenura.care/privacy";
 
 export default function SignUp() {
   const router = useRouter();
@@ -40,20 +45,20 @@ export default function SignUp() {
   const { colors, isDark, fonts } = useTheme();
   const { width } = useWindowDimensions();
   const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const role: "user" | "partner" = partnerCode ? "partner" : "user";
-  const [agreedToPrivacyPolicy, setAgreedToPrivacyPolicy] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isOtpModalVisible, setIsOtpModalVisible] = useState(false);
+  // The rule checklist appears once the user starts on the password, so the
+  // form starts short and the rules show exactly when they matter.
+  const [showPasswordRules, setShowPasswordRules] = useState(false);
   // Covers the form from the moment the account is verified (OTP or Google)
   // until finishSignIn navigates away, so the signup page doesn't reappear
   // while the session/partner role is being resolved.
   const [isFinishing, setIsFinishing] = useState(false);
 
-  const lastNameRef = useRef<TextInput>(null);
   const emailRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
 
@@ -73,18 +78,19 @@ export default function SignUp() {
   async function handleSignup() {
     setErrorMessage("");
 
-    if (!firstName.trim() || !lastName.trim() || !email.trim() || !password) {
-      setErrorMessage("All fields are required.");
+    if (firstName.trim().length < 2) {
+      setErrorMessage("Please enter your first name.");
       return;
     }
 
-    if (password.length < 8) {
-      setErrorMessage("Password must be at least 8 characters.");
+    if (!/^\S+@\S+\.\S+$/.test(email.trim())) {
+      setErrorMessage("Please enter a valid email address.");
       return;
     }
 
-    if (!agreedToPrivacyPolicy) {
-      setErrorMessage("Please agree to the Privacy Policy to continue.");
+    if (!isStrongPassword(password)) {
+      setShowPasswordRules(true);
+      setErrorMessage("Your password needs a few more things — see the checklist.");
       return;
     }
 
@@ -96,11 +102,13 @@ export default function SignUp() {
       // code is verified in the modal below.
       await signupUser({
         firstName: firstName.trim(),
-        lastName: lastName.trim(),
+        lastName: "",
         email: email.trim().toLowerCase(),
         password,
         role,
-        agreedToPrivacyPolicy,
+        // Consent is given by tapping "Create account" under the notice
+        // that links both documents.
+        agreedToPrivacyPolicy: true,
       });
 
       setIsOtpModalVisible(true);
@@ -213,7 +221,7 @@ export default function SignUp() {
                   className="mt-2 text-center text-sm font-semibold"
                   style={{ color: colors.mutedText, fontFamily: fonts.body, maxWidth: 280 }}
                 >
-                  Takes 2 minutes. Your data stays private, always.
+                  Free, private, and ready in under a minute.
                 </Text>
               </View>
 
@@ -225,7 +233,7 @@ export default function SignUp() {
                 >
                   <Ionicons name="heart-outline" size={15} color={colors.primary} />
                   <Text
-                    className="flex-1 text-[11px] font-semibold leading-4"
+                    className="flex-1 text-xs font-semibold leading-4"
                     style={{ color: colors.foreground, fontFamily: fonts.body }}
                   >
                     Connecting to your partner&apos;s account after sign up.
@@ -233,44 +241,33 @@ export default function SignUp() {
                 </View>
               ) : null}
 
-              {/* Card-free field stack */}
-              <View style={{ gap: 14 }}>
-                <View className="flex-row" style={{ gap: 10 }}>
-                  <View style={{ flex: 1 }}>
-                    <AuthField
-                      icon="person-outline"
-                      autoComplete="given-name"
-                      onChangeText={(text) => {
-                        setErrorMessage("");
-                        setFirstName(text);
-                      }}
-                      onSubmitEditing={() => lastNameRef.current?.focus()}
-                      placeholder="First name"
-                      returnKeyType="next"
-                      submitBehavior="submit"
-                      textContentType="givenName"
-                      value={firstName}
-                    />
-                  </View>
+              {/* Fastest path first: one tap with Google. */}
+              <GoogleSignInButton
+                disabled={isSubmitting}
+                onBusyChange={setIsFinishing}
+                onError={setErrorMessage}
+                onSuccess={handleGoogleSignInSuccess}
+                role={role}
+              />
 
-                  <View style={{ flex: 1 }}>
-                    <AuthField
-                      ref={lastNameRef}
-                      icon="person-outline"
-                      autoComplete="family-name"
-                      onChangeText={(text) => {
-                        setErrorMessage("");
-                        setLastName(text);
-                      }}
-                      onSubmitEditing={() => emailRef.current?.focus()}
-                      placeholder="Last name"
-                      returnKeyType="next"
-                      submitBehavior="submit"
-                      textContentType="familyName"
-                      value={lastName}
-                    />
-                  </View>
-                </View>
+              <AuthDivider label="OR SIGN UP WITH EMAIL" />
+
+              <View style={{ gap: 12 }}>
+                <AuthField
+                  icon="person-outline"
+                  autoCapitalize="words"
+                  autoComplete="given-name"
+                  onChangeText={(text) => {
+                    setErrorMessage("");
+                    setFirstName(text);
+                  }}
+                  onSubmitEditing={() => emailRef.current?.focus()}
+                  placeholder="First name"
+                  returnKeyType="next"
+                  submitBehavior="submit"
+                  textContentType="givenName"
+                  value={firstName}
+                />
 
                 <AuthField
                   ref={emailRef}
@@ -294,80 +291,68 @@ export default function SignUp() {
                   ref={passwordRef}
                   icon="lock-closed-outline"
                   isPassword
+                  autoComplete="new-password"
+                  onFocus={() => setShowPasswordRules(true)}
                   onChangeText={(text) => {
                     setErrorMessage("");
                     setPassword(text);
                   }}
                   onSubmitEditing={handleSignup}
-                  placeholder="Password"
+                  placeholder="Create a password"
                   returnKeyType="done"
                   textContentType="newPassword"
                   value={password}
                 />
               </View>
 
-              <Text
-                className="mt-4"
-                style={{
-                  fontSize: 11,
-                  lineHeight: 15,
-                  color: colors.mutedText,
-                  fontFamily: fonts.body,
-                }}
-              >
-                Use at least 8 characters and keep your password private.
-              </Text>
-
-              <TouchableOpacity
-                activeOpacity={0.8}
-                className="mt-4 flex-row items-start"
-                onPress={() => {
-                  setErrorMessage("");
-                  setAgreedToPrivacyPolicy((prev) => !prev);
-                }}
-                style={{ gap: 10 }}
-              >
-                <View
-                  className="items-center justify-center rounded-md border"
-                  style={{
-                    width: 20,
-                    height: 20,
-                    marginTop: 1,
-                    backgroundColor: agreedToPrivacyPolicy ? colors.primary : colors.input,
-                    borderColor: agreedToPrivacyPolicy ? colors.primary : colors.border,
-                    borderWidth: 1.5,
-                  }}
-                >
-                  {agreedToPrivacyPolicy ? (
-                    <Ionicons name="checkmark" size={13} color={colors.buttonText} />
-                  ) : null}
+              {showPasswordRules ? (
+                <View className="flex-row flex-wrap" style={{ gap: 6, marginTop: 10 }}>
+                  {PASSWORD_RULES.map((rule) => {
+                    const met = rule.test(password);
+                    return (
+                      <View
+                        key={rule.id}
+                        accessible
+                        accessibilityLabel={`${rule.label}: ${met ? "done" : "missing"}`}
+                        className="flex-row items-center rounded-full"
+                        style={{
+                          gap: 4,
+                          paddingHorizontal: 9,
+                          paddingVertical: 5,
+                          backgroundColor: met ? colors.successLight : colors.surface,
+                          borderWidth: 1,
+                          borderColor: met ? colors.successLight : colors.border,
+                        }}
+                      >
+                        <Ionicons
+                          name={met ? "checkmark-circle" : "ellipse-outline"}
+                          size={13}
+                          color={met ? colors.success : colors.mutedText}
+                        />
+                        <Text
+                          style={{
+                            fontSize: 12.5,
+                            fontWeight: "700",
+                            color: met ? colors.success : colors.mutedText,
+                            fontFamily: fonts.body,
+                          }}
+                        >
+                          {rule.label}
+                        </Text>
+                      </View>
+                    );
+                  })}
                 </View>
-                <Text
-                  className="flex-1"
-                  style={{
-                    fontSize: 12,
-                    lineHeight: 17,
-                    color: colors.foreground,
-                    fontFamily: fonts.body,
-                  }}
-                >
-                  I agree to the{" "}
-                  <Text style={{ fontWeight: "800", color: colors.primary }}>
-                    Terms &amp; Privacy Policy
-                  </Text>
-                  .
-                </Text>
-              </TouchableOpacity>
+              ) : null}
 
               <View
                 style={{
-                  marginTop: 14,
+                  marginTop: 18,
                   borderRadius: 999,
                   ...getShadow(colors, isDark),
                 }}
               >
                 <AuthPrimaryButton
-                  disabled={!agreedToPrivacyPolicy}
                   isLoading={isSubmitting}
                   label="Create account"
                   loadingLabel="Creating account..."
@@ -376,25 +361,44 @@ export default function SignUp() {
               </View>
 
               {errorMessage ? (
-                <View style={{ marginTop: 16 }}>
+                <View style={{ marginTop: 14 }}>
                   <AuthErrorBanner message={errorMessage} />
                 </View>
               ) : null}
 
-              <AuthDivider />
-
-              <GoogleSignInButton
-                disabled={isSubmitting}
-                onBusyChange={setIsFinishing}
-                onError={setErrorMessage}
-                onSuccess={handleGoogleSignInSuccess}
-                role={role}
-              />
+              <Text
+                className="text-center"
+                style={{
+                  marginTop: 14,
+                  fontSize: 12.5,
+                  lineHeight: 17,
+                  color: colors.mutedText,
+                  fontFamily: fonts.body,
+                }}
+              >
+                By continuing, you agree to our{" "}
+                <Text
+                  accessibilityRole="link"
+                  onPress={() => WebBrowser.openBrowserAsync(TERMS_URL).catch(() => {})}
+                  style={{ fontWeight: "800", color: colors.primary }}
+                >
+                  Terms
+                </Text>{" "}
+                and{" "}
+                <Text
+                  accessibilityRole="link"
+                  onPress={() => WebBrowser.openBrowserAsync(PRIVACY_URL).catch(() => {})}
+                  style={{ fontWeight: "800", color: colors.primary }}
+                >
+                  Privacy Policy
+                </Text>
+                .
+              </Text>
 
               {/* Bottom Sign In text */}
               <View className="flex-row justify-center mt-7">
                 <Text
-                  style={{ fontSize: 12.5, color: colors.mutedText, fontFamily: fonts.body }}
+                  style={{ fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}
                 >
                   Already have an account?{" "}
                 </Text>

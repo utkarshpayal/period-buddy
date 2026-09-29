@@ -71,7 +71,7 @@ function SchemeCard({ scheme }: { scheme: GovernmentBenefit }) {
               style={{ backgroundColor: softTints.lavender }}
             >
               <Text
-                className="text-[10px] font-bold"
+                className="text-xs font-bold"
                 style={{ color: colors.accentText, fontFamily: fonts.body }}
               >
                 {scheme.governmentLevel === "central"
@@ -85,7 +85,7 @@ function SchemeCard({ scheme }: { scheme: GovernmentBenefit }) {
                 style={{ backgroundColor: softTints.amber }}
               >
                 <Text
-                  className="text-[10px] font-bold"
+                  className="text-xs font-bold"
                   style={{ color: colors.warning, fontFamily: fonts.mono }}
                 >
                   {scheme.shortName}
@@ -108,7 +108,7 @@ function SchemeCard({ scheme }: { scheme: GovernmentBenefit }) {
           </Text>
           <View className="flex-row items-center mt-2">
             <Text
-              className="text-[11px] font-bold"
+              className="text-xs font-bold"
               style={{ color: colors.primary, fontFamily: fonts.body }}
             >
               {SCHEME_ACTION_LABELS[scheme.actionType] || "View"}
@@ -255,7 +255,7 @@ export default function GovernmentSchemes() {
       >
         <Ionicons name="folder-open-outline" size={14} color={colors.primary} />
         <Text
-          className="text-[11px] font-bold ml-1"
+          className="text-xs font-bold ml-1"
           style={{ color: colors.primary, fontFamily: fonts.body }}
         >
           My Applications
@@ -282,7 +282,7 @@ export default function GovernmentSchemes() {
         <View className="flex-1 items-center justify-center px-6">
           <LockedFeatureCard
             title="Government Schemes & Benefits"
-            description="Unlock access to browse and apply for women's reproductive & menstrual health schemes."
+            description="Browse and apply for health schemes."
             onPress={() => setPaywallVisible(true)}
           />
         </View>
@@ -381,7 +381,7 @@ export default function GovernmentSchemes() {
                   color={active ? "#fff" : colors.mutedText}
                 />
                 <Text
-                  className="text-[11px] font-bold ml-1"
+                  className="text-xs font-bold ml-1"
                   style={{
                     color: active ? "#fff" : colors.mutedText,
                     fontFamily: fonts.body,

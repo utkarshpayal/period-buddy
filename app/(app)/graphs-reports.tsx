@@ -219,7 +219,7 @@ function ReportRow({
         <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "800", fontFamily: fonts.heading }}>
           {title}
         </Text>
-        <Text style={{ color: colors.mutedText, fontSize: 11.5, marginTop: 2, fontFamily: fonts.body }}>
+        <Text style={{ color: colors.mutedText, fontSize: 12.5, marginTop: 2, fontFamily: fonts.body }}>
           {subtitle}
         </Text>
       </View>
@@ -301,7 +301,7 @@ export default function GraphsAndReportsScreen() {
                   <Text style={{ color: cardTints.weight.accent, fontSize: 22, fontWeight: "900", fontFamily: fonts.mono }}>
                     {data.latestWeight ? `${data.latestWeight.value} kg` : "No data yet"}
                   </Text>
-                  <Text style={{ color: cardTints.weight.accent, fontSize: 11, marginTop: 2, opacity: 0.8, fontFamily: fonts.body }}>
+                  <Text style={{ color: cardTints.weight.accent, fontSize: 12.5, marginTop: 2, opacity: 0.8, fontFamily: fonts.body }}>
                     {data.latestWeight ? `Last logged ${data.latestWeight.dateKey}` : "Log your weight in a day entry"}
                   </Text>
                 </StatCard>
@@ -314,7 +314,7 @@ export default function GraphsAndReportsScreen() {
                   <Text style={{ color: cardTints.bbt.accent, fontSize: 22, fontWeight: "900", fontFamily: fonts.mono }}>
                     {data.latestTemperature ? `${data.latestTemperature.value}°C` : "No data yet"}
                   </Text>
-                  <Text style={{ color: cardTints.bbt.accent, fontSize: 11, marginTop: 2, opacity: 0.8, fontFamily: fonts.body }}>
+                  <Text style={{ color: cardTints.bbt.accent, fontSize: 12.5, marginTop: 2, opacity: 0.8, fontFamily: fonts.body }}>
                     {data.latestTemperature ? `Last logged ${data.latestTemperature.dateKey}` : "Log BBT in a day entry"}
                   </Text>
                 </StatCard>
@@ -327,7 +327,7 @@ export default function GraphsAndReportsScreen() {
                   <Text style={{ color: cardTints.water.accent, fontSize: 22, fontWeight: "900", fontFamily: fonts.mono }}>
                     {avgWater != null ? `${Math.round(avgWater)} ml` : "No data yet"}
                   </Text>
-                  <Text style={{ color: cardTints.water.accent, fontSize: 11, marginTop: 2, opacity: 0.8, fontFamily: fonts.body }}>
+                  <Text style={{ color: cardTints.water.accent, fontSize: 12.5, marginTop: 2, opacity: 0.8, fontFamily: fonts.body }}>
                     {avgWater != null ? "90-day daily average" : "Log water intake in a day entry"}
                   </Text>
                 </StatCard>
@@ -340,7 +340,7 @@ export default function GraphsAndReportsScreen() {
                   <Text style={{ color: cardTints.sleep.accent, fontSize: 22, fontWeight: "900", fontFamily: fonts.mono }}>
                     {avgSleep != null ? `${avgSleep.toFixed(1)} hrs` : "No data yet"}
                   </Text>
-                  <Text style={{ color: cardTints.sleep.accent, fontSize: 11, marginTop: 2, opacity: 0.8, fontFamily: fonts.body }}>
+                  <Text style={{ color: cardTints.sleep.accent, fontSize: 12.5, marginTop: 2, opacity: 0.8, fontFamily: fonts.body }}>
                     {avgSleep != null ? "90-day nightly average" : "Log sleep hours in a day entry"}
                   </Text>
                 </StatCard>

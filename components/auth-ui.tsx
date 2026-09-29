@@ -183,7 +183,7 @@ export function AuthPrimaryButton({
 }
 
 /** "OR CONTINUE WITH" divider between password auth and Google sign-in. */
-export function AuthDivider() {
+export function AuthDivider({ label = "OR CONTINUE WITH" }: { label?: string }) {
   const { colors, fonts } = useTheme();
 
   return (
@@ -191,9 +191,9 @@ export function AuthDivider() {
       <View className="h-[1px] flex-1" style={{ backgroundColor: colors.border }} />
       <Text
         className="mx-3 font-semibold"
-        style={{ fontSize: 10, color: colors.mutedText, letterSpacing: 0.4, fontFamily: fonts.body }}
+        style={{ fontSize: 12.5, color: colors.mutedText, letterSpacing: 0.4, fontFamily: fonts.body }}
       >
-        OR CONTINUE WITH
+        {label}
       </Text>
       <View className="h-[1px] flex-1" style={{ backgroundColor: colors.border }} />
     </View>

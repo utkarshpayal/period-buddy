@@ -83,7 +83,7 @@ export function PurchaseResultPanel({
           Almost there
         </Text>
         <Text className="mt-1.5 text-sm text-center" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-          Your payment is still processing. This can take a minute — tap below to check again.
+          Payment is still processing. Tap below to check again.
         </Text>
 
         <TouchableOpacity

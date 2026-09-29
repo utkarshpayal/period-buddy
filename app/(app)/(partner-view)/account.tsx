@@ -205,7 +205,7 @@ export default function PartnerViewAccount() {
             >
               <Ionicons name="eye-outline" size={12} color={colors.primary} />
               <Text
-                className="text-[10px] font-black uppercase tracking-wider"
+                className="text-[11.5px] font-black uppercase tracking-wider"
                 style={{ color: colors.primary, fontFamily: fonts.body }}
               >
                 Partner (read-only) account
@@ -251,7 +251,7 @@ export default function PartnerViewAccount() {
                   : "No partner connected"}
               </Text>
               <Text
-                className="text-[10.5px] mt-0.5 font-semibold"
+                className="text-xs mt-0.5 font-semibold"
                 style={{ color: colors.mutedText, fontFamily: fonts.body }}
               >
                 {isConnected
@@ -292,7 +292,7 @@ export default function PartnerViewAccount() {
                     Notifications
                   </Text>
                   <Text
-                    className="text-[10px] mt-0.5"
+                    className="text-xs mt-0.5"
                     style={{ color: colors.mutedText, fontFamily: fonts.body }}
                   >
                     Alerts when they share an update

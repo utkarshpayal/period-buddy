@@ -15,7 +15,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Avatar from "../../components/Avatar";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
 import { ScreenHeader } from "../../components/ScreenHeader";
@@ -47,11 +47,12 @@ const SIDE = 20;
 
 function Sheet({ visible, title, onClose, children }: { visible: boolean; title: string; onClose: () => void; children: React.ReactNode }) {
   const { colors, fonts } = useTheme();
+  const insets = useSafeAreaInsets();
   return (
     <Modal transparent animationType="slide" visible={visible} onRequestClose={onClose}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1, justifyContent: "flex-end", backgroundColor: colors.overlay }}>
         <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} accessibilityLabel="Close" />
-        <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: SIDE, paddingTop: 10, paddingBottom: 34 }}>
+        <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: SIDE, paddingTop: 10, paddingBottom: Math.max(insets.bottom, 12) + 22 }}>
           <View style={{ alignSelf: "center", width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: 14 }} />
           <View className="flex-row items-center justify-between mb-4">
             <Text style={{ color: colors.foreground, fontSize: 18, fontFamily: fonts.heading, fontWeight: "800" }}>{title}</Text>
@@ -75,7 +76,7 @@ function Sheet({ visible, title, onClose, children }: { visible: boolean; title:
 function FieldLabel({ children, first }: { children: string; first?: boolean }) {
   const { colors, fonts } = useTheme();
   return (
-    <Text style={{ color: colors.mutedText, fontSize: 12.5, fontFamily: fonts.body, fontWeight: "700", marginTop: first ? 0 : 18, marginBottom: 8 }}>{children}</Text>
+    <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body, fontWeight: "700", marginTop: first ? 0 : 18, marginBottom: 8 }}>{children}</Text>
   );
 }
 
@@ -176,7 +177,7 @@ function ActionRow({ icon, label, hint, onPress, last }: { icon: React.Component
       </View>
       <View className="flex-1">
         <Text style={{ color: colors.foreground, fontSize: 15, fontFamily: fonts.body, fontWeight: "700" }}>{label}</Text>
-        {hint ? <Text style={{ color: colors.mutedText, fontSize: 12.5, fontFamily: fonts.body, marginTop: 1 }}>{hint}</Text> : null}
+        {hint ? <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body, marginTop: 1 }}>{hint}</Text> : null}
       </View>
       <Feather name="chevron-right" size={18} color={colors.mutedText} />
       {!last ? <Divider inset={SIDE + 48 + 14} /> : null}
@@ -316,7 +317,7 @@ function CircleList({ initialCode }: { initialCode?: string }) {
                           {c.name}
                         </Text>
                         {c.latestVibe ? (
-                          <Text style={{ color: colors.mutedText, fontSize: 12, fontFamily: fonts.body }}>{timeAgo(c.latestVibe.createdAt).replace(" ago", "")}</Text>
+                          <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body }}>{timeAgo(c.latestVibe.createdAt).replace(" ago", "")}</Text>
                         ) : null}
                       </View>
                       <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body, marginTop: 2 }} numberOfLines={1}>
@@ -473,8 +474,8 @@ function VibeRow({
             <Text style={{ color: colors.foreground, fontSize: 14.5, fontFamily: fonts.body, fontWeight: "700" }} numberOfLines={1}>
               {v.isMine ? "You" : v.name}
             </Text>
-            {v.phaseEmoji ? <Text style={{ fontSize: 12 }}>{v.phaseEmoji}</Text> : null}
-            <Text style={{ flex: 1, color: colors.mutedText, fontSize: 12, fontFamily: fonts.body }} numberOfLines={1}>
+            {v.phaseEmoji ? <Text style={{ fontSize: 13 }}>{v.phaseEmoji}</Text> : null}
+            <Text style={{ flex: 1, color: colors.mutedText, fontSize: 13, fontFamily: fonts.body }} numberOfLines={1}>
               {timeAgo(v.createdAt)}
             </Text>
             {v.isMine ? (
@@ -655,7 +656,7 @@ function CircleView({ id }: { id: string }) {
             contentContainerStyle={{ paddingBottom: 60 }}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => reload(true)} tintColor={colors.primary} />}
           >
-            <Text style={{ color: colors.mutedText, fontSize: 12.5, fontFamily: fonts.body, paddingHorizontal: SIDE, marginTop: 4 }}>
+            <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body, paddingHorizontal: SIDE, marginTop: 4 }}>
               {`${circle.memberCount} of ${data.limits.maxMembers} members · tap someone to send hype`}
             </Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: SIDE - 8, paddingTop: 12, gap: 2 }}>
@@ -673,7 +674,7 @@ function CircleView({ id }: { id: string }) {
                   <View className="items-center justify-center rounded-full" style={{ width: 52, height: 52, borderColor: colors.border, borderWidth: 1.5, borderStyle: "dashed" }}>
                     <Feather name="plus" size={20} color={colors.mutedText} />
                   </View>
-                  <Text style={{ color: colors.mutedText, fontSize: 12, fontFamily: fonts.body, fontWeight: "600", marginTop: 6 }}>Invite</Text>
+                  <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body, fontWeight: "600", marginTop: 6 }}>Invite</Text>
                 </TouchableOpacity>
               ) : null}
             </ScrollView>
@@ -696,7 +697,7 @@ function CircleView({ id }: { id: string }) {
 
             <View className="flex-row items-baseline justify-between" style={{ paddingHorizontal: SIDE, marginTop: 24, marginBottom: 2 }}>
               <Text style={{ color: colors.foreground, fontSize: 16, fontFamily: fonts.heading, fontWeight: "800" }}>Vibes</Text>
-              <Text style={{ color: colors.mutedText, fontSize: 12, fontFamily: fonts.body }}>Cleared after 7 days</Text>
+              <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body }}>Cleared after 7 days</Text>
             </View>
             {circle.feed.length ? (
               circle.feed.map((v, i) => (
@@ -731,7 +732,7 @@ function CircleView({ id }: { id: string }) {
               <View className="flex-row items-center" style={{ paddingVertical: 10, gap: 12 }}>
                 <View className="flex-1">
                   <Text style={{ color: colors.foreground, fontSize: 14, fontFamily: fonts.body, fontWeight: "600" }}>I could use some love 🫂</Text>
-                  <Text style={{ color: colors.mutedText, fontSize: 12, fontFamily: fonts.body, marginTop: 1 }}>Your circle gets a gentle notification</Text>
+                  <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body, marginTop: 1 }}>Your circle gets a gentle notification</Text>
                 </View>
                 <Switch value={askForSupport} onValueChange={setAskForSupport} trackColor={{ true: colors.primary, false: colors.border }} thumbColor="#FFF" />
               </View>
@@ -750,7 +751,7 @@ function CircleView({ id }: { id: string }) {
                 <Text style={{ color: colors.foreground, fontSize: 14.5, fontFamily: fonts.body, fontWeight: "600" }}>
                   {member.vibe ? `Feeling ${member.vibe.emoji}${member.vibe.text ? `  “${member.vibe.text}”` : ""}` : "No vibe shared yet"}
                 </Text>
-                <Text style={{ color: colors.mutedText, fontSize: 12.5, fontFamily: fonts.body, marginTop: 2 }}>
+                <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body, marginTop: 2 }}>
                   {member.vibe ? timeAgo(member.vibe.createdAt) : member.isOwner ? "Started this circle" : "Member"}
                 </Text>
               </View>

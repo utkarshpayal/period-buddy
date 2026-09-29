@@ -242,7 +242,12 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
             onAction={() => setInfoReloadKey((k) => k + 1)}
           />
         ) : (
-          <ScrollView className="px-6" contentContainerStyle={{ paddingBottom: 32 }}>
+          <ScrollView
+            className="px-6"
+            automaticallyAdjustKeyboardInsets
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingBottom: 32 }}
+          >
             <View
               className="items-center rounded-3xl px-6 py-8 mt-2"
               style={{ backgroundColor: colors.goldLight ?? colors.surfaceSoft }}
@@ -341,7 +346,7 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
                               style={{ backgroundColor: colors.primaryLight }}
                             >
                               <Text
-                                className="text-[10px] font-bold"
+                                className="text-xs font-bold"
                                 style={{ color: colors.primaryDark, fontFamily: fonts.body }}
                               >
                                 {plan.badge}

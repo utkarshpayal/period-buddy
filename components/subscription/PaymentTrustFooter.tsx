@@ -14,7 +14,7 @@ export function PaymentTrustFooter({ compact = false }: { compact?: boolean }) {
   return (
     <View className={`flex-row items-center justify-center ${compact ? "mt-3" : "mt-6"}`} style={{ gap: 6 }}>
       <Feather name="lock" size={11} color={colors.mutedText} />
-      <Text className="text-[11px] font-semibold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+      <Text className="text-xs font-semibold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
         Payments secured by Cashfree · cards, UPI &amp; netbanking supported
       </Text>
     </View>

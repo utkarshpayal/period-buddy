@@ -108,7 +108,7 @@ export default function PartnerViewChat() {
               {partnerName !== "your partner" ? partnerName : "Chat"}
             </Text>
             <Text
-              className="text-[11px] font-semibold"
+              className="text-xs font-semibold"
               style={{ color: colors.mutedText, fontFamily: fonts.body }}
             >
               {isConnected ? "Connected" : "Not connected"}

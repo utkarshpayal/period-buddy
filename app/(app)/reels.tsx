@@ -31,6 +31,7 @@ import { useTheme } from "../../components/theme";
 import { getShadow } from "../../components/ui-tokens";
 import { reelsApi, type Reel as ApiReel } from "../../lib/api";
 import { LinearGradient } from "expo-linear-gradient";
+import { useContentWidth } from "../../lib/layout";
 
 // --- STRUCTURAL CLINICAL ENDPOINT CONTRACTS ---
 interface HealthReel {
@@ -476,7 +477,8 @@ export default function Reels() {
   // re-fetch/re-pin it (or re-show the "Couldn't open" alert).
   const handledDeepLinkKeyRef = useRef<string | null>(null);
   const { earnTokens } = useAppState();
-  const { height, width } = useWindowDimensions();
+  const { height } = useWindowDimensions();
+  const width = useContentWidth();
   const insets = useSafeAreaInsets();
   const reelHeight = useMemo(
     () => Math.max(560, height - insets.top - insets.bottom),
@@ -898,7 +900,7 @@ export default function Reels() {
                     <Text className="text-lg font-black text-white" style={{ fontFamily: fonts.heading }}>
                       Reels
                     </Text>
-                    <Text className="text-[10px] font-bold uppercase text-white/65" style={{ fontFamily: fonts.body }}>
+                    <Text className="text-[11.5px] font-bold uppercase text-white/65" style={{ fontFamily: fonts.body }}>
                       {index + 1} of {reels.length}
                     </Text>
                   </View>
@@ -909,7 +911,7 @@ export default function Reels() {
                     onPress={() => setCategoryPickerVisible(true)}
                     className="flex-row items-center gap-1 rounded-full bg-white/15 px-3 py-1.5"
                   >
-                    <Text className="text-[10px] font-black uppercase text-white" style={{ fontFamily: fonts.body }}>
+                    <Text className="text-[11.5px] font-black uppercase text-white" style={{ fontFamily: fonts.body }}>
                       {selectedCategory === "all" ? "For You" : selectedCategory}
                     </Text>
                     <Feather name="chevron-down" size={11} color="white" />
@@ -954,7 +956,7 @@ export default function Reels() {
                         color="white"
                       />
                     </View>
-                    <Text className="mt-1 text-[10px] font-black text-white" style={{ fontFamily: fonts.body }}>
+                    <Text className="mt-1 text-xs font-black text-white" style={{ fontFamily: fonts.body }}>
                       {isFollowing ? "Following" : "Follow"}
                     </Text>
                   </TouchableOpacity>
@@ -963,7 +965,7 @@ export default function Reels() {
                     <View className="h-11 w-11 items-center justify-center rounded-full bg-white/18">
                       <Feather name="eye" size={20} color="white" />
                     </View>
-                    <Text className="mt-1 text-[10px] font-black text-white" style={{ fontFamily: fonts.mono }}>
+                    <Text className="mt-1 text-xs font-black text-white" style={{ fontFamily: fonts.mono }}>
                       {item.views.toLocaleString()}
                     </Text>
                   </View>
@@ -990,7 +992,7 @@ export default function Reels() {
                         </View>
                       ) : null}
                     </View>
-                    <Text className="mt-1 text-[10px] font-black text-white" style={{ fontFamily: fonts.body }}>
+                    <Text className="mt-1 text-xs font-black text-white" style={{ fontFamily: fonts.body }}>
                       Poll
                     </Text>
                   </TouchableOpacity>
@@ -1005,7 +1007,7 @@ export default function Reels() {
                     <View className="h-11 w-11 items-center justify-center rounded-full bg-white/18">
                       <Feather name="share-2" size={19} color="white" />
                     </View>
-                    <Text className="mt-1 text-[10px] font-black text-white" style={{ fontFamily: fonts.body }}>
+                    <Text className="mt-1 text-xs font-black text-white" style={{ fontFamily: fonts.body }}>
                       Share
                     </Text>
                   </TouchableOpacity>
@@ -1025,7 +1027,7 @@ export default function Reels() {
                       {item.creatorName}
                     </Text>
                     <View className="rounded-full bg-white/18 px-2 py-0.5">
-                      <Text className="text-[9px] font-black uppercase text-white" style={{ fontFamily: fonts.body }}>
+                      <Text className="text-[11.5px] font-black uppercase text-white" style={{ fontFamily: fonts.body }}>
                         {item.category}
                       </Text>
                     </View>
@@ -1046,11 +1048,11 @@ export default function Reels() {
                         size={12}
                         color="rgba(255,255,255,0.82)"
                       />
-                      <Text className="text-[10px] font-bold text-white/85" style={{ fontFamily: fonts.mono }}>
+                      <Text className="text-xs font-bold text-white/85" style={{ fontFamily: fonts.mono }}>
                         {item.duration}
                       </Text>
                     </View>
-                    <Text className="text-[10px] font-bold text-white/70" style={{ fontFamily: fonts.body }}>
+                    <Text className="text-xs font-bold text-white/70" style={{ fontFamily: fonts.body }}>
                       Board-certified cycle education
                     </Text>
                   </View>
@@ -1173,7 +1175,7 @@ export default function Reels() {
                       {metric.value}
                     </Text>
                     <Text
-                      className="text-[10px] font-bold"
+                      className="text-xs font-bold"
                       style={{ color: colors.mutedText, fontFamily: fonts.body }}
                     >
                       {metric.label}
@@ -1282,7 +1284,7 @@ export default function Reels() {
                             {reel.title}
                           </Text>
                           <Text
-                            className="mt-1 text-[10px] font-bold"
+                            className="mt-1 text-xs font-bold"
                             style={{ color: colors.mutedText, fontFamily: fonts.body }}
                           >
                             {reel.duration} • {reel.views.toLocaleString()} views
@@ -1385,7 +1387,7 @@ export default function Reels() {
                   color={colors.primary}
                 />
                 <Text
-                  className="text-[10px] font-black uppercase tracking-widest"
+                  className="text-[11.5px] font-black uppercase tracking-widest"
                   style={{ color: colors.primary, fontFamily: fonts.body }}
                 >
                   Next topic poll
@@ -1460,7 +1462,7 @@ export default function Reels() {
 
                 {pollReel.votedOptionId ? (
                   <Text
-                    className="mt-3 text-center text-[10px] font-bold"
+                    className="mt-3 text-center text-xs font-bold"
                     style={{ color: colors.mutedText, fontFamily: fonts.body }}
                   >
                     Thanks for voting — {pollTotalVotes.toLocaleString()} total votes

@@ -51,11 +51,11 @@ export function AppGate() {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={{ color: colors.foreground, fontWeight: "800", fontSize: 13.5, fontFamily: fonts.body }}>{gate.title}</Text>
-            <Text style={{ color: colors.mutedText, fontSize: 11.5, marginTop: 2, fontFamily: fonts.body }} numberOfLines={2}>{gate.message}</Text>
+            <Text style={{ color: colors.mutedText, fontSize: 12.5, marginTop: 2, fontFamily: fonts.body }} numberOfLines={2}>{gate.message}</Text>
           </View>
           {gate.storeUrl ? (
             <TouchableOpacity onPress={() => openStore(gate.storeUrl)} style={{ backgroundColor: colors.button, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14, marginLeft: 8 }} accessibilityRole="button">
-              <Text style={{ color: colors.buttonText, fontWeight: "800", fontSize: 12, fontFamily: fonts.body }}>Update</Text>
+              <Text style={{ color: colors.buttonText, fontWeight: "800", fontSize: 13, fontFamily: fonts.body }}>Update</Text>
             </TouchableOpacity>
           ) : null}
           <TouchableOpacity onPress={dismiss} hitSlop={10} style={{ marginLeft: 8 }} accessibilityRole="button" accessibilityLabel="Not now">

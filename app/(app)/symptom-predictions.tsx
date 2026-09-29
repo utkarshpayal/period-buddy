@@ -28,7 +28,7 @@ export default function SymptomPredictionsScreen() {
     <FeatureGate
       featureKey="symptom_predictions"
       title="Symptom Predictions"
-      description="Per-symptom likelihood by cycle phase, based on your own logged history."
+      description="Symptoms to expect in each phase."
     >
       <SymptomPredictionsContent />
     </FeatureGate>
@@ -130,7 +130,7 @@ function SymptomPredictionsContent() {
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingHorizontal: 22, paddingVertical: 14, gap: 8 }}
+                contentContainerStyle={{ paddingHorizontal: 24, paddingVertical: 14, gap: 8 }}
               >
                 {availablePhases.map((phase) => {
                   const selected = phase === activePhase;
@@ -212,8 +212,8 @@ function SymptomPredictionsContent() {
                     style={{ backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 20 }}
                   >
                     <Feather name="info" size={14} color={colors.mutedText} style={{ marginTop: 1 }} />
-                    <Text className="flex-1 text-[11px] leading-4 font-medium" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                      Based on patterns in your own logged history. Educational only — not a diagnosis.
+                    <Text className="flex-1 text-xs leading-4 font-medium" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                      Based on your own logs. Not a diagnosis.
                     </Text>
                   </View>
                 </View>

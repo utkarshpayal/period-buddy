@@ -83,7 +83,7 @@ export function TilePill({ tile }: { tile: HubTile }) {
   const { bg, fg } = pillColors(colors, pill.tone);
   return (
     <View style={{ marginLeft: 6, backgroundColor: bg, borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1 }}>
-      <Text style={{ fontSize: 9, fontWeight: "900", color: fg, fontFamily: fonts.body }}>{pill.text}</Text>
+      <Text style={{ fontSize: 10.5, fontWeight: "900", color: fg, fontFamily: fonts.body }}>{pill.text}</Text>
     </View>
   );
 }

@@ -371,7 +371,35 @@ export type ForestTree = {
   status: "dead" | "healthy" | "wilted" | string;
 };
 
+export type ForestTaskKey = "log" | "habit" | "water";
+export type ForestGrowthStage = "seed" | "sprout" | "seedling" | "sapling" | "young" | "mature" | "bloom";
+export type ForestVitality = "new" | "thriving" | "thirsty" | "wilting" | "dry";
+
+/** Seed → tree growth from daily tasks (backend utils/forestGrowth.js). */
+export type ForestGrowth = {
+  stage: ForestGrowthStage;
+  stageIndex: number;
+  stageCount: number;
+  stageProgress: number;
+  nextStage: ForestGrowthStage | null;
+  pointsToNextStage: number;
+  points: number;
+  pointsPerTree: number;
+  /** 0..1 along seed → full tree. */
+  growth: number;
+  totalPoints: number;
+  treesGrown: number;
+  grownTrees: { number: number; grownOn: string }[];
+  vitality: ForestVitality;
+  vitalityLevel: number;
+  daysSinceActive: number | null;
+  today: { dateKey: string; tasks: { key: ForestTaskKey; done: boolean }[]; done: number; total: number };
+  week: { dateKey: string; done: number }[];
+};
+
 export type ForestStatus = {
+  /** Missing from backends older than the growth feature. */
+  growth?: ForestGrowth;
   activeHabits: number;
   averageHealth: number;
   careActions: number;
@@ -1336,12 +1364,14 @@ export const habitsApi = {
 };
 
 export const forestApi = {
-  getStatus: () => apiRequest<ForestStatus>("/api/forest/status"),
+  /** `today` is the device's local YYYY-MM-DD, so "today's tasks" match the day logs are saved under. */
+  getStatus: (today?: string) => apiRequest<ForestStatus>(`/api/forest/status${toQuery({ today })}`),
 
   logCare: (payload: {
     careType?: ForestLog["careType"];
     dateKey: string;
     note?: string;
+    today?: string;
   }) =>
     apiRequest<{
       log: ForestLog;

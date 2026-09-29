@@ -93,7 +93,7 @@ export function PurchaseConfirmSheet({
                     </Text>
                   </View>
                 ) : couponNote ? (
-                  <Text className="text-[11px] mt-1" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                  <Text className="text-xs mt-1" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                     {couponNote}
                   </Text>
                 ) : null}

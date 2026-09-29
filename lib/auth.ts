@@ -28,8 +28,8 @@ type SignupPayload = {
 export type OnboardingPayload = {
   dateOfBirth: string;
   gender: string;
-  phone: string;
-  profilePicture: string;
+  phone?: string;
+  profilePicture?: string;
 };
 
 export type CycleSettingsPayload = {

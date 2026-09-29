@@ -61,9 +61,9 @@ export const SHARED_HUB_TILES: Record<SharedHubTileId, SharedHubTile> = {
     desc: "Ask privately, anytime",
     icon: "help-circle-outline",
     id: "nuraAi",
-    // ?new=1 always starts a fresh chat — qa.tsx redirects a bare push to
-    // the chat-history list instead (see docs/fixes.md 2.3).
-    route: "/(app)/qa?new=1",
+    // A bare /qa opens the Nura AI home (recent chats + new chat + topics)
+    // first; qa.tsx redirects it to qa-history.
+    route: "/(app)/qa",
     title: "Nura AI",
   },
   sexualWellbeing: {

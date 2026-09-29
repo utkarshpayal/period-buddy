@@ -14,6 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../../components/theme";
 import { getSoftTints } from "../../components/ui-tokens";
 import { wellbeingApi, type WellbeingResource } from "../../lib/api";
+import { ScreenHeader } from "../../components/ScreenHeader";
 
 // --- BACKEND RESPONSE MODEL SCHEMAS ---
 interface HygieneItem {
@@ -248,27 +249,11 @@ export default function Hygiene() {
         className="flex-1"
         style={{ backgroundColor: colors.background }}
       >
-        {/* Upper Navigation Action Header */}
-        <View className="flex-row items-center gap-3 px-[22px] pt-6 pb-1.5">
-          <TouchableOpacity
-            onPress={() => router.back()}
-            activeOpacity={0.7}
-            className="w-9 h-9 rounded-full items-center justify-center shadow-2xs"
-            style={{ backgroundColor: colors.surface }}
-          >
-            <Feather name="arrow-left" size={16} color={colors.foreground} />
-          </TouchableOpacity>
-          <Text
-            className="text-lg font-bold tracking-tight"
-            style={{ color: colors.foreground, fontFamily: fonts.heading }}
-          >
-            Hygiene & Wellbeing
-          </Text>
-        </View>
+        <ScreenHeader title="Hygiene & Wellbeing" />
 
         {usingOfflineTips && (
           <Text
-            className="px-[22px] pb-1.5 text-[11px] font-semibold"
+            className="px-6 pb-1.5 text-xs font-semibold"
             style={{ color: colors.mutedText }}
           >
             Showing offline tips — couldn&apos;t reach the latest guidance right now.
@@ -284,7 +269,7 @@ export default function Hygiene() {
         >
           <View className="mt-5">
             {/* 2x2 TOPIC CARD GRID — tap a card to switch the active topic */}
-            <View className="flex-row flex-wrap px-[22px]" style={{ gap: 12 }}>
+            <View className="flex-row flex-wrap px-6" style={{ gap: 12 }}>
               {(
                 [
                   { id: "products", tint: softTints.pink, bg: colors.primaryLight },
@@ -316,14 +301,14 @@ export default function Hygiene() {
                       {renderItemIcon(item)}
                     </View>
                     <Text
-                      className="text-[12.5px] font-bold mt-2"
+                      className="text-[13px] font-bold mt-2"
                       style={{ color: colors.foreground, fontFamily: fonts.heading }}
                       numberOfLines={2}
                     >
                       {item.title}
                     </Text>
                     <Text
-                      className="text-[10.5px] font-medium mt-0.5 leading-4"
+                      className="text-xs font-medium mt-0.5 leading-4"
                       style={{ color: colors.mutedText, fontFamily: fonts.body }}
                       numberOfLines={2}
                     >
@@ -432,7 +417,7 @@ export default function Hygiene() {
                   Experiencing rash or itching irritation?
                 </Text>
                 <Text
-                  className="text-[10px] font-semibold mt-0.5"
+                  className="text-xs font-semibold mt-0.5"
                   style={{ color: colors.mutedText, fontFamily: fonts.body }}
                 >
                   Talk privately with an OBGYN if symptoms persist or worsen.
@@ -444,7 +429,7 @@ export default function Hygiene() {
                 style={{ backgroundColor: colors.primary }}
               >
                 <Text
-                  className="text-[11px] font-black"
+                  className="text-xs font-black"
                   style={{ color: colors.buttonText, fontFamily: fonts.body }}
                 >
                   Consult
@@ -454,7 +439,7 @@ export default function Hygiene() {
 
             {/* Footer trust / privacy note */}
             <Text
-              className="text-[12px] font-bold text-center mx-[22px] mt-1.5 px-1 py-2"
+              className="text-[13px] font-bold text-center mx-6 mt-1.5 px-1 py-2"
               style={{ color: colors.mutedText, fontFamily: fonts.body }}
             >
               Gentle reminders, zero judgment. All chats here are private.

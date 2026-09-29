@@ -1,5 +1,4 @@
-import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { Feather, Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Linking,
@@ -11,14 +10,14 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppState } from "../../components/AppState";
 import { useTheme } from "../../components/theme";
 import { SkeletonBlock } from "../../components/Skeleton";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
 import { wellbeingApi, type WellbeingResource } from "../../lib/api";
+import { HeaderIconButton, ScreenHeader, SectionHeader } from "../../components/ScreenHeader";
 
-// --- STRUCTURAL BACKEND API CONTRACTS ---
 interface ResourceCategory {
   id: string;
   title: string;
@@ -26,7 +25,7 @@ interface ResourceCategory {
   color: string;
   items: number;
   summary: string;
-  extendedGuide: string[]; // Dynamic checklist nodes inside the detail modal sheet
+  extendedGuide: string[]; // the "What to know" list in the detail sheet
   estimatedReadTime?: number;
   videoUrl?: string;
   audioUrl?: string;
@@ -114,19 +113,15 @@ function normalizePositionCard(card: unknown, index: number): PositionCard {
 
 export default function SexualWellbeing() {
   const { colors, isDark, fonts } = useTheme();
-  const router = useRouter();
   const { earnTokens } = useAppState();
+  const insets = useSafeAreaInsets();
 
-  // Dual Game Modules Core Switching Engine States
-  const [activeGameMode, setActiveGameMode] = useState<
-    "none" | "spark" | "positions"
-  >("none");
+  // Which card deck is open inline, if any.
+  const [activeGameMode, setActiveGameMode] = useState<"none" | "spark" | "positions">("none");
   const [currentPromptIdx, setCurrentPromptIdx] = useState(0);
   const [currentPositionIdx, setCurrentPositionIdx] = useState(0);
 
-  // Bottom Sheet Modal Controller States
-  const [selectedCategory, setSelectedCategory] =
-    useState<ResourceCategory | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<ResourceCategory | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const openedAtRef = useRef<number | null>(null);
 
@@ -137,8 +132,7 @@ export default function SexualWellbeing() {
       icon: "heart-outline",
       color: colors.primary,
       items: 8,
-      summary:
-        "Guidance on comfort, consent, and clear boundaries during periods.",
+      summary: "Guidance on comfort, consent, and clear boundaries during periods.",
       extendedGuide: [
         "Talk about energy, flow, and comfort before intimacy.",
         "Protection still matters during periods because pregnancy and infection risks can remain.",
@@ -151,8 +145,7 @@ export default function SexualWellbeing() {
       icon: "shield-checkmark-outline",
       color: colors.success,
       items: 12,
-      summary:
-        "Clear guidance on barrier protection, routine screening, and stigma-free conversations.",
+      summary: "Clear guidance on barrier protection, routine screening, and stigma-free conversations.",
       extendedGuide: [
         "Use protection from the start of sex, not halfway through.",
         "Consider routine testing every 6 months with active partners.",
@@ -165,8 +158,7 @@ export default function SexualWellbeing() {
       icon: "apps-outline",
       color: colors.accent,
       items: 15,
-      summary:
-        "Compare hormonal options, barriers, emergency contraception, and what to discuss with an OBGYN.",
+      summary: "Compare hormonal options, barriers, emergency contraception, and what to discuss with an OBGYN.",
       extendedGuide: [
         "Combining condoms with another method can improve protection.",
         "Emergency contraception works best as soon as possible after unprotected sex.",
@@ -179,8 +171,7 @@ export default function SexualWellbeing() {
       icon: "checkmark-circle-outline",
       color: colors.warning,
       items: 6,
-      summary:
-        "Boundaries, communication, privacy, and enthusiastic consent.",
+      summary: "Boundaries, communication, privacy, and enthusiastic consent.",
       extendedGuide: [
         "Consent should be clear, conscious, and enthusiastic.",
         "Anyone can pause, change their mind, or stop at any point.",
@@ -195,8 +186,8 @@ export default function SexualWellbeing() {
   const [refreshing, setRefreshing] = useState(false);
 
   const softTints = getSoftTints(colors);
-  const visibleCategories =
-    apiCategories.length > 0 ? apiCategories : categories;
+  const categoryTints = [softTints.pink, softTints.emerald, softTints.lavender, softTints.amber];
+  const visibleCategories = apiCategories.length > 0 ? apiCategories : categories;
 
   const loadWellbeing = useCallback(async () => {
     try {
@@ -209,19 +200,17 @@ export default function SexualWellbeing() {
       if (resources.length > 0) {
         setApiCategories(resources.map(mapWellbeingResource));
       }
-      if (sparkDeck.cards.length > 0) {
-        setSparkCards(
-          sparkDeck.cards.map((card, index) =>
-            normalizeTextCard(
-              card,
-              fallbackSparkCards[index % fallbackSparkCards.length],
-            ),
-          ),
-        );
-      }
-      if (positionsDeck.cards.length > 0) {
-        setPositionCards(positionsDeck.cards.map(normalizePositionCard));
-      }
+      // An empty deck from the server falls back to the built-in cards, so the decks are never dead buttons.
+      setSparkCards(
+        sparkDeck.cards.length > 0
+          ? sparkDeck.cards.map((card, index) =>
+              normalizeTextCard(card, fallbackSparkCards[index % fallbackSparkCards.length]),
+            )
+          : fallbackSparkCards,
+      );
+      setPositionCards(
+        positionsDeck.cards.length > 0 ? positionsDeck.cards.map(normalizePositionCard) : fallbackPositionCards,
+      );
     } catch {
       setApiCategories([]);
       setSparkCards(fallbackSparkCards);
@@ -252,19 +241,20 @@ export default function SexualWellbeing() {
       color: resource.color,
       items: resource.items,
       summary: resource.summary,
-      extendedGuide:
-        resource.extendedGuide.length > 0
-          ? resource.extendedGuide
-          : [resource.summary],
+      extendedGuide: resource.extendedGuide.length > 0 ? resource.extendedGuide : [resource.summary],
       estimatedReadTime: resource.estimatedReadTime,
       videoUrl: resource.videoUrl,
       audioUrl: resource.audioUrl,
     };
   }
 
-  // Deck Shuffle Controller Mechanics
+  // A refresh can return a shorter deck, so indexes are always read modulo its length.
+  const sparkIndex = sparkCards.length ? currentPromptIdx % sparkCards.length : 0;
+  const positionIndex = positionCards.length ? currentPositionIdx % positionCards.length : 0;
+  const currentPosition = positionCards[positionIndex];
+
   async function handleNextSparkCard() {
-    const nextIndex = (currentPromptIdx + 1) % sparkCards.length;
+    const nextIndex = (sparkIndex + 1) % sparkCards.length;
     setCurrentPromptIdx(nextIndex);
     earnTokens(1);
     try {
@@ -275,7 +265,7 @@ export default function SexualWellbeing() {
   }
 
   async function handleNextPositionCard() {
-    const nextIndex = (currentPositionIdx + 1) % positionCards.length;
+    const nextIndex = (positionIndex + 1) % positionCards.length;
     setCurrentPositionIdx(nextIndex);
     earnTokens(2);
     try {
@@ -285,7 +275,6 @@ export default function SexualWellbeing() {
     }
   }
 
-  // MODAL TRIGGER ACTION INSTEAD OF REDIRECT HOOKS
   function handleOpenArticleModal(category: ResourceCategory) {
     setSelectedCategory(category);
     setModalVisible(true);
@@ -303,528 +292,275 @@ export default function SexualWellbeing() {
     setModalVisible(false);
   }
 
+  // Same card as the hubs' small feature tiles (components/HubFeatureTiles.tsx).
+  const tileStyle = {
+    width: "48%" as const,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 20,
+    padding: 16,
+    ...getShadow(colors, isDark),
+  };
+
+  const iconSquare = (icon: string, color: string, bg: string) => (
+    <View style={{ width: 40, height: 40, borderRadius: 13, backgroundColor: bg, alignItems: "center", justifyContent: "center" }}>
+      <Ionicons name={icon as any} size={18} color={color} />
+    </View>
+  );
+
+  const decks = [
+    {
+      mode: "spark" as const,
+      title: "Conversation cards",
+      description: "Questions to feel closer",
+      icon: "chatbubbles-outline",
+      color: colors.primary,
+      bg: colors.primaryLight,
+      count: sparkCards.length,
+    },
+    {
+      mode: "positions" as const,
+      title: "Comfort cards",
+      description: "Gentle ideas for tired days",
+      icon: "leaf-outline",
+      color: colors.accent,
+      bg: colors.accentLight,
+      count: positionCards.length,
+    },
+  ];
+  const openDeck = decks.find((d) => d.mode === activeGameMode);
+
   return (
     <>
-      <StatusBar
-        barStyle={isDark ? "light-content" : "dark-content"}
-        backgroundColor={colors.background}
-      />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
 
-      <SafeAreaView
-        className="flex-1"
-        style={{ backgroundColor: colors.background }}
-      >
-        {/* Navigation Action Header */}
-        <View className="flex-row items-center gap-3 px-[22px] pt-6 pb-1.5">
-          <TouchableOpacity
-            onPress={() => router.back()}
-            activeOpacity={0.7}
-            className="w-9 h-9 items-center justify-center rounded-full"
-            style={{ backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
-          >
-            <Feather name="arrow-left" size={18} color={colors.foreground} />
-          </TouchableOpacity>
-          <Text
-            className="text-xl font-black tracking-tight"
-            style={{ color: colors.foreground, fontFamily: fonts.heading }}
-          >
-            Wellbeing
-          </Text>
-        </View>
+      <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
+        <ScreenHeader title="Sexual Wellbeing" subtitle="Private, judgement-free guidance" />
 
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 120 }}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
-          }
+          contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 12, paddingBottom: 120 }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
         >
-          <View style={{ paddingHorizontal: 22, paddingTop: 8, paddingBottom: 14 }}>
-            <Text
-              className="text-[12.5px] font-semibold"
-              style={{ color: colors.mutedText, fontFamily: fonts.body, lineHeight: 18.75 }}
-            >
-              Consent-centered intimacy guidance, safety resources, and private
-              partner conversation tools.
-            </Text>
-          </View>
-
-          {/* DYNAMIC MULTI-MODE PARTNER INTERACTIVE GAME DECKS */}
-          <View
-            className="rounded-3xl relative overflow-hidden"
-            style={{
-              backgroundColor: colors.surface,
-              marginHorizontal: 22,
-              marginBottom: 16,
-              padding: 20,
-              ...getShadow(colors, isDark),
-            }}
-          >
-              {activeGameMode === "none" && (
-                <View className="items-center">
-                  <MaterialCommunityIcons
-                    name="gamepad-variant-outline"
-                    size={30}
-                    color={colors.primary}
-                  />
-                  <Text
-                    className="text-[15px] font-black tracking-tight text-center"
-                    style={{ color: colors.foreground, fontFamily: fonts.heading, marginTop: 12 }}
-                  >
-                    Partner Intimacy Game Center
-                  </Text>
-                  <Text
-                    className="text-[11.5px] text-center leading-4"
-                    style={{ color: colors.mutedText, fontFamily: fonts.body, marginTop: 6 }}
-                  >
-                    Choose a specialized conversational or physical card deck to
-                    explore comfort, boundaries, and communication together.
-                  </Text>
-
-                  {loadingWellbeing ? (
-                    <View className="flex-row w-full" style={{ gap: 10, marginTop: 14 }}>
-                      <SkeletonBlock width="48%" height={120} radius={16} />
-                      <SkeletonBlock width="48%" height={120} radius={16} />
-                    </View>
-                  ) : (
-                  <View className="flex-row w-full" style={{ gap: 10, marginTop: 14 }}>
-                    <TouchableOpacity
-                      activeOpacity={0.8}
-                      disabled={sparkCards.length === 0}
-                      onPress={() => setActiveGameMode("spark")}
-                      className="flex-1 items-center justify-center"
-                      style={{
-                        backgroundColor: colors.primaryLight,
-                        borderRadius: 13,
-                        padding: 11,
-                        opacity: sparkCards.length === 0 ? 0.5 : 1,
-                      }}
-                    >
-                      <Text
-                        className="text-[12.5px] font-bold"
-                        style={{ color: colors.primary, fontFamily: fonts.body }}
-                      >
-                        Play Spark
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      activeOpacity={0.8}
-                      disabled={positionCards.length === 0}
-                      onPress={() => setActiveGameMode("positions")}
-                      className="flex-1 items-center justify-center"
-                      style={{
-                        backgroundColor: colors.accent,
-                        borderRadius: 13,
-                        padding: 11,
-                        opacity: positionCards.length === 0 ? 0.5 : 1,
-                      }}
-                    >
-                      <Text
-                        className="text-[12.5px] font-bold"
-                        style={{ color: colors.buttonText, fontFamily: fonts.body }}
-                      >
-                        Comfort Cards
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                  )}
-                </View>
-              )}
-
-              {activeGameMode === "spark" && (
-                <View className="py-1">
-                  <View className="flex-row justify-between items-center mb-4 pb-2" style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}>
-                    <View className="flex-row items-center gap-2">
-                      <Ionicons
-                        name="chatbubbles-outline"
-                        size={15}
-                        color={colors.primary}
-                      />
-                      <Text
-                        className="text-xs font-black tracking-widest uppercase"
-                        style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                      >
-                        Spark Deck Active
-                      </Text>
-                    </View>
-                    <TouchableOpacity onPress={() => setActiveGameMode("none")}>
-                      <Feather
-                        name="minimize-2"
-                        size={14}
-                        color={colors.mutedText}
-                      />
-                    </TouchableOpacity>
-                  </View>
-
-                  <View className="p-5 rounded-2xl min-h-[90px] justify-center" style={{ backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border }}>
-                    <Text
-                      className="text-xs font-bold text-center leading-5 italic"
-                      style={{ color: colors.foreground, fontFamily: fonts.body }}
-                    >
-                      {sparkCards[currentPromptIdx]}
-                    </Text>
-                  </View>
-
-                  <View className="mt-4 flex-row justify-end">
-                    <TouchableOpacity
-                      onPress={handleNextSparkCard}
-                      className="flex-row items-center gap-1.5 px-4 py-2 rounded-xl border"
-                      style={{
-                        backgroundColor: colors.surface,
-                        borderColor: colors.border,
-                      }}
-                    >
-                      <Feather
-                        name="arrow-right"
-                        size={12}
-                        color={colors.foreground}
-                      />
-                      <Text
-                        className="text-xs font-bold"
-                        style={{ color: colors.foreground, fontFamily: fonts.body }}
-                      >
-                        Next Card
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-
-              {activeGameMode === "positions" && (
-                <View className="py-1">
-                  <View className="flex-row justify-between items-center mb-4 pb-2" style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}>
-                    <View className="flex-row items-center gap-2">
-                      <MaterialCommunityIcons
-                        name="fire"
-                        size={16}
-                        color={colors.danger}
-                      />
-                      <Text
-                        className="text-xs font-black tracking-widest uppercase"
-                        style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                      >
-                        Positions Deck
-                      </Text>
-                    </View>
-                    <TouchableOpacity onPress={() => setActiveGameMode("none")}>
-                      <Feather
-                        name="minimize-2"
-                        size={14}
-                        color={colors.mutedText}
-                      />
-                    </TouchableOpacity>
-                  </View>
-
-                  <View className="p-6 rounded-2xl" style={{ backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border }}>
-                    <Text className="text-sm font-black tracking-tight text-center" style={{ color: colors.primary, fontFamily: fonts.heading }}>
-                      {positionCards[currentPositionIdx].name}
-                    </Text>
-                    <View className="my-2.5 px-3 py-1  self-center rounded-md">
-                      <Text
-                        className="text-[10px] font-bold uppercase tracking-wider text-center"
-                        style={{ color: colors.foreground, fontFamily: fonts.body }}
-                      >
-                        Focus: {positionCards[currentPositionIdx].focus}
-                      </Text>
-                    </View>
-                    <Text
-                      className="text-xs font-medium text-center leading-4 mt-1"
-                      style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                    >
-                      {positionCards[currentPositionIdx].tip}
-                    </Text>
-                  </View>
-
-                  <View className="mt-4 flex-row justify-end">
-                    <TouchableOpacity
-                      onPress={handleNextPositionCard}
-                      className="flex-row items-center gap-1.5 px-4 py-2 rounded-xl border"
-                      style={{
-                        backgroundColor: colors.surface,
-                        borderColor: colors.border,
-                      }}
-                    >
-                      <Feather
-                        name="shuffle"
-                        size={12}
-                        color={colors.foreground}
-                      />
-                      <Text
-                        className="text-xs font-bold"
-                        style={{ color: colors.foreground, fontFamily: fonts.body }}
-                      >
-                        Shuffle Deck
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-          </View>
-
-          {/* DYNAMIC SCROLLABLE CLICKABLE RESOURCE HUB */}
-          <Text
-            className="text-[11px] font-black uppercase"
-            style={{
-              color: colors.primary,
-              fontFamily: fonts.heading,
-              letterSpacing: 1,
-              marginBottom: 10,
-              paddingHorizontal: 22,
-            }}
-          >
-            Clinical Resource Hub
-          </Text>
-
-          <View
-            className="flex-row flex-wrap"
-            style={{ paddingHorizontal: 22, gap: 10 }}
-          >
-            {visibleCategories.map((category, index) => {
-              const categoryTints = [
-                softTints.pink,
-                softTints.emerald,
-                softTints.lavender,
-                softTints.amber,
-              ];
-              const currentTint = categoryTints[index % categoryTints.length];
-
-              return (
-                <TouchableOpacity
-                  key={category.id}
-                  activeOpacity={0.85}
-                  onPress={() => handleOpenArticleModal(category)} // MODAL HOOK APPLIED INSTEAD OF ROUTER REDIRECTS
-                  style={{
-                    width: "47%",
-                    backgroundColor: colors.surface,
-                    borderRadius: 16,
-                    padding: 14,
-                    marginBottom: 10,
-                    ...getShadow(colors, isDark),
-                  }}
-                >
-                  <View className="flex-row justify-between items-start">
-                    <View
-                      className="items-center justify-center"
-                      style={{ width: 34, height: 34, borderRadius: 13, backgroundColor: currentTint }}
-                    >
-                      <Ionicons
-                        name={category.icon as any}
-                        size={17}
-                        color={category.color}
-                      />
-                    </View>
-                    <View className="px-2 py-1 rounded-md" style={{ backgroundColor: colors.surfaceSoft }}>
-                      <Text
-                        className="text-[9px] font-bold tracking-wide"
-                        style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                      >
-                        {category.items} Hubs
-                      </Text>
-                    </View>
-                  </View>
-
-                  <Text
-                    className="text-xs font-black tracking-tight"
-                    style={{ color: colors.foreground, fontFamily: fonts.heading, marginTop: 10 }}
-                  >
-                    {category.title}
-                  </Text>
-                  <Text
-                    className="text-[11px] font-medium leading-4 mt-1.5"
-                    style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                    numberOfLines={2}
-                  >
-                    {category.summary}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          {/* VERIFICATION STATEMENT BADGE FOOTER BAR PANEL */}
-          <View
-            className="flex-row items-center"
-            style={{
-              backgroundColor: colors.surface,
-              borderRadius: 16,
-              padding: 14,
-              gap: 12,
-              marginHorizontal: 22,
-              marginTop: 16,
-              ...getShadow(colors, isDark),
-            }}
-          >
-            <View
-              className="items-center justify-center rounded-xl"
-              style={{ width: 36, height: 36, backgroundColor: softTints.emerald }}
-            >
-              <MaterialCommunityIcons
-                name="shield-account-outline"
-                size={18}
-                color={colors.success}
-              />
+          {/* Partner card decks */}
+          <SectionHeader title="Together" />
+          {loadingWellbeing ? (
+            <View className="flex-row" style={{ gap: 10 }}>
+              <SkeletonBlock width="48%" height={124} radius={20} />
+              <SkeletonBlock width="48%" height={124} radius={20} />
             </View>
-            <Text
-              className="flex-1 text-[11.5px] leading-4"
-              style={{ color: colors.mutedText, fontFamily: fonts.body }}
-            >
-              <Text
-                className="font-bold"
-                style={{ color: colors.foreground, fontFamily: fonts.heading }}
-              >
-                Verified Guidance —{" "}
-              </Text>
-              every resource is continuously mapped alongside board-certified
-              health specialists to eliminate misinformation.
-            </Text>
-          </View>
-        </ScrollView>
-
-        {/* --- DYNAMIC THREADS STYLE SLIDING IN-SCREEN ARTICLE DETAIL BOTTOM SHEET MODAL --- */}
-        <Modal
-          visible={modalVisible}
-          animationType="slide"
-          presentationStyle="pageSheet"
-          onRequestClose={handleCloseArticleModal}
-        >
-          {selectedCategory && (
-            <SafeAreaView
-              className="flex-1"
-              style={{ backgroundColor: colors.background }}
-            >
-              {/* Sheet Control Header section.
-                  Android ignores presentationStyle="pageSheet" and renders
-                  this Modal truly fullscreen under the status bar, so
-                  SafeAreaView (not a plain View) is required to keep this
-                  header — and the content below it — on screen. */}
-              <View
-                className="px-6 py-4 flex-row justify-between items-center"
-                style={{ backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border }}
-              >
-                <View className="flex-row items-center gap-3">
-                  <View className="p-2 rounded-xl" style={{ backgroundColor: colors.surfaceSoft }}>
-                    <Ionicons
-                      name={selectedCategory.icon as any}
-                      size={18}
-                      color={selectedCategory.color}
-                    />
-                  </View>
-                  <Text
-                    className="text-base font-black tracking-tight"
-                    style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                  >
-                    {selectedCategory.title}
+          ) : openDeck ? (
+            <View style={{ ...tileStyle, width: "100%", padding: 18 }}>
+              <View className="flex-row items-center" style={{ gap: 12 }}>
+                {iconSquare(openDeck.icon, openDeck.color, openDeck.bg)}
+                <View className="flex-1">
+                  <Text style={{ color: colors.foreground, fontSize: 14.5, fontWeight: "800", fontFamily: fonts.heading }}>{openDeck.title}</Text>
+                  <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.mono, marginTop: 1 }}>
+                    {`${(openDeck.mode === "spark" ? sparkIndex : positionIndex) + 1} of ${openDeck.count}`}
                   </Text>
                 </View>
                 <TouchableOpacity
-                  onPress={handleCloseArticleModal}
-                  className="p-1.5 rounded-full"
-                  style={{ backgroundColor: colors.surfaceSoft }}
+                  onPress={() => setActiveGameMode("none")}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close cards"
+                  style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.surfaceSoft, alignItems: "center", justifyContent: "center" }}
                 >
                   <Feather name="x" size={16} color={colors.foreground} />
                 </TouchableOpacity>
               </View>
 
-              {/* Scrollable Document Content details area */}
-              <ScrollView
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={{ padding: 24, gap: 20 }}
+              <View
+                style={{ marginTop: 16, minHeight: 150, borderRadius: 18, backgroundColor: openDeck.bg, paddingHorizontal: 20, paddingVertical: 22, justifyContent: "center" }}
               >
-                {/* Intro summary header block */}
-                <View>
-                  <Text
-                    className="text-xs font-bold tracking-widest uppercase mb-1.5"
-                    style={{ color: colors.primary, fontFamily: fonts.heading }}
-                  >
-                    Overview Summary
+                {openDeck.mode === "spark" ? (
+                  <Text style={{ color: colors.foreground, fontSize: 17, lineHeight: 25, fontWeight: "700", fontFamily: fonts.heading, textAlign: "center" }}>
+                    {sparkCards[sparkIndex]}
                   </Text>
-                  <Text
-                    className="text-sm font-medium leading-6"
-                    style={{ color: colors.text, fontFamily: fonts.body }}
-                  >
-                    {selectedCategory.summary}
+                ) : currentPosition ? (
+                  <View className="items-center">
+                    <Text style={{ color: colors.foreground, fontSize: 17, fontWeight: "800", fontFamily: fonts.heading, textAlign: "center" }}>
+                      {currentPosition.name}
+                    </Text>
+                    <Text style={{ color: colors.mutedText, fontSize: 13, fontWeight: "700", fontFamily: fonts.body, textAlign: "center", marginTop: 4 }}>
+                      {currentPosition.focus}
+                    </Text>
+                    <Text style={{ color: colors.foreground, fontSize: 14, lineHeight: 21, fontFamily: fonts.body, textAlign: "center", marginTop: 12 }}>
+                      {currentPosition.tip}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+
+              <TouchableOpacity
+                onPress={openDeck.mode === "spark" ? handleNextSparkCard : handleNextPositionCard}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                className="flex-row items-center justify-center"
+                style={{ marginTop: 14, height: 48, borderRadius: 24, backgroundColor: colors.primary, gap: 8 }}
+              >
+                <Text style={{ color: colors.buttonText, fontSize: 14.5, fontWeight: "800", fontFamily: fonts.body }}>Next card</Text>
+                <Feather name="arrow-right" size={16} color={colors.buttonText} />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View className="flex-row" style={{ gap: 10 }}>
+              {decks.map((deck) => (
+                <TouchableOpacity
+                  key={deck.mode}
+                  activeOpacity={0.8}
+                  disabled={deck.count === 0}
+                  onPress={() => setActiveGameMode(deck.mode)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${deck.title}, ${deck.description}`}
+                  style={{ ...tileStyle, flex: 1, opacity: deck.count === 0 ? 0.5 : 1 }}
+                >
+                  <View style={{ marginBottom: 12 }}>{iconSquare(deck.icon, deck.color, deck.bg)}</View>
+                  <Text style={{ color: colors.foreground, fontSize: 13.5, fontWeight: "800", fontFamily: fonts.body }}>{deck.title}</Text>
+                  <Text style={{ color: colors.mutedText, fontSize: 12.5, marginTop: 3, fontFamily: fonts.body }} numberOfLines={2}>
+                    {deck.description}
                   </Text>
-                  {!!selectedCategory.estimatedReadTime && (
-                    <View className="flex-row items-center gap-1 mt-2">
-                      <Feather name="clock" size={11} color={colors.mutedText} />
-                      <Text
-                        className="text-[10px] font-bold"
-                        style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                      >
-                        {selectedCategory.estimatedReadTime} min read
-                      </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+
+          {/* Guides, as a reading list: they're short articles with no cover art, so rows read better than tiles. */}
+          <SectionHeader title="Read" barColor={colors.accent} style={{ marginTop: 26 }} />
+          <View style={{ ...tileStyle, width: "100%", padding: 0 }}>
+            {visibleCategories.map((category, index) => {
+              const meta = [
+                category.estimatedReadTime ? `${category.estimatedReadTime} min read` : null,
+                `${category.extendedGuide.length} key ${category.extendedGuide.length === 1 ? "point" : "points"}`,
+              ].filter(Boolean).join("  ·  ");
+              return (
+                <TouchableOpacity
+                  key={category.id}
+                  activeOpacity={0.7}
+                  onPress={() => handleOpenArticleModal(category)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${category.title}. ${category.summary}. ${meta}`}
+                  className="flex-row"
+                  style={{
+                    gap: 14,
+                    paddingHorizontal: 16,
+                    paddingVertical: 16,
+                    borderTopWidth: index === 0 ? 0 : 1,
+                    borderTopColor: colors.border,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 56,
+                      height: 56,
+                      borderRadius: 16,
+                      backgroundColor: categoryTints[index % categoryTints.length],
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Ionicons name={category.icon as any} size={24} color={category.color} />
+                  </View>
+                  <View className="flex-1">
+                    <Text style={{ color: colors.foreground, fontSize: 15, lineHeight: 20, fontWeight: "800", letterSpacing: -0.2, fontFamily: fonts.heading }} numberOfLines={2}>
+                      {category.title}
+                    </Text>
+                    <Text style={{ color: colors.mutedText, fontSize: 13, lineHeight: 18, marginTop: 3, fontFamily: fonts.body }} numberOfLines={2}>
+                      {category.summary}
+                    </Text>
+                    <View className="flex-row items-center" style={{ gap: 8, marginTop: 8 }}>
+                      <Text style={{ color: colors.mutedText, fontSize: 12, fontFamily: fonts.mono }}>{meta}</Text>
+                      {category.videoUrl ? <Ionicons name="play-circle" size={14} color={colors.mutedText} accessibilityLabel="Has video" /> : null}
+                      {category.audioUrl ? <Ionicons name="headset" size={13} color={colors.mutedText} accessibilityLabel="Has audio" /> : null}
                     </View>
-                  )}
-                </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* Honest scope note */}
+          <View className="flex-row items-start" style={{ gap: 10, marginTop: 22, paddingHorizontal: 4 }}>
+            <Ionicons name="lock-closed-outline" size={15} color={colors.mutedText} style={{ marginTop: 2 }} />
+            <Text style={{ flex: 1, color: colors.mutedText, fontSize: 13, lineHeight: 19, fontFamily: fonts.body }}>
+              Private to you. General guidance, not a diagnosis: for anything specific or worrying, talk to a doctor.
+            </Text>
+          </View>
+        </ScrollView>
+
+        {/* Guide detail */}
+        <Modal visible={modalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleCloseArticleModal}>
+          {selectedCategory && (
+            // Android ignores pageSheet and renders fullscreen, so SafeAreaView keeps the header clear.
+            <SafeAreaView edges={["top"]} className="flex-1" style={{ backgroundColor: colors.background }}>
+              <View className="flex-row items-center" style={{ paddingHorizontal: 24, paddingTop: 16, paddingBottom: 12, gap: 12 }}>
+                {iconSquare(
+                  selectedCategory.icon,
+                  selectedCategory.color,
+                  categoryTints[Math.max(0, visibleCategories.findIndex((c) => c.id === selectedCategory.id)) % categoryTints.length],
+                )}
+                <Text
+                  accessibilityRole="header"
+                  numberOfLines={2}
+                  style={{ flex: 1, color: colors.foreground, fontSize: 20, fontWeight: "800", letterSpacing: -0.3, fontFamily: fonts.heading }}
+                >
+                  {selectedCategory.title}
+                </Text>
+                <HeaderIconButton icon="close" onPress={handleCloseArticleModal} accessibilityLabel="Close" />
+              </View>
+
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: insets.bottom + 32 }}>
+                <Text style={{ color: colors.foreground, fontSize: 15, lineHeight: 23, fontFamily: fonts.body }}>{selectedCategory.summary}</Text>
+                {!!selectedCategory.estimatedReadTime && (
+                  <View className="flex-row items-center" style={{ gap: 5, marginTop: 8 }}>
+                    <Feather name="clock" size={12} color={colors.mutedText} />
+                    <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body }}>{`${selectedCategory.estimatedReadTime} min read`}</Text>
+                  </View>
+                )}
 
                 {(selectedCategory.videoUrl || selectedCategory.audioUrl) && (
-                  <View className="flex-row gap-3">
+                  <View className="flex-row" style={{ gap: 10, marginTop: 18 }}>
                     {!!selectedCategory.videoUrl && (
                       <TouchableOpacity
                         activeOpacity={0.8}
                         onPress={() => Linking.openURL(selectedCategory.videoUrl!)}
-                        className="flex-1 flex-row items-center justify-center gap-2 py-3 rounded-xl border"
-                        style={{ backgroundColor: colors.surfaceSoft, borderColor: colors.border }}
+                        className="flex-1 flex-row items-center justify-center"
+                        style={{ height: 46, borderRadius: 23, gap: 8, backgroundColor: colors.primaryLight }}
                       >
-                        <Ionicons name="play-circle-outline" size={16} color={colors.primary} />
-                        <Text
-                          className="text-xs font-bold"
-                          style={{ color: colors.primary, fontFamily: fonts.body }}
-                        >
-                          Watch Video
-                        </Text>
+                        <Ionicons name="play-circle-outline" size={18} color={colors.primary} />
+                        <Text style={{ color: colors.primary, fontSize: 14, fontWeight: "800", fontFamily: fonts.body }}>Watch</Text>
                       </TouchableOpacity>
                     )}
                     {!!selectedCategory.audioUrl && (
                       <TouchableOpacity
                         activeOpacity={0.8}
                         onPress={() => Linking.openURL(selectedCategory.audioUrl!)}
-                        className="flex-1 flex-row items-center justify-center gap-2 py-3 rounded-xl border"
-                        style={{ backgroundColor: colors.surfaceSoft, borderColor: colors.border }}
+                        className="flex-1 flex-row items-center justify-center"
+                        style={{ height: 46, borderRadius: 23, gap: 8, backgroundColor: colors.primaryLight }}
                       >
-                        <Ionicons name="headset-outline" size={16} color={colors.primary} />
-                        <Text
-                          className="text-xs font-bold"
-                          style={{ color: colors.primary, fontFamily: fonts.body }}
-                        >
-                          Listen
-                        </Text>
+                        <Ionicons name="headset-outline" size={18} color={colors.primary} />
+                        <Text style={{ color: colors.primary, fontSize: 14, fontWeight: "800", fontFamily: fonts.body }}>Listen</Text>
                       </TouchableOpacity>
                     )}
                   </View>
                 )}
 
-                {/* Separator split frame border line */}
-                <View style={{ height: 1, backgroundColor: colors.border }} />
-
-                {/* Multi lines detailed clinical checkboxes insights guide system list */}
-                <View className="gap-3.5">
-                  <Text
-                    className="text-xs font-bold tracking-widest uppercase mb-1"
-                    style={{ color: colors.success, fontFamily: fonts.heading }}
-                  >
-                    Verified Care Strategies
-                  </Text>
+                <SectionHeader title="What to know" barColor={colors.success} style={{ marginTop: 26 }} />
+                <View style={{ ...tileStyle, width: "100%", paddingVertical: 4 }}>
                   {selectedCategory.extendedGuide.map((line, idx) => (
                     <View
                       key={idx}
-                      className="flex-row items-start p-4 rounded-2xl"
-                      style={{ backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border }}
+                      className="flex-row items-start"
+                      style={{
+                        gap: 12,
+                        paddingVertical: 14,
+                        borderTopWidth: idx === 0 ? 0 : 1,
+                        borderTopColor: colors.border,
+                      }}
                     >
-                      <View className="mt-0.5 mr-3.5 p-1 rounded-full" style={{ backgroundColor: colors.successLight }}>
-                        <Ionicons
-                          name="shield-checkmark"
-                          size={14}
-                          color={colors.success}
-                        />
-                      </View>
-                      <Text
-                        className="flex-1 text-xs font-medium leading-5"
-                        style={{ color: colors.foreground, fontFamily: fonts.body }}
-                      >
-                        {line}
-                      </Text>
+                      <Ionicons name="checkmark-circle" size={18} color={colors.success} style={{ marginTop: 1 }} />
+                      <Text style={{ flex: 1, color: colors.foreground, fontSize: 14, lineHeight: 21, fontFamily: fonts.body }}>{line}</Text>
                     </View>
                   ))}
                 </View>

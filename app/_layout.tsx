@@ -1,7 +1,7 @@
 import * as Notifications from "expo-notifications";
 import { Stack, usePathname, useRootNavigationState, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { Platform, Text, TextInput } from "react-native";
+import { Platform, Text, TextInput, View } from "react-native";
 import { AppLockProvider, useAppLock } from "../components/AppLock";
 import { AppConfigProvider } from "../components/app-config";
 import { AppConfigSync } from "../components/AppConfigSync";
@@ -10,10 +10,6 @@ import { AppLockScreen } from "../components/AppLockScreen";
 import { AuthProvider, useAuth } from "../components/auth-context";
 import { GenZModeProvider } from "../components/genz-mode";
 import { AppModalHost } from "../components/modals/AppModalHost";
-import {
-  hasRequestedPermissions,
-  PermissionsGate,
-} from "../components/PermissionsGate";
 import { ThemeProvider, useTheme } from "../components/theme";
 import {
   clearPendingDeepLink,
@@ -28,6 +24,8 @@ import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
 import "../global.css";
+import { MAX_CONTENT_WIDTH } from "../lib/layout";
+
 
 // The payload's data fields. The type normally arrives in content.data, but
 // on Android a notification displayed by the FCM SDK itself (app
@@ -77,7 +75,7 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 // screen only once both are ready, stops the app from ever painting a screen
 // with the wrong/default theme.
 function AppShell() {
-  const { hasHydrated } = useTheme();
+  const { colors, hasHydrated } = useTheme();
   const { isLocked } = useAppLock();
   const router = useRouter();
   const { isAuthenticated, user } = useAuth();
@@ -87,15 +85,7 @@ function AppShell() {
     null,
   );
   const handledNotificationIds = useRef(new Set<string>());
-  const [permissionsChecked, setPermissionsChecked] = useState(false);
-  const [needsPermissionsGate, setNeedsPermissionsGate] = useState(false);
 
-  useEffect(() => {
-    hasRequestedPermissions().then((requested) => {
-      setNeedsPermissionsGate(!requested);
-      setPermissionsChecked(true);
-    });
-  }, []);
 
   // Shared content links (blogs, community posts, reels, schemes, partner
   // invites, ...) are intercepted by app/+native-intent.tsx before
@@ -198,23 +188,24 @@ function AppShell() {
   }, [pendingNotification, navigatorReady, isAuthenticated, pathname, router, user?.partnerRole]);
 
   useEffect(() => {
-    if (hasHydrated && permissionsChecked) {
+    if (hasHydrated) {
       SplashScreen.hideAsync().catch(() => {});
     }
-  }, [hasHydrated, permissionsChecked]);
+  }, [hasHydrated]);
 
-  if (!hasHydrated || !permissionsChecked) {
+  if (!hasHydrated) {
     return null;
-  }
-
-  // Shown once, before the very first login/signup screen, on a fresh install.
-  if (needsPermissionsGate) {
-    return <PermissionsGate onDone={() => setNeedsPermissionsGate(false)} />;
   }
 
   return (
     <>
-      <Stack screenOptions={{ headerShown: false }} />
+      {/* Phone-width column on tablets / wide web windows, so screens built
+          for phones don't stretch edge to edge. No effect on phones. */}
+      <View style={{ flex: 1, backgroundColor: colors.background }}>
+        <View style={{ flex: 1, width: "100%", maxWidth: MAX_CONTENT_WIDTH, alignSelf: "center" }}>
+          <Stack screenOptions={{ headerShown: false }} />
+        </View>
+      </View>
       {isLocked && <AppLockScreen />}
       {/* App CMS maintenance mode / update prompts; renders nothing by default. */}
       <AppGate />

@@ -286,7 +286,7 @@ export default function Partner() {
   const isConnected = profile?.isConnected ?? false;
   const partnerName =
     profile?.partnerId && typeof profile.partnerId === "object"
-      ? `${profile.partnerId.firstName} ${profile.partnerId.lastName}`
+      ? [profile.partnerId.firstName, profile.partnerId.lastName].filter(Boolean).join(" ") || "Your Partner"
       : "Your Partner";
 
   return (
@@ -306,12 +306,12 @@ export default function Partner() {
             isConnected ? (
               <View className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-full" style={{ backgroundColor: softTints.emerald }}>
                 <View className="w-2 h-2 rounded-full" style={{ backgroundColor: colors.success }} />
-                <Text className="text-[10px] font-black" style={{ color: colors.success, fontFamily: fonts.body }}>Connected</Text>
+                <Text className="text-xs font-black" style={{ color: colors.success, fontFamily: fonts.body }}>Connected</Text>
               </View>
             ) : inviteCode ? (
               <View className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-full" style={{ backgroundColor: softTints.pink }}>
                 <View className="w-2 h-2 rounded-full" style={{ backgroundColor: colors.primary }} />
-                <Text className="text-[10px] font-black" style={{ color: colors.primary, fontFamily: fonts.body }}>Invite Pending</Text>
+                <Text className="text-xs font-black" style={{ color: colors.primary, fontFamily: fonts.body }}>Invite Pending</Text>
               </View>
             ) : null
           }
@@ -401,9 +401,9 @@ export default function Partner() {
                 )}
 
                 {[
-                  { icon: "people-outline", bg: softTints.pink, color: colors.primary, title: "What's Shared", desc: "Cycle phase, comfort tips, and alerts can be shared only when you allow them." },
-                  { icon: "heart-outline", bg: softTints.emerald, color: colors.success, title: "Better Support", desc: "Help your partner understand what kind of care, space, or reminders may help." },
-                  { icon: "shield-checkmark-outline", bg: softTints.pink, color: colors.primary, title: "Privacy First", desc: "Everything shared is your choice. You can change permissions any time." },
+                  { icon: "people-outline", bg: softTints.pink, color: colors.primary, title: "What's Shared", desc: "You choose what your partner sees." },
+                  { icon: "heart-outline", bg: softTints.emerald, color: colors.success, title: "Better Support", desc: "Help them know what care helps." },
+                  { icon: "shield-checkmark-outline", bg: softTints.pink, color: colors.primary, title: "Privacy First", desc: "Change what you share any time." },
                 ].map((card) => (
                   <View
                     key={card.title}
@@ -452,7 +452,7 @@ export default function Partner() {
                     Invite Your Partner
                   </Text>
                   <Text className="text-xs text-center mt-1.5 leading-4 px-4" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                    Generate a secure invite code and share it with your partner so they can connect to your profile.
+                    Share an invite code so your partner can connect.
                   </Text>
 
                   {inviteCode ? (
@@ -464,7 +464,7 @@ export default function Partner() {
                         className="p-4 rounded-xl border"
                         style={{ borderColor: `${colors.primary}30` }}
                       >
-                        <Text className="text-[10px] text-center font-bold uppercase" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                        <Text className="text-[11.5px] text-center font-bold uppercase" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                           Your Secure Sync Key
                         </Text>
                         <Text className="text-center text-xl font-black mt-1 tracking-widest" style={{ color: colors.primary, fontFamily: fonts.mono }}>
@@ -484,7 +484,7 @@ export default function Partner() {
                       </TouchableOpacity>
 
                       <TouchableOpacity onPress={handleGenerateCode} className="mt-1 py-1">
-                        <Text className="text-center text-[11px] font-bold underline" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                        <Text className="text-center text-xs font-bold underline" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                           Generate new code
                         </Text>
                       </TouchableOpacity>
@@ -533,7 +533,7 @@ export default function Partner() {
                   style={{ backgroundColor: softTints.pink, borderColor: colors.border }}
                 >
                   <Ionicons name="shield-checkmark-outline" size={15} color={colors.primary} style={{ marginTop: 1 }} />
-                  <Text className="flex-1 text-[11px] font-semibold leading-4" style={{ color: colors.foreground, fontFamily: fonts.body }}>
+                  <Text className="flex-1 text-xs font-semibold leading-4" style={{ color: colors.foreground, fontFamily: fonts.body }}>
                     You&apos;re in control — change these anytime, and disconnecting removes access immediately.
                   </Text>
                 </View>
@@ -543,11 +543,11 @@ export default function Partner() {
                   style={{ backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
                 >
                   {[
-                    { key: "shareCyclePhase" as const, title: "Cycle Phase", desc: "They'll see your current phase and countdown to your next period — not exact dates from past cycles.", value: perms.shareCyclePhase },
-                    { key: "shareSymptoms" as const, title: "Symptoms", desc: "They'll see mood, energy, and flow in plain words. Detailed numbers (sleep, water, stress, weight, temperature) stay tucked away unless they tap for more.", value: perms.shareSymptoms },
-                    { key: "shareIntimacyLog" as const, title: "Intimacy Notes", desc: "Off by default. Only turn this on if you're both comfortable — it's very personal, so take a moment to think it over.", value: perms.shareIntimacyLog },
-                    { key: "shareAlerts" as const, title: "Care Alerts", desc: "Gentle heads-up messages before your period or PMS days — a nudge, not raw data.", value: perms.shareAlerts },
-                    { key: "shareReports" as const, title: "Health Reports", desc: "Off by default. Lets your AI-generated care suggestions draw on your uploaded lab reports and prescriptions, not just daily logs.", value: perms.shareReports },
+                    { key: "shareCyclePhase" as const, title: "Cycle Phase", desc: "Current phase and days to next period.", value: perms.shareCyclePhase },
+                    { key: "shareSymptoms" as const, title: "Symptoms", desc: "Mood, energy and flow.", value: perms.shareSymptoms },
+                    { key: "shareIntimacyLog" as const, title: "Intimacy Notes", desc: "Very personal. Off by default.", value: perms.shareIntimacyLog },
+                    { key: "shareAlerts" as const, title: "Care Alerts", desc: "A gentle heads-up before your period.", value: perms.shareAlerts },
+                    { key: "shareReports" as const, title: "Health Reports", desc: "Let care tips use your uploaded reports too. Off by default.", value: perms.shareReports },
                   ].map((item, i, arr) => (
                     <View key={item.key}>
                       <View className="flex-row justify-between items-center">
@@ -555,7 +555,7 @@ export default function Partner() {
                           <Text className="text-xs font-extrabold" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
                             {item.title}
                           </Text>
-                          <Text className="text-[10px] mt-0.5 font-medium leading-3.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                          <Text className="text-xs mt-0.5 font-medium leading-3.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                             {item.desc}
                           </Text>
                         </View>

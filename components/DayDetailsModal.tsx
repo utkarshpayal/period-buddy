@@ -889,7 +889,7 @@ export default function DayDetailsModal({
               </TouchableOpacity>
               {sleepHours !== undefined && (
                 <TouchableOpacity onPress={() => setSleepHours(undefined)} style={{ marginLeft: "auto" }}>
-                  <Text style={{ color: colors.mutedText, fontSize: 12, fontFamily: fonts.body }}>Clear</Text>
+                  <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body }}>Clear</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -937,7 +937,7 @@ export default function DayDetailsModal({
               </TouchableOpacity>
               {waterIntake !== undefined && (
                 <TouchableOpacity onPress={() => setWaterIntake(undefined)} style={{ marginLeft: "auto" }}>
-                  <Text style={{ color: colors.mutedText, fontSize: 12, fontFamily: fonts.body }}>Clear</Text>
+                  <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body }}>Clear</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -1061,7 +1061,7 @@ export default function DayDetailsModal({
                 style={{
                   flex: 1,
                   color: colors.mutedText,
-                  fontSize: 11.5,
+                  fontSize: 12.5,
                   lineHeight: 16,
                   marginRight: 12,
                   fontFamily: fonts.body,

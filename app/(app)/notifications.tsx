@@ -191,7 +191,7 @@ export default function NotificationsScreen() {
                     accessibilityRole="header"
                     style={{
                       color: colors.mutedText,
-                      fontSize: 12.5,
+                      fontSize: 13,
                       fontWeight: "600",
                       fontFamily: fonts.body,
                       paddingHorizontal: 20,
@@ -206,7 +206,7 @@ export default function NotificationsScreen() {
                   ))}
                 </View>
               ))}
-              <View className="px-5 mt-2">
+              <View className="px-6 mt-2">
                 <LoadMoreButton hasMore={hasMore} loading={loadingMore} onPress={loadMore} />
               </View>
             </>
@@ -314,7 +314,7 @@ function NotificationRow({
               <Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={16} color={colors.primary} />
             </TouchableOpacity>
           ) : null}
-          <Text style={{ color: colors.mutedText, fontSize: 12, fontFamily: fonts.body, opacity: 0.8 }}>{timeAgo(notifDate(notif))}</Text>
+          <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body, opacity: 0.8 }}>{timeAgo(notifDate(notif))}</Text>
         </View>
         {notif.body ? (
           <Text

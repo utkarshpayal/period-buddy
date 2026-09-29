@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+import { Feather, Ionicons } from "@expo/vector-icons";
 import { createAudioPlayer, type AudioPlayer } from "expo-audio";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
@@ -14,13 +14,13 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useAppState } from "../../components/AppState";
 import { useAuth } from "../../components/auth-context";
 import { LanguagePickerSheet } from "../../components/LanguagePickerSheet";
 import { SkeletonBlock } from "../../components/Skeleton";
 import { useTheme } from "../../components/theme";
-import { getLogCategoryTints, getShadow, getSoftTints } from "../../components/ui-tokens";
+import { getLogCategoryTints, getSoftTints } from "../../components/ui-tokens";
 import { VoiceModeOverlay, type VoiceStatus } from "../../components/VoiceModeOverlay";
 import { useVoiceInput } from "../../hooks/useVoiceInput";
 import { alert } from "../../lib/alert";
@@ -39,8 +39,10 @@ import {
   type VoiceAgentPendingAction,
 } from "../../lib/api";
 import { resolveAudioUri } from "../../lib/audio";
-import { CHAT_TOPICS, composeIntakeMessage, getChatTopic, isTopicLocked } from "../../lib/chatTopics";
+import { CHAT_TOPICS, getChatTopic, isTopicLocked } from "../../lib/chatTopics";
 import { SUPPORTED_LANGUAGES } from "../../lib/languages";
+import { HeaderIconButton } from "../../components/ScreenHeader";
+import { TypingDots } from "../../components/TypingDots";
 
 // --- TELEHEALTH CONVERSATION MODEL CONTRACTS ---
 interface ChatMessage {
@@ -75,26 +77,32 @@ export default function QA() {
   // result, ...) gets redirected to qa-history below, so "AI Chat" always
   // lands on the chat list first instead of jumping straight into a blank
   // chat/topic-picker.
-  const { voiceMode: voiceModeParam, sessionId: sessionIdParam, new: newChatParam } = useLocalSearchParams<{
+  const {
+    voiceMode: voiceModeParam,
+    sessionId: sessionIdParam,
+    new: newChatParam,
+    topic: topicParam,
+  } = useLocalSearchParams<{
     voiceMode?: string;
     sessionId?: string;
     new?: string;
+    topic?: string;
   }>();
   const { earnTokens } = useAppState();
   const { user } = useAuth();
   const scrollViewRef = useRef<ScrollView>(null);
-  const insets = useSafeAreaInsets();
   const softTints = getSoftTints(colors);
   const categoryTints = getLogCategoryTints(colors);
-  const shadow = getShadow(colors, isDark);
 
   // Functional Input and Loading States
   const [typedQuestion, setTypedQuestion] = useState("");
   const [isCompanionTyping, setIsCompanionTyping] = useState(false);
-  const [activeTopicId, setActiveTopicId] = useState<ChatTopicId | null>(null);
-  // Answers to the active topic's short intake form (question id -> text),
-  // cleared whenever the topic selection changes.
-  const [intakeAnswers, setIntakeAnswers] = useState<Record<string, string>>({});
+  // A topic picked on the Nura AI home (?topic=) opens the chat already
+  // scoped to it — no form, just that topic's starter questions.
+  const presetTopic = sessionIdParam ? undefined : getChatTopic(topicParam);
+  const [activeTopicId, setActiveTopicId] = useState<ChatTopicId | null>(
+    presetTopic && !isTopicLocked(presetTopic, user?.dateOfBirth) ? presetTopic.id : null,
+  );
   // The backend chat session this conversation is persisted to, once one
   // exists — created lazily on the first message (or eagerly when resuming
   // a past chat from history) so idle browsing never creates empty sessions.
@@ -536,571 +544,380 @@ export default function QA() {
     return <Redirect href="/(app)/qa-history" />;
   }
 
+  // Flo-style assistant: a welcome screen with question cards and topics
+  // until the first real exchange, then a clean thread with quick replies
+  // pinned above the composer.
+  const isWelcome = !isLoadingSession && chatLog.length === 1 && chatLog[0].sender === "companion" && !isCompanionTyping;
+  const lastMessage = chatLog[chatLog.length - 1];
+  const quickReplies =
+    !isWelcome && !isCompanionTyping && lastMessage?.sender === "companion" ? (lastMessage.suggestedQuestions ?? []).slice(0, 3) : [];
+  const activeTopic = getChatTopic(activeTopicId);
+  const starterQuestions = (
+    activeTopic && isTopicScoped
+      ? activeTopic.questions
+      : chatLog[0]?.suggestedQuestions?.length
+        ? chatLog[0].suggestedQuestions
+        : defaultSuggestedQuestions
+  ).slice(0, 4);
+  const firstName = user?.firstName && user.firstName !== "Nura" ? user.firstName : "";
+  const canSend = Boolean(typedQuestion.trim()) && !isCompanionTyping;
+
+  const avatar = (size: number) => (
+    <View
+      className="items-center justify-start overflow-hidden rounded-full"
+      style={{ width: size, height: size, backgroundColor: softTints.pink }}
+    >
+      {/* nura-avatar.png is a tall half-body illustration: scale to the
+          circle's width and anchor to the top so the face stays in view. */}
+      <Image
+        source={require("../../assets/images/illustrations/nura-avatar.png")}
+        style={{ width: size, height: size * (1294 / 871) }}
+        resizeMode="cover"
+      />
+    </View>
+  );
+
   return (
     <>
-      <StatusBar
-        barStyle={isDark ? "light-content" : "dark-content"}
-        backgroundColor={colors.background}
-      />
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
 
-      <SafeAreaView
-        className="flex-1"
-        style={{ backgroundColor: colors.background }}
-      >
+      <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           className="flex-1"
           keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
         >
-        {/* Custom Companion Chat Header Section */}
-        <View
-          className="mx-4 mt-4 mb-1 px-4 py-3.5 rounded-3xl flex-row justify-between items-center gap-2"
-          style={[
-            { backgroundColor: colors.surface },
-            shadow,
-          ]}
-        >
-          <View className="flex-row items-center gap-3 flex-1 min-w-0">
-            <TouchableOpacity
-              onPress={() => router.back()}
-              activeOpacity={0.7}
-              className="p-2.5 rounded-full border"
-              style={{ backgroundColor: colors.input, borderColor: colors.border }}
-            >
-              <Feather name="arrow-left" size={18} color={colors.foreground} />
-            </TouchableOpacity>
-
-            {/* Robot/Companion Identity Sphere Indicator */}
-            <View className="relative">
-              <View
-                className="w-11 h-11 rounded-full items-center justify-start overflow-hidden"
-                style={{ backgroundColor: softTints.pink }}
-              >
-                {/* nura-avatar.png is a tall half-body illustration with the face in
-                    the top square — scale to container width and anchor to
-                    the top (instead of centering) so the circle crops off
-                    the shoulders/hands below instead of cutting the face. */}
-                <Image
-                  source={require("../../assets/images/illustrations/nura-avatar.png")}
-                  style={{ width: 44, height: 44 * (1294 / 871) }}
-                  resizeMode="cover"
-                />
-              </View>
-              <View
-                className="absolute bottom-0 right-0 w-3 h-3 rounded-full"
-                style={{ backgroundColor: colors.success, borderWidth: 2, borderColor: colors.surface }}
-              />
-            </View>
-
-            <View className="flex-1 min-w-0">
-              <Text
-                numberOfLines={1}
-                ellipsizeMode="tail"
-                className="text-base font-black tracking-tight"
-                style={{ color: colors.foreground, fontFamily: fonts.heading }}
-              >
-                Nura AI
+          {/* Header: back · centred title (tap the language to change it) · history */}
+          <View className="flex-row items-center px-6 pt-3 pb-2" style={{ gap: 12 }}>
+            <HeaderIconButton icon="chevron-back" accessibilityLabel="Go back" onPress={() => router.back()} />
+            <View className="flex-1 items-center" style={{ minWidth: 0 }}>
+              <Text accessibilityRole="header" numberOfLines={1} style={{ color: colors.foreground, fontSize: 16, fontWeight: "800", fontFamily: fonts.heading }}>
+                {isTopicScoped ? getChatTopic(activeTopicId)?.label : "Nura AI"}
               </Text>
-              <Text
-                numberOfLines={1}
-                ellipsizeMode="tail"
-                className="text-[10px] font-bold tracking-wider uppercase mt-0.5"
-                style={{ color: isTopicScoped ? colors.primary : colors.success, fontFamily: fonts.body }}
+              <TouchableOpacity
+                onPress={() => setLanguagePickerVisible(true)}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={`Change language, currently ${selectedLanguage.label}`}
+                hitSlop={8}
+                className="flex-row items-center"
+                style={{ gap: 3, marginTop: 1 }}
               >
-                {/* Visible confirmation that this chat is scoped — matches
-                    what the backend's topicScopeInstruction actually does.
-                    "general" (the "Other" tile) is intentionally unscoped,
-                    same as picking no topic at all. */}
-                {isTopicScoped ? `Focused on ${getChatTopic(activeTopicId)?.label}` : "Private guidance online"}
-              </Text>
+                <Text numberOfLines={1} style={{ color: colors.mutedText, fontSize: 12.5, fontFamily: fonts.body }}>
+                  {selectedLanguage.label}
+                </Text>
+                <Ionicons name="chevron-down" size={12} color={colors.mutedText} />
+              </TouchableOpacity>
             </View>
+            <HeaderIconButton icon="time-outline" accessibilityLabel="Chat history" onPress={() => router.push("/(app)/qa-history")} />
           </View>
 
-          {/* Icon-only toggles — keeps the row to a single line even when
-              the name/status block is long, instead of squeezing two
-              labeled pills in next to the avatar. */}
-          <View className="flex-row items-center gap-2 flex-shrink-0">
-            <TouchableOpacity
-              onPress={() => router.push("/(app)/qa-history")}
-              activeOpacity={0.7}
-              accessibilityRole="button"
-              accessibilityLabel="Chat history"
-              className="w-9 h-9 items-center justify-center rounded-full"
-              style={{ backgroundColor: softTints.pink }}
-            >
-              <Feather name="clock" size={15} color={colors.primary} />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => setVoiceMode((prev) => !prev)}
-              activeOpacity={0.7}
-              accessibilityRole="button"
-              accessibilityLabel={voiceMode ? "Turn off voice mode" : "Turn on voice mode"}
-              className="w-9 h-9 items-center justify-center rounded-full"
-              style={{ backgroundColor: voiceMode ? colors.primary : softTints.pink }}
-            >
-              <Feather name="headphones" size={15} color={voiceMode ? colors.buttonText : colors.primary} />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => setLanguagePickerVisible(true)}
-              activeOpacity={0.7}
-              accessibilityRole="button"
-              accessibilityLabel={`Change language, currently ${selectedLanguage.label}`}
-              className="w-9 h-9 items-center justify-center rounded-full"
-              style={{ backgroundColor: softTints.pink }}
-            >
-              <Feather name="globe" size={15} color={colors.primary} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {voiceMode ? (
-          <View
-            className="mx-4 mb-1 mt-2 px-4 py-3 rounded-2xl flex-row items-start gap-2"
-            style={{ backgroundColor: softTints.pink }}
+          <ScrollView
+            ref={scrollViewRef}
+            showsVerticalScrollIndicator={false}
+            className="flex-1"
+            contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16, flexGrow: 1 }}
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
+            onContentSizeChange={() => {
+              if (!isWelcome) scrollViewRef.current?.scrollToEnd({ animated: true });
+            }}
           >
-            <Feather name="mic" size={13} color={colors.primary} style={{ marginTop: 1.5 }} />
-            <Text className="text-[11px] font-bold flex-1 flex-shrink leading-4" style={{ color: colors.primary, fontFamily: fonts.body }}>
-              Voice mode on — tap the mic, speak, and I&apos;ll reply out loud in {selectedLanguage.label}. Pause
-              for 3 seconds and I&apos;ll send it automatically.
-            </Text>
-          </View>
-        ) : null}
+            {isLoadingSession ? (
+              <View style={{ gap: 16 }}>
+                <SkeletonBlock width="70%" height={64} radius={20} />
+                <SkeletonBlock width="55%" height={44} radius={20} style={{ alignSelf: "flex-end" }} />
+                <SkeletonBlock width="80%" height={84} radius={20} />
+              </View>
+            ) : isWelcome ? (
+              <View>
+                {/* Greeting */}
+                <View className="items-center" style={{ marginTop: 12, marginBottom: 28 }}>
+                  {avatar(72)}
+                  <Text
+                    style={{ color: colors.foreground, fontSize: 24, lineHeight: 30, fontWeight: "800", textAlign: "center", marginTop: 14, fontFamily: fonts.heading }}
+                  >
+                    {firstName ? `Hi ${firstName}, I'm Nura` : "Hi, I'm Nura"}
+                  </Text>
+                  <Text style={{ color: colors.mutedText, fontSize: 15, lineHeight: 22, textAlign: "center", marginTop: 6, fontFamily: fonts.body }}>
+                    {activeTopic && isTopicScoped
+                      ? `Ask me anything about ${activeTopic.label.toLowerCase()}.`
+                      : "Ask me anything about your cycle, body or health."}
+                  </Text>
+                  <View className="flex-row items-center" style={{ gap: 5, marginTop: 10 }}>
+                    <Ionicons name="lock-closed" size={12} color={colors.success} />
+                    <Text style={{ color: colors.success, fontSize: 12.5, fontWeight: "700", fontFamily: fonts.body }}>Private & anonymous</Text>
+                  </View>
+                </View>
 
-        {/* SCROLLABLE LIVE CHAT MESSAGE STREAM WINDOW CONTAINER */}
-        <ScrollView
-          ref={scrollViewRef}
-          showsVerticalScrollIndicator={false}
-          className="flex-1 px-5 pt-4"
-          contentContainerStyle={{ paddingBottom: 72 }}
-          keyboardDismissMode="on-drag"
-          keyboardShouldPersistTaps="handled"
-          onContentSizeChange={() =>
-            scrollViewRef.current?.scrollToEnd({ animated: true })
-          }
-        >
-          {isLoadingSession ? (
-            <View className="gap-4">
-              <SkeletonBlock width="70%" height={64} radius={20} />
-              <SkeletonBlock width="55%" height={44} radius={20} style={{ alignSelf: "flex-end" }} />
-              <SkeletonBlock width="80%" height={84} radius={20} />
-              <SkeletonBlock width="45%" height={44} radius={20} style={{ alignSelf: "flex-end" }} />
-            </View>
-          ) : (
-          <View className="gap-4">
-            {chatLog.map((message) => {
-              const isCompanion = message.sender === "companion";
-              const isUrgent = message.source === "urgent_safety";
-              return (
-                <View key={message.id}>
-                  {isCompanion ? (
-                    <View
-                      className="max-w-[85%] p-4 rounded-3xl self-start rounded-bl-md border"
-                      style={[
-                        {
-                          backgroundColor: isUrgent ? colors.dangerLight : colors.surface,
-                          borderColor: isUrgent ? colors.danger : colors.border,
-                        },
-                        isUrgent ? null : shadow,
-                      ]}
+                {/* Try asking — one tap sends it. */}
+                <Text style={{ color: colors.foreground, fontSize: 14.5, fontWeight: "800", marginBottom: 10, fontFamily: fonts.heading }}>
+                  Try asking
+                </Text>
+                <View style={{ gap: 8 }}>
+                  {starterQuestions.map((question) => (
+                    <TouchableOpacity
+                      key={question}
+                      activeOpacity={0.8}
+                      onPress={() => handleTriggerConversation(question)}
+                      accessibilityRole="button"
+                      className="flex-row items-center"
+                      style={{ gap: 12, paddingHorizontal: 16, paddingVertical: 14, borderRadius: 16, backgroundColor: colors.surface }}
                     >
-                      {isUrgent && (
-                        <View className="mb-2 flex-row items-center gap-1.5">
-                          <Feather
-                            name="alert-triangle"
-                            size={13}
-                            color={colors.danger}
-                          />
-                          <Text
-                            className="text-[10px] font-black uppercase"
-                            style={{ color: colors.danger, fontFamily: fonts.heading }}
+                      <Ionicons name="chatbubble-ellipses-outline" size={18} color={activeTopic ? categoryTints[activeTopic.tint].color : colors.primary} />
+                      <Text style={{ flex: 1, color: colors.foreground, fontSize: 14.5, fontWeight: "600", fontFamily: fonts.body }}>{question}</Text>
+                      <Ionicons name="arrow-forward" size={16} color={colors.mutedText} />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {/* Topics: only when none was picked on the Nura AI home. Tapping
+                    one just swaps the starter questions above; no form. */}
+                {presetTopic ? null : (
+                  <>
+                    <Text style={{ color: colors.foreground, fontSize: 14.5, fontWeight: "800", marginTop: 24, marginBottom: 10, fontFamily: fonts.heading }}>
+                      Or pick a topic
+                    </Text>
+                    <View className="flex-row flex-wrap" style={{ gap: 8 }}>
+                      {CHAT_TOPICS.map((topic) => {
+                        const tint = categoryTints[topic.tint];
+                        const isActive = activeTopicId === topic.id;
+                        const locked = isTopicLocked(topic, user?.dateOfBirth);
+                        return (
+                          <TouchableOpacity
+                            key={topic.id}
+                            activeOpacity={0.75}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected: isActive }}
+                            accessibilityLabel={locked ? `${topic.label}, locked` : topic.label}
+                            onPress={() => {
+                              if (locked) {
+                                alert(
+                                  "Age verification needed",
+                                  `${topic.label} unlocks once your profile shows you're ${topic.minAge}+. Add your birthday in Profile → Edit profile.`,
+                                );
+                                return;
+                              }
+                              setActiveTopicId((prev) => (prev === topic.id ? null : topic.id));
+                            }}
+                            className="flex-row items-center rounded-full"
+                            style={{
+                              gap: 6,
+                              paddingLeft: 6,
+                              paddingRight: 14,
+                              paddingVertical: 6,
+                              borderWidth: 1.5,
+                              backgroundColor: isActive ? tint.light : colors.surface,
+                              borderColor: isActive ? tint.color : "transparent",
+                              opacity: locked ? 0.55 : 1,
+                            }}
                           >
-                            Urgent care guidance
-                          </Text>
-                        </View>
-                      )}
-                      {message.personalized && !isUrgent && (
-                        <View className="mb-2 flex-row items-center gap-1.5">
-                          <Feather name="user-check" size={12} color={colors.primary} />
-                          <Text
-                            className="text-[10px] font-black uppercase"
-                            style={{ color: colors.primary, fontFamily: fonts.heading }}
-                          >
-                            Personalized for you
-                          </Text>
-                        </View>
-                      )}
-                      <Text
-                        className="text-[15px] font-medium leading-6"
+                            <View className="items-center justify-center rounded-full" style={{ width: 26, height: 26, backgroundColor: tint.light }}>
+                              <Feather name={locked ? "lock" : topic.icon} size={13} color={tint.color} />
+                            </View>
+                            <Text numberOfLines={1} style={{ color: colors.foreground, fontSize: 13.5, fontWeight: "700", fontFamily: fonts.body }}>
+                              {topic.label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </>
+                )}
+
+                <Text style={{ color: colors.mutedText, fontSize: 12.5, lineHeight: 18, textAlign: "center", marginTop: 24, fontFamily: fonts.body }}>
+                  {defaultCompanionDisclaimer}
+                </Text>
+              </View>
+            ) : (
+              <View style={{ gap: 14 }}>
+                {chatLog.map((message, index) => {
+                  const isCompanion = message.sender === "companion";
+                  const isUrgent = message.source === "urgent_safety";
+                  if (!isCompanion) {
+                    return (
+                      <View
+                        key={message.id}
                         style={{
-                          color: colors.foreground,
-                          fontFamily: fonts.body,
+                          maxWidth: "82%",
+                          alignSelf: "flex-end",
+                          paddingHorizontal: 16,
+                          paddingVertical: 11,
+                          borderRadius: 20,
+                          borderBottomRightRadius: 6,
+                          backgroundColor: colors.primary,
                         }}
                       >
-                        {message.text}
-                      </Text>
-                      {message.disclaimer && (
-                        <Text
-                          className="text-[11px] font-semibold leading-4 mt-3"
-                          style={{
-                            color: colors.mutedText,
-                            fontFamily: fonts.body,
-                          }}
-                        >
-                          {message.disclaimer}
-                        </Text>
-                      )}
-                      {message.suggestedQuestions?.length ? (
-                        <View className="mt-3 flex-row flex-wrap gap-2">
-                          {message.suggestedQuestions
-                            .slice(0, 3)
-                            .map((question) => (
-                              <TouchableOpacity
-                                activeOpacity={0.75}
-                                disabled={isCompanionTyping}
-                                key={question}
-                                onPress={() => setTypedQuestion(question)}
-                                className="rounded-full border px-3 py-1.5"
-                                style={{
-                                  backgroundColor: colors.input,
-                                  borderColor: colors.border,
-                                }}
-                              >
-                                <Text
-                                  className="text-[10px] font-bold"
-                                  style={{ color: colors.foreground, fontFamily: fonts.body }}
-                                >
-                                  {question}
-                                </Text>
-                              </TouchableOpacity>
-                            ))}
-                        </View>
-                      ) : null}
-                      <View className="flex-row items-center justify-between mt-1.5">
+                        <Text style={{ color: colors.buttonText, fontSize: 15, lineHeight: 22, fontFamily: fonts.body }}>{message.text}</Text>
+                      </View>
+                    );
+                  }
+                  // Avatar only on the first of consecutive assistant messages.
+                  const showAvatar = index === 0 || chatLog[index - 1].sender !== "companion";
+                  return (
+                    <View key={message.id} className="flex-row items-end" style={{ gap: 8 }}>
+                      <View style={{ width: 28 }}>{showAvatar ? avatar(28) : null}</View>
+                      <View
+                        style={{
+                          flexShrink: 1,
+                          maxWidth: "86%",
+                          paddingHorizontal: 16,
+                          paddingTop: 12,
+                          paddingBottom: 10,
+                          borderRadius: 20,
+                          borderBottomLeftRadius: 6,
+                          backgroundColor: isUrgent ? colors.dangerLight : colors.surface,
+                          borderWidth: isUrgent ? 1 : 0,
+                          borderColor: colors.danger,
+                        }}
+                      >
+                        {isUrgent || message.personalized ? (
+                          <View className="mb-1.5 flex-row items-center" style={{ gap: 5 }}>
+                            <Ionicons
+                              name={isUrgent ? "warning-outline" : "sparkles-outline"}
+                              size={14}
+                              color={isUrgent ? colors.danger : colors.primary}
+                            />
+                            <Text style={{ color: isUrgent ? colors.danger : colors.primary, fontSize: 12.5, fontWeight: "700", fontFamily: fonts.body }}>
+                              {isUrgent ? "Please get care soon" : "Based on your logs"}
+                            </Text>
+                          </View>
+                        ) : null}
+                        <Text style={{ color: colors.foreground, fontSize: 15, lineHeight: 22, fontFamily: fonts.body }}>{message.text}</Text>
+                        {isUrgent && message.disclaimer ? (
+                          <Text style={{ color: colors.mutedText, fontSize: 12.5, lineHeight: 17, marginTop: 8, fontFamily: fonts.body }}>
+                            {message.disclaimer}
+                          </Text>
+                        ) : null}
                         <TouchableOpacity
                           onPress={() => handleListen(message)}
                           activeOpacity={0.7}
                           disabled={synthesizingMessageId === message.id}
-                          className="flex-row items-center gap-1 -ml-1 px-1.5 py-0.5"
+                          accessibilityRole="button"
+                          accessibilityLabel={playingMessageId === message.id ? "Pause" : "Listen to this reply"}
+                          hitSlop={8}
+                          className="flex-row items-center self-start"
+                          style={{ gap: 4, marginTop: 8 }}
                         >
                           {synthesizingMessageId === message.id ? (
                             <ActivityIndicator size="small" color={colors.primary} />
                           ) : (
-                            <Feather
-                              name={playingMessageId === message.id ? "pause-circle" : "volume-2"}
-                              size={13}
-                              color={colors.primary}
+                            <Ionicons
+                              name={playingMessageId === message.id ? "pause-circle-outline" : "volume-high-outline"}
+                              size={17}
+                              color={colors.mutedText}
                             />
                           )}
-                          <Text className="text-[10px] font-bold uppercase tracking-wide" style={{ color: colors.primary, fontFamily: fonts.body }}>
-                            {playingMessageId === message.id ? "Playing" : "Listen"}
-                          </Text>
                         </TouchableOpacity>
-                        <Text
-                          className="text-[10px] font-bold opacity-70"
-                          style={{
-                            color: colors.mutedText,
-                            fontFamily: fonts.body,
-                          }}
-                        >
-                          {message.time}
-                        </Text>
                       </View>
                     </View>
-                  ) : (
-                    <View
-                      className="max-w-[85%] self-end rounded-3xl rounded-br-md overflow-hidden p-4"
-                      style={[{ backgroundColor: colors.primaryDark }, shadow]}
-                    >
-                      <Text
-                        className="text-[15px] font-medium leading-6"
-                        style={{ color: "#FFFFFF", fontFamily: fonts.body }}
-                      >
-                        {message.text}
-                      </Text>
-                      <Text
-                        className="text-[10px] font-bold text-right mt-1.5 opacity-70"
-                        style={{ color: "#FFFFFF", fontFamily: fonts.body }}
-                      >
-                        {message.time}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              );
-            })}
-
-            {/* TOPIC STARTER GRID — only before the first real exchange, so
-                it reads as "what would you like to talk about" rather than
-                cluttering an already-active conversation. */}
-            {chatLog.length === 1 && !isCompanionTyping ? (
-              <View className="gap-3">
-                <Text
-                  className="text-xs font-black uppercase tracking-wider"
-                  style={{ color: colors.mutedText, fontFamily: fonts.heading }}
-                >
-                  Or pick a topic
-                </Text>
-                <View className="flex-row flex-wrap gap-2.5">
-                  {CHAT_TOPICS.map((topic) => {
-                    const tint = categoryTints[topic.tint];
-                    const isActive = activeTopicId === topic.id;
-                    const locked = isTopicLocked(topic, user?.dateOfBirth);
-                    return (
-                      <TouchableOpacity
-                        key={topic.id}
-                        activeOpacity={0.75}
-                        onPress={() => {
-                          if (locked) {
-                            alert(
-                              "Age verification needed",
-                              `${topic.label} is only available once your profile shows you're ${topic.minAge}+. Update your date of birth in Profile to unlock it.`,
-                            );
-                            return;
-                          }
-                          setIntakeAnswers({});
-                          setActiveTopicId((prev) => (prev === topic.id ? null : topic.id));
-                        }}
-                        className="flex-row items-center gap-2 rounded-2xl border px-3 py-2.5"
-                        style={{
-                          backgroundColor: isActive ? tint.light : colors.surface,
-                          borderColor: isActive ? tint.color : colors.border,
-                          opacity: locked ? 0.55 : 1,
-                          width: "47%",
-                        }}
-                      >
-                        <View
-                          className="w-7 h-7 items-center justify-center rounded-full"
-                          style={{ backgroundColor: tint.light }}
-                        >
-                          <Feather name={locked ? "lock" : topic.icon} size={13} color={tint.color} />
-                        </View>
-                        <Text
-                          numberOfLines={2}
-                          className="text-[11px] font-bold flex-1 flex-shrink leading-4"
-                          style={{ color: colors.foreground, fontFamily: fonts.body }}
-                        >
-                          {topic.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-
-                {activeTopicId
-                  ? (() => {
-                      const topic = getChatTopic(activeTopicId);
-                      if (!topic) return null;
-
-                      // Topics with an intake form (everything but "Other")
-                      // collect a couple of quick answers first, so the
-                      // AI's first reply is already grounded — the form
-                      // itself is never sent to the backend, just the
-                      // composed sentence it produces.
-                      if (topic.intake?.length) {
-                        const requiredUnanswered = topic.intake.some(
-                          (question) => !question.optional && !intakeAnswers[question.id]?.trim(),
-                        );
-                        return (
-                          <View
-                            className="gap-3 mt-1 p-3.5 rounded-2xl border"
-                            style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-                          >
-                            {topic.intake.map((question) => (
-                              <View key={question.id} className="gap-2">
-                                <Text
-                                  className="text-[11px] font-bold"
-                                  style={{ color: colors.foreground, fontFamily: fonts.body }}
-                                >
-                                  {question.label}
-                                  {question.optional ? (
-                                    <Text style={{ color: colors.mutedText }}> (optional)</Text>
-                                  ) : null}
-                                </Text>
-                                {question.type === "choice" ? (
-                                  <View className="flex-row flex-wrap gap-2">
-                                    {question.options?.map((option) => {
-                                      const selected = intakeAnswers[question.id] === option;
-                                      return (
-                                        <TouchableOpacity
-                                          key={option}
-                                          activeOpacity={0.75}
-                                          onPress={() =>
-                                            setIntakeAnswers((prev) => ({ ...prev, [question.id]: option }))
-                                          }
-                                          className="rounded-full border px-3 py-1.5"
-                                          style={{
-                                            backgroundColor: selected ? colors.primary : colors.input,
-                                            borderColor: selected ? colors.primary : colors.border,
-                                          }}
-                                        >
-                                          <Text
-                                            className="text-[10px] font-bold"
-                                            style={{ color: selected ? colors.buttonText : colors.foreground, fontFamily: fonts.body }}
-                                          >
-                                            {option}
-                                          </Text>
-                                        </TouchableOpacity>
-                                      );
-                                    })}
-                                  </View>
-                                ) : (
-                                  <TextInput
-                                    value={intakeAnswers[question.id] ?? ""}
-                                    onChangeText={(text) =>
-                                      setIntakeAnswers((prev) => ({ ...prev, [question.id]: text }))
-                                    }
-                                    placeholder={question.placeholder}
-                                    placeholderTextColor={colors.mutedText}
-                                    maxLength={200}
-                                    className="px-3 py-2.5 rounded-xl text-xs"
-                                    style={{ backgroundColor: colors.input, color: colors.foreground, fontFamily: fonts.body }}
-                                  />
-                                )}
-                              </View>
-                            ))}
-                            <TouchableOpacity
-                              activeOpacity={0.85}
-                              disabled={requiredUnanswered || isCompanionTyping}
-                              onPress={() => handleTriggerConversation(composeIntakeMessage(topic, intakeAnswers))}
-                              className="items-center py-3 rounded-xl mt-1"
-                              style={{ backgroundColor: requiredUnanswered ? colors.input : colors.primary }}
-                            >
-                              <Text
-                                className="text-xs font-black"
-                                style={{ color: requiredUnanswered ? colors.mutedText : colors.buttonText, fontFamily: fonts.body }}
-                              >
-                                Start chat
-                              </Text>
-                            </TouchableOpacity>
-                          </View>
-                        );
-                      }
-
-                      // No intake form (just "Other") — keep the simple
-                      // tap-a-question chips.
-                      return (
-                        <View className="flex-row flex-wrap gap-2 mt-1">
-                          {topic.questions.map((question) => (
-                            <TouchableOpacity
-                              key={question}
-                              activeOpacity={0.75}
-                              onPress={() => handleTriggerConversation(question)}
-                              className="rounded-full border px-3 py-1.5"
-                              style={{ backgroundColor: colors.input, borderColor: colors.border }}
-                            >
-                              <Text
-                                className="text-[10px] font-bold"
-                                style={{ color: colors.foreground, fontFamily: fonts.body }}
-                              >
-                                {question}
-                              </Text>
-                            </TouchableOpacity>
-                          ))}
-                        </View>
-                      );
-                    })()
-                  : null}
+                  );
+                })}
+                {isCompanionTyping ? (
+                  <View className="flex-row items-end" style={{ gap: 8 }}>
+                    <View style={{ width: 28 }}>{lastMessage?.sender === "companion" ? null : avatar(28)}</View>
+                    <TypingDots />
+                  </View>
+                ) : null}
               </View>
-            ) : null}
+            )}
+          </ScrollView>
 
-            {/* HUMANIZED ACTIVE TYPING STATUS DOTS SIMULATION */}
-            {isCompanionTyping && (
-              <View
-                className="self-start rounded-3xl rounded-bl-md border px-4 py-3.5 items-center justify-center flex-row gap-1"
-                style={[
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  },
-                  shadow,
-                ]}
+          {/* Quick replies from the latest answer, one tap to send */}
+          {quickReplies.length ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              style={{ flexGrow: 0 }}
+              contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 4, gap: 8 }}
+            >
+              {quickReplies.map((question) => (
+                <TouchableOpacity
+                  key={question}
+                  activeOpacity={0.8}
+                  onPress={() => handleTriggerConversation(question)}
+                  accessibilityRole="button"
+                  style={{ paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, borderWidth: 1.5, borderColor: colors.primary, backgroundColor: colors.background }}
+                >
+                  <Text numberOfLines={1} style={{ color: colors.primary, fontSize: 13.5, fontWeight: "700", fontFamily: fonts.body }}>
+                    {question}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          ) : null}
+
+          {/* Composer: input pill with mic inside; round button sends, or opens voice chat while empty */}
+          <View className="flex-row items-end px-4 pt-2" style={{ gap: 8, paddingBottom: 8 }}>
+            <View
+              className="flex-1 flex-row items-center"
+              style={{
+                minHeight: 48,
+                borderRadius: 24,
+                paddingLeft: 18,
+                paddingRight: 6,
+                backgroundColor: colors.surface,
+                borderWidth: 1,
+                borderColor: isRecording ? colors.danger : colors.border,
+              }}
+            >
+              <TextInput
+                placeholder={isRecording ? "Listening…" : isTranscribing ? "Transcribing…" : "Ask Nura anything"}
+                placeholderTextColor={colors.mutedText}
+                value={typedQuestion}
+                onChangeText={setTypedQuestion}
+                onSubmitEditing={() => handleTriggerConversation()}
+                maxLength={500}
+                multiline
+                returnKeyType="send"
+                submitBehavior="submit"
+                editable={!isRecording && !isTranscribing}
+                className="flex-1 outline-none"
+                style={{ color: colors.foreground, fontSize: 15, fontFamily: fonts.body, paddingVertical: 12, maxHeight: 120 }}
+              />
+              <TouchableOpacity
+                disabled={isTranscribing}
+                onPress={handleMicPress}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel={isTranscribing ? "Transcribing" : isRecording ? "Stop recording" : "Dictate your question"}
+                hitSlop={6}
+                className="items-center justify-center rounded-full"
+                style={{ width: 36, height: 36, backgroundColor: isRecording ? colors.danger : "transparent" }}
               >
-                <Text
-                  className="text-xs font-bold tracking-widest animate-pulse"
-                  style={{ color: colors.primary, fontFamily: fonts.body }}
-                >
-                  Checking trusted guidance...
-                </Text>
-              </View>
+                {isTranscribing ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <Ionicons name={isRecording ? "stop" : "mic-outline"} size={20} color={isRecording ? "#FFFFFF" : colors.mutedText} />
+                )}
+              </TouchableOpacity>
+            </View>
+            {canSend || typedQuestion.trim() ? (
+              <TouchableOpacity
+                disabled={!canSend}
+                onPress={() => handleTriggerConversation()}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Send"
+                className="items-center justify-center rounded-full"
+                style={{ width: 48, height: 48, backgroundColor: canSend ? colors.primary : colors.primaryLight }}
+              >
+                <Ionicons name="arrow-up" size={22} color={canSend ? colors.buttonText : colors.primary} />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                onPress={() => setVoiceMode(true)}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Talk with Nura"
+                className="items-center justify-center rounded-full"
+                style={{ width: 48, height: 48, backgroundColor: colors.primary }}
+              >
+                <Ionicons name="headset" size={21} color={colors.buttonText} />
+              </TouchableOpacity>
             )}
           </View>
-          )}
-        </ScrollView>
-
-        {/* PERSISTENT FIXED FOOTER MESSAGE CONSOLE BAR ROW */}
-        <View
-          className="mx-4 mb-2 px-2 py-2 rounded-full flex-row items-center gap-2"
-          style={[
-            {
-              backgroundColor: colors.surface,
-              marginBottom: Math.max(8, insets.bottom),
-            },
-            shadow,
-          ]}
-        >
-          <TextInput
-            placeholder={isRecording ? "Listening..." : "Ask me anything anonymously..."}
-            placeholderTextColor={colors.mutedText}
-            value={typedQuestion}
-            onChangeText={setTypedQuestion}
-            onSubmitEditing={() => handleTriggerConversation()}
-            maxLength={500}
-            returnKeyType="send"
-            submitBehavior="submit"
-            editable={!isRecording && !isTranscribing}
-            className="flex-1 px-4 py-3 rounded-full text-sm"
-            style={{
-              color: colors.foreground,
-              backgroundColor: colors.input,
-              fontFamily: fonts.body,
-            }}
-          />
-          <TouchableOpacity
-            disabled={isTranscribing}
-            onPress={handleMicPress}
-            activeOpacity={0.8}
-            accessibilityRole="button"
-            accessibilityLabel={isTranscribing ? "Transcribing" : isRecording ? "Stop recording" : "Start recording"}
-            className="rounded-full overflow-hidden"
-          >
-            <View
-              className="w-11 h-11 items-center justify-center rounded-full"
-              style={{ backgroundColor: isRecording ? colors.danger : colors.input }}
-            >
-              {isTranscribing ? (
-                <ActivityIndicator size="small" color={colors.mutedText} />
-              ) : (
-                <Feather name="mic" size={16} color={isRecording ? "#fff" : colors.mutedText} />
-              )}
-            </View>
-          </TouchableOpacity>
-          <TouchableOpacity
-            disabled={!typedQuestion.trim() || isCompanionTyping}
-            onPress={() => handleTriggerConversation()}
-            activeOpacity={0.8}
-            accessibilityRole="button"
-            accessibilityLabel="Send question"
-            className="rounded-full overflow-hidden"
-          >
-            {typedQuestion.trim() && !isCompanionTyping ? (
-              <View
-                className="w-11 h-11 items-center justify-center rounded-full"
-                style={{ backgroundColor: colors.primary }}
-              >
-                <Feather name="send" size={16} color={colors.buttonText} />
-              </View>
-            ) : (
-              <View
-                className="w-11 h-11 items-center justify-center rounded-full"
-                style={{ backgroundColor: colors.input }}
-              >
-                <Feather name="send" size={16} color={colors.mutedText} />
-              </View>
-            )}
-          </TouchableOpacity>
-        </View>
         </KeyboardAvoidingView>
 
         <LanguagePickerSheet

@@ -36,7 +36,7 @@ export default function WellnessHub() {
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 48 }}>
           <Text
             className="mx-6 mt-2 mb-5"
-            style={{ fontSize: 12.5, color: colors.mutedText, fontFamily: fonts.body, lineHeight: 18 }}
+            style={{ fontSize: 13, color: colors.mutedText, fontFamily: fonts.body, lineHeight: 18 }}
           >
             Support for your body and mind — private, judgment-free, and always here.
           </Text>
@@ -46,7 +46,7 @@ export default function WellnessHub() {
           {features.length > 0 ? (
             <HubFeatureTiles features={features} smallHeading={"More support"} />
           ) : (
-            <Text className="mx-6" style={{ fontSize: 12.5, color: colors.mutedText, fontFamily: fonts.body }}>
+            <Text className="mx-6" style={{ fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}>
               Nothing here right now — check back soon.
             </Text>
           )}

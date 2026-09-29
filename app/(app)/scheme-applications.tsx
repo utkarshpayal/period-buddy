@@ -163,7 +163,7 @@ export default function SchemeApplications() {
             <EmptyState
               icon="folder-outline"
               title="No applications yet"
-              message="When you save or start an application for a scheme, it will show up here so you can track it."
+              message="Applications you start will show up here."
               actionLabel="Browse schemes"
               onAction={() => router.push("/government-schemes")}
             />
@@ -206,7 +206,7 @@ export default function SchemeApplications() {
                           {name}
                         </Text>
                         <Text
-                          className="text-[11px] mt-0.5"
+                          className="text-xs mt-0.5"
                           style={{ color: colors.mutedText, fontFamily: fonts.body }}
                         >
                           Started {formatShortDate(app.createdAt)}
@@ -217,7 +217,7 @@ export default function SchemeApplications() {
                         style={{ backgroundColor: `${tintColor}22` }}
                       >
                         <Text
-                          className="text-[10px] font-bold"
+                          className="text-xs font-bold"
                           style={{ color: tintColor, fontFamily: fonts.body }}
                         >
                           {meta.label}
@@ -234,7 +234,7 @@ export default function SchemeApplications() {
                           className="flex-row items-center"
                         >
                           <Text
-                            className="text-[11px] font-bold"
+                            className="text-xs font-bold"
                             style={{ color: colors.primary, fontFamily: fonts.body }}
                           >
                             View details
@@ -266,7 +266,7 @@ export default function SchemeApplications() {
                                 color={colors.danger}
                               />
                               <Text
-                                className="text-[11px] font-bold ml-1"
+                                className="text-xs font-bold ml-1"
                                 style={{ color: colors.danger, fontFamily: fonts.body }}
                               >
                                 Withdraw

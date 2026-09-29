@@ -5,8 +5,8 @@ import { authApi, type AppNotification } from './api';
 import { showPermissionModal } from './modal-host';
 
 // Configure notification behavior for when the app is in the foreground.
-// This module is imported statically (via components/PermissionsGate.tsx from
-// app/_layout.tsx), so the handler is in place before the first notification
+// This module is imported statically by app/_layout.tsx (for
+// resolveNotificationTarget), so the handler is in place before the first notification
 // can arrive — without it, pushes received while the app is open are silently
 // swallowed instead of showing a banner.
 Notifications.setNotificationHandler({

@@ -35,9 +35,9 @@ export default function CareHub() {
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 48 }}>
           <Text
             className="mx-6 mt-2 mb-5"
-            style={{ fontSize: 12.5, color: colors.mutedText, fontFamily: fonts.body, lineHeight: 18 }}
+            style={{ fontSize: 13, color: colors.mutedText, fontFamily: fonts.body, lineHeight: 18 }}
           >
-            Your forecasts, personalized insights, and everything to check in on your health.
+            Forecasts and insights for your health.
           </Text>
 
           <PromoBanners placement="care_hub" style={{ marginBottom: 14 }} />
@@ -45,7 +45,7 @@ export default function CareHub() {
           {features.length > 0 ? (
             <HubFeatureTiles features={features} />
           ) : (
-            <Text className="mx-6" style={{ fontSize: 12.5, color: colors.mutedText, fontFamily: fonts.body }}>
+            <Text className="mx-6" style={{ fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}>
               Nothing here right now — check back soon.
             </Text>
           )}
