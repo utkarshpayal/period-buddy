@@ -5,7 +5,6 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   FlatList,
   Image,
-  Pressable,
   StatusBar,
   Text,
   useWindowDimensions,
@@ -13,6 +12,7 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native";
+import Pressable from "../components/PressableFeedback";
 import Animated, { useAnimatedStyle, withTiming } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../components/auth-context";

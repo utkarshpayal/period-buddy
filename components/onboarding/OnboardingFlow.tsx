@@ -5,12 +5,12 @@ import {
   BackHandler,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StatusBar,
   Text,
   View,
 } from "react-native";
+import Pressable from "../PressableFeedback";
 import Animated, { FadeIn, FadeInDown, FadeInLeft, FadeInRight, ZoomIn } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle } from "react-native-svg";
