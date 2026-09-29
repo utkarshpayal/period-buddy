@@ -1,7 +1,7 @@
 /**
  * Remote app layout from the App CMS (The-Nura-CMS portal → period-buddy-be
  * `GET /api/app-config`): which feature tiles show in which hub and how,
- * the Home screen's section order, theme colour overrides, and promo
+ * the block order on Home, Profile and the hubs, theme colour overrides, and promo
  * banners. Pure data + helpers only (no React/RN imports) so it's
  * unit-testable; fetching and caching live in components/app-config.tsx.
  *
@@ -172,7 +172,31 @@ export type HomeSectionKey =
   | "insights"
   | "moreForYou";
 
-export type HomeSection = { key: HomeSectionKey; visible: boolean };
+/**
+ * A block's settings from the CMS. `text` overrides its heading or intro
+ * (null = the app's own); `audience` and the ISO `startAt` / `endAt` narrow
+ * who sees it and when (checked on the device, like banners).
+ */
+type SectionSettings = { visible: boolean; text: string | null; audience: Audience; startAt: string | null; endAt: string | null };
+export type HomeSection = SectionSettings & { key: HomeSectionKey };
+
+/** Profile and the three hubs, whose blocks the CMS can also reorder or hide. */
+export type LayoutScreen = "profile" | "care_hub" | "wellness_hub" | "explore_hub";
+export type ProfileSectionKey =
+  | "identity"
+  | "completeProfile"
+  | "stats"
+  | "account"
+  | "preferences"
+  | "privacyHelp"
+  | "promo"
+  | "shortcuts"
+  | "logout";
+export type HubSectionKey = "intro" | "promo" | "tiles";
+export type ScreenSectionKey<S extends LayoutScreen> = S extends "profile" ? ProfileSectionKey : HubSectionKey;
+export type ScreenSection<S extends LayoutScreen = LayoutScreen> = SectionSettings & { key: ScreenSectionKey<S> };
+export type HubScreenKey = "care_hub" | "wellness_hub" | "explore_hub";
+export type ScreenSections = { [S in LayoutScreen]: ScreenSection<S>[] };
 
 export type PromoBanner = {
   id: string;
@@ -198,6 +222,9 @@ export type AppConfig = {
   features: ResolvedFeature[];
   customTiles: CustomTile[];
   homeSections: HomeSection[];
+  screenSections: ScreenSections;
+  /** Hub title overrides from the CMS; a hub missing here keeps its own. */
+  screenTitles: Partial<Record<HubScreenKey, string>>;
   theme: ThemeOverrides;
   settings: AppSettings;
   banners: PromoBanner[];
@@ -239,11 +266,67 @@ export const FEATURE_REGISTRY: FeatureDefinition[] = [
 
 const REGISTRY_BY_KEY = new Map(FEATURE_REGISTRY.map((f) => [f.key, f]));
 
+export const EVERYONE: Audience = { segment: "all", platforms: [], minAppVersion: null, maxAppVersion: null };
+
+const shownAlways = { visible: true, text: null, startAt: null, endAt: null } as const;
+
 export const DEFAULT_HOME_SECTIONS: HomeSection[] = (
   ["statPills", "weekStrip", "promo_top", "phaseHero", "quickActions", "promo_middle", "insights", "moreForYou", "shortcuts"] as HomeSectionKey[]
-).map((key) => ({ key, visible: true }));
+).map((key) => ({ key, ...shownAlways, audience: EVERYONE }));
 
-const SECTION_KEYS = new Set<string>(DEFAULT_HOME_SECTIONS.map((s) => s.key));
+
+/**
+ * Default block order per screen (mirrors period-buddy-be's SCREEN_SECTIONS).
+ * `REQUIRED` blocks always show, whatever a config says: they hold Edit
+ * profile, subscription, privacy toggles, log out, or the hub's tiles.
+ */
+const HUB_SECTION_KEYS: HubSectionKey[] = ["intro", "promo", "tiles"];
+const SCREEN_SECTION_KEYS: { [S in LayoutScreen]: ScreenSectionKey<S>[] } = {
+  profile: ["identity", "completeProfile", "stats", "account", "preferences", "privacyHelp", "promo", "shortcuts", "logout"],
+  care_hub: HUB_SECTION_KEYS,
+  wellness_hub: HUB_SECTION_KEYS,
+  explore_hub: HUB_SECTION_KEYS,
+};
+const REQUIRED_SECTIONS = new Set<string>(["identity", "account", "preferences", "privacyHelp", "logout", "tiles"]);
+const LAYOUT_SCREENS = Object.keys(SCREEN_SECTION_KEYS) as LayoutScreen[];
+
+export const DEFAULT_SCREEN_SECTIONS = Object.fromEntries(
+  LAYOUT_SCREENS.map((screen) => [screen, SCREEN_SECTION_KEYS[screen].map((key) => ({ key, ...shownAlways, audience: EVERYONE }))]),
+) as ScreenSections;
+
+const isoDate = (v: unknown): string | null => (typeof v === "string" && !Number.isNaN(Date.parse(v)) ? v : null);
+
+/**
+ * Sent sections in their order, then any known one it left out (visible, in
+ * default order), so a block new in this build never vanishes. A required
+ * block always shows, for everyone, whatever the config says.
+ */
+function parseSectionOrder<K extends string>(raw: unknown, defaults: (SectionSettings & { key: K })[], required = new Set<string>()) {
+  const known = new Set<string>(defaults.map((s) => s.key));
+  const out: (SectionSettings & { key: K })[] = [];
+  const seen = new Set<string>();
+  if (Array.isArray(raw)) {
+    const sorted = [...raw]
+      .filter((s): s is Record<string, unknown> & { key: K; order?: number } =>
+        Boolean(s) && typeof s === "object" && known.has((s as { key?: string }).key ?? ""))
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    for (const s of sorted) {
+      if (seen.has(s.key)) continue;
+      seen.add(s.key);
+      const always = required.has(s.key);
+      out.push({
+        key: s.key,
+        visible: s.visible !== false || always,
+        text: text(s.text, 140),
+        audience: always ? EVERYONE : parseAudience(s.audience),
+        startAt: always ? null : isoDate(s.startAt),
+        endAt: always ? null : isoDate(s.endAt),
+      });
+    }
+  }
+  for (const s of defaults) if (!seen.has(s.key)) out.push(s);
+  return out;
+}
 
 /**
  * Theme tokens the CMS may override (mirrors the backend's THEME_TOKENS).
@@ -254,7 +337,6 @@ export const OVERRIDABLE_THEME_TOKENS = new Set([
   "background", "surface", "surfaceSoft", "border", "button", "buttonText", "foreground", "text", "mutedText",
 ]);
 
-export const EVERYONE: Audience = { segment: "all", platforms: [], minAppVersion: null, maxAppVersion: null };
 
 const NO_ACTION: TapAction = { type: "none", value: null, fallbackUrl: null };
 
@@ -288,6 +370,8 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   features: FEATURE_REGISTRY.map((f, order) => ({ ...f, enabled: true, order, badge: null, audience: EVERYONE, launch: OPEN_LAUNCH })),
   customTiles: [],
   homeSections: DEFAULT_HOME_SECTIONS,
+  screenSections: DEFAULT_SCREEN_SECTIONS,
+  screenTitles: {},
   theme: { light: {}, dark: {} },
   settings: DEFAULT_SETTINGS,
   banners: [],
@@ -457,22 +541,21 @@ export function parseAppConfig(raw: unknown): AppConfig {
     }
   }
 
-  // Home sections: the sent order, then any known section it left out
-  // (visible, in default order) so a new section in this build never vanishes.
-  const homeSections: HomeSection[] = [];
-  const seen = new Set<string>();
-  if (Array.isArray(data.homeSections)) {
-    const sorted = [...data.homeSections]
-      .filter((s): s is { key: HomeSectionKey; visible?: boolean; order?: number } =>
-        Boolean(s) && typeof s === "object" && SECTION_KEYS.has((s as { key?: string }).key ?? ""))
-      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    for (const s of sorted) {
-      if (seen.has(s.key)) continue;
-      seen.add(s.key);
-      homeSections.push({ key: s.key, visible: s.visible !== false });
-    }
+  const homeSections: HomeSection[] = parseSectionOrder(data.homeSections, DEFAULT_HOME_SECTIONS);
+  const rawScreens = (data.screenSections ?? {}) as Record<string, unknown>;
+  const screenSections = Object.fromEntries(
+    LAYOUT_SCREENS.map((screen) => [
+      screen,
+      parseSectionOrder(rawScreens[screen], DEFAULT_SCREEN_SECTIONS[screen] as ScreenSection[], REQUIRED_SECTIONS),
+    ]),
+  ) as ScreenSections;
+
+  const screenTitles: AppConfig["screenTitles"] = {};
+  const rawTitles = (data.screenTitles ?? {}) as Record<string, unknown>;
+  for (const hub of ["care_hub", "wellness_hub", "explore_hub"] as HubScreenKey[]) {
+    const t = text(rawTitles[hub], 30);
+    if (t) screenTitles[hub] = t;
   }
-  for (const s of DEFAULT_HOME_SECTIONS) if (!seen.has(s.key)) homeSections.push(s);
 
   const theme: ThemeOverrides = { light: {}, dark: {} };
   const rawTheme = (data.theme ?? {}) as Record<string, unknown>;
@@ -538,6 +621,8 @@ export function parseAppConfig(raw: unknown): AppConfig {
     features,
     customTiles,
     homeSections,
+    screenSections,
+    screenTitles,
     theme,
     settings,
     banners,
@@ -545,6 +630,25 @@ export function parseAppConfig(raw: unknown): AppConfig {
 }
 
 /* ------------------------------ Selectors ------------------------------ */
+
+/** Whether `viewer` sees a block now: turned on, in its audience, inside its dates. */
+export function isSectionShown(s: SectionSettings, viewer: Viewer, now = Date.now()): boolean {
+  if (!s.visible || !matchesAudience(s.audience, viewer)) return false;
+  if (s.startAt && Date.parse(s.startAt) > now) return false;
+  return !(s.endAt && Date.parse(s.endAt) <= now);
+}
+
+/** The blocks of Home or another screen that `viewer` sees now, in order. */
+export function shownSections(config: AppConfig, screen: "home", viewer?: Viewer, now?: number): HomeSection[];
+export function shownSections<S extends LayoutScreen>(config: AppConfig, screen: S, viewer?: Viewer, now?: number): ScreenSection<S>[];
+export function shownSections(config: AppConfig, screen: "home" | LayoutScreen, viewer: Viewer = ANY_VIEWER, now = Date.now()) {
+  const list: (SectionSettings & { key: string })[] = screen === "home" ? config.homeSections : config.screenSections[screen];
+  return list.filter((s) => isSectionShown(s, viewer, now));
+}
+
+/** A block's text from the CMS, else `fallback`. */
+export const sectionText = (sections: { key: string; text: string | null }[], key: string, fallback: string) =>
+  sections.find((s) => s.key === key)?.text ?? fallback;
 
 /** Viewer used when there's nobody to match (e.g. tests): everything shows. */
 export const ANY_VIEWER: Viewer = { signedIn: true, premium: true, platform: "android", appVersion: "999.0.0" };
@@ -630,6 +734,20 @@ export function routePath(route: string): string {
     .replace(/\/\([^/)]*\)/g, "")
     .replace(/\/+$/, "");
   return path.startsWith("/") ? path : `/${path}`;
+}
+
+/**
+ * The built-in feature whose screen `route` is (same matching as the route
+ * guard: its path, or anything under it), for the usage beacon. Null for
+ * screens that aren't a feature (Home, Profile, settings…).
+ */
+export function featureForRoute(config: AppConfig, route: string): string | null {
+  const path = routePath(route);
+  for (const f of config.features) {
+    const base = routePath(f.route);
+    if (path === base || path.startsWith(`${base}/`)) return f.key;
+  }
+  return null;
 }
 
 /** What the route guard shows instead of a locked feature's screen. */

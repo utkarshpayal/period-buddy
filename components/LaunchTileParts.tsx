@@ -6,6 +6,7 @@ import { useTheme } from "./theme";
 import type { HubTile } from "../lib/appConfig";
 import { openTileSheet } from "../lib/launchGuard";
 import { runTapAction } from "../lib/tapAction";
+import { trackUse } from "../lib/usage";
 
 /**
  * Shared pieces for drawing an App CMS tile in its launch state (The-Nura-CMS
@@ -24,7 +25,11 @@ export const isLocked = (tile: HubTile) => tile.launch.access !== "open";
 /** What a tap does: the tile's action when open, its sheet otherwise. */
 export function useTilePress(tile: HubTile) {
   const router = useRouter();
-  return () => (tile.launch.access === "open" ? runTapAction(tile.action, router) : openTileSheet(tile));
+  return () => {
+    if (tile.launch.access !== "open") return openTileSheet(tile);
+    trackUse(tile.key, "tap");
+    return runTapAction(tile.action, router);
+  };
 }
 
 /** "{Title}, coming soon" etc., for the tile's accessibility label. */

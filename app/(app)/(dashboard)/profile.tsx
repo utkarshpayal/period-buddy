@@ -27,6 +27,9 @@ import {
 } from "../../../lib/notifications";
 import Avatar from "../../../components/Avatar";
 import { CmsShortcuts } from "../../../components/CmsShortcuts";
+import { useAppConfig } from "../../../components/app-config";
+import { type ProfileSectionKey, sectionText, shownSections } from "../../../lib/appConfig";
+import { useViewer } from "../../../hooks/useViewer";
 import { PromoBanners } from "../../../components/PromoBanners";
 import { useUserStats } from "../../../hooks/useUserStats";
 import { useDataRefresh } from "../../../hooks/useDataRefresh";
@@ -41,6 +44,9 @@ export default function Profile() {
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const { streakCount, walletBalance } = useUserStats();
+  const { config: appConfig } = useAppConfig();
+  const viewer = useViewer();
+  const sections = shownSections(appConfig, "profile", viewer);
   const { enabled: genZModeEnabled, setEnabled: setGenZModeEnabled } = useGenZMode();
   const router = useRouter();
   const displayName =
@@ -279,6 +285,162 @@ export default function Profile() {
     </View>
   );
 
+  // Blocks below the header, in the order the App CMS sets and with the
+  // ones hidden, targeted elsewhere or out of their dates left out
+  // (lib/appConfig.ts `screenSections.profile`). Headings can be renamed there.
+  const blocks: Record<ProfileSectionKey, React.ReactNode> = {
+    identity: (
+      <View className="items-center" style={{ paddingHorizontal: 24, marginTop: 20 }}>
+        <Avatar
+          uri={user?.profilePicture}
+          name={displayName}
+          size={88}
+          backgroundColor={softTints.pink}
+          textColor={colors.primary}
+          fontFamily={fonts.heading}
+        />
+        <Text numberOfLines={1} style={{ color: colors.foreground, fontSize: 21, fontWeight: "800", fontFamily: fonts.heading, marginTop: 12 }}>
+          {displayName}
+        </Text>
+        <Text numberOfLines={1} style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body, marginTop: 2 }}>
+          {displayEmail}
+        </Text>
+        <TouchableOpacity
+          accessibilityRole="button"
+          activeOpacity={0.8}
+          onPress={() => router.push("/edit-profile")}
+          className="flex-row items-center rounded-full"
+          style={{ marginTop: 12, gap: 6, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}
+        >
+          <Feather name="edit-2" size={13} color={colors.foreground} />
+          <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}>Edit profile</Text>
+        </TouchableOpacity>
+      </View>
+    ),
+    // Optional details that used to be onboarding steps.
+    completeProfile:
+      !user?.profilePicture || !user?.phone ? (
+      <TouchableOpacity
+        accessibilityRole="button"
+        activeOpacity={0.85}
+        onPress={() => router.push("/edit-profile")}
+        className="flex-row items-center rounded-2xl"
+        style={{ marginHorizontal: 24, marginTop: 18, padding: 14, gap: 12, backgroundColor: colors.primaryLight }}
+      >
+        <View className="items-center justify-center rounded-xl" style={{ width: 38, height: 38, backgroundColor: colors.surface }}>
+          <Ionicons name={!user?.profilePicture ? "camera-outline" : "call-outline"} size={18} color={colors.primary} />
+        </View>
+        <View className="flex-1">
+          <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "800", fontFamily: fonts.body }}>Complete your profile</Text>
+          <Text style={{ color: colors.mutedText, fontSize: 13, marginTop: 2, fontFamily: fonts.body }}>
+            {!user?.profilePicture && !user?.phone
+              ? "Add a photo and phone number. Both optional."
+              : !user?.profilePicture
+                ? "Add a photo so your circles recognise you."
+                : "Add a phone number for check-in calls."}
+          </Text>
+        </View>
+        <Feather name="chevron-right" size={18} color={colors.mutedText} />
+      </TouchableOpacity>
+      ) : null,
+    // Stats — same flat style as the Tracker's
+    stats: (
+      <View className="flex-row" style={{ marginHorizontal: 24, marginTop: 20, gap: 10 }}>
+        {[
+          { label: "Days tracked", value: dashboard?.trackedDays ?? 0, icon: "calendar-outline" as const, color: colors.primary },
+          { label: "Care points", value: walletBalance, icon: "star" as const, color: colors.accent },
+          { label: "Day streak", value: streakCount, icon: "flame" as const, color: colors.warning },
+        ].map((m) => (
+          <View
+            key={m.label}
+            accessible
+            accessibilityLabel={`${m.label}: ${m.value}`}
+            className="flex-1 items-center rounded-2xl"
+            style={{ backgroundColor: colors.surface, paddingVertical: 14, paddingHorizontal: 6 }}
+          >
+            <View className="flex-row items-center" style={{ gap: 5 }}>
+              <Ionicons name={m.icon} size={15} color={m.color} />
+              <Text style={{ color: colors.foreground, fontSize: 17, fontWeight: "800", fontFamily: fonts.heading }}>{m.value}</Text>
+            </View>
+            <Text numberOfLines={1} style={{ color: colors.mutedText, fontSize: 12.5, fontWeight: "600", fontFamily: fonts.body, marginTop: 3 }}>
+              {m.label}
+            </Text>
+          </View>
+        ))}
+      </View>
+    ),
+    account: (
+      <>
+        {sectionLabel(sectionText(sections, "account", "Your account"))}
+        <View style={card}>{accountRows.map((row, i) => menuRow(row, i === accountRows.length - 1))}</View>
+      </>
+    ),
+    preferences: (
+      <>
+        {sectionLabel(sectionText(sections, "preferences", "Preferences"))}
+        <View style={card}>
+          {menuRow(
+            {
+              icon: "options-outline",
+              label: "Notifications & display",
+              tint: softTints.pink,
+              color: colors.primary,
+              onPress: () => setActiveMenuId(settingsOpen ? null : "settings"),
+            },
+            !settingsOpen,
+            <Feather name={settingsOpen ? "chevron-up" : "chevron-down"} size={18} color={colors.mutedText} />,
+          )}
+          {settingsOpen
+            ? preferenceRows.map((p, i) => (
+                <View key={p.label}>
+                  <View className="flex-row items-center" style={{ paddingLeft: 16 + 36 + 14, paddingRight: 16, paddingVertical: 12, gap: 12 }}>
+                    <View className="flex-1">
+                      <Text style={{ color: colors.foreground, fontSize: 14.5, fontWeight: "600", fontFamily: fonts.body }}>{p.label}</Text>
+                      {p.hint ? <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body, marginTop: 1 }}>{p.hint}</Text> : null}
+                    </View>
+                    <Switch
+                      value={p.value}
+                      disabled={p.disabled}
+                      onValueChange={p.onChange}
+                      trackColor={{ true: colors.primary, false: colors.border }}
+                      thumbColor="#FFFFFF"
+                      accessibilityLabel={p.label}
+                    />
+                  </View>
+                  {i < preferenceRows.length - 1 ? divider : null}
+                </View>
+              ))
+            : null}
+        </View>
+      </>
+    ),
+    privacyHelp: (
+      <>
+        {sectionLabel(sectionText(sections, "privacyHelp", "Privacy & help"))}
+        <View style={card}>{privacyRows.map((row, i) => menuRow(row, i === privacyRows.length - 1))}</View>
+      </>
+    ),
+    // App CMS: banners and features/links an admin placed on Profile.
+    // Both render nothing by default.
+    promo: <PromoBanners placement="profile" style={{ marginTop: 24 }} />,
+    shortcuts: <CmsShortcuts placement="profile" style={{ marginTop: 24 }} />,
+    logout: (
+      <TouchableOpacity
+        onPress={handleLogout}
+        activeOpacity={0.7}
+        disabled={isLoggingOut}
+        accessibilityRole="button"
+        className="flex-row items-center justify-center"
+        style={{ ...card, marginTop: 24, paddingVertical: 15, gap: 8 }}
+      >
+        <Feather name="log-out" size={16} color={colors.danger} />
+        <Text style={{ color: colors.danger, fontSize: 15, fontWeight: "700", fontFamily: fonts.body }}>
+          {isLoggingOut ? "Logging out…" : "Log out"}
+        </Text>
+      </TouchableOpacity>
+    ),
+  };
+
   return (
     <>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
@@ -292,145 +454,9 @@ export default function Profile() {
           {/* Header */}
           <TabHeader title="Profile" right={<ThemeToggle />} />
 
-          {/* Identity */}
-          <View className="items-center" style={{ paddingHorizontal: 24, marginTop: 20 }}>
-            <Avatar
-              uri={user?.profilePicture}
-              name={displayName}
-              size={88}
-              backgroundColor={softTints.pink}
-              textColor={colors.primary}
-              fontFamily={fonts.heading}
-            />
-            <Text numberOfLines={1} style={{ color: colors.foreground, fontSize: 21, fontWeight: "800", fontFamily: fonts.heading, marginTop: 12 }}>
-              {displayName}
-            </Text>
-            <Text numberOfLines={1} style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body, marginTop: 2 }}>
-              {displayEmail}
-            </Text>
-            <TouchableOpacity
-              accessibilityRole="button"
-              activeOpacity={0.8}
-              onPress={() => router.push("/edit-profile")}
-              className="flex-row items-center rounded-full"
-              style={{ marginTop: 12, gap: 6, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}
-            >
-              <Feather name="edit-2" size={13} color={colors.foreground} />
-              <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}>Edit profile</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Optional details that used to be onboarding steps. */}
-          {!user?.profilePicture || !user?.phone ? (
-            <TouchableOpacity
-              accessibilityRole="button"
-              activeOpacity={0.85}
-              onPress={() => router.push("/edit-profile")}
-              className="flex-row items-center rounded-2xl"
-              style={{ marginHorizontal: 24, marginTop: 18, padding: 14, gap: 12, backgroundColor: colors.primaryLight }}
-            >
-              <View className="items-center justify-center rounded-xl" style={{ width: 38, height: 38, backgroundColor: colors.surface }}>
-                <Ionicons name={!user?.profilePicture ? "camera-outline" : "call-outline"} size={18} color={colors.primary} />
-              </View>
-              <View className="flex-1">
-                <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "800", fontFamily: fonts.body }}>Complete your profile</Text>
-                <Text style={{ color: colors.mutedText, fontSize: 13, marginTop: 2, fontFamily: fonts.body }}>
-                  {!user?.profilePicture && !user?.phone
-                    ? "Add a photo and phone number. Both optional."
-                    : !user?.profilePicture
-                      ? "Add a photo so your circles recognise you."
-                      : "Add a phone number for check-in calls."}
-                </Text>
-              </View>
-              <Feather name="chevron-right" size={18} color={colors.mutedText} />
-            </TouchableOpacity>
-          ) : null}
-
-          {/* Stats — same flat style as the Tracker's */}
-          <View className="flex-row" style={{ marginHorizontal: 24, marginTop: 20, gap: 10 }}>
-            {[
-              { label: "Days tracked", value: dashboard?.trackedDays ?? 0, icon: "calendar-outline" as const, color: colors.primary },
-              { label: "Care points", value: walletBalance, icon: "star" as const, color: colors.accent },
-              { label: "Day streak", value: streakCount, icon: "flame" as const, color: colors.warning },
-            ].map((m) => (
-              <View
-                key={m.label}
-                accessible
-                accessibilityLabel={`${m.label}: ${m.value}`}
-                className="flex-1 items-center rounded-2xl"
-                style={{ backgroundColor: colors.surface, paddingVertical: 14, paddingHorizontal: 6 }}
-              >
-                <View className="flex-row items-center" style={{ gap: 5 }}>
-                  <Ionicons name={m.icon} size={15} color={m.color} />
-                  <Text style={{ color: colors.foreground, fontSize: 17, fontWeight: "800", fontFamily: fonts.heading }}>{m.value}</Text>
-                </View>
-                <Text numberOfLines={1} style={{ color: colors.mutedText, fontSize: 12.5, fontWeight: "600", fontFamily: fonts.body, marginTop: 3 }}>
-                  {m.label}
-                </Text>
-              </View>
-            ))}
-          </View>
-
-          {sectionLabel("Your account")}
-          <View style={card}>{accountRows.map((row, i) => menuRow(row, i === accountRows.length - 1))}</View>
-
-          {sectionLabel("Preferences")}
-          <View style={card}>
-            {menuRow(
-              {
-                icon: "options-outline",
-                label: "Notifications & display",
-                tint: softTints.pink,
-                color: colors.primary,
-                onPress: () => setActiveMenuId(settingsOpen ? null : "settings"),
-              },
-              !settingsOpen,
-              <Feather name={settingsOpen ? "chevron-up" : "chevron-down"} size={18} color={colors.mutedText} />,
-            )}
-            {settingsOpen
-              ? preferenceRows.map((p, i) => (
-                  <View key={p.label}>
-                    <View className="flex-row items-center" style={{ paddingLeft: 16 + 36 + 14, paddingRight: 16, paddingVertical: 12, gap: 12 }}>
-                      <View className="flex-1">
-                        <Text style={{ color: colors.foreground, fontSize: 14.5, fontWeight: "600", fontFamily: fonts.body }}>{p.label}</Text>
-                        {p.hint ? <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body, marginTop: 1 }}>{p.hint}</Text> : null}
-                      </View>
-                      <Switch
-                        value={p.value}
-                        disabled={p.disabled}
-                        onValueChange={p.onChange}
-                        trackColor={{ true: colors.primary, false: colors.border }}
-                        thumbColor="#FFFFFF"
-                        accessibilityLabel={p.label}
-                      />
-                    </View>
-                    {i < preferenceRows.length - 1 ? divider : null}
-                  </View>
-                ))
-              : null}
-          </View>
-
-          {sectionLabel("Privacy & help")}
-          <View style={card}>{privacyRows.map((row, i) => menuRow(row, i === privacyRows.length - 1))}</View>
-
-          {/* App CMS: banners and features/links an admin placed on Profile.
-              Both render nothing by default. */}
-          <PromoBanners placement="profile" style={{ marginTop: 24 }} />
-          <CmsShortcuts placement="profile" style={{ marginTop: 24 }} />
-
-          <TouchableOpacity
-            onPress={handleLogout}
-            activeOpacity={0.7}
-            disabled={isLoggingOut}
-            accessibilityRole="button"
-            className="flex-row items-center justify-center"
-            style={{ ...card, marginTop: 24, paddingVertical: 15, gap: 8 }}
-          >
-            <Feather name="log-out" size={16} color={colors.danger} />
-            <Text style={{ color: colors.danger, fontSize: 15, fontWeight: "700", fontFamily: fonts.body }}>
-              {isLoggingOut ? "Logging out…" : "Log out"}
-            </Text>
-          </TouchableOpacity>
+          {sections.map((s) => (
+            <React.Fragment key={s.key}>{blocks[s.key]}</React.Fragment>
+          ))}
         </ScrollView>
       </SafeAreaView>
 

@@ -7,6 +7,9 @@ import {
   featuresFor,
   groupTiles,
   parseAppConfig,
+  featureForRoute,
+  sectionText,
+  shownSections,
 } from "../appConfig";
 
 test("garbage in, defaults out", () => {
@@ -14,6 +17,7 @@ test("garbage in, defaults out", () => {
     const c = parseAppConfig(raw);
     assert.equal(c.features.length, DEFAULT_APP_CONFIG.features.length);
     assert.deepEqual(c.homeSections, DEFAULT_APP_CONFIG.homeSections);
+    assert.deepEqual(c.screenSections, DEFAULT_APP_CONFIG.screenSections);
     assert.deepEqual(c.theme, { light: {}, dark: {} });
     assert.deepEqual(c.banners, []);
   }
@@ -63,6 +67,61 @@ test("home sections follow the sent order and keep unknown-to-backend ones", () 
   assert.equal(c.homeSections[0].key, "insights");
   assert.equal(c.homeSections[1].visible, false);
   assert.equal(c.homeSections.length, DEFAULT_APP_CONFIG.homeSections.length);
+});
+
+const keys = (list: { key: string }[]) => list.map((s) => s.key);
+
+test("screen sections: sent order per screen, required blocks can't be hidden, defaults fill gaps", () => {
+  const c = parseAppConfig({
+    screenSections: {
+      care_hub: [
+        { key: "tiles", visible: true, order: 0 },
+        { key: "intro", visible: false, order: 1 },
+        { key: "promo", visible: true, order: 2 },
+      ],
+      profile: [
+        { key: "logout", visible: false, order: 0, audience: { segment: "premium" } },
+        { key: "stats", visible: false, order: 1 },
+        { key: "weekStrip", visible: true, order: 2 },
+      ],
+      tracker: [{ key: "x", visible: false, order: 0 }],
+    },
+  });
+  assert.deepEqual(keys(shownSections(c, "care_hub")), ["tiles", "promo"]);
+  const free = { signedIn: true, premium: false, platform: "android" as const, appVersion: "1.0.0" };
+  const profile = keys(shownSections(c, "profile", free));
+  assert.equal(profile[0], "logout");
+  assert.ok(!profile.includes("stats"));
+  assert.equal(profile.length, DEFAULT_APP_CONFIG.screenSections.profile.length - 1);
+  assert.deepEqual(c.screenSections.explore_hub, DEFAULT_APP_CONFIG.screenSections.explore_hub);
+  assert.deepEqual(parseAppConfig({ screenSections: "nope" }).screenSections, DEFAULT_APP_CONFIG.screenSections);
+});
+
+test("blocks: audience, schedule and text apply per viewer and time", () => {
+  const c = parseAppConfig({
+    homeSections: [
+      { key: "insights", visible: true, order: 0, text: "For you", audience: { segment: "premium" } },
+      { key: "weekStrip", visible: true, order: 1, startAt: "2026-10-01T00:00:00Z", endAt: "2026-10-10T00:00:00Z" },
+      { key: "statPills", visible: true, order: 2, endAt: "not a date" },
+    ],
+    screenTitles: { care_hub: "Health", explore_hub: 42, profile: "Me" },
+  });
+  const premium = { signedIn: true, premium: true, platform: "ios" as const, appVersion: "2.0.0" };
+  const free = { ...premium, premium: false };
+  const during = Date.parse("2026-10-05T00:00:00Z");
+  const after = Date.parse("2026-10-11T00:00:00Z");
+  assert.deepEqual(keys(shownSections(c, "home", premium, during)).slice(0, 3), ["insights", "weekStrip", "statPills"]);
+  assert.deepEqual(keys(shownSections(c, "home", free, after)).slice(0, 1), ["statPills"]);
+  assert.equal(sectionText(c.homeSections, "insights", "Insights"), "For you");
+  assert.equal(sectionText(c.homeSections, "moreForYou", "More for you"), "More for you");
+  assert.deepEqual(c.screenTitles, { care_hub: "Health" });
+});
+
+test("featureForRoute matches a feature's screen and anything under it", () => {
+  const c = parseAppConfig({});
+  assert.equal(featureForRoute(c, "/blogs"), "blogs");
+  assert.equal(featureForRoute(c, "/(app)/blogs/123?x=1"), "blogs");
+  assert.equal(featureForRoute(c, "/home"), null);
 });
 
 test("theme accepts only overridable tokens with safe colours", () => {

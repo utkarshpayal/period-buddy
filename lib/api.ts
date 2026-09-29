@@ -1172,6 +1172,15 @@ export const appConfigApi = {
       body: JSON.stringify({ platform: Platform.OS === "ios" ? "ios" : Platform.OS === "web" ? "web" : "android" }),
     }),
   /** Fire-and-forget: someone tapped a locked (Coming soon) tile. */
+  /** Batched feature usage (lib/usage.ts): `open` = its screen was visited, `tap` = its tile was tapped. */
+  trackUsage: async (events: { itemKey: string; kind: "open" | "tap" }[]) =>
+    apiRequest<unknown>("/api/app-config/usage", {
+      method: "POST",
+      skipAuth: true,
+      timeoutMs: 8000,
+      headers: await launchHeaders(),
+      body: JSON.stringify({ events }),
+    }),
   trackLockedTap: async (itemKey: string) =>
     apiRequest<unknown>(`/api/app-config/launch/${encodeURIComponent(itemKey)}/tap`, {
       method: "POST",
