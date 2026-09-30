@@ -27,7 +27,7 @@ import {
   type Predictions,
 } from "../../../lib/api";
 import { getCyclePhase } from "../../../lib/cycle";
-import { HomeSectionKey, describeHub, hubTilesFor } from "../../../lib/appConfig";
+import { HomeSectionKey, describeHub, hubTilesFor, sectionText, shownSections } from "../../../lib/appConfig";
 import { useViewer } from "../../../hooks/useViewer";
 import { PromoPopup } from "../../../components/PromoPopup";
 import { CmsShortcuts } from "../../../components/CmsShortcuts";
@@ -197,6 +197,7 @@ export default function Home() {
   const router = useRouter();
   const { config: appConfig, refresh: refreshAppConfig } = useAppConfig();
   const viewer = useViewer();
+  const shownHome = shownSections(appConfig, "home", viewer);
   // A hub with nothing visible for this user drops off "More for you".
   const hubHasFeatures = {
     care: hubTilesFor(appConfig, "care_hub", viewer).length > 0,
@@ -544,7 +545,7 @@ export default function Home() {
           <View className="flex-row items-center" style={{ gap: 7 }}>
             <View style={{ width: 5, height: 14, borderRadius: 3, backgroundColor: colors.secondary }} />
             <Text style={{ fontSize: 14.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
-              {insightsLabel}
+              {sectionText(shownHome, "insights", insightsLabel)}
             </Text>
           </View>
           <TouchableOpacity activeOpacity={0.7} onPress={() => router.push("/(app)/predictions")} className="flex-row items-center" style={{ gap: 2 }}>
@@ -669,7 +670,7 @@ export default function Home() {
         <View className="mb-2.5 flex-row items-center" style={{ gap: 7 }}>
           <View style={{ width: 5, height: 14, borderRadius: 3, backgroundColor: colors.primary }} />
           <Text style={{ fontSize: 14.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
-            {moreForYouLabel}
+            {sectionText(shownHome, "moreForYou", moreForYouLabel)}
           </Text>
         </View>
 
@@ -679,7 +680,7 @@ export default function Home() {
               icon="pulse-outline"
               iconColor={colors.primary}
               iconBg={colors.primaryLight}
-              title={careInsightsLabel}
+              title={appConfig.screenTitles.care_hub ?? careInsightsLabel}
               description={describeHub(appConfig, "care_hub", "Predictions, insights, symptom trends & consults", viewer)}
               onPress={() => router.push("/(app)/care-hub")}
             />
@@ -689,7 +690,7 @@ export default function Home() {
               icon="heart-outline"
               iconColor={colors.secondary}
               iconBg={colors.secondaryLight}
-              title={wellnessSupportLabel}
+              title={appConfig.screenTitles.wellness_hub ?? wellnessSupportLabel}
               description={describeHub(appConfig, "wellness_hub", "Health concerns, private Q&A, hygiene & more", viewer)}
               onPress={() => router.push("/(app)/wellness-hub")}
             />
@@ -699,7 +700,7 @@ export default function Home() {
               icon="compass-outline"
               iconColor={colors.accent}
               iconBg={colors.accentLight}
-              title={exploreLabel}
+              title={appConfig.screenTitles.explore_hub ?? exploreLabel}
               description={describeHub(appConfig, "explore_hub", "Forest, blogs, videos, habits & your buddy", viewer)}
               onPress={() => router.push("/(app)/explore-hub")}
             />
@@ -796,11 +797,9 @@ export default function Home() {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
           }
         >
-          {appConfig.homeSections
-            .filter((section) => section.visible)
-            .map((section) => (
-              <React.Fragment key={section.key}>{homeSections[section.key]}</React.Fragment>
-            ))}
+          {shownHome.map((section) => (
+            <React.Fragment key={section.key}>{homeSections[section.key]}</React.Fragment>
+          ))}
         </ScrollView>
       </SafeAreaView>
       <PromoPopup />
