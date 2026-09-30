@@ -1,4 +1,5 @@
 import * as AuthSession from "expo-auth-session";
+import Constants from "expo-constants";
 import * as Google from "expo-auth-session/providers/google";
 import * as WebBrowser from "expo-web-browser";
 import React, { useState } from "react";
@@ -21,12 +22,16 @@ export type GoogleSignInButtonProps = {
   role?: string;
 };
 
-// Env vars filled in per Google Cloud OAuth client — see .env.example on the
-// backend for where the matching client IDs are registered for verification.
-const WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
-const IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
-const ANDROID_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
-const EXPO_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_EXPO_CLIENT_ID;
+// One Google Cloud OAuth client per platform — the backend's GOOGLE_*_CLIENT_ID
+// must list the same IDs to verify tokens. An EXPO_PUBLIC_* env var wins,
+// else app.json's `extra.googleClientIds` (public IDs, safe to ship).
+const configClientIds = (Constants.expoConfig?.extra?.googleClientIds ?? {}) as Partial<
+  Record<"web" | "ios" | "android" | "expo", string>
+>;
+const WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || configClientIds.web;
+const IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || configClientIds.ios;
+const ANDROID_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || configClientIds.android;
+const EXPO_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_EXPO_CLIENT_ID || configClientIds.expo;
 
 // See the comment at its use below: a non-undefined stand-in fed to
 // Google.useAuthRequest so it doesn't throw during render when the real

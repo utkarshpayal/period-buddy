@@ -8,6 +8,10 @@ import { analyticsAllowed } from "./analyticsConsent";
 
 const LOCAL_DEV_API_PORT = "5000";
 const envApiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
+// Production API from app.json's `extra.apiBaseUrl`, for release builds made
+// without EXPO_PUBLIC_API_BASE_URL.
+const configApiBaseUrl =
+  (Constants.expoConfig?.extra?.apiBaseUrl as string | undefined)?.trim() || "https://www.backend.thenura.care";
 
 function getLocalDevApiBaseUrl() {
   const constants = Constants as unknown as {
@@ -31,7 +35,7 @@ function getLocalDevApiBaseUrl() {
 }
 
 export const API_BASE_URL = (
-  envApiBaseUrl || (__DEV__ ? getLocalDevApiBaseUrl() : "https://www.backend.thenura.care")
+  envApiBaseUrl || (__DEV__ ? getLocalDevApiBaseUrl() : configApiBaseUrl)
 ).replace(/\/+$/, "");
 export const WS_BASE_URL = API_BASE_URL.replace(/^http/, "ws");
 const APP_VERSION: string =

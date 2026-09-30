@@ -3,13 +3,16 @@
 Every endpoint the app calls, grouped by the `xApi` object in `lib/api.ts`
 that wraps it — a friendlier index than reading the backend's
 `API_DOCUMENTATION.md` route-by-route. This lists *what the frontend
-actually uses*; the backend may expose a couple of admin-only routes not
-listed here (those go through the separate Content Studio portal, not this
-app).
+actually uses*; staff-only routes (`/api/admin/*`, `/api/cms/*`,
+`/api/doctor/*`) belong to the Admin Workspace and the CMS, not this app.
+Checked against `lib/api.ts` on 2026-09-30.
 
 **Conventions:** all paths are relative to `EXPO_PUBLIC_API_BASE_URL`. Every
 request carries `Authorization: Bearer <jwt>` automatically unless the
-frontend call passes `skipAuth: true`. Every response is
+frontend call passes `skipAuth: true` (the token comes from the OS keystore,
+`lib/sessionStore.ts`). Every request also sends `X-App-Version`, and
+`/api/auth/*` requests send `X-Device-Id` so the backend can list devices.
+Every response is
 `{ data, error, message, ... }`; `apiRequest` unwraps `.data` for you,
 `apiEnvelopeRequest` returns the whole envelope (used where `token`/`user`
 are needed alongside `data`, i.e. auth flows). See `lib/api.ts`'s top for
@@ -29,12 +32,20 @@ the shared `ApiError` shape (`kind`: `network`/`timeout`/`server`/
 | POST | `/api/auth/google` | Google Sign-In (ID token) |
 | POST | `/api/auth/onboarding` | Save cycle length/last period/goals after signup |
 | GET | `/api/auth/profile` | Get the current user |
-| PATCH | `/api/auth/profile` | Update profile fields |
+| PUT | `/api/auth/profile` | Update profile fields (`profileApi` wraps this and `GET` above) |
 | POST | `/api/auth/fcm-token` | Register a push-notification device token |
-| POST | `/api/auth/change-password` | Change password |
-| POST | `/api/auth/delete-account` | Delete account (OTP-confirmed) |
+| POST | `/api/auth/change-password` | Change password (signs out every other device) |
+| DELETE | `/api/auth/delete-account` | Delete account: signed out and hidden at once, erased 30 days later |
 | GET | `/api/auth/dashboard` | Streak/wallet/summary — the single source `useUserStats.ts` fetches once and shares |
-| POST | `/api/auth/logout` | Invalidate the session server-side |
+| POST | `/api/auth/logout` | End this device's session |
+| POST | `/api/logout` | Legacy logout alias; also clears the push token |
+| POST | `/api/auth/logout-all` | Sign out everywhere |
+| GET | `/api/auth/sessions` | Signed-in devices |
+| DELETE | `/api/auth/sessions/:id` | Sign one device out |
+| GET | `/api/auth/privacy` | AI consent and privacy settings |
+| PUT | `/api/auth/privacy/settings` | `hideNotificationDetails`, `newSignInAlerts`, `aiChatRetentionDays` |
+| PUT | `/api/auth/privacy/ai-consent` | Turn AI features on/off (AI endpoints answer 403 `AI_CONSENT_REQUIRED` while off) |
+| GET | `/api/auth/export-data` | "Download my data" (once per 5 minutes) |
 
 ## `cycleApi` — cycle tracking
 
@@ -108,8 +119,9 @@ into `ApiError.kind === "featureLocked"` with a `.lock` payload — see
 | GET | `/api/partner/messages` | Partner chat history |
 | POST | `/api/partner/message` | Send a partner chat message |
 | DELETE | `/api/partner/disconnect` | Disconnect the pairing |
-| GET | `/api/partner/notifications` | In-app notification list (lives here for historical reasons) |
-| PATCH | `/api/partner/notifications/:id/read` | Mark a notification read |
+| GET | `/api/partner/notifications?page=&limit=` | In-app notification list, paged, with `unreadCount` on the envelope (lives here for historical reasons) |
+| POST | `/api/partner/notifications/:id/read` | Mark a notification read |
+| POST | `/api/partner/notifications/read-all` | Mark all read |
 
 ## `buddyApi` — anonymous peer support
 
@@ -198,9 +210,10 @@ match → AI → fallback) documented in the backend's `AI_ML_OVERVIEW.md`.
 | Method | Endpoint | Purpose |
 |---|---|---|
 | POST | `/api/voice-agent/converse` | One turn of the in-app voice/text agent (structured JSON reply) |
-| POST | `/api/voice-agent/checkin-call` | Trigger an outbound "call me now" |
+| POST | `/api/voice-agent/checkin-call` | Trigger an outbound "call me now" (no longer called from the UI) |
 | GET | `/api/voice-agent/checkin-call/schedule` | Get the recurring-call schedule |
 | PUT | `/api/voice-agent/checkin-call/schedule` | Save the recurring-call schedule |
+| GET | `/api/voice-agent/checkin-call/history?limit=` | Past check-in calls |
 
 ## `uploadApi`, `documentApi`, `speechApi`
 
@@ -208,8 +221,10 @@ match → AI → fallback) documented in the backend's `AI_ML_OVERVIEW.md`.
 |---|---|---|
 | POST | `/api/upload` | Generic image upload (avatars, etc.) — raw `FormData`, not `apiRequest` |
 | POST | `/api/documents` | Upload a medical document (OCR runs fire-and-forget after) |
-| GET | `/api/documents` | List my documents |
+| GET | `/api/documents` | List my documents (paged) |
+| GET | `/api/documents/:id` | One document with a fresh 10-minute signed `fileUrl` (fetched again on every open) |
 | DELETE | `/api/documents/:id` | Delete a document |
+| POST | `/api/documents/:id/retry-extraction` | Re-run text extraction |
 | POST | `/api/documents/summarize` | AI summary of documents in a date range |
 | GET | `/api/documents/chat` | Document-chat history |
 | POST | `/api/documents/chat` | Ask a question about my documents (AI) |
@@ -239,6 +254,42 @@ match → AI → fallback) documented in the backend's `AI_ML_OVERVIEW.md`.
 | POST | `/api/scheme-applications` | Start tracking an application |
 | GET | `/api/scheme-applications` | My applications |
 | GET/PATCH | `/api/scheme-applications/:id` | One application |
+
+## `appConfigApi` — remote layout from the CMS
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/api/app-config` | Per-viewer layout, features, launch states, banners, theme, app settings. Sent with `X-Device-Id` and `X-Nura-Launch: 1`; the token is attached by hand under `skipAuth` so a stale one can't sign anyone out |
+| POST | `/api/app-config/launch/:key/notify` | "Notify me" on a Coming-soon feature |
+| POST | `/api/app-config/launch/:key/tap` | Count a tap on a locked tile (not sent for under-18s) |
+| POST | `/api/app-config/usage` | Batched feature opens/taps (every 15 s, 20 events or on background) |
+| POST | `/api/app-config/banners/:id/click` | Banner click |
+| POST | `/api/app-config/banners/impressions` | Banner impressions, once per session |
+
+## `genzApi`, `circlesApi` — Gen Z pack
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/api/genz/wrapped?period=month\|year&value=&tz=` | Cycle Wrapped story data (`value` is `YYYY-MM` or `YYYY`) |
+| GET | `/api/genz/era` | Today's "era" (404 when there are no cycle settings) |
+| GET | `/api/genz/badges` | Streak and badges |
+| GET | `/api/circles` | My Bestie Circles |
+| POST | `/api/circles` | Create a circle |
+| POST | `/api/circles/join` | Join with an invite code |
+| GET | `/api/circles/:id` | One circle: members, vibes, reactions |
+| PATCH | `/api/circles/:id` | Rename |
+| POST | `/api/circles/:id/invite-code` | New invite code |
+| DELETE | `/api/circles/:id/members/:userId` | Remove a member / leave |
+| POST | `/api/circles/:id/vibes` | Post a vibe |
+| DELETE | `/api/circles/:id/vibes/:vibeId` | Delete a vibe |
+| POST | `/api/circles/:id/vibes/:vibeId/react` | React to a vibe |
+| POST | `/api/circles/:id/hype/:userId` | Hype a member |
+
+## `healthApi`
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/health` | Liveness check (outside `/api`) |
 
 ---
 

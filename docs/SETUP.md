@@ -26,7 +26,7 @@ Runs on `http://localhost:5000` by default (`PORT` in `.env`).
 
 | Variable | What it's for |
 |---|---|
-| `MONGODB_URI` | Your MongoDB connection string. |
+| `MONGODB_URI` | Your MongoDB connection string. Use a **development** database, never the production one: a laptop should not be able to reach real health data. |
 | `JWT_SECRET` | Signs/verifies auth tokens. Must be ≥32 characters — the server refuses to start in production with a short/missing one (validated at boot in `utils/jwt.js`); in dev it only warns. |
 
 Everything else below is **optional** — each integration degrades
@@ -43,6 +43,18 @@ actually need to test.
   — the general `/api` limiter; auto-on in production
 - `AUTH_RATE_LIMIT_WINDOW_MS` / `AUTH_RATE_LIMIT_MAX` — the stricter limiter
   on login/signup/OTP endpoints
+- `DATA_ENCRYPTION_KEYS` — field-level encryption key(s), `<id>:<base64 of 32
+  bytes>`. Optional in dev, **required in production** (the server won't
+  start without it). Generate one with
+  `node -e "console.log('k1:' + require('crypto').randomBytes(32).toString('base64'))"`.
+  Never reuse the production key locally.
+- `AI_CONSENT_ENFORCED`, `STAFF_2FA_ENABLED`, `STAFF_COOKIE_AUTH`,
+  `STAFF_SESSION_TTL`, `LOGIN_MAX_FAILURES`, `LOGIN_LOCK_MINUTES`,
+  `ACCOUNT_PURGE_AFTER_DAYS` and the `*_RETENTION_DAYS` keys — see the
+  backend's `docs/SECURITY.md`; the defaults are fine for local work.
+
+Production doesn't use a `.env` file: its values live in AWS Secrets Manager
+(`nura/api/env`, see the backend's `docs/INFRASTRUCTURE.md` §7).
 
 ### Email (OTP, newsletter, contact form)
 
@@ -119,8 +131,8 @@ npx expo start           # press w for web, a for Android, i for iOS
 
 | Variable | What it's for |
 |---|---|
-| `EXPO_PUBLIC_API_BASE_URL` | Must point at a reachable backend — `http://localhost:5000` for local dev against the backend above. Required for installed (EAS) builds; in `__DEV__` without it, `lib/api.ts` derives the host from the Expo dev server's own address on port 5000. |
-| `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` / `_IOS_CLIENT_ID` / `_ANDROID_CLIENT_ID` / `_EXPO_CLIENT_ID` | Must match the backend's `GOOGLE_*_CLIENT_ID` values so token verification succeeds. Only fill in the ones for platforms you're testing. |
+| `EXPO_PUBLIC_API_BASE_URL` | Which backend to use. On a phone, `localhost` is the phone itself, so use `http://<your computer's LAN IP>:5000` for a local backend, or leave it out: in `__DEV__` without it, `lib/api.ts` derives the host from the Expo dev server's own address on port 5000. A release build without it uses `app.json` → `extra.apiBaseUrl` (`https://www.backend.thenura.care`). |
+| `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` / `_IOS_CLIENT_ID` / `_ANDROID_CLIENT_ID` / `_EXPO_CLIENT_ID` | Google sign-in OAuth client IDs; must match the backend's `GOOGLE_*_CLIENT_ID`. Optional: without them the app uses `app.json` → `extra.googleClientIds` (the real, public IDs; also in `.env.example` and `eas.json`). |
 
 Two native config files (tracked in git; EAS builds use them) are needed for push notifications /
 Google Sign-In on native builds, not for `web`/Expo Go dev:
