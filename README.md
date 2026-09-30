@@ -109,9 +109,10 @@ eas.json                 EAS build profiles
 |---|---|
 | [docs/README.md](docs/README.md) | Index of every doc, plus where each asset lives |
 | [docs/SETUP.md](docs/SETUP.md) | Full local setup for app + backend, every env var |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How app, backend, database and AI vendors fit together |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | The whole system: all five repos, API, database, AWS, roles, deploys |
 | [docs/FEATURES.md](docs/FEATURES.md) | Every screen and how it works |
 | [docs/API_REFERENCE.md](docs/API_REFERENCE.md) | Backend endpoints the app calls |
+| [docs/security-implementation.md](docs/security-implementation.md) | App-side security and privacy |
 | [docs/PRD.md](docs/PRD.md) | Product requirements |
 | [CLAUDE.md](CLAUDE.md) / [AGENTS.md](AGENTS.md) | Detailed architecture notes (for AI assistants and humans) |
 

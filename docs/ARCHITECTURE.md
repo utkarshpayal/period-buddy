@@ -1,174 +1,168 @@
-# The Nura App — Architecture Overview
+# The Nura — System Architecture
 
-A high-level map of how the whole product fits together: two repos, one
-database, one AI vendor. For per-file implementation detail, see each
-repo's `CLAUDE.md` (kept in sync with the code on every architectural
-change) — this doc is the "how the pieces connect" picture that sits above
-that detail.
+The one picture of how the whole product fits together: five repos, one API,
+one database. **Last checked against the code and the live AWS account:
+2026-09-30.**
+
+This is the only system-wide architecture doc. The other four repos link here
+instead of keeping their own copy. For per-file detail, read each repo's
+`CLAUDE.md` / `README.md`; if this page and a `CLAUDE.md` ever disagree, trust
+the `CLAUDE.md` and fix this page.
+
+## The five repos
+
+| Repo (GitHub) | Local folder | What it is | Stack | Runs at |
+|---|---|---|---|---|
+| [`period-buddy`](https://github.com/utkarshpayal/period-buddy) | `The-Nura-App` | The mobile app (Android, iOS, web) | Expo SDK 54, Expo Router 6, React Native, TypeScript, NativeWind | Play Store (`com.uvin124.thenura`); builds via EAS |
+| [`period-buddy-be`](https://github.com/utkarshpayal/period-buddy-be) | `The-Nura-Backend` | The one API every client talks to | Node.js, Express, Mongoose, plain JS | `https://www.backend.thenura.care` (AWS EC2, Mumbai) |
+| [`period-buddy-content`](https://github.com/utkarshpayal/period-buddy-content) | `The-Nura-Admin-Website` | Admin Workspace (staff), clinician portal (doctors), People & Letters (HR) | React 18, TypeScript, Vite | `https://admin.thenura.care` (Vercel) |
+| [`the-nura-care-cms`](https://github.com/utkarshpayal/the-nura-care-cms) | `The-Nura-CMS` | App CMS: remote layout, feature launches, banners, theme, update prompts | React, TypeScript, Vite | `https://cms.thenura.care` (Vercel) |
+| [`The-Nura-website`](https://github.com/utkarshpayal/The-Nura-website) | `The-Nura-Marketing-Website` | Public site, legal pages, account deletion, deep-link bounce page | React 19, Vite | `https://thenura.care` (Vercel) |
+
+All five are private repositories.
 
 ## System diagram
 
-```
-┌─────────────────────────────┐        ┌──────────────────────────────────┐
-│   The-Nura-App (frontend)    │        │   The-Nura-Backend (backend)      │
-│   Expo Router / React Native │  HTTPS │   Node.js + Express                │
-│   iOS · Android · Web        │───────▶│   period-buddy-be                  │
-│                               │◀───────│                                    │
-│  lib/api.ts — the ONE file   │  WS    │  routes/ → controllers/ → models/  │
-│  that talks to the backend   │───────▶│  One WebSocket server shares the   │
-└───────────────┬───────────────┘        │  same HTTP server                 │
-                │                        └──────────────┬─────────────────────┘
-                │ push (FCM)                             │
-                ▼                                        ▼
-        ┌───────────────┐                        ┌───────────────┐
-        │ Firebase Cloud │                        │   MongoDB      │
-        │ Messaging      │                        │  (Mongoose)    │
-        └───────────────┘                        └───────┬───────┘
-                                                            │
-                        ┌───────────────────────────────────┼───────────────────────┐
-                        │                                   │                       │
-                        ▼                                   ▼                       ▼
-                ┌───────────────┐                  ┌────────────────┐     ┌──────────────────┐
-                │  Sarvam AI     │                  │  Cashfree        │     │  AWS S3            │
-                │  api.sarvam.ai │                  │  payments        │     │  file uploads       │
-                │  (chat/STT/TTS/│                  │  (subscriptions, │     │  (avatars, docs,    │
-                │  translate/OCR)│                  │  consultations)  │     │  reels, blogs)      │
-                └───────────────┘                  └────────────────┘     └──────────────────┘
-                        │
-                        ▼
-                ┌───────────────────┐
-                │ apps.sarvam.ai     │
-                │ Instant Outbound   │
-                │ ("Samvaad") — real │
-                │ phone calls        │
-                └───────────────────┘
+```mermaid
+flowchart LR
+  app["Mobile app<br/>period-buddy"] -->|HTTPS + WebSocket| api
+  admin["Admin Workspace<br/>admin.thenura.care"] -->|HTTPS| api
+  cms["App CMS<br/>cms.thenura.care"] -->|HTTPS| api
+  web["Marketing site<br/>thenura.care"] -->|HTTPS: contact, newsletter,<br/>account deletion| api
+  api["API<br/>www.backend.thenura.care<br/>(EC2 · Docker · Caddy)"]
+  api --> db[("MongoDB Atlas")]
+  api --> s3[("AWS S3<br/>uploads, private documents")]
+  api --> sm[("AWS Secrets Manager<br/>nura/api/env")]
+  api --> sarvam["Sarvam AI<br/>chat, speech, OCR, translate,<br/>outbound calls"]
+  api --> cf["Cashfree<br/>payments"]
+  api --> fcm["Firebase Cloud Messaging<br/>push"]
+  api --> resend["Resend<br/>email"]
+  fcm -.->|push| app
+  web -. "/app deep links,<br/>assetlinks.json" .-> app
 ```
 
-Two separate git repositories, two separate deployments, one shared
-MongoDB. The frontend never talks to MongoDB, Sarvam, Cashfree, S3, or FCM
-directly — every one of those goes through the backend's `/api/*` surface.
-(FCM is the one exception in the diagram: the backend sends the push, but
-the frontend registers its own device token and receives the push directly
-from Firebase, not through the backend.)
+Rules that hold everywhere:
 
-## The two repos
+- **Only the API touches the database and the third-party services.** No
+  client talks to MongoDB, S3, Sarvam, Cashfree or Resend directly. The one
+  exception is push: the app registers its own FCM/APNs token and receives
+  pushes straight from Firebase; the API is what sends them.
+- **One database** (MongoDB Atlas) serves every client. The admin portal and
+  the CMS write content and config; the app reads it.
+- **Staff and users are the same `User` collection**, told apart by `role`.
+  Staff roles and their permissions live in the backend's
+  `src/config/permissions.js`; the Admin Workspace and the CMS both sign in
+  through `/api/auth/login` and read permissions from `/api/admin/me`.
 
-### `The-Nura-App` (this repo) — frontend
+## Who can use which portal
 
-- **Stack:** Expo Router v6 (file-based routing), React Native, NativeWind
-  (Tailwind for RN), TypeScript.
-- **Targets:** iOS, Android, and Web from one codebase — builds go through
-  EAS (`eas build`), not a local Xcode/Android Studio pipeline.
-- **Data layer:** exactly one file, `lib/api.ts`, owns every HTTP call to
-  the backend. See [API_REFERENCE.md](./API_REFERENCE.md) for the full
-  endpoint list it wraps.
-- **State:** React Context providers (`ThemeProvider`, `AuthProvider`,
-  `AppLockProvider`, `GenZModeProvider`, `AppStateProvider`,
-  `PartnerViewStateProvider`) rather than Redux/Zustand — see `app/_layout.tsx`
-  for the exact nesting order.
-- **Realtime:** a single shared WebSocket connection (`hooks/useRealtimeSocket.ts`),
-  reference-counted per "room" so multiple screens subscribing to the same
-  room (e.g. `community`) share one socket instead of opening duplicates.
-- **No local ML, no local persistence beyond AsyncStorage** (auth session,
-  theme, app-lock PIN hash, a few cosmetic preferences) — everything else
-  is a live fetch from the backend.
+| Role (`User.role`) | Admin Workspace | CMS |
+|---|---|---|
+| `admin` (Super Admin) | Everything | Edit + publish |
+| `app_super_admin` | App side: users, push, subscriptions, analytics, schemes, staff | Edit + publish |
+| `app_admin` | App side, read-mostly | View only |
+| `content_super_admin`, `content_admin` | Content (blogs, guides, videos, Q&A), approvals for super | No access |
+| `clinical_admin` | Doctors | No access |
+| `doctor` | Clinician portal | No access |
+| `user`, `partner` | No access (mobile app only) | No access |
 
-### `period-buddy-be` / `The-Nura-Backend` — backend
+New staff are invited from Admin Workspace → Staff (an email with a
+set-password link). An address that already has an app account can't be
+invited; its role has to be changed in the database.
 
-- **Stack:** Node.js, Express 4, Mongoose/MongoDB, plain JS (not TypeScript).
-- **Layering:** `routes/` (Express routers, one per domain) → `controllers/`
-  (request handling) → `models/` (Mongoose schemas). `schemas/` holds
-  express-validator request validation where it exists.
-- **Auth:** JWT bearer tokens, verified per-request in `middleware/authMiddleware.js`.
-  A global feature-gate middleware (`middleware/subscriptionMiddleware.js` +
-  `config/subscriptionRouteRegistry.js`) enforces the paywall before a
-  request ever reaches its controller, driven by one registry file rather
-  than scattered inline checks.
-- **Realtime:** one WebSocket server (`config/websocket.js`) sharing the
-  same HTTP server the REST API runs on. Every authenticated connection is
-  auto-joined to a personal `user_<userId>` room; feature-specific rooms
-  (`community`, `partner_<id>`, `buddy_<roomKey>`, `consultation_<id>`) are
-  joined/left explicitly by clients.
-- **Scheduled jobs:** two recurring features (auto check-in calls, daily
-  reminders) are driven by a tick endpoint, fired either by an in-process
-  interval (`utils/inProcessScheduler.js`, the default — fine for one
-  running instance) or an external scheduler (AWS EventBridge) hitting a
-  shared-secret-authenticated HTTP endpoint once the deployment scales past
-  one instance. See the backend's `README.md` → "Scheduled jobs".
-- **AI:** every AI/ML feature is one vendor, Sarvam AI, wrapped by
-  `utils/sarvamClient.js`. Full breakdown in `AI_ML_OVERVIEW.md`.
-- **Payments:** Cashfree (orders → checkout → webhook verify), used for
-  both subscription purchases and doctor consultation bookings, sharing the
-  same order-creation/verification shape in `utils/cashfreeClient.js`.
+## The mobile app (`period-buddy`)
 
-### Where content is authored
+- **Routing:** Expo Router file-based routes. `(tabs)/` is signed-out
+  (login, signup, partner connect), `(app)/(dashboard)/` the owner's tab bar
+  (Home, Tracker, Community, Profile), `(app)/(partner-view)/` a connected
+  partner's read-only view, and every feature is one screen under `(app)/`.
+  Home stays short; features are grouped behind three hubs (Care & Insights,
+  Wellness & Support, Explore).
+- **Data layer:** one file, `lib/api.ts`, owns every HTTP call (see
+  [API_REFERENCE.md](./API_REFERENCE.md)). Every failure is a typed
+  `ApiError`; a 401 signs the user out globally; writes emit data-change
+  topics so other mounted screens refetch (`lib/data-sync.ts`).
+- **State:** React context providers (theme, Gen Z mode, auth, app lock, app
+  config, app state, partner-view state), no Redux.
+- **Remote layout:** `components/app-config.tsx` loads `GET /api/app-config`
+  (built-in defaults → cached copy → fresh fetch) so the CMS can move, hide,
+  launch or pause features, and show banners and update prompts, without a
+  release.
+- **Realtime:** one shared WebSocket (`hooks/useRealtimeSocket.ts`),
+  reference-counted per room (`community`, `partner_<id>`, `buddy_<key>`,
+  `consultation_<id>`, and the auto-joined `user_<id>`).
+- **On-device storage:** the session token and health-related caches (the
+  onboarding draft) are in the OS keystore (`lib/sessionStore.ts`,
+  `lib/secureStorage.ts`). AsyncStorage holds only non-secret things: the
+  profile, theme, cached app config, cosmetic preferences.
+- **Config:** `app.json` is the source of truth. The API URL and the Google
+  OAuth client IDs come from `EXPO_PUBLIC_*` env vars, falling back to
+  `app.json` → `extra` (`apiBaseUrl`, `googleClientIds`).
 
-A **third** system, `period-buddy-content` (the "Content Studio," not in
-this workspace), is the admin web portal where non-engineers manage blogs,
-reels, Q&A knowledge-base entries, subscription pricing, coupons, and
-government schemes. It writes to the same MongoDB the backend reads from —
-the mobile/web app is read-only over that content.
+## The API (`period-buddy-be`)
 
-## Data flow: a typical request
-
-```
-User taps "Log period" on Home
-  → DayDetailsModal collects flow/symptoms/mood/etc.
-  → cycleApi.saveLog(payload)                         (lib/api.ts)
-  → POST /api/cycle/log  { Authorization: Bearer <jwt> }
-  → authMiddleware verifies the JWT
-  → globalFeatureGate checks subscriptionRouteRegistry.js (this route isn't gated — free)
-  → cycleController.upsertCycleLog()
-      - derives cycleDay/phase via computeCyclePredictions (utils/cycle.js)
-      - atomically upserts the CycleLog document
-      - credits wallet tokens only on a truly new day's log (race-safe)
-      - recomputes the tracking streak
-  → response: { cycleLog, tokensEarned, isNewLog, phase }
-  → frontend updates local state, shows the new streak/tokens
-```
-
-## Data flow: an AI feature (Nura AI chat)
-
-```
-User sends a message in a topic-scoped chat
-  → questionAnswerApi.sendSessionMessage()
-  → POST /api/questions/sessions/:id/messages
-  → chatSessionController → companionChat.js#generateCompanionAnswer()
-      1. urgent-safety regex check
-      2. topic-scope classifier (separate LLM call, YES/NO only)
-      3. knowledge-base keyword match (MongoDB, no AI)
-      4. LLM answer, personalized with the asker's own cycle data
-      5. local fallback if the LLM call itself fails
-  → Sarvam AI (api.sarvam.ai/v1/chat/completions) — only reached if step 3 found nothing
-  → response persisted to the ChatSession, returned to the client
-```
-
-Full detail on every AI-touching flow (voice agent, document OCR, outbound
-calls, translation, health-report analysis) is in the backend's
-`AI_ML_OVERVIEW.md`.
+- **Layering:** `routes/` → `middleware/` (auth, permissions, feature gate,
+  rate limits) → `controllers/` → `models/` (Mongoose), with shared logic in
+  `utils/`.
+- **Auth:** JWTs backed by revocable `UserSession` rows (log out one device or
+  everywhere). Staff and doctors add a second sign-in step (authenticator app,
+  recovery code or emailed code). Staff may use an `HttpOnly` cookie instead of
+  a bearer token.
+- **Paywall:** a global feature gate driven by one registry file
+  (`config/subscriptionRouteRegistry.js`) answers `402 FEATURE_LOCKED` before a
+  controller runs.
+- **Scheduled jobs:** daily reminders and check-in calls tick in-process
+  (`utils/inProcessScheduler.js`); account purge and data retention run from
+  their own runners started in `index.js`. Keep the API to one instance, or
+  jobs double-fire and WebSocket rooms split.
+- **AI:** Sarvam AI for chat, speech, OCR, translation and outbound phone
+  calls, gated by each person's AI consent. See the backend's
+  `docs/AI_ML_OVERVIEW.md`.
 
 ## Deployment
 
-- **Frontend:** EAS Build profiles (`eas.json`) produce installable
-  Android/iOS builds; `EXPO_PUBLIC_API_BASE_URL` is baked in at build time
-  per profile (dev/preview/production each point at a different backend
-  URL). Web is served as a static Expo web export. `app.json` is the source
-  of truth for app identity/config.
-- **Backend:** a standard Node HTTP server (`index.js`), deployed behind
-  whatever reverse proxy/host terminates TLS in front of it (`API_BASE_URL`
-  must be a public HTTPS URL for Sarvam's outbound-call webhook and
-  EventBridge scheduler callbacks to reach it). Graceful shutdown drains
-  WebSocket clients and in-flight HTTP requests before closing the DB
-  connection.
-- **Database:** one MongoDB instance/cluster shared by the backend and the
-  Content Studio admin portal.
+| Piece | How it ships |
+|---|---|
+| API | Merge to `main` → CodePipeline **`the-nura-care-be`** → CodeBuild (lint, test, Docker image to ECR `nura-api`) → CodeDeploy to EC2 `Nura-Backend` (ap-south-1). Environment comes from Secrets Manager `nura/api/env`; changing it needs a new pipeline run. Failed health checks roll back. Details: backend `docs/INFRASTRUCTURE.md`. |
+| Mobile app | `eas build` (profiles in `eas.json`), then Play Store. Native changes need a new build; JS-only and CMS changes don't. |
+| Admin, CMS, marketing site | Vercel, from `main`. Each needs its `VITE_*` API URL set in Vercel. |
+
+## Security
+
+Everything about how data is protected (encryption, sessions, staff access,
+retention, incident response) is in one place: the backend's
+[`docs/SECURITY.md`](https://github.com/utkarshpayal/period-buddy-be/blob/main/docs/SECURITY.md).
+The app-side details are in [security-implementation.md](./security-implementation.md).
+The public, plain-language version is `https://thenura.care/security`, which
+must never claim more than `SECURITY.md` does.
+
+## Data flow: logging a day
+
+```
+User taps "Log period"
+  → DayDetailsModal → cycleApi.saveLog()                    (lib/api.ts)
+  → POST /api/cycle/log   Authorization: Bearer <jwt>
+  → auth middleware: token → live UserSession
+  → feature gate: route not gated
+  → cycleController: derive cycle day/phase, upsert CycleLog (note field encrypted),
+    award tokens once per new day, recompute streak
+  → response → app emits the "cycle" topic → Home, Tracker and Calendar refetch
+```
+
+## Data flow: a Nura AI message
+
+```
+questionAnswerApi.sendSessionMessage()
+  → POST /api/questions/sessions/:id/messages
+  → AI consent check (403 AI_CONSENT_REQUIRED if AI is off)
+  → companionChat: urgent-safety check → topic classifier → knowledge base → Sarvam AI → local fallback
+  → messages saved encrypted on the session
+```
 
 ## Related docs
 
-- [FEATURES.md](./FEATURES.md) — what the product does, screen by screen.
-- [SETUP.md](./SETUP.md) — get both repos running locally.
-- [API_REFERENCE.md](./API_REFERENCE.md) — every endpoint the frontend calls.
-- Backend `AI_ML_OVERVIEW.md` — every AI/ML flow in detail.
-- Backend `API_DOCUMENTATION.md` — the backend's own endpoint reference.
-- Each repo's `CLAUDE.md` — the living, most-detailed technical doc; if
-  anything here ever disagrees with a `CLAUDE.md`, trust `CLAUDE.md`.
+- [README.md](./README.md): index of this repo's docs, and links to every repo's docs.
+- [API_REFERENCE.md](./API_REFERENCE.md): every endpoint the app calls.
+- [SETUP.md](./SETUP.md): run the app and the backend locally.
+- Backend `docs/INFRASTRUCTURE.md`, `docs/SECURITY.md`, `docs/API_DOCUMENTATION.md`, `docs/AI_ML_OVERVIEW.md`.
+- CMS `docs/launch-states.md`: the launch-state contract between CMS, API and app.

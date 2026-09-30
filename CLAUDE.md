@@ -184,4 +184,4 @@ Some components have a `.web.tsx` variant (e.g. `components/BuddyVideoCall.tsx` 
 
 - Expo SDK has changed significantly — check `https://docs.expo.dev/versions/v54.0.0/` before writing Expo API code rather than relying on older training data.
 - Sensitive local files present but gitignored: `.env` and every `.env.*` variant except `.env.example` — never print or commit their contents.
-- Longer product docs (`FEATURES-AND-PITCH.md`, `PAGE-BY-PAGE-FEATURES.md`) live in `docs/`.
+- All docs live in `docs/`, indexed by `docs/README.md` (which also links every Nura repo's docs). `docs/ARCHITECTURE.md` is the **only system-wide architecture doc** for all five repos (the others link to it), and `docs/API_REFERENCE.md` lists every endpoint `lib/api.ts` calls — update both in the same change when the system shape or the API surface changes. Security facts live in the backend's `docs/SECURITY.md`; the website's `/security` page must match it.

@@ -1,31 +1,55 @@
-# Documentation Index
+# Documentation — Mobile app (`period-buddy`)
+
+All of this repo's docs live in this folder. `README.md`, `CLAUDE.md` and
+`AGENTS.md` stay at the repo root because GitHub and coding tools look for them
+there.
+
+## Start here
 
 | Doc | For |
 |---|---|
-| [PRD.md](./PRD.md) | Product requirements — problem, goals, scope, functional/non-functional requirements, risks. |
-| [FEATURES.md](./FEATURES.md) | Product guide — every screen, what it does, how to use it. |
-| [ARCHITECTURE.md](./ARCHITECTURE.md) | How the frontend, backend, database, and AI vendor fit together. |
-| [SETUP.md](./SETUP.md) | Get both repos running locally; every environment variable explained; contribution conventions. |
-| [API_REFERENCE.md](./API_REFERENCE.md) | Every backend endpoint the frontend calls, grouped by feature. |
-| [PAGE-BY-PAGE-FEATURES.md](./PAGE-BY-PAGE-FEATURES.md) | Screen-by-screen feature breakdown. |
-| [FEATURES-AND-PITCH.md](./FEATURES-AND-PITCH.md) | Feature list written as a product pitch. |
-| [FEATURES.html](./FEATURES.html) | Printable/shareable HTML version of the product guide. |
-| [fixes.md](./fixes.md) | Code review findings and their status. Code comments cite its sections (e.g. "see docs/fixes.md §2"). |
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | **The system-wide picture**: all five repos, the API, database, AWS, roles, deploys. The only copy; other repos link here. |
+| [SETUP.md](./SETUP.md) | Run the app and backend locally; every environment variable. |
+| [API_REFERENCE.md](./API_REFERENCE.md) | Every backend endpoint the app calls, grouped by `lib/api.ts` object. |
+| [security-implementation.md](./security-implementation.md) | How the app side of security and privacy works (keystore, screen privacy, sessions, AI consent, exports). |
+| [../CLAUDE.md](../CLAUDE.md) | The most detailed, always-current technical notes for this repo. |
+
+## Product
+
+| Doc | For |
+|---|---|
+| [PRD.md](./PRD.md) | Product requirements: problem, goals, scope, risks. |
+| [FEATURES.md](./FEATURES.md) | Every screen, what it does, how to use it. |
+| [PAGE-BY-PAGE-FEATURES.md](./PAGE-BY-PAGE-FEATURES.md) | Screen-by-screen breakdown. |
+| [FEATURES-AND-PITCH.md](./FEATURES-AND-PITCH.md) | The feature list written as a pitch. |
+| [FEATURES.html](./FEATURES.html) | Printable export of the product guide (from 2026-09-21; FEATURES.md is newer). |
+
+## History
+
+| Doc | For |
+|---|---|
+| [fixes.md](./fixes.md) | Code-review findings and their status. Code comments cite its sections (e.g. "see docs/fixes.md §2"). |
 
 ## Where assets live
 
 | Folder | Contents |
 |---|---|
-| `assets/images/brand/` | `app-icon.png` (app/adaptive/notification icon, favicon), `logo-full.png` (splash), `logo-mark.png` (in-app logo) |
-| `assets/images/brand/source/` | Original logo files with backgrounds, not used by the app, kept for design work |
+| `assets/images/brand/` | `app-icon.png` (app/adaptive/notification icon, favicon), `logo-full.png` (splash), `logo-mark.png` (in-app logo), adaptive icon layers |
+| `assets/images/brand/source/` | Original logo files, kept for design work, not used by the app |
 | `assets/images/illustrations/` | In-app illustrations (`nura-avatar.png`: tab-bar centre / Q&A avatar) |
-| `assets/sounds/` | `notification.wav`: custom push sound (registered in `app.json` → expo-notifications) |
-| `assets/fonts/` | Manrope + IBM Plex Mono, loaded in `app/_layout.tsx` |
-| `assets/*.json`, `*.plist` | Firebase client configs used by EAS builds (`app.json`) |
+| `assets/sounds/` | `notification.wav`: custom push sound |
+| `assets/fonts/` | Manrope (embedded natively) + IBM Plex Mono |
+| `assets/*.json`, `*.plist` | Firebase client configs used by EAS builds (public by design) |
 
-For deeper technical detail than these give, see:
+## All Nura repos
 
-- `/CLAUDE.md` (project root) — the living, most-detailed architecture doc
-  for this repo, kept in sync with the code on every change.
-- Backend repo's `CLAUDE.md`, `README.md`, and `docs/` (`API_DOCUMENTATION.md`,
-  `INFRASTRUCTURE.md`, `AI_ML_OVERVIEW.md`).
+| Repo | What | Its docs |
+|---|---|---|
+| [period-buddy](https://github.com/utkarshpayal/period-buddy) (`The-Nura-App`) | Mobile app | [docs/](https://github.com/utkarshpayal/period-buddy/tree/main/docs), including the system [ARCHITECTURE.md](https://github.com/utkarshpayal/period-buddy/blob/main/docs/ARCHITECTURE.md) |
+| [period-buddy-be](https://github.com/utkarshpayal/period-buddy-be) (`The-Nura-Backend`) | API | [docs/](https://github.com/utkarshpayal/period-buddy-be/tree/main/docs), including [SECURITY.md](https://github.com/utkarshpayal/period-buddy-be/blob/main/docs/SECURITY.md) and [INFRASTRUCTURE.md](https://github.com/utkarshpayal/period-buddy-be/blob/main/docs/INFRASTRUCTURE.md) |
+| [period-buddy-content](https://github.com/utkarshpayal/period-buddy-content) (`The-Nura-Admin-Website`) | Admin Workspace, clinician portal | [docs/](https://github.com/utkarshpayal/period-buddy-content/tree/main/docs) |
+| [the-nura-care-cms](https://github.com/utkarshpayal/the-nura-care-cms) (`The-Nura-CMS`) | App CMS | [docs/](https://github.com/utkarshpayal/the-nura-care-cms/tree/main/docs) |
+| [The-Nura-website](https://github.com/utkarshpayal/The-Nura-website) (`The-Nura-Marketing-Website`) | Marketing site | [docs/](https://github.com/utkarshpayal/The-Nura-website/tree/main/docs) |
+
+Keeping docs current: a change to architecture, routes, the API surface,
+deploys or security updates the matching doc in the same PR.
