@@ -88,23 +88,27 @@ export default function DocumentChatScreen() {
 
   const selectedLanguage = languages.find((l) => l.code === language) ?? SUPPORTED_LANGUAGES[0];
   const isSpeakingReply = voiceMode && playingMessageId !== null;
+  // The reply's audio is still being made. Counts as busy: otherwise the mic
+  // re-arms in this gap, records the reply being spoken and sends it back as
+  // if the user had said it.
+  const isPreparingReply = voiceMode && synthesizingMessageId !== null;
 
   // Google Assistant style loop: whenever voice mode is idle, auto-arm the mic again.
   // Paused while a voice-mode failure is showing (voiceError) so the user has
   // time to actually read it before the mic starts listening again.
   useEffect(() => {
-    if (!voiceMode || isRecording || isTranscribing || isReplying || isSpeakingReply || voiceError) return;
+    if (!voiceMode || isRecording || isTranscribing || isReplying || isPreparingReply || isSpeakingReply || voiceError) return;
     const timer = setTimeout(() => {
       handleMicPress();
     }, 450);
     return () => clearTimeout(timer);
-  }, [voiceMode, isRecording, isTranscribing, isReplying, isSpeakingReply, voiceError, handleMicPress]);
+  }, [voiceMode, isRecording, isTranscribing, isReplying, isPreparingReply, isSpeakingReply, voiceError, handleMicPress]);
 
   const voiceStatus: VoiceStatus = isTranscribing
     ? "processing"
     : isRecording
       ? "listening"
-      : isReplying
+      : isReplying || isPreparingReply
         ? "thinking"
         : isSpeakingReply
           ? "speaking"
