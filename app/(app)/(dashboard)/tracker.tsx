@@ -40,6 +40,7 @@ import { SkeletonBlock } from "../../../components/Skeleton";
 import { CalendarDayCell, CalendarLegend } from "../../../components/CycleCalendar";
 import { getCycleDay, type DayStatus } from "../../../lib/cycleCalendar";
 import { alertLogNotSaved } from "../../../lib/alert";
+import { useSecureScreen } from "../../../lib/screenPrivacy";
 
 const CYCLE_LENGTH = 28;
 const CURRENT_CYCLE_DAY = 14;
@@ -466,6 +467,7 @@ function CycleRing({
 }
 
 export default function Tracker() {
+  useSecureScreen("tracker");
   const insets = useSafeAreaInsets();
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();

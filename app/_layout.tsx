@@ -27,6 +27,7 @@ import "../global.css";
 import { LinearGradient } from "expo-linear-gradient";
 import { cssInterop } from "nativewind";
 import { MAX_CONTENT_WIDTH } from "../lib/layout";
+import { ScreenPrivacySync } from "../lib/screenPrivacy";
 
 
 // The payload's data fields. The type normally arrives in content.data, but
@@ -206,6 +207,7 @@ function AppShell() {
       <AppGate />
       {/* Refetches the App CMS config on sign-in/out; feeds the launch route guard. */}
       <AppConfigSync />
+      <ScreenPrivacySync />
       <AppModalHost />
     </>
   );

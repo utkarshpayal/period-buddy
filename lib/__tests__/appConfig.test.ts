@@ -8,6 +8,13 @@ import {
   groupTiles,
   parseAppConfig,
   featureForRoute,
+  gateState,
+  hubTilesFor,
+  isAppLink,
+  isFeatureVisible,
+  launchForRoute,
+  matchesAudience,
+  routePath,
   sectionText,
   shownSections,
 } from "../appConfig";
@@ -153,7 +160,6 @@ test("describeHub keeps the copy until the CMS moves tiles", () => {
   assert.equal(describeHub(moved, "explore_hub", "fallback"), "Forest, Videos, Partner Sync & more");
 });
 
-import { gateState, hubTilesFor, isAppLink, matchesAudience } from "../appConfig";
 
 const viewer = (over: Partial<{ signedIn: boolean; premium: boolean; platform: "android" | "ios" | "web"; appVersion: string }> = {}) => ({
   signedIn: true,
@@ -216,7 +222,6 @@ test("gateState: maintenance, required and optional updates", () => {
   assert.deepEqual(gateState(upd, viewer({ appVersion: "1.0.0", platform: "web" }), null), { kind: "none" });
 });
 
-import { isFeatureVisible, launchForRoute, routePath } from "../appConfig";
 
 const sheet = { headline: "Coming this month", message: "Chat any time", notifyMe: true, onList: false, alternative: { type: "none" } };
 

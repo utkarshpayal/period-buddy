@@ -38,6 +38,7 @@ import {
   type DoctorAvailability,
 } from "../../lib/api";
 import { ScreenHeader } from "../../components/ScreenHeader";
+import { useSecureScreen } from "../../lib/screenPrivacy";
 
 function getDoctorDisplayName(doctor: Doctor) {
   const legacyName = (doctor as Doctor & { name?: string }).name;
@@ -131,6 +132,7 @@ function dedupeMessages(messages: ConsultationMessage[]): ConsultationMessage[] 
 }
 
 export default function ConsultationScreen() {
+  useSecureScreen("consultation");
   const { colors, isDark, fonts } = useTheme();
   const chatScrollRef = useRef<ScrollView>(null);
   const insets = useSafeAreaInsets();

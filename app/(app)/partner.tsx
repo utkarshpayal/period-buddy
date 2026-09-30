@@ -32,8 +32,10 @@ import {
 } from "../../lib/api";
 import { shareWithAppLink } from "../../lib/share";
 import { useRealtimeSocket, type RealtimeMessage } from "../../hooks/useRealtimeSocket";
+import { useSecureScreen } from "../../lib/screenPrivacy";
 
 export default function Partner() {
+  useSecureScreen("partner");
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
   const chatScrollRef = useRef<ScrollView>(null);

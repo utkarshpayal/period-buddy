@@ -1,0 +1,22 @@
+// Dependency audit for CI (.github/workflows/security.yml): fails on any high
+// or critical advisory in production dependencies, except the ones below.
+// Each was reviewed; remove an entry once a fix can be installed.
+{
+  "$schema": "https://github.com/IBM/audit-ci/raw/main/docs/schema.json",
+  "high": true,
+  "skip-dev": true,
+  "allowlist": [
+    // image-size (via Expo's Metro bundler): only reads our own bundled
+    // images at build time. Fixed only in image-size 2.x, whose API Metro
+    // doesn't use; goes away with an Expo SDK upgrade.
+    "GHSA-5p2g-fcmc-qvqq",
+    "GHSA-w3rx-r6r6-pgpr",
+    // linkify-it (via markdown-it 10, via react-native-markdown-display 7):
+    // slow-rendering (DoS) bugs. The app only renders
+    // blog posts from the Content Studio and AI answers to the person's own
+    // question, never text written by other users. Replace the markdown
+    // library to clear these.
+    "GHSA-22p9-wv53-3rq4",
+    "GHSA-v245-v573-v5vm"
+  ]
+}

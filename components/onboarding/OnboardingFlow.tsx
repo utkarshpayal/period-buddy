@@ -1,5 +1,4 @@
 import { Ionicons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BackHandler,
@@ -15,6 +14,7 @@ import Animated, { FadeIn, FadeInDown, FadeInLeft, FadeInRight, ZoomIn } from "r
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle } from "react-native-svg";
 import { requestNotificationPermissionAsync } from "../../lib/notifications";
+import { secureGetItem, secureRemoveItem, secureSetItem } from "../../lib/secureStorage";
 import {
   addDays,
   CYCLE_LENGTH_RANGE,
@@ -82,7 +82,7 @@ export function OnboardingFlow({ userId, firstName, onSubmit, onFinish }: Onboar
   // Resume where the user left off if the app was closed mid-setup.
   useEffect(() => {
     let cancelled = false;
-    AsyncStorage.getItem(draftKey)
+    secureGetItem(draftKey)
       .then((raw) => {
         if (cancelled) return;
         const saved = parseDraft(raw, STEPS.length);
@@ -100,7 +100,7 @@ export function OnboardingFlow({ userId, firstName, onSubmit, onFinish }: Onboar
 
   useEffect(() => {
     if (!hasLoaded || isDone) return;
-    AsyncStorage.setItem(draftKey, JSON.stringify(draft)).catch(() => {});
+    secureSetItem(draftKey, JSON.stringify(draft)).catch(() => {});
   }, [draft, draftKey, hasLoaded, isDone]);
 
   const update = useCallback((patch: Partial<OnboardingDraft>) => {
@@ -146,7 +146,7 @@ export function OnboardingFlow({ userId, firstName, onSubmit, onFinish }: Onboar
         trackingGoal: goals[0],
         trackingGoals: goals,
       });
-      AsyncStorage.removeItem(draftKey).catch(() => {});
+      secureRemoveItem(draftKey).catch(() => {});
       setDraft((current) => ({ ...current, lastPeriodStartDate }));
       setDirection(1);
       setIsDone(true);

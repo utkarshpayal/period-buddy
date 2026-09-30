@@ -18,8 +18,10 @@ import { useTheme } from "../../../components/theme";
 import { SkeletonRow } from "../../../components/Skeleton";
 import { partnerApi } from "../../../lib/api";
 import { usePartnerViewState } from "../../../components/partner-view-state";
+import { useSecureScreen } from "../../../lib/screenPrivacy";
 
 export default function PartnerViewChat() {
+  useSecureScreen("partner-chat");
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
   const { prefill } = useLocalSearchParams<{ prefill?: string }>();

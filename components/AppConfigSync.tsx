@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { usePathname } from "expo-router";
 import { useAppConfig } from "./app-config";
 import { useAuth } from "./auth-context";
+import { isMinor, setAnalyticsAllowed } from "../lib/analyticsConsent";
 import { useViewer } from "../hooks/useViewer";
 import { featureForRoute } from "../lib/appConfig";
 import { setLaunchContext } from "../lib/launchGuard";
@@ -26,6 +27,11 @@ export function AppConfigSync() {
   const lastAccount = useRef(account);
   const pathname = usePathname();
   const lastFeature = useRef<string | null>(null);
+
+  // Before the usage effect below, so a minor's first screen isn't counted.
+  useEffect(() => {
+    setAnalyticsAllowed(!isMinor(user?.dateOfBirth));
+  }, [user?.dateOfBirth]);
 
   useEffect(() => {
     const feature = featureForRoute(config, pathname);

@@ -21,6 +21,7 @@ import { usePartnerViewState } from "../../../components/partner-view-state";
 import { getSharedHubTiles } from "../../../lib/hubTiles";
 import { isFeatureVisible } from "../../../lib/appConfig";
 import { useAppConfig } from "../../../components/app-config";
+import { useSecureScreen } from "../../../lib/screenPrivacy";
 
 const PHASE_LABEL: Record<string, string> = {
   follicular: "Follicular phase",
@@ -56,6 +57,7 @@ function formatDateKey(dateKey?: string) {
 }
 
 export default function PartnerViewOverview() {
+  useSecureScreen("partner-overview");
   const { colors, isDark, fonts } = useTheme();
   // Links to a feature hidden in the App CMS disappear here too (tile ids
   // match the CMS feature keys).
