@@ -139,23 +139,27 @@ export default function QA() {
 
   const selectedLanguage = languages.find((l) => l.code === language) ?? SUPPORTED_LANGUAGES[0];
   const isSpeakingReply = voiceMode && playingMessageId !== null;
+  // The reply's audio is still being made. Counts as busy: otherwise the mic
+  // re-arms in this gap, records the reply being spoken and sends it back as
+  // if the user had said it.
+  const isPreparingReply = voiceMode && synthesizingMessageId !== null;
 
   // Google Assistant style loop: whenever voice mode is idle, auto-arm the mic again.
   // Paused while a voice-mode failure is showing (voiceError) so the user has
   // time to actually read it before the mic starts listening again.
   useEffect(() => {
-    if (!voiceMode || isRecording || isTranscribing || isCompanionTyping || isSpeakingReply || voiceError) return;
+    if (!voiceMode || isRecording || isTranscribing || isCompanionTyping || isPreparingReply || isSpeakingReply || voiceError) return;
     const timer = setTimeout(() => {
       handleMicPress();
     }, 450);
     return () => clearTimeout(timer);
-  }, [voiceMode, isRecording, isTranscribing, isCompanionTyping, isSpeakingReply, voiceError, handleMicPress]);
+  }, [voiceMode, isRecording, isTranscribing, isCompanionTyping, isPreparingReply, isSpeakingReply, voiceError, handleMicPress]);
 
   const voiceStatus: VoiceStatus = isTranscribing
     ? "processing"
     : isRecording
       ? "listening"
-      : isCompanionTyping
+      : isCompanionTyping || isPreparingReply
         ? "thinking"
         : isSpeakingReply
           ? "speaking"
@@ -251,6 +255,27 @@ export default function QA() {
 
   // Knowledge base containing strict fallback patterns mapping human conversational styles
   const trainedLocalKnowledgeBase = [
+    // Checked first: an urgent question must never get a "that's normal" answer.
+    {
+      keywords: [
+        "soaking",
+        "faint",
+        "dizzy",
+        "fever",
+        "severe pain",
+        "unbearable",
+        "bleeding during pregnancy",
+        "pregnant and bleeding",
+        "suicid",
+        "self harm",
+        "self-harm",
+        "kill myself",
+        "want to die",
+      ],
+      response:
+        "This could need urgent help. If you are soaking pads quickly, feeling faint, have fever with pelvic pain, severe one-sided or unbearable pain, or bleeding during pregnancy, go to the nearest hospital or call 112 now. If you are having thoughts of harming yourself, you are not alone: call Tele-MANAS on 14416 (free, 24 hours) or 112, and tell someone you trust.",
+      source: "urgent_safety",
+    },
     {
       keywords: ["brown", "dark", "black", "blood", "bleed"],
       response:
@@ -277,24 +302,9 @@ export default function QA() {
         "Avoid scented washes, douching, or internal cleaning. The vagina is self-cleaning, and harsh products can disrupt pH. Warm water on the external vulva is usually enough.",
     },
     {
-      keywords: ["boy", "boyfriend", "pms", "partner", "man"],
+      keywords: ["boyfriend", "husband", "pms", "partner"],
       response:
         "PMS support works best when it is respectful: validate feelings, offer practical help, and avoid teasing or blaming mood changes on a period. A heating pad, rest, water, and patience can help a lot.",
-    },
-    {
-      keywords: [
-        "soaking",
-        "faint",
-        "dizzy",
-        "fever",
-        "severe pain",
-        "pregnant",
-        "suicide",
-        "self harm",
-      ],
-      response:
-        "This could need urgent help. If you are soaking pads quickly, feeling faint, have fever with pelvic pain, severe one-sided pain, bleeding during pregnancy, or thoughts of self-harm, contact emergency care or a trusted local clinician now.",
-      source: "urgent_safety",
     },
   ];
 
@@ -506,7 +516,8 @@ export default function QA() {
           "That is a valid thing to wonder about. Try keywords like 'brown blood', 'period poop', 'tampon', 'cup', 'hygiene', or 'intimacy' so I can give a more specific answer.";
 
         for (const entry of trainedLocalKnowledgeBase) {
-          if (entry.keywords.some((keyword) => cleanQuery.includes(keyword))) {
+          // Match from the start of a word, so "man" can't hit "woman".
+          if (entry.keywords.some((keyword) => new RegExp(`\\b${keyword}`).test(cleanQuery))) {
             foundMatchedResponse = entry.response;
             companionSource = entry.source ?? companionSource;
             break;

@@ -316,12 +316,15 @@ function CycleRing({
   ovulationDayPivot,
   cycleDay,
   nextPeriodDaysAway,
+  fertilityReliable,
 }: {
   activeCycleLength: number;
   activePeriodLength: number;
   ovulationDayPivot: number;
   cycleDay: number;
   nextPeriodDaysAway: number;
+  /** False when cycles are too irregular for a calendar-based fertile window. */
+  fertilityReliable: boolean;
 }) {
   const { colors, isDark, fonts } = useTheme();
   const displayDay = cycleDay;
@@ -347,9 +350,12 @@ function CycleRing({
     ovulation: colors.info,
     luteal: colors.warning,
   }[displayPhase];
+  // Only ever says when fertility is likely high. The other days get no
+  // label: a calendar estimate can't promise a day is low-risk.
   const isHighFertility =
-    displayPhase === "ovulation" ||
-    (displayDay >= ovulationDayPivot - 5 && displayDay <= ovulationDayPivot);
+    fertilityReliable &&
+    (displayPhase === "ovulation" ||
+      (displayDay >= ovulationDayPivot - 5 && displayDay <= ovulationDayPivot));
 
   const handleFraction = displayDay / activeCycleLength;
   const handleAngleRad = (handleFraction * 360 - 90) * (Math.PI / 180);
@@ -449,18 +455,14 @@ function CycleRing({
                   ? "Today"
                   : daysLabel(nextPeriodDaysAway)}
         </Text>
-        <Text
-          numberOfLines={1}
-          style={{
-            color: isHighFertility ? colors.success : colors.mutedText,
-            fontSize: 12.5,
-            fontWeight: "700",
-            fontFamily: fonts.body,
-            marginTop: 4,
-          }}
-        >
-          {isHighFertility ? "High fertility" : "Low fertility"}
-        </Text>
+        {isHighFertility ? (
+          <Text
+            numberOfLines={1}
+            style={{ color: colors.success, fontSize: 12.5, fontWeight: "700", fontFamily: fonts.body, marginTop: 4 }}
+          >
+            High fertility
+          </Text>
+        ) : null}
       </View>
     </View>
   );
@@ -1162,6 +1164,7 @@ export default function Tracker() {
                   ovulationDayPivot={ovulationDayPivot}
                   cycleDay={cycleDay}
                   nextPeriodDaysAway={nextPeriodDaysAway}
+                  fertilityReliable={predictions?.ovulationReliable !== false}
                 />
               </View>
 
@@ -1969,7 +1972,7 @@ export default function Tracker() {
 
                     {/* Pregnancy Mode — kept here, below Fertility reminders */}
                     <SettingsToggleRow
-                      description="Pauses cycle predictions."
+                      description="Pauses period and fertility reminders."
                       label="Pregnancy Mode"
                       onValueChange={setPregnancyMode}
                       value={pregnancyMode}

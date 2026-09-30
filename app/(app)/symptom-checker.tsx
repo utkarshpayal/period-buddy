@@ -71,8 +71,8 @@ export default function SymptomCheckerScreen() {
   const softTints = getSoftTints(colors);
 
   const RISK_META: Record<string, { color: string; bg: string; label: string }> = {
-    low: { color: colors.success, bg: softTints.emerald, label: "Low risk" },
-    moderate: { color: colors.warning, bg: softTints.amber, label: "Elevated risk" },
+    low: { color: colors.success, bg: softTints.emerald, label: "Few signs" },
+    moderate: { color: colors.warning, bg: softTints.amber, label: "Some signs" },
     high: { color: colors.danger, bg: softTints.danger, label: "Talk to a doctor" },
   };
 

@@ -21,7 +21,7 @@ export const GOAL_OPTIONS: {
   { value: "track_period", label: "Track my period", hint: "Know what's coming, every cycle", icon: "water-outline" },
   { value: "manage_symptoms", label: "Understand my symptoms", hint: "Cramps, moods, skin, energy", icon: "pulse-outline" },
   { value: "achieve_pregnancy", label: "Trying to conceive", hint: "Spot my fertile days", icon: "heart-outline" },
-  { value: "avoid_pregnancy", label: "Avoid pregnancy", hint: "Stay aware of risky days", icon: "shield-checkmark-outline" },
+  { value: "avoid_pregnancy", label: "Avoid pregnancy", hint: "See my estimated fertile days", icon: "shield-checkmark-outline" },
   { value: "general_health", label: "Feel better overall", hint: "Sleep, habits and wellbeing", icon: "leaf-outline" },
 ];
 
