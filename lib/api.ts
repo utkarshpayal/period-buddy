@@ -1,9 +1,10 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 import type { CyclePhase } from "./cycle";
 import { emitDataChange, emitMutation } from "./data-sync";
 import { getDeviceId } from "./deviceId";
+import { loadSessionToken } from "./sessionStore";
+import { analyticsAllowed } from "./analyticsConsent";
 
 const LOCAL_DEV_API_PORT = "5000";
 const envApiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
@@ -33,7 +34,9 @@ export const API_BASE_URL = (
   envApiBaseUrl || (__DEV__ ? getLocalDevApiBaseUrl() : "https://www.backend.thenura.care")
 ).replace(/\/+$/, "");
 export const WS_BASE_URL = API_BASE_URL.replace(/^http/, "ws");
-export const AUTH_SESSION_KEY = "period-buddy.auth-session";
+const APP_VERSION: string =
+  Constants.expoConfig?.version ?? (Constants as unknown as { nativeAppVersion?: string }).nativeAppVersion ?? "0.0.0";
+export { AUTH_SESSION_KEY } from "./sessionStore";
 
 
 type QueryValue = boolean | number | string | null | undefined;
@@ -96,6 +99,40 @@ export type FeatureLockInfo = {
     billingCycle: "monthly" | "yearly" | "one_time";
     badge?: string;
   }[];
+};
+
+/** A signed-in device, from GET /api/auth/sessions. */
+export type SignedInDevice = {
+  id: string;
+  platform: "android" | "ios" | "web" | null;
+  appVersion: string | null;
+  userAgent: string | null;
+  signedInAt: string;
+  lastActiveAt: string;
+  current: boolean;
+};
+
+/** Privacy choices. `granted: null` = never asked. */
+export type PrivacyConsents = {
+  aiProcessing: {
+    granted: boolean | null;
+    version: string | null;
+    updatedAt: string | null;
+    currentVersion: string;
+    providers: string[];
+    allowedNow: boolean;
+  };
+};
+
+/** Settings on the privacy screen (User.privacySettings on the backend). */
+export type PrivacySettings = {
+  /** Pushes say "You have a new update" instead of their text. */
+  hideNotificationDetails: boolean;
+  /** Nura AI and document chats older than this are deleted; 0 = keep. */
+  aiChatRetentionDays: number;
+  aiChatRetentionOptions: number[];
+  /** Email when the account signs in on a new device. */
+  newSignInAlerts: boolean;
 };
 
 export class ApiError extends Error {
@@ -950,9 +987,8 @@ async function getToken(): Promise<string | null> {
     return cachedToken.token;
   }
   try {
-    const raw = await AsyncStorage.getItem(AUTH_SESSION_KEY);
-    const session = raw ? (JSON.parse(raw) as { token?: string }) : null;
-    const token = session?.token ?? null;
+    // The token lives in the OS keystore (lib/sessionStore.ts).
+    const token = await loadSessionToken();
     cachedToken = { readAt: Date.now(), token };
     return token;
   } catch {
@@ -1028,6 +1064,9 @@ export async function apiEnvelopeRequest<T>(
   };
 
   if (token) headers.Authorization = `Bearer ${token}`;
+  // Which install and version is asking: shown in Privacy → Signed-in devices.
+  headers["X-App-Version"] = APP_VERSION;
+  if (path.startsWith("/api/auth/")) headers["X-Device-Id"] = await getDeviceId();
 
   // Time out the request so a dropped/slow connection surfaces a clear error
   // instead of hanging the screen's loading state forever.
@@ -1182,20 +1221,27 @@ export const appConfigApi = {
       body: JSON.stringify({ events }),
     }),
   trackLockedTap: async (itemKey: string) =>
-    apiRequest<unknown>(`/api/app-config/launch/${encodeURIComponent(itemKey)}/tap`, {
+    !analyticsAllowed()
+      ? null
+      : apiRequest<unknown>(`/api/app-config/launch/${encodeURIComponent(itemKey)}/tap`, {
       method: "POST",
       skipAuth: true,
       timeoutMs: 5000,
       headers: await launchHeaders(),
     }),
-  trackBannerClick: (id: string) =>
-    apiRequest<unknown>(`/api/app-config/banners/${encodeURIComponent(id)}/click`, {
+  // The three tracking calls send nothing for anyone under 18 (lib/analyticsConsent.ts).
+  trackBannerClick: async (id: string) =>
+    !analyticsAllowed()
+      ? null
+      : apiRequest<unknown>(`/api/app-config/banners/${encodeURIComponent(id)}/click`, {
       method: "POST",
       skipAuth: true,
       timeoutMs: 5000,
     }),
-  trackBannerImpressions: (ids: string[]) =>
-    apiRequest<unknown>("/api/app-config/banners/impressions", {
+  trackBannerImpressions: async (ids: string[]) =>
+    !analyticsAllowed()
+      ? null
+      : apiRequest<unknown>("/api/app-config/banners/impressions", {
       method: "POST",
       skipAuth: true,
       timeoutMs: 5000,
@@ -1297,6 +1343,36 @@ export const authApi = {
     }),
 
   logout: () => apiRequest<null>("/api/auth/logout", { method: "POST" }),
+
+  /** Sign out of every device, this one included. */
+  logoutAll: () => apiRequest<null>("/api/auth/logout-all", { method: "POST" }),
+
+  /** Devices signed in to this account; `current` is this one. */
+  getSessions: () => apiRequest<{ sessions: SignedInDevice[] }>("/api/auth/sessions"),
+
+  endSession: (id: string) => apiRequest<null>(`/api/auth/sessions/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  // `settings` is missing from backends older than the privacy settings.
+  getPrivacy: () => apiRequest<{ consents: PrivacyConsents; settings?: PrivacySettings }>("/api/auth/privacy"),
+
+  /** Save privacy settings; only the fields sent change. */
+  setPrivacySettings: (
+    settings: Partial<Pick<PrivacySettings, "hideNotificationDetails" | "aiChatRetentionDays" | "newSignInAlerts">>,
+  ) =>
+    apiRequest<{ consents: PrivacyConsents; settings: PrivacySettings }>("/api/auth/privacy/settings", {
+      body: JSON.stringify(settings),
+      method: "PUT",
+    }),
+
+  /** Allow or refuse sending your content to the AI provider. */
+  setAiConsent: (granted: boolean) =>
+    apiRequest<{ consents: PrivacyConsents }>("/api/auth/privacy/ai-consent", {
+      body: JSON.stringify({ granted }),
+      method: "PUT",
+    }),
+
+  /** Everything the app stores about you (lib/privacyExport.ts saves and shares it). */
+  exportData: () => apiRequest<Record<string, unknown>>("/api/auth/export-data"),
 
   // `fcmToken` is this device's current push token (optional): the backend
   // only clears the stored token when it matches, so logging out on one
@@ -2200,7 +2276,8 @@ export type MedicalDocument = {
   createdAt: string;
   docType: DocType;
   documentDate: string;
-  extractionStatus?: "done" | "failed" | "limited" | "pending";
+  /** "skipped": not read, because AI features are off for this account. */
+  extractionStatus?: "done" | "failed" | "limited" | "pending" | "skipped";
   fileKey: string;
   fileSize?: number;
   fileUrl: string;
@@ -2274,6 +2351,9 @@ export const documentApi = {
     apiRequest<{ documents: MedicalDocument[]; pagination: Pagination }>(
       `/api/documents${toQuery(params)}`,
     ),
+
+  /** One document with a fresh `fileUrl`: documents are private and their links expire after 10 minutes. */
+  get: (id: string) => apiRequest<{ document: MedicalDocument }>(`/api/documents/${encodeURIComponent(id)}`),
 
   remove: (id: string) =>
     apiRequest<void>(`/api/documents/${id}`, { method: "DELETE" }),

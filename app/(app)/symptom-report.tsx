@@ -11,6 +11,7 @@ import { getShadow, getSoftTints } from "../../components/ui-tokens";
 import { useAsyncLoad } from "../../hooks/useAsyncLoad";
 import { reportApi, type HealthReportCycleStats, type ReportCountItem } from "../../lib/api";
 import { getDateKey } from "../../lib/format";
+import { useSecureScreen } from "../../lib/screenPrivacy";
 
 const RANGE_DAYS = 90;
 
@@ -105,6 +106,7 @@ function SectionCard({
 }
 
 export default function SymptomReportScreen() {
+  useSecureScreen("symptom-report");
   const { colors, isDark, fonts } = useTheme();
   const softTints = getSoftTints(colors);
 

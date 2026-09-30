@@ -21,6 +21,7 @@ import { HeaderIconButton } from "../../components/ScreenHeader";
 import { useContentWidth } from "../../lib/layout";
 import { getShadow } from "../../components/ui-tokens";
 import { alertLogNotSaved } from "../../lib/alert";
+import { useSecureScreen } from "../../lib/screenPrivacy";
 
 /**
  * Full-screen cycle calendar, Flo-style: a Month view (months scroll
@@ -50,6 +51,7 @@ function parseMonthParam(value?: string) {
 }
 
 export default function CalendarScreen() {
+  useSecureScreen("calendar");
   const router = useRouter();
   const { colors, fonts, isDark } = useTheme();
   const width = useContentWidth();

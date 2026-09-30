@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { DayEntry } from "./AppState";
 import { alert } from "../lib/alert";
 import { useTheme } from "./theme";
+import { useSecureScreen } from "../lib/screenPrivacy";
 import {
   getLogCategoryTints,
   getShadow,
@@ -177,6 +178,8 @@ export default function DayDetailsModal({
   /** When set, the modal scrolls to this section on open (Home quick actions). */
   focusSection?: "symptoms" | "flow" | "mood";
 }) {
+  // Opened over Home too (quick actions), which isn't a protected screen.
+  useSecureScreen("day-log", visible);
   const { colors, fonts, isDark } = useTheme();
   const tints = getLogCategoryTints(colors);
   const insets = useSafeAreaInsets();

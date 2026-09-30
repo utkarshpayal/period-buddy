@@ -60,7 +60,6 @@ export default function Profile() {
   const [badges, setBadges] = useState<BadgesSummary | null>(null);
   const [badgesError, setBadgesError] = useState(false);
   const [supportModalVisible, setSupportModalVisible] = useState(false);
-  const [privacyModalVisible, setPrivacyModalVisible] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   // Profile is a tab and stays mounted: close the Preferences dropdown when
@@ -229,7 +228,7 @@ export default function Profile() {
   ];
   const privacyRows: typeof accountRows = [
     { icon: "finger-print-outline", label: "App lock", tint: softTints.lavender, color: colors.secondary, onPress: () => router.push("/app-lock") },
-    { icon: "shield-checkmark-outline", label: "Data privacy & security", tint: softTints.mint, color: colors.accent, onPress: () => setPrivacyModalVisible(true) },
+    { icon: "shield-checkmark-outline", label: "Data privacy & security", tint: softTints.mint, color: colors.accent, onPress: () => router.push("/privacy") },
     { icon: "help-circle-outline", label: "Help & support", tint: softTints.blue, color: colors.info, onPress: () => setSupportModalVisible(true) },
   ];
   const settingsOpen = activeMenuId === "settings";
@@ -536,24 +535,6 @@ export default function Profile() {
         </SafeAreaView>
       </Modal>
 
-      {/* Data privacy */}
-      <Modal visible={privacyModalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setPrivacyModalVisible(false)}>
-        <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background, paddingHorizontal: 24, paddingTop: 20 }}>
-          {sheetHeader("Data privacy & security", () => setPrivacyModalVisible(false))}
-          <View className="rounded-3xl" style={{ backgroundColor: colors.surface, padding: 20, gap: 14 }}>
-            {[
-              { icon: "lock-closed-outline" as const, text: "Your cycle logs, notes and identity details are treated as private health data." },
-              { icon: "people-outline" as const, text: "Sharing (partner, circles, doctors) is always your choice, and you can stop it any time." },
-              { icon: "finger-print-outline" as const, text: "Turn on App lock to keep the app private on a shared phone." },
-            ].map((item) => (
-              <View key={item.icon} className="flex-row" style={{ gap: 12 }}>
-                <Ionicons name={item.icon} size={18} color={colors.accent} style={{ marginTop: 1 }} />
-                <Text style={{ flex: 1, color: colors.foreground, fontSize: 14, lineHeight: 21, fontFamily: fonts.body }}>{item.text}</Text>
-              </View>
-            ))}
-          </View>
-        </SafeAreaView>
-      </Modal>
     </>
   );
 }

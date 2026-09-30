@@ -35,12 +35,14 @@ import { resolveAudioUri } from "../../lib/audio";
 import { SUPPORTED_LANGUAGES } from "../../lib/languages";
 import { HeaderIconButton } from "../../components/ScreenHeader";
 import { TypingDots } from "../../components/TypingDots";
+import { useSecureScreen } from "../../lib/screenPrivacy";
 
 function formatTime(dateString: string) {
   return new Date(dateString).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 }
 
 export default function DocumentChatScreen() {
+  useSecureScreen("document-chat");
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
   const scrollViewRef = useRef<ScrollView>(null);

@@ -20,6 +20,8 @@ import {
 import Markdown from "react-native-markdown-display";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
+import { File, Paths } from "expo-file-system";
+import * as Sharing from "expo-sharing";
 import { CalendarModal } from "../../components/CalendarModal";
 import { LoadMoreButton } from "../../components/LoadMoreButton";
 import { useAuth } from "../../components/auth-context";
@@ -43,6 +45,8 @@ import {
 import { generateAndShareHealthReport } from "../../lib/healthReport";
 import { SUPPORTED_LANGUAGES as LANGUAGE_OPTIONS } from "../../lib/languages";
 import { ScreenHeader } from "../../components/ScreenHeader";
+import { useSecureScreen } from "../../lib/screenPrivacy";
+import { cleanupTempFiles } from "../../lib/tempFiles";
 
 type PickedFile = {
   mimeType: string;
@@ -87,11 +91,24 @@ function dateKeyToDate(dateKey: string) {
   return new Date(`${dateKey}T00:00:00`);
 }
 
-function googleViewerUrl(fileUrl: string) {
-  return `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(fileUrl)}`;
+/**
+ * Android's WebView can't show a PDF, and handing the link to an online
+ * viewer would give someone else the file. Download it to the cache and let
+ * the phone's own PDF app open it; the copy is removed afterwards
+ * (lib/tempFiles.ts).
+ */
+async function openPdfOnDevice(doc: MedicalDocument) {
+  const target = new File(Paths.cache, `document-${doc._id}.pdf`);
+  if (target.exists) target.delete();
+  const file = await File.downloadFileAsync(doc.fileUrl, target);
+  // Not deleted here: the PDF app may still be reading it. cleanupTempFiles
+  // removes it when the preview closes or the screen opens again.
+  await Sharing.shareAsync(file.uri, { mimeType: "application/pdf", UTI: "com.adobe.pdf", dialogTitle: doc.title });
 }
 
 export default function DocumentsScreen() {
+  useSecureScreen("documents");
+
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
   const { openReport } = useLocalSearchParams<{ openReport?: string }>();
@@ -342,6 +359,22 @@ export default function DocumentsScreen() {
 
   // --- Preview / delete ---
   const [previewDoc, setPreviewDoc] = useState<MedicalDocument | null>(null);
+  // Removes PDFs handed to the PDF app once the preview closes (and any left
+  // from an earlier visit): by then the PDF app has read its copy.
+  useEffect(() => {
+    if (!previewDoc) cleanupTempFiles();
+  }, [previewDoc]);
+  // Links expire after 10 minutes, so each open asks for a fresh one; the
+  // list's copy is only a fallback if that request fails.
+  const openDocument = useCallback(async (doc: MedicalDocument) => {
+    setPreviewDoc(doc);
+    try {
+      const { document } = await documentApi.get(doc._id);
+      setPreviewDoc((current) => (current?._id === doc._id ? document : current));
+    } catch {
+      /* keep the list's copy */
+    }
+  }, []);
   const [deleting, setDeleting] = useState(false);
 
   function handleDelete(doc: MedicalDocument) {
@@ -691,12 +724,12 @@ export default function DocumentsScreen() {
                 const meta = DOC_TYPE_META[doc.docType];
                 const accent = DOC_TYPE_ACCENTS[doc.docType];
                 const isPdf = doc.mimeType === "application/pdf";
-                const hasIssue = doc.extractionStatus === "limited" || doc.extractionStatus === "failed";
+                const hasIssue = doc.extractionStatus === "limited" || doc.extractionStatus === "failed" || doc.extractionStatus === "skipped";
                 return (
                   <TouchableOpacity
                     key={doc._id}
                     activeOpacity={0.8}
-                    onPress={() => setPreviewDoc(doc)}
+                    onPress={() => openDocument(doc)}
                     className="flex-row items-center rounded-2xl border p-4"
                     style={{ backgroundColor: colors.surface, borderColor: colors.border, ...getShadow(colors, isDark) }}
                   >
@@ -719,7 +752,11 @@ export default function DocumentsScreen() {
                       </View>
                       {hasIssue ? (
                         <Text className="text-xs font-bold mt-1.5" style={{ color: colors.warning, fontFamily: fonts.body }}>
-                          {doc.extractionStatus === "failed" ? "Couldn't read this file" : "Limited text found in this file"}
+                          {doc.extractionStatus === "failed"
+                            ? "Couldn't read this file"
+                            : doc.extractionStatus === "skipped"
+                              ? "Not read: AI features are off"
+                              : "Limited text found in this file"}
                         </Text>
                       ) : null}
                     </View>
@@ -892,7 +929,12 @@ export default function DocumentsScreen() {
       </Modal>
 
       {/* Preview modal */}
-      <Modal visible={!!previewDoc} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setPreviewDoc(null)}>
+      <Modal
+        visible={!!previewDoc}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setPreviewDoc(null)}
+      >
         {previewDoc ? (
           <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
             <View className="flex-row items-center justify-between px-6 pt-6 pb-4">
@@ -953,8 +995,30 @@ export default function DocumentsScreen() {
                     </Text>
                   </TouchableOpacity>
                 </View>
+              ) : Platform.OS === "ios" ? (
+                // iOS shows PDFs itself: the file goes nowhere else.
+                <WebView source={{ uri: previewDoc.fileUrl }} style={{ flex: 1 }} />
               ) : (
-                <WebView source={{ uri: googleViewerUrl(previewDoc.fileUrl) }} style={{ flex: 1 }} />
+                <View className="flex-1 items-center justify-center gap-4 px-8" style={{ backgroundColor: colors.surfaceSoft }}>
+                  <Feather name="file-text" size={28} color={colors.mutedText} />
+                  <Text className="text-center text-xs font-semibold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                    Opens in your phone&apos;s PDF app. The file stays on your phone.
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() =>
+                      openPdfOnDevice(previewDoc).catch(() => alert("Couldn't open the PDF", "Please try again."))
+                    }
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open PDF"
+                    className="rounded-full px-5 py-3"
+                    style={{ backgroundColor: colors.primary }}
+                  >
+                    <Text className="text-xs font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
+                      Open PDF
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               )}
             </View>
           </SafeAreaView>

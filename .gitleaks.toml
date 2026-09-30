@@ -1,0 +1,10 @@
+# Secret scanning config (.github/workflows/security.yml).
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Firebase client configs: public by design, they ship in every app binary (see CLAUDE.md)"
+paths = [
+  '''assets/google-services\.json''',
+  '''assets/GoogleService-Info\.plist''',
+]

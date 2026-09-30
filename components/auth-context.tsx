@@ -1,4 +1,4 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { clearSession, loadSession, saveSession, saveSessionProfile } from "../lib/sessionStore";
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AppState } from "react-native";
 import type { AuthUser } from "../lib/auth";
@@ -29,7 +29,7 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
-export const AUTH_SESSION_KEY = "period-buddy.auth-session";
+export { AUTH_SESSION_KEY } from "../lib/sessionStore";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(null);
@@ -42,16 +42,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Which account the device last held, so signIn can tell a new account from a refresh of the same one.
   const signedInUserId = useRef<string | null>(null);
 
-  // Hydrate from AsyncStorage on mount
+  // Hydrate from the device (lib/sessionStore.ts) on mount
   useEffect(() => {
-    AsyncStorage.getItem(AUTH_SESSION_KEY)
-      .then((raw) => {
-        if (raw) {
-          const parsed = JSON.parse(raw) as AuthSession;
-          if (parsed.token) {
-            signedInUserId.current = parsed.user?._id ?? null;
-            setSession(parsed);
-          }
+    loadSession<AuthSession>()
+      .then((parsed) => {
+        if (parsed?.token) {
+          signedInUserId.current = parsed.user?._id ?? null;
+          setSession(parsed);
         }
       })
       .catch(() => {})
@@ -100,7 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSession(null);
     invalidateTokenCache();
     clearAccountData();
-    await AsyncStorage.removeItem(AUTH_SESSION_KEY).catch(() => {});
+    await clearSession().catch(() => {});
   }, [clearAccountData]);
 
   // Awaited by callers before firing off any follow-up authenticated request
@@ -114,7 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signedInUserId.current = s.user?._id ?? null;
     setSession(s);
     invalidateTokenCache();
-    await AsyncStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(s)).catch(() => {});
+    await saveSession(s).catch(() => {});
   }, [clearAccountData]);
 
   // Stable identity (via the functional setSession form, no `session` dep
@@ -135,7 +132,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const partnerRole =
         u.partnerRole !== undefined ? u.partnerRole : current.user?.partnerRole;
       const next = { ...current, user: { ...u, partnerRole } };
-      AsyncStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(next)).catch(() => {});
+      saveSessionProfile(next).catch(() => {});
       return next;
     });
   }, []);
@@ -146,7 +143,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!current?.user) return current;
       if ((current.user.partnerRole ?? null) === normalized) return current;
       const next = { ...current, user: { ...current.user, partnerRole: normalized } };
-      AsyncStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(next)).catch(() => {});
+      saveSessionProfile(next).catch(() => {});
       return next;
     });
   }, []);

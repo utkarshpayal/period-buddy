@@ -17,6 +17,7 @@ import { alert } from "../../lib/alert";
 import { questionAnswerApi, type ChatTopicId, type QaChatSessionSummary } from "../../lib/api";
 import { CHAT_TOPICS, getChatTopic, isTopicLocked } from "../../lib/chatTopics";
 import { formatShortDate } from "../../lib/format";
+import { useSecureScreen } from "../../lib/screenPrivacy";
 
 /**
  * Nura AI home — the entry to the assistant. One primary action (start a new
@@ -25,6 +26,7 @@ import { formatShortDate } from "../../lib/format";
  * ?sessionId=...). qa.tsx redirects a bare open here.
  */
 export default function NuraAiHome() {
+  useSecureScreen("qa-history");
   const { colors, fonts, isDark } = useTheme();
   const router = useRouter();
   const { user } = useAuth();

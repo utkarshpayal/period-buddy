@@ -43,6 +43,7 @@ import { CHAT_TOPICS, getChatTopic, isTopicLocked } from "../../lib/chatTopics";
 import { SUPPORTED_LANGUAGES } from "../../lib/languages";
 import { HeaderIconButton } from "../../components/ScreenHeader";
 import { TypingDots } from "../../components/TypingDots";
+import { useSecureScreen } from "../../lib/screenPrivacy";
 
 // --- TELEHEALTH CONVERSATION MODEL CONTRACTS ---
 interface ChatMessage {
@@ -66,6 +67,7 @@ const defaultCompanionDisclaimer =
   "General guidance only. For severe, unusual, or urgent symptoms, contact a trusted clinician.";
 
 export default function QA() {
+  useSecureScreen("qa");
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
   // The dashboard's center avatar tab links here with ?voiceMode=1 so tapping
