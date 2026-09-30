@@ -30,6 +30,7 @@ import { SkeletonList, SkeletonRow } from "../../components/Skeleton";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
 import { alert } from "../../lib/alert";
 import { showPermissionModal } from "../../lib/modal-host";
+import { requestPhotoLibraryAccess } from "../../lib/photoAccess";
 import { useSubscriptionAccess } from "../../hooks/useSubscriptionAccess";
 import { useDataRefresh } from "../../hooks/useDataRefresh";
 import { LockedFeatureCard } from "../../components/subscription/LockedFeatureCard";
@@ -291,7 +292,7 @@ export default function DocumentsScreen() {
   }
 
   async function handlePickGallery() {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const permission = await requestPhotoLibraryAccess();
     if (!permission.granted) {
       showPermissionModal({
         title: "Photo access needed",

@@ -24,6 +24,7 @@ import { BirthdayInput } from "../../components/BirthdayInput";
 import { alert } from "../../lib/alert";
 import { authApi, uploadApi } from "../../lib/api";
 import { openAppSettings } from "../../lib/modal-host";
+import { requestPhotoLibraryAccess } from "../../lib/photoAccess";
 import { isPlausiblePhone, normalizePhone } from "../../lib/onboarding";
 
 /**
@@ -67,7 +68,7 @@ export default function EditProfile() {
   const canSave = isDirty && firstName.trim().length >= 2 && isPlausiblePhone(phone) && !dobIncomplete && !isUploading;
 
   async function pickPhoto() {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const permission = await requestPhotoLibraryAccess();
     if (!permission.granted) {
       if (!permission.canAskAgain) {
         alert("Allow photo access", "Turn on photo access for Nura in Settings to choose a picture.", [

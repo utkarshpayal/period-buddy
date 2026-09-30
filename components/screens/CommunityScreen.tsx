@@ -34,6 +34,7 @@ import { useAuth } from "../../components/auth-context";
 import OptionsModal from "../../components/OptionsModal";
 import { alert } from "../../lib/alert";
 import { showPermissionModal } from "../../lib/modal-host";
+import { requestPhotoLibraryAccess } from "../../lib/photoAccess";
 import { useTheme } from "../../components/theme";
 import { SkeletonPostList, SkeletonRow } from "../../components/Skeleton";
 import { getShadow } from "../../components/ui-tokens";
@@ -917,7 +918,7 @@ export default function CommunityScreen() {
   }
 
   async function pickAttachmentImage(setter: (attachment: PendingAttachment) => void) {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const permission = await requestPhotoLibraryAccess();
     if (!permission.granted) {
       showPermissionModal({
         title: "Photo access needed",
@@ -940,7 +941,7 @@ export default function CommunityScreen() {
   }
 
   async function pickAttachmentVideo(setter: (attachment: PendingAttachment) => void) {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const permission = await requestPhotoLibraryAccess();
     if (!permission.granted) {
       showPermissionModal({
         title: "Media access needed",
