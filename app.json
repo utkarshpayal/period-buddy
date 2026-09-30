@@ -186,6 +186,13 @@
     },
     "extra": {
       "router": {},
+      "apiBaseUrl": "https://www.backend.thenura.care",
+      "googleClientIds": {
+        "web": "729251216529-95q69sjt3nh6tl6m0ak0ieoq8dbtjuqr.apps.googleusercontent.com",
+        "ios": "729251216529-k8ej20e55d5onqv028lt132k62ms76rd.apps.googleusercontent.com",
+        "android": "729251216529-uckp51hhjo159m3pt4jbrfinap5s3trn.apps.googleusercontent.com",
+        "expo": "729251216529-qe8sbs3mcgon9ne0gclqooiugc5e63hn.apps.googleusercontent.com"
+      },
       "eas": {
         "projectId": "b1582d15-6e00-455c-b5d9-97d0435c04af"
       }
