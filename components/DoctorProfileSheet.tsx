@@ -27,6 +27,14 @@ function doctorDisplayName(doctor: Doctor): string {
  * which owns the date/slot picker and payment: the main button hands back
  * to it via `onPrimary`.
  */
+/** "4.8 (12 ratings)", or "New" before anyone has rated this doctor. */
+export function ratingLabel(doctor: Doctor, short = false): string {
+  const count = doctor.ratingCount ?? 0;
+  if (!count) return "New";
+  const value = doctor.rating.toFixed(1);
+  return short ? `${value} (${count})` : `${value} (${count} rating${count === 1 ? "" : "s"})`;
+}
+
 export function DoctorProfileSheet({
   doctor,
   availability,
@@ -111,14 +119,12 @@ export function DoctorProfileSheet({
               {doctor.specialty}
             </Text>
             <View className="flex-row items-center gap-3 mt-3">
-              {doctor.rating ? (
-                <View className="flex-row items-center gap-1 rounded-full px-3 py-1" style={{ backgroundColor: colors.surface }}>
-                  <Feather name="star" size={13} color={colors.primary} />
-                  <Text className="text-xs font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
-                    {doctor.rating.toFixed(1)}
-                  </Text>
-                </View>
-              ) : null}
+              <View className="flex-row items-center gap-1 rounded-full px-3 py-1" style={{ backgroundColor: colors.surface }}>
+                <Feather name="star" size={13} color={colors.primary} />
+                <Text className="text-xs font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
+                  {ratingLabel(doctor)}
+                </Text>
+              </View>
               {doctor.totalConsultations ? (
                 <View className="rounded-full px-3 py-1" style={{ backgroundColor: colors.surface }}>
                   <Text className="text-xs font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>

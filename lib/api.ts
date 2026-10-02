@@ -485,7 +485,9 @@ export type Doctor = {
   licenses?: string[];
   name?: string;
   pricePerSession: number;
+  /** Average of patients' session ratings; only meaningful when ratingCount > 0. */
   rating: number;
+  ratingCount?: number;
   specialty: string;
   totalConsultations?: number;
 };
@@ -504,11 +506,15 @@ export type Consultation = {
   createdAt?: string;
   currency: string;
   doctorId: Doctor | string;
+  /** The patient's optional comment with their rating. */
   feedback?: string;
   meetingLink?: string;
   messages: ConsultationMessage[];
   paymentStatus?: "failed" | "paid" | "refunded" | "unpaid";
   prescription?: string;
+  /** 1-5, set once by the patient after a completed session. */
+  rating?: number;
+  ratedAt?: string;
   scheduledFor?: string | null;
   startedAt?: string;
   status: "active" | "cancelled" | "completed" | "paid" | "pending";
@@ -1518,6 +1524,13 @@ export const consultationApi = {
     apiRequest<ConsultationMessage[]>(
       `/api/consultation/${consultationId}/messages`,
     ),
+
+  /** Rate a completed session (once). */
+  rateConsultation: (consultationId: string, rating: number, comment?: string) =>
+    apiRequest<Consultation>(`/api/consultation/${consultationId}/rating`, {
+      body: JSON.stringify({ rating, comment }),
+      method: "POST",
+    }),
 
   sendMessage: (consultationId: string, text: string) =>
     apiRequest<ConsultationMessage[]>(

@@ -20,7 +20,8 @@ import {
   type ConsultationVideoCallHandle,
 } from "../../components/ConsultationVideoCall";
 import { DoctorPhoto } from "../../components/DoctorPhoto";
-import { DoctorProfileSheet } from "../../components/DoctorProfileSheet";
+import { DoctorProfileSheet, ratingLabel } from "../../components/DoctorProfileSheet";
+import { RateSessionSheet } from "../../components/RateSessionSheet";
 import { EmptyState } from "../../components/EmptyState";
 import { alert } from "../../lib/alert";
 import { CashfreeCheckoutModal, type CashfreeResult } from "../../components/CashfreeCheckoutModal";
@@ -151,6 +152,8 @@ export default function ConsultationScreen() {
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
   // Doctor whose full profile sheet is open (tapping a doctor in the list).
   const [profileDoctor, setProfileDoctor] = useState<Doctor | null>(null);
+  // Finished session being rated, and the star tapped to open the sheet.
+  const [rateTarget, setRateTarget] = useState<{ consultation: Consultation; stars: number } | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const slotsY = useRef(0);
   const [booking, setBooking] = useState(false);
@@ -626,6 +629,36 @@ export default function ConsultationScreen() {
               );
             })()}
 
+            {/* Rate the latest finished session that hasn't been rated yet */}
+            {(() => {
+              const toRate = myConsultations.find((c) => c.status === "completed" && !c.rating);
+              if (!toRate) return null;
+              const doc = typeof toRate.doctorId === "object" ? toRate.doctorId : null;
+              const name = doc ? getDoctorDisplayName(doc) : "your doctor";
+              return (
+                <View className="mt-6 rounded-3xl p-[18px]" style={{ backgroundColor: colors.surface }}>
+                  <Text className="text-sm font-extrabold" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
+                    How was your session with {name}?
+                  </Text>
+                  <Text className="text-xs mt-1" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                    Your rating helps others choose the right specialist.
+                  </Text>
+                  <View className="flex-row gap-2 mt-3">
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <TouchableOpacity
+                        key={n}
+                        onPress={() => setRateTarget({ consultation: toRate, stars: n })}
+                        accessibilityLabel={`Rate ${n} star${n > 1 ? "s" : ""}`}
+                        hitSlop={4}
+                      >
+                        <MaterialCommunityIcons name="star-outline" size={32} color={colors.primary} />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              );
+            })()}
+
             {/* Recommended experts */}
             <View className="mt-6 gap-3">
               <Text className="text-[15px] font-bold" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
@@ -703,7 +736,7 @@ export default function ConsultationScreen() {
                           {getDoctorDisplayName(doctor)}
                         </Text>
                         <Text className="text-xs font-semibold mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                          {doctor.specialty} · ★ {doctor.rating}
+                          {doctor.specialty} · ★ {ratingLabel(doctor, true)}
                         </Text>
                       </View>
 
@@ -935,6 +968,23 @@ export default function ConsultationScreen() {
             }
             setSelectedDoctor(doctor);
             setTimeout(() => scrollRef.current?.scrollTo({ y: Math.max(0, slotsY.current - 16), animated: true }), 350);
+          }}
+        />
+
+        <RateSessionSheet
+          consultation={rateTarget?.consultation ?? null}
+          initialRating={rateTarget?.stars ?? 0}
+          doctorName={
+            rateTarget && typeof rateTarget.consultation.doctorId === "object"
+              ? getDoctorDisplayName(rateTarget.consultation.doctorId)
+              : "your doctor"
+          }
+          onClose={() => setRateTarget(null)}
+          onRated={(updated) => {
+            setRateTarget(null);
+            setMyConsultations((list) => list.map((c) => (c._id === updated._id ? { ...c, ...updated } : c)));
+            alert("Thank you!", "Your rating has been shared.");
+            load(true); // the doctor's average changed
           }}
         />
 
