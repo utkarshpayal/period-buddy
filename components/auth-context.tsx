@@ -2,7 +2,7 @@ import { clearSession, loadSession, saveSession, saveSessionProfile } from "../l
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AppState } from "react-native";
 import type { AuthUser } from "../lib/auth";
-import { invalidateTokenCache, partnerApi, setUnauthorizedHandler } from "../lib/api";
+import { partnerApi, setSessionToken, setUnauthorizedHandler } from "../lib/api";
 import { alert } from "../lib/alert";
 import { emitDataChange } from "../lib/data-sync";
 import { clearStoredAppState } from "./AppState";
@@ -48,6 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .then((parsed) => {
         if (parsed?.token) {
           signedInUserId.current = parsed.user?._id ?? null;
+          setSessionToken(parsed.token);
           setSession(parsed);
         }
       })
@@ -95,22 +96,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = useCallback(async () => {
     roleWriteSeq.current += 1;
     setSession(null);
-    invalidateTokenCache();
+    setSessionToken(null);
     clearAccountData();
     await clearSession().catch(() => {});
   }, [clearAccountData]);
 
-  // Awaited by callers before firing off any follow-up authenticated request
-  // (e.g. resolving partner role right after login) — otherwise getToken()
-  // can read AsyncStorage before this write lands and send that request with
-  // no Authorization header at all.
+  // The token goes to the API client (setSessionToken) before the session is
+  // set, so the screens that mount on sign-in send it on their very first
+  // request instead of reading the device store before the write below lands.
   const signIn = useCallback(async (s: AuthSession) => {
     roleWriteSeq.current += 1;
     // Onboarding's finish re-signs-in the same user; only a different account clears.
     if (signedInUserId.current !== (s.user?._id ?? null)) clearAccountData();
     signedInUserId.current = s.user?._id ?? null;
+    setSessionToken(s.token);
     setSession(s);
-    invalidateTokenCache();
     await saveSession(s).catch(() => {});
   }, [clearAccountData]);
 

@@ -974,11 +974,8 @@ export function setUnauthorizedHandler(handler: ((reason?: UnauthorizedReason) =
 // In-memory cache of the parsed session token, avoiding an AsyncStorage
 // round trip + JSON.parse on every single API call (a screen can fire many
 // concurrent requests, e.g. tracker.tsx's 12 month-log calls). Invalidated
-// explicitly on a 401 below; the short TTL is a safety net for a
-// login/logout/account-switch writing AUTH_SESSION_KEY directly via
-// AsyncStorage without going through this file (auth-context.tsx) — call
-// `invalidateTokenCache()` from there on login/logout for immediate
-// correctness instead of waiting out the TTL.
+// explicitly on a 401 below. Only used while AuthProvider hasn't handed over
+// the session token (`setSessionToken`), e.g. a request fired during launch.
 const TOKEN_CACHE_TTL_MS = 30_000;
 let cachedToken: { readAt: number; token: string | null } | null = null;
 
@@ -986,17 +983,31 @@ export function invalidateTokenCache() {
   cachedToken = null;
 }
 
+// The signed-in session's token, set by AuthProvider on sign-in, launch and
+// sign-out. Requests use it first, so they never depend on the keystore write
+// that follows a sign-in: screens mount and fetch as soon as the session is
+// set, and reading storage before that write landed sent them (and, through
+// the cache, every request for the next 30s) with no Authorization header
+// ("No authentication token provided").
+let sessionToken: string | null = null;
+
+export function setSessionToken(token: string | null) {
+  sessionToken = token;
+  cachedToken = null;
+}
+
 async function getToken(): Promise<string | null> {
+  if (sessionToken) return sessionToken;
   if (cachedToken && Date.now() - cachedToken.readAt < TOKEN_CACHE_TTL_MS) {
     return cachedToken.token;
   }
   try {
     // The token lives in the OS keystore (lib/sessionStore.ts).
     const token = await loadSessionToken();
-    cachedToken = { readAt: Date.now(), token };
+    // Never cache "no token": a sign-in may be writing one right now.
+    if (token) cachedToken = { readAt: Date.now(), token };
     return token;
   } catch {
-    cachedToken = { readAt: Date.now(), token: null };
     return null;
   }
 }
