@@ -20,6 +20,7 @@ import {
   type ConsultationVideoCallHandle,
 } from "../../components/ConsultationVideoCall";
 import { DoctorPhoto } from "../../components/DoctorPhoto";
+import { DoctorProfileSheet } from "../../components/DoctorProfileSheet";
 import { EmptyState } from "../../components/EmptyState";
 import { alert } from "../../lib/alert";
 import { CashfreeCheckoutModal, type CashfreeResult } from "../../components/CashfreeCheckoutModal";
@@ -148,6 +149,10 @@ export default function ConsultationScreen() {
 
   // Booking
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
+  // Doctor whose full profile sheet is open (tapping a doctor in the list).
+  const [profileDoctor, setProfileDoctor] = useState<Doctor | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
+  const slotsY = useRef(0);
   const [booking, setBooking] = useState(false);
   const [checkoutOrder, setCheckoutOrder] = useState<ConsultationOrder | null>(null);
   const [useHostedCheckout, setUseHostedCheckout] = useState(false);
@@ -524,6 +529,7 @@ export default function ConsultationScreen() {
         <ScreenHeader title="Consultation" />
 
         <ScrollView
+          ref={scrollRef}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 120 }}
           refreshControl={
@@ -664,7 +670,11 @@ export default function ConsultationScreen() {
                     <TouchableOpacity
                       key={doctor._id}
                       activeOpacity={0.9}
-                      onPress={() => setSelectedDoctor(doctor)}
+                      onPress={() => {
+                        setSelectedDoctor(doctor);
+                        setProfileDoctor(doctor);
+                      }}
+                      accessibilityHint="Opens this doctor's full profile"
                       className="rounded-2xl p-3.5 flex-row items-center gap-3"
                       style={{
                         backgroundColor: colors.surface,
@@ -720,7 +730,12 @@ export default function ConsultationScreen() {
 
             {/* SELECT A DATE + SLOT — from the gynac's published availability */}
             {selectedDoctor && !loadingDoctors && (
-              <View className="mt-8">
+              <View
+                className="mt-8"
+                onLayout={(e) => {
+                  slotsY.current = e.nativeEvent.layout.y;
+                }}
+              >
                 <Text
                   className="text-[11.5px] font-black uppercase tracking-widest mb-3"
                   style={{ color: colors.mutedText, fontFamily: fonts.body }}
@@ -901,6 +916,27 @@ export default function ConsultationScreen() {
             {!getConsultationForDoctor(selectedDoctor._id) ? <PaymentTrustFooter compact /> : null}
           </View>
         )}
+
+        {/* Full doctor profile — the main button books via the slot picker below */}
+        <DoctorProfileSheet
+          doctor={profileDoctor}
+          availability={profileDoctor && selectedDoctor?._id === profileDoctor._id ? availability : null}
+          loadingAvailability={loadingAvailability}
+          hasActiveSession={Boolean(profileDoctor && getConsultationForDoctor(profileDoctor._id))}
+          onClose={() => setProfileDoctor(null)}
+          onPrimary={() => {
+            const doctor = profileDoctor;
+            setProfileDoctor(null);
+            if (!doctor) return;
+            const existing = getConsultationForDoctor(doctor._id);
+            if (existing) {
+              openChat(existing);
+              return;
+            }
+            setSelectedDoctor(doctor);
+            setTimeout(() => scrollRef.current?.scrollTo({ y: Math.max(0, slotsY.current - 16), animated: true }), 350);
+          }}
+        />
 
         {/* Chat Modal */}
         <Modal
