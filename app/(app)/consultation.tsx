@@ -19,6 +19,7 @@ import {
   ConsultationVideoCall,
   type ConsultationVideoCallHandle,
 } from "../../components/ConsultationVideoCall";
+import { DoctorPhoto } from "../../components/DoctorPhoto";
 import { EmptyState } from "../../components/EmptyState";
 import { alert } from "../../lib/alert";
 import { CashfreeCheckoutModal, type CashfreeResult } from "../../components/CashfreeCheckoutModal";
@@ -572,6 +573,16 @@ export default function ConsultationScreen() {
                       end={{ x: 1, y: 1 }}
                       className="flex-row items-center justify-between p-[18px]"
                     >
+                      <View className="mr-3">
+                        <DoctorPhoto
+                          name={doc ? getDoctorDisplayName(doc) : "Doctor"}
+                          uri={doc?.avatarUrl}
+                          size={48}
+                          backgroundColor="rgba(255,255,255,0.22)"
+                          textColor="#FFFFFF"
+                          fontFamily={fonts.heading}
+                        />
+                      </View>
                       <View className="flex-1 pr-3">
                         <Text
                           className="text-[12px] font-black uppercase tracking-widest"
@@ -648,12 +659,6 @@ export default function ConsultationScreen() {
                   const avatarTextOptions = [colors.primary, colors.foreground, colors.foreground];
                   const avatarBg = avatarBgOptions[i % avatarBgOptions.length];
                   const avatarText = avatarTextOptions[i % avatarTextOptions.length];
-                  const initials = getDoctorDisplayName(doctor)
-                    .split(" ")
-                    .filter(Boolean)
-                    .slice(0, 2)
-                    .map((part) => part[0]?.toUpperCase())
-                    .join("");
 
                   return (
                     <TouchableOpacity
@@ -673,14 +678,14 @@ export default function ConsultationScreen() {
                       }}
                     >
                       {/* Avatar */}
-                      <View
-                        className="h-11 w-11 items-center justify-center rounded-full"
-                        style={{ backgroundColor: avatarBg }}
-                      >
-                        <Text className="text-[15px] font-bold" style={{ color: avatarText, fontFamily: fonts.heading }}>
-                          {initials || "DR"}
-                        </Text>
-                      </View>
+                      <DoctorPhoto
+                        name={getDoctorDisplayName(doctor)}
+                        uri={doctor.avatarUrl}
+                        size={44}
+                        backgroundColor={avatarBg}
+                        textColor={avatarText}
+                        fontFamily={fonts.heading}
+                      />
 
                       {/* Middle info */}
                       <View className="flex-1">
@@ -922,12 +927,14 @@ export default function ConsultationScreen() {
                   <TouchableOpacity onPress={() => setChatModalVisible(false)} className="p-1 -ml-1">
                     <Feather name="chevron-down" size={20} color={colors.foreground} />
                   </TouchableOpacity>
-                  <View
-                    className="h-8 w-8 rounded-full items-center justify-center"
-                    style={{ backgroundColor: colors.primaryLight }}
-                  >
-                    <Text className="text-sm">👩‍⚕️</Text>
-                  </View>
+                  <DoctorPhoto
+                    name={selectedDoctor ? getDoctorDisplayName(selectedDoctor) : "Doctor"}
+                    uri={selectedDoctor?.avatarUrl}
+                    size={32}
+                    backgroundColor={colors.primaryLight}
+                    textColor={colors.primary}
+                    fontFamily={fonts.heading}
+                  />
                   <View>
                     <Text className="text-sm font-extrabold" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
                       {selectedDoctor ? getDoctorDisplayName(selectedDoctor) : "Clinical Specialist"}
@@ -1053,6 +1060,7 @@ export default function ConsultationScreen() {
             key={activeConsultation._id}
             ref={callRef}
             peerName={selectedDoctor ? getDoctorDisplayName(selectedDoctor) : "Doctor"}
+            peerAvatarUrl={selectedDoctor?.avatarUrl}
             roomId={`consultation_${activeConsultation._id}`}
             socketRef={socketRef}
             chatMessages={chatMessages}

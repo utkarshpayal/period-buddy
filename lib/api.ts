@@ -467,7 +467,10 @@ export type ForestLog = {
 
 export type Doctor = {
   _id: string;
+  /** @deprecated replaced by avatarUrl */
   avatarEmoji?: string;
+  /** Profile photo set in the clinician portal. */
+  avatarUrl?: string | null;
   /** @deprecated use DoctorAvailability */
   availability?: string;
   bio?: string;
