@@ -981,14 +981,22 @@ export default function ConsultationScreen() {
                 {upcomingSessions.map((session) => {
                   const doc = doctorOf(session);
                   const name = doc ? getDoctorDisplayName(doc) : "Your Doctor";
-                  const startsAt = session.scheduledFor ? new Date(session.scheduledFor) : null;
-                  const canCancel = session.status === "paid" && (!startsAt || startsAt.getTime() > Date.now());
+                  const startsAt = session.scheduledFor ? new Date(session.scheduledFor).getTime() : null;
+                  const endsAt = session.slotEndsAt ? new Date(session.slotEndsAt).getTime() : null;
+                  const now = Date.now();
+                  // By the slot time, not 'paid' vs 'active': a chat message before
+                  // the slot makes it 'active', and the user can still cancel then.
+                  const canCancel = startsAt !== null && startsAt > now;
                   const label =
-                    session.status === "active"
-                      ? "Session active · tap to chat"
-                      : session.scheduledFor
-                        ? `Upcoming · ${formatSessionWhen(session.scheduledFor, { withZone: true })}`
-                        : "Booked · tap to chat";
+                    startsAt === null
+                      ? session.status === "active"
+                        ? "Session active · tap to chat"
+                        : "Booked · tap to chat"
+                      : startsAt > now
+                        ? `Upcoming · ${formatSessionWhen(session.scheduledFor!, { withZone: true })}`
+                        : endsAt === null || endsAt > now
+                          ? "Happening now · tap to join"
+                          : "Session time over · tap to chat";
                   return (
                     <View key={session._id}>
                       <TouchableOpacity

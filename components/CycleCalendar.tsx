@@ -91,14 +91,18 @@ export function CalendarDayCell({
         ? palette.period.color
         : colors.foreground;
   const showLogDot = s.isLogged && !loggedPeriod;
+  // Future days can't be logged, so they don't open the log modal.
+  const isFuture = s.dateKey > getDateKey(new Date());
 
   return (
     <TouchableOpacity
       activeOpacity={0.7}
       onPress={() => onPress(s)}
+      disabled={isFuture}
       accessibilityRole="button"
+      accessibilityState={{ disabled: isFuture }}
       accessibilityLabel={`${s.date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}, ${palette[s.phase].label} phase${s.isToday ? ", today" : ""}${s.isLogged ? ", logged" : ""}${s.isPredictedPeriod ? ", predicted period" : ""}${s.isOvulation ? ", ovulation" : ""}`}
-      style={{ width: `${100 / 7}%`, height, alignItems: "center", justifyContent: "center" }}
+      style={{ width: `${100 / 7}%`, height, alignItems: "center", justifyContent: "center", opacity: isFuture ? 0.55 : 1 }}
     >
       <View
         style={{

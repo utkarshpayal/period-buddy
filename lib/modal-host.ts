@@ -10,14 +10,21 @@ import type {
 
 type Listener = (request: ModalRequest | null) => void;
 
+// Hosts stack: the root AppModalHost plus an inline one inside any open
+// <Modal> (e.g. DayDetailsModal). The newest wins, so a dialog raised from
+// inside a modal draws on top of it instead of behind it.
+const listeners: Listener[] = [];
 let listener: Listener | null = null;
 let nextId = 0;
 
-/** Called once by AppModalHost on mount; never call this from screen code. */
+/** Called by AppModalHost on mount; never call this from screen code. */
 export function registerModalListener(fn: Listener) {
+  listeners.push(fn);
   listener = fn;
   return () => {
-    if (listener === fn) listener = null;
+    const index = listeners.lastIndexOf(fn);
+    if (index !== -1) listeners.splice(index, 1);
+    listener = listeners[listeners.length - 1] ?? null;
   };
 }
 

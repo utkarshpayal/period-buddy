@@ -17,10 +17,14 @@ const VARIANT_ICON: Record<ModalVariant, ModalIconName> = {
 
 /**
  * Single global host for every alert/confirm/permission dialog in the app.
- * Mounted once in app/_layout.tsx; screens never render this directly —
- * they call showAlert/showPermissionModal (or the alert() shim) instead.
+ * Mounted once in app/_layout.tsx; screens call showAlert/showPermissionModal
+ * (or the alert() shim) instead of rendering it. The one exception: a
+ * component that renders its own <Modal> mounts `<AppModalHost inline />`
+ * as that modal's last child, so alerts raised while it's open draw inside
+ * it. The root host is a separate Modal and would end up behind it (web) or
+ * fail to present at all (iOS).
  */
-export function AppModalHost() {
+export function AppModalHost({ inline = false }: { inline?: boolean }) {
   const { colors, fonts } = useTheme();
   const [request, setRequest] = useState<ModalRequest | null>(null);
 
@@ -79,110 +83,157 @@ export function AppModalHost() {
           ]
         : [];
 
-  return (
-    <Modal transparent animationType="fade" visible={Boolean(request)} onRequestClose={handleRequestClose}>
-      <View style={{ alignItems: "center", flex: 1, justifyContent: "center", padding: 24 }}>
-        <Pressable
-          accessibilityLabel="Dismiss dialog"
-          onPress={handleRequestClose}
-          style={{ backgroundColor: colors.overlay, bottom: 0, left: 0, position: "absolute", right: 0, top: 0 }}
-        />
+  const dialog = (
+    <View
+      style={
+        inline
+          ? {
+              alignItems: "center",
+              bottom: 0,
+              justifyContent: "center",
+              left: 0,
+              padding: 24,
+              position: "absolute",
+              right: 0,
+              top: 0,
+              zIndex: 1000,
+              elevation: 1000,
+            }
+          : {
+              alignItems: "center",
+              flex: 1,
+              justifyContent: "center",
+              padding: 24,
+            }
+      }
+    >
+      <Pressable
+        accessibilityLabel="Dismiss dialog"
+        onPress={handleRequestClose}
+        style={{
+          backgroundColor: colors.overlay,
+          bottom: 0,
+          left: 0,
+          position: "absolute",
+          right: 0,
+          top: 0,
+        }}
+      />
+
+      <View
+        style={{
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          borderRadius: 20,
+          borderWidth: 1,
+          maxWidth: 360,
+          padding: 20,
+          width: "100%",
+        }}
+      >
+        <View
+          style={{
+            alignItems: "center",
+            backgroundColor: accent.bg,
+            borderRadius: 26,
+            height: 52,
+            justifyContent: "center",
+            marginBottom: 14,
+            width: 52,
+          }}
+        >
+          <Ionicons name={icon} size={26} color={accent.fg} />
+        </View>
+
+        <Text
+          style={{
+            color: colors.foreground,
+            fontFamily: fonts.heading,
+            fontSize: 17,
+            fontWeight: "800",
+          }}
+        >
+          {title}
+        </Text>
+
+        {message ? (
+          <Text
+            style={{
+              color: colors.mutedText,
+              fontFamily: fonts.body,
+              fontSize: 13,
+              fontWeight: "600",
+              lineHeight: 19,
+              marginTop: 6,
+            }}
+          >
+            {message}
+          </Text>
+        ) : null}
 
         <View
           style={{
-            backgroundColor: colors.surface,
-            borderColor: colors.border,
-            borderRadius: 20,
-            borderWidth: 1,
-            maxWidth: 360,
-            padding: 20,
-            width: "100%",
+            flexDirection: buttons.length > 1 ? "row" : "column",
+            gap: 10,
+            marginTop: 20,
           }}
         >
-          <View
-            style={{
-              alignItems: "center",
-              backgroundColor: accent.bg,
-              borderRadius: 26,
-              height: 52,
-              justifyContent: "center",
-              marginBottom: 14,
-              width: 52,
-            }}
-          >
-            <Ionicons name={icon} size={26} color={accent.fg} />
-          </View>
+          {buttons.map((spec, index) => {
+            const buttonColors = buttonStyle(colors, spec.style);
+            const isPermissionSettingsButton = request?.kind === "permission" && spec.style !== "cancel";
 
-          <Text
-            style={{ color: colors.foreground, fontFamily: fonts.heading, fontSize: 17, fontWeight: "800" }}
-          >
-            {title}
-          </Text>
-
-          {message ? (
-            <Text
-              style={{
-                color: colors.mutedText,
-                fontFamily: fonts.body,
-                fontSize: 13,
-                fontWeight: "600",
-                lineHeight: 19,
-                marginTop: 6,
-              }}
-            >
-              {message}
-            </Text>
-          ) : null}
-
-          <View
-            style={{
-              flexDirection: buttons.length > 1 ? "row" : "column",
-              gap: 10,
-              marginTop: 20,
-            }}
-          >
-            {buttons.map((spec, index) => {
-              const buttonColors = buttonStyle(colors, spec.style);
-              const isPermissionSettingsButton = request?.kind === "permission" && spec.style !== "cancel";
-
-              return (
-                <TouchableOpacity
-                  key={`${spec.text}-${index}`}
-                  accessibilityRole="button"
-                  activeOpacity={0.85}
-                  onPress={() =>
-                    isPermissionSettingsButton && request?.kind === "permission"
-                      ? runOpenSettings(request)
-                      : request?.kind === "permission" && spec.style === "cancel"
-                        ? runPermissionCancel(request)
-                        : runButton(spec)
-                  }
+            return (
+              <TouchableOpacity
+                key={`${spec.text}-${index}`}
+                accessibilityRole="button"
+                activeOpacity={0.85}
+                onPress={() =>
+                  isPermissionSettingsButton && request?.kind === "permission"
+                    ? runOpenSettings(request)
+                    : request?.kind === "permission" && spec.style === "cancel"
+                      ? runPermissionCancel(request)
+                      : runButton(spec)
+                }
+                style={{
+                  alignItems: "center",
+                  backgroundColor: buttonColors.bg,
+                  borderColor: buttonColors.border,
+                  borderRadius: 14,
+                  borderWidth: 1,
+                  // Only stretch buttons when they share a row. In the
+                  // single-button (column) layout the parent has no fixed
+                  // height, and RN's `flex: 1` means flexBasis 0 — the
+                  // button would collapse to just its padding, leaving a
+                  // pink pill with its label clipped away (on native only;
+                  // web resolves the basis differently, so it looked fine).
+                  flex: buttons.length > 1 ? 1 : undefined,
+                  justifyContent: "center",
+                  paddingVertical: 13,
+                }}
+              >
+                <Text
                   style={{
-                    alignItems: "center",
-                    backgroundColor: buttonColors.bg,
-                    borderColor: buttonColors.border,
-                    borderRadius: 14,
-                    borderWidth: 1,
-                    // Only stretch buttons when they share a row. In the
-                    // single-button (column) layout the parent has no fixed
-                    // height, and RN's `flex: 1` means flexBasis 0 — the
-                    // button would collapse to just its padding, leaving a
-                    // pink pill with its label clipped away (on native only;
-                    // web resolves the basis differently, so it looked fine).
-                    flex: buttons.length > 1 ? 1 : undefined,
-                    justifyContent: "center",
-                    paddingVertical: 13,
+                    color: buttonColors.text,
+                    fontFamily: fonts.body,
+                    fontSize: 14,
+                    fontWeight: "700",
                   }}
                 >
-                  <Text style={{ color: buttonColors.text, fontFamily: fonts.body, fontSize: 14, fontWeight: "700" }}>
-                    {spec.text}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+                  {spec.text}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </View>
+    </View>
+  );
+
+  if (inline) return request ? dialog : null;
+
+  return (
+    <Modal transparent animationType="fade" visible={Boolean(request)} onRequestClose={handleRequestClose}>
+      {dialog}
     </Modal>
   );
 }
@@ -207,7 +258,15 @@ function buttonStyle(colors: ReturnType<typeof useTheme>["colors"], style: Modal
     return { bg: colors.input, border: colors.border, text: colors.mutedText };
   }
   if (style === "destructive") {
-    return { bg: colors.dangerLight, border: colors.danger, text: colors.danger };
+    return {
+      bg: colors.dangerLight,
+      border: colors.danger,
+      text: colors.danger,
+    };
   }
-  return { bg: colors.primary, border: colors.primary, text: colors.buttonText };
+  return {
+    bg: colors.primary,
+    border: colors.primary,
+    text: colors.buttonText,
+  };
 }
