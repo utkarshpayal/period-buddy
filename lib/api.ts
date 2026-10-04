@@ -467,11 +467,15 @@ export type ForestLog = {
 
 export type Doctor = {
   _id: string;
+  /** @deprecated replaced by avatarUrl */
   avatarEmoji?: string;
+  /** Profile photo set in the clinician portal. */
+  avatarUrl?: string | null;
   /** @deprecated use DoctorAvailability */
   availability?: string;
   bio?: string;
-  currency: string;
+  /** Always "INR". */
+  currency: "INR";
   education?: string[];
   experience?: string;
   firstName?: string;
@@ -481,32 +485,49 @@ export type Doctor = {
   lastName?: string;
   licenses?: string[];
   name?: string;
-  pricePerSession: number;
+  /** Fee in rupees; missing/0 means the doctor can't be booked yet. */
+  pricePerSession?: number;
+  /** Average of patients' session ratings; only meaningful when ratingCount > 0. */
   rating: number;
+  ratingCount?: number;
   specialty: string;
   totalConsultations?: number;
 };
 
 export type ConsultationMessage = {
   _id?: string;
+  /** A file the doctor shared (https). */
+  attachmentUrl?: string;
   sender: "doctor" | "user";
   sentAt?: string;
   text: string;
 };
 
+// All instants are UTC ISO 8601 strings; show them in the device's zone
+// (lib/consultationFormat.ts). Chat messages come from getMessages().
 export type Consultation = {
   _id: string;
   amountPaid: number;
+  cancelledBy?: "doctor" | "patient" | "system";
+  cancelReason?: string;
   completedAt?: string;
   createdAt?: string;
-  currency: string;
+  currency: "INR";
   doctorId: Doctor | string;
+  /** The patient's optional comment with their rating. */
   feedback?: string;
   meetingLink?: string;
-  messages: ConsultationMessage[];
   paymentStatus?: "failed" | "paid" | "refunded" | "unpaid";
   prescription?: string;
+  /** 1-5, set once by the patient after a completed session. */
+  rating?: number;
+  ratedAt?: string;
+  /** Set on a cancelled paid booking: "required" until the team refunds it. */
+  refundStatus?: "processed" | "required";
   scheduledFor?: string | null;
+  slotEndsAt?: string | null;
+  /** The doctor's IANA zone the slot was published in. */
+  slotTimezone?: string;
   startedAt?: string;
   status: "active" | "cancelled" | "completed" | "paid" | "pending";
 };
@@ -542,7 +563,14 @@ export type DoctorAvailabilityDay = {
 export type DoctorAvailability = {
   doctorId: string;
   isAvailable: boolean;
+  /** The doctor's IANA zone; `days` are wall-clock times in it. */
+  timezone?: string;
+  /** How many days ahead `slots` cover. */
+  windowDays?: number;
+  /** Weekly hours, for display only. */
   days: DoctorAvailabilityDay[];
+  /** Bookable slots (UTC ISO), already without past/taken ones. Book one by its `start`. */
+  slots: { start: string; end: string }[];
 };
 
 export type ConsultationOrder = {
@@ -553,7 +581,8 @@ export type ConsultationOrder = {
   consultationId?: string;
   orderId?: string;
   amount?: number;
-  currency?: string;
+  currency?: "INR";
+  scheduledFor?: string;
   // Cashfree checkout session token for CashfreeCheckoutModal — absent
   // whenever `consultation` is present (no order was created).
   paymentSessionId?: string;
@@ -1504,12 +1533,15 @@ export const consultationApi = {
       `/api/consultation/doctors/${doctorId}/availability`,
     ),
 
-  createOrder: (doctorId: string, scheduledFor?: string) =>
+  /** `scheduledFor` is the chosen availability slot's `start`, as given. 409 = that time was just taken. */
+  createOrder: (doctorId: string, scheduledFor: string) =>
     apiRequest<ConsultationOrder>("/api/consultation/order", {
       body: JSON.stringify({ doctorId, scheduledFor }),
       method: "POST",
     }),
 
+  // Idempotent (safe to retry). 400 = payment failed; 409 = paid but the
+  // booking couldn't be made (it will be refunded).
   // A pending UPI-collect approval (or any other still-open Cashfree
   // order) comes back as { pending: true } rather than a Consultation —
   // callers polling this (CashfreeUpiCollectModal) must check for that
@@ -1522,11 +1554,20 @@ export const consultationApi = {
 
   getMyConsultations: () => apiRequest<Consultation[]>("/api/consultation/my"),
 
+  /** Works for past sessions too (read-only history). */
   getMessages: (consultationId: string) =>
     apiRequest<ConsultationMessage[]>(
       `/api/consultation/${consultationId}/messages`,
     ),
 
+  /** Rate a completed session (once). */
+  rateConsultation: (consultationId: string, rating: number, comment?: string) =>
+    apiRequest<Consultation>(`/api/consultation/${consultationId}/rating`, {
+      body: JSON.stringify({ rating, comment }),
+      method: "POST",
+    }),
+
+  /** 403 once the session isn't paid/active any more. */
   sendMessage: (consultationId: string, text: string) =>
     apiRequest<ConsultationMessage[]>(
       `/api/consultation/${consultationId}/message`,
@@ -1541,9 +1582,17 @@ export const consultationApi = {
       method: "PATCH",
     }),
 
-  cancelConsultation: (consultationId: string) =>
+  /** Patient cancels a pending/paid booking before it starts; a paid one is refunded by the team. */
+  cancelConsultation: (consultationId: string, reason?: string) =>
     apiRequest<Consultation>(`/api/consultation/${consultationId}/cancel`, {
+      body: JSON.stringify({ reason }),
       method: "PATCH",
+    }),
+
+  /** Decline a ringing call from the doctor. */
+  declineCall: (consultationId: string) =>
+    apiRequest<{ declined: true }>(`/api/consultation/${consultationId}/call/decline`, {
+      method: "POST",
     }),
 };
 

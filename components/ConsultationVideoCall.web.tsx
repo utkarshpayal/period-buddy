@@ -7,8 +7,10 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Image, Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { type ConsultationMessage } from "../lib/api";
+import { CallMediaError, getCallMedia } from "../lib/callMedia";
+import { startRingTone } from "../lib/ringTone";
 import { useTheme } from "./theme";
 
 /**
@@ -31,6 +33,8 @@ export type ConsultationVideoCallHandle = {
 
 type Props = {
   peerName: string;
+  /** The doctor's profile photo, shown while their video is off. */
+  peerAvatarUrl?: string | null;
   roomId: string;
   socketRef: React.RefObject<WebSocket | null>;
   /** Shared consultation message log (same as the pre-call chat). */
@@ -53,7 +57,7 @@ function initialsOf(name: string): string {
 }
 
 export const ConsultationVideoCall = forwardRef<ConsultationVideoCallHandle, Props>(
-  function ConsultationVideoCall({ peerName, roomId, socketRef, chatMessages, onSendMessage }, ref) {
+  function ConsultationVideoCall({ peerName, peerAvatarUrl, roomId, socketRef, chatMessages, onSendMessage }, ref) {
     const { colors, fonts } = useTheme();
 
     const [phase, setPhase] = useState<Phase>("idle");
@@ -169,15 +173,16 @@ export const ConsultationVideoCall = forwardRef<ConsultationVideoCallHandle, Pro
     );
 
     const setupPeerConnection = useCallback(async () => {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        // Ask for a capture aspect ratio close to the portrait preview box
-        // (~3:4) the stream is rendered into with objectFit="cover" below.
-        // Without this the camera defaults to a wide (e.g. 16:9) frame that
-        // "cover" then crops hard to fit the portrait box — the visible
-        // slice ends up zoomed in tight on the face.
-        video: { facingMode: "user", aspectRatio: 0.75 },
-      });
+      // Ask for a capture aspect ratio close to the portrait preview box
+      // (~3:4) the stream is rendered into with objectFit="cover" below.
+      // Without this the camera defaults to a wide (e.g. 16:9) frame that
+      // "cover" then crops hard to fit the portrait box — the visible
+      // slice ends up zoomed in tight on the face.
+      const { stream, videoMissing } = await getCallMedia({ facingMode: "user", aspectRatio: 0.75 });
+      if (videoMissing) {
+        isCameraOffRef.current = true;
+        setIsCameraOff(true);
+      }
       localStreamRef.current = stream;
       setLocalStream(stream);
 
@@ -237,7 +242,7 @@ export const ConsultationVideoCall = forwardRef<ConsultationVideoCallHandle, Pro
         await setupPeerConnection();
       } catch (err) {
         console.warn("Failed to enter consultation call:", err);
-        endWithReason("Couldn't access camera/mic", false);
+        endWithReason(err instanceof CallMediaError ? err.message : "Couldn't access camera/mic", false);
         return;
       }
       setPhase(knownPeer != null ? "connecting" : "waiting");
@@ -247,6 +252,12 @@ export const ConsultationVideoCall = forwardRef<ConsultationVideoCallHandle, Pro
     }, [endWithReason, maybeNegotiate, send, setupPeerConnection]);
 
     const endCall = useCallback(() => endWithReason("Call ended", true), [endWithReason]);
+
+    // Ring while the other side is calling and we haven't answered.
+    useEffect(() => {
+      if (phase !== "incoming") return;
+      return startRingTone();
+    }, [phase]);
 
     const dismissIncoming = useCallback(() => {
       incomingPeerIdRef.current = null;
@@ -392,9 +403,13 @@ export const ConsultationVideoCall = forwardRef<ConsultationVideoCallHandle, Pro
                     className="w-28 h-28 rounded-full items-center justify-center mb-4"
                     style={{ backgroundColor: "rgba(255,255,255,0.14)" }}
                   >
-                    <Text style={{ color: "#fff", fontFamily: fonts.heading }} className="text-3xl font-black">
-                      {peerInitials}
-                    </Text>
+                    {peerAvatarUrl ? (
+                      <Image source={{ uri: peerAvatarUrl }} style={{ width: 112, height: 112, borderRadius: 56 }} />
+                    ) : (
+                      <Text style={{ color: "#fff", fontFamily: fonts.heading }} className="text-3xl font-black">
+                        {peerInitials}
+                      </Text>
+                    )}
                   </View>
                   <Text style={{ color: "#fff", fontFamily: fonts.heading }} className="text-base font-black">
                     {peerName}

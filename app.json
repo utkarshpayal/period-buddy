@@ -2,7 +2,7 @@
   "expo": {
     "name": "The Nura",
     "slug": "thenuracare",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/brand/app-icon.png",
     "splash": {
@@ -45,7 +45,8 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.USE_BIOMETRIC",
         "android.permission.USE_FINGERPRINT",
-        "android.permission.MODIFY_AUDIO_SETTINGS"
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.VIBRATE"
       ],
       "blockedPermissions": [
         "android.permission.SYSTEM_ALERT_WINDOW",

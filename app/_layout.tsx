@@ -9,6 +9,7 @@ import { AppGate } from "../components/AppGate";
 import { AppLockScreen } from "../components/AppLockScreen";
 import { AuthProvider, useAuth } from "../components/auth-context";
 import { GenZModeProvider } from "../components/genz-mode";
+import { IncomingCallOverlay } from "../components/IncomingCallOverlay";
 import { AppModalHost } from "../components/modals/AppModalHost";
 import { ThemeProvider, useTheme } from "../components/theme";
 import {
@@ -180,7 +181,13 @@ function AppShell() {
     const target = resolveNotificationTarget(pendingNotification, user?.partnerRole === "viewer");
     setPendingNotification(null);
     if (guardRoute(target)) return;
-    router.push(target as Parameters<typeof router.push>[0]);
+    // A consultation link reuses an open consultation screen (it reacts to
+    // the new ?id= / &call= params) instead of stacking a second copy.
+    if (String(target).startsWith("/(app)/consultation")) {
+      router.navigate(target as Parameters<typeof router.navigate>[0]);
+    } else {
+      router.push(target as Parameters<typeof router.push>[0]);
+    }
   }, [pendingNotification, navigatorReady, isAuthenticated, pathname, router, user?.partnerRole]);
 
   useEffect(() => {
@@ -208,6 +215,12 @@ function AppShell() {
       {/* Refetches the App CMS config on sign-in/out; feeds the launch route guard. */}
       <AppConfigSync />
       <ScreenPrivacySync />
+      {/* "Your doctor is calling" — rings over the personal socket room. */}
+      <IncomingCallOverlay
+        userId={user?._id}
+        enabled={isAuthenticated && user?.partnerRole !== "viewer"}
+        hidden={isLocked}
+      />
       <AppModalHost />
     </>
   );

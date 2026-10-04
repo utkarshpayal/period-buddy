@@ -8,6 +8,7 @@ import React, {
   useState,
 } from "react";
 import {
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -27,6 +28,7 @@ import {
   RTCView,
 } from "react-native-webrtc";
 import { type ConsultationMessage } from "../lib/api";
+import { startRingTone } from "../lib/ringTone";
 import { useTheme } from "./theme";
 
 /**
@@ -61,6 +63,8 @@ export type ConsultationVideoCallHandle = {
 
 type Props = {
   peerName: string;
+  /** The doctor's profile photo, shown while their video is off. */
+  peerAvatarUrl?: string | null;
   roomId: string;
   socketRef: React.RefObject<WebSocket | null>;
   /** Shared consultation message log (same as the pre-call chat). */
@@ -83,7 +87,7 @@ function initialsOf(name: string): string {
 }
 
 export const ConsultationVideoCall = forwardRef<ConsultationVideoCallHandle, Props>(
-  function ConsultationVideoCall({ peerName, roomId, socketRef, chatMessages, onSendMessage }, ref) {
+  function ConsultationVideoCall({ peerName, peerAvatarUrl, roomId, socketRef, chatMessages, onSendMessage }, ref) {
     const { colors, fonts } = useTheme();
 
     const [phase, setPhase] = useState<Phase>("idle");
@@ -287,6 +291,12 @@ export const ConsultationVideoCall = forwardRef<ConsultationVideoCallHandle, Pro
 
     const endCall = useCallback(() => endWithReason("Call ended", true), [endWithReason]);
 
+    // Ring while the other side is calling and we haven't answered.
+    useEffect(() => {
+      if (phase !== "incoming") return;
+      return startRingTone();
+    }, [phase]);
+
     const dismissIncoming = useCallback(() => {
       incomingPeerIdRef.current = null;
       setPhase("idle");
@@ -426,9 +436,13 @@ export const ConsultationVideoCall = forwardRef<ConsultationVideoCallHandle, Pro
                     className="w-28 h-28 rounded-full items-center justify-center mb-4"
                     style={{ backgroundColor: "rgba(255,255,255,0.14)" }}
                   >
-                    <Text style={{ color: "#fff", fontFamily: fonts.heading }} className="text-3xl font-black">
-                      {peerInitials}
-                    </Text>
+                    {peerAvatarUrl ? (
+                      <Image source={{ uri: peerAvatarUrl }} style={{ width: 112, height: 112, borderRadius: 56 }} />
+                    ) : (
+                      <Text style={{ color: "#fff", fontFamily: fonts.heading }} className="text-3xl font-black">
+                        {peerInitials}
+                      </Text>
+                    )}
                   </View>
                   <Text style={{ color: "#fff", fontFamily: fonts.heading }} className="text-base font-black">
                     {peerName}
