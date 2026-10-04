@@ -124,6 +124,7 @@ export default function NotificationsScreen() {
     const target = resolveNotificationTarget(
       { ...(notif.data ?? {}), type: notif.type },
       user?.partnerRole === "viewer",
+      { joinCall: false },
     );
     // A feature the App CMS has Coming soon / paused opens its sheet instead.
     if (target !== NOTIFICATIONS_LIST_ROUTE && !guardRoute(target)) {

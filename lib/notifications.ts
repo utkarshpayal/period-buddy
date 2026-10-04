@@ -261,13 +261,30 @@ const VIEWER_ALLOWED_ROUTES = new Set([
 export const NOTIFICATIONS_LIST_ROUTE = '/(app)/notifications';
 
 /**
+ * A consultation push opens that consultation's chat (`?id=`); a ringing
+ * call (`kind: 'incoming_call'`) also joins the call (`&call=1`). Without a
+ * valid id it opens the consultation screen itself.
+ */
+function consultationRoute(data: Record<string, unknown>, joinCall: boolean): string {
+  const base = '/(app)/consultation';
+  const id = typeof data.consultationId === 'string' ? data.consultationId : '';
+  if (!/^[0-9a-f]{24}$/i.test(id)) return base;
+  return `${base}?id=${id}${joinCall && data.kind === 'incoming_call' ? '&call=1' : ''}`;
+}
+
+/**
  * Where a tapped notification should land — a push (app/_layout.tsx, resolved
  * when the navigation actually happens, not at tap time, so a cold-start tap
  * uses the role of the account that ends up signed in) or a row in the in-app
  * list (app/(app)/notifications.tsx). `data` is the push's data payload / the
- * Notification doc's `data` plus its `type`.
+ * Notification doc's `data` plus its `type`. `joinCall: false` (the list, where
+ * a ring is long over) opens a call notification's chat without joining.
  */
-export function resolveNotificationTarget(data: Record<string, unknown>, isViewer: boolean): string {
+export function resolveNotificationTarget(
+  data: Record<string, unknown>,
+  isViewer: boolean,
+  { joinCall = true }: { joinCall?: boolean } = {},
+): string {
   // An explicit in-app route (admin pushes pick one in the Content Studio)
   // wins; explicitNotificationRoute() rejects anything that isn't an in-app path.
   const route = explicitNotificationRoute(data);
@@ -286,5 +303,6 @@ export function resolveNotificationTarget(data: Record<string, unknown>, isViewe
   // The daily 'log today' nudge (period-buddy-be's dailyNotificationScheduler)
   // is a `system` notification, but it's about the tracker.
   if (type === 'system' && data.kind === 'daily_nudge') return '/(app)/(dashboard)/tracker';
+  if (type === 'consultation_update') return consultationRoute(data, joinCall);
   return NOTIFICATION_TAP_ROUTES[type] ?? NOTIFICATIONS_LIST_ROUTE;
 }

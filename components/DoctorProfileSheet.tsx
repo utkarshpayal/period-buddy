@@ -3,18 +3,9 @@ import React from "react";
 import { ActivityIndicator, Modal, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Doctor, DoctorAvailability } from "../lib/api";
+import { formatINR, shortZoneName, to12Hour } from "../lib/consultationFormat";
 import { DoctorPhoto } from "./DoctorPhoto";
 import { useTheme } from "./theme";
-
-const CURRENCY_SYMBOL: Record<string, string> = { INR: "₹", USD: "$", EUR: "€", GBP: "£" };
-
-/** "14:30" -> "2:30 PM" */
-function to12Hour(hhmm: string): string {
-  const [h, m] = hhmm.split(":").map(Number);
-  if (Number.isNaN(h)) return hhmm;
-  const hour12 = h % 12 === 0 ? 12 : h % 12;
-  return `${hour12}:${String(m || 0).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
-}
 
 function doctorDisplayName(doctor: Doctor): string {
   return doctor.name || [doctor.firstName, doctor.lastName].filter(Boolean).join(" ") || "Clinical specialist";
@@ -57,8 +48,10 @@ export function DoctorProfileSheet({
   if (!doctor) return null;
 
   const name = doctorDisplayName(doctor);
-  const price = `${CURRENCY_SYMBOL[doctor.currency] ?? `${doctor.currency} `}${doctor.pricePerSession}`;
+  const price = formatINR(doctor.pricePerSession);
   const days = (availability?.days ?? []).filter((d) => d.slots?.length);
+  // Weekly hours are wall-clock times in the doctor's own zone, so say which.
+  const hoursZone = availability?.timezone ? shortZoneName(new Date(), availability.timezone) : "";
   const facts = [
     doctor.experience ? { icon: "award" as const, text: `${doctor.experience} experience` } : null,
     doctor.hospital ? { icon: "home" as const, text: doctor.hospital } : null,
@@ -193,7 +186,9 @@ export function DoctorProfileSheet({
                       {d.day}
                     </Text>
                     <Text className="text-sm text-right flex-1 ml-4" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                      {d.slots.map((s) => `${to12Hour(s.startTime)} – ${to12Hour(s.endTime)}`).join(", ")}
+                      {d.slots
+                        .map((s) => `${to12Hour(s.startTime)} – ${to12Hour(s.endTime)}${hoursZone ? ` (${hoursZone})` : ""}`)
+                        .join(", ")}
                     </Text>
                   </View>
                 ))}
@@ -212,7 +207,7 @@ export function DoctorProfileSheet({
               Per session
             </Text>
             <Text className="text-lg font-extrabold" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-              {price}
+              {price ?? "Not set"}
             </Text>
           </View>
           <TouchableOpacity
