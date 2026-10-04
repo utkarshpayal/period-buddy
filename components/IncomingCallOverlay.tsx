@@ -1,12 +1,13 @@
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
-import { Modal, StatusBar, Text, TouchableOpacity, Vibration, View } from "react-native";
+import { Modal, StatusBar, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRealtimeSocket, type RealtimeMessage } from "../hooks/useRealtimeSocket";
 import { consultationApi } from "../lib/api";
 import { getOpenConsultationChat } from "../lib/consultationPresence";
 import { guardRoute } from "../lib/launchGuard";
+import { startRingTone } from "../lib/ringTone";
 import { DoctorPhoto } from "./DoctorPhoto";
 import { useTheme } from "./theme";
 
@@ -18,8 +19,6 @@ type IncomingCall = {
 
 // Stop ringing on our own if the doctor neither connects nor hangs up.
 const RING_TIMEOUT_MS = 45_000;
-// Buzz, pause, repeat — like a phone ringing.
-const RING_PATTERN = [0, 900, 1100];
 
 /**
  * App-wide "your doctor is calling" screen. The server rings the patient on
@@ -87,8 +86,7 @@ export function IncomingCallOverlay({
 
   useEffect(() => {
     if (!visible) return;
-    Vibration.vibrate(RING_PATTERN, true);
-    return () => Vibration.cancel();
+    return startRingTone();
   }, [visible]);
 
   const accept = () => {

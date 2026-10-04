@@ -28,6 +28,7 @@ import {
   RTCView,
 } from "react-native-webrtc";
 import { type ConsultationMessage } from "../lib/api";
+import { startRingTone } from "../lib/ringTone";
 import { useTheme } from "./theme";
 
 /**
@@ -289,6 +290,12 @@ export const ConsultationVideoCall = forwardRef<ConsultationVideoCallHandle, Pro
     }, [endWithReason, maybeNegotiate, send, setupPeerConnection]);
 
     const endCall = useCallback(() => endWithReason("Call ended", true), [endWithReason]);
+
+    // Ring while the other side is calling and we haven't answered.
+    useEffect(() => {
+      if (phase !== "incoming") return;
+      return startRingTone();
+    }, [phase]);
 
     const dismissIncoming = useCallback(() => {
       incomingPeerIdRef.current = null;

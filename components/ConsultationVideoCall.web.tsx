@@ -9,6 +9,8 @@ import React, {
 } from "react";
 import { Image, Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { type ConsultationMessage } from "../lib/api";
+import { CallMediaError, getCallMedia } from "../lib/callMedia";
+import { startRingTone } from "../lib/ringTone";
 import { useTheme } from "./theme";
 
 /**
@@ -171,15 +173,16 @@ export const ConsultationVideoCall = forwardRef<ConsultationVideoCallHandle, Pro
     );
 
     const setupPeerConnection = useCallback(async () => {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        // Ask for a capture aspect ratio close to the portrait preview box
-        // (~3:4) the stream is rendered into with objectFit="cover" below.
-        // Without this the camera defaults to a wide (e.g. 16:9) frame that
-        // "cover" then crops hard to fit the portrait box — the visible
-        // slice ends up zoomed in tight on the face.
-        video: { facingMode: "user", aspectRatio: 0.75 },
-      });
+      // Ask for a capture aspect ratio close to the portrait preview box
+      // (~3:4) the stream is rendered into with objectFit="cover" below.
+      // Without this the camera defaults to a wide (e.g. 16:9) frame that
+      // "cover" then crops hard to fit the portrait box — the visible
+      // slice ends up zoomed in tight on the face.
+      const { stream, videoMissing } = await getCallMedia({ facingMode: "user", aspectRatio: 0.75 });
+      if (videoMissing) {
+        isCameraOffRef.current = true;
+        setIsCameraOff(true);
+      }
       localStreamRef.current = stream;
       setLocalStream(stream);
 
@@ -239,7 +242,7 @@ export const ConsultationVideoCall = forwardRef<ConsultationVideoCallHandle, Pro
         await setupPeerConnection();
       } catch (err) {
         console.warn("Failed to enter consultation call:", err);
-        endWithReason("Couldn't access camera/mic", false);
+        endWithReason(err instanceof CallMediaError ? err.message : "Couldn't access camera/mic", false);
         return;
       }
       setPhase(knownPeer != null ? "connecting" : "waiting");
@@ -249,6 +252,12 @@ export const ConsultationVideoCall = forwardRef<ConsultationVideoCallHandle, Pro
     }, [endWithReason, maybeNegotiate, send, setupPeerConnection]);
 
     const endCall = useCallback(() => endWithReason("Call ended", true), [endWithReason]);
+
+    // Ring while the other side is calling and we haven't answered.
+    useEffect(() => {
+      if (phase !== "incoming") return;
+      return startRingTone();
+    }, [phase]);
 
     const dismissIncoming = useCallback(() => {
       incomingPeerIdRef.current = null;
