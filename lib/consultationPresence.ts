@@ -1,13 +1,11 @@
-// Which consultation chat is open on screen right now (null when none). The
-// consultation screen sets it; the app-wide ringing UI
-// (components/IncomingCallOverlay.tsx) reads it so it stays quiet when that
-// chat's own in-screen call UI is already showing the call.
-let openChatId: string | null = null;
+// The video call that's open (components/JitsiCall): a consultation id, or
+// "buddy". The app-wide ringer (IncomingCallOverlay) stays quiet for it.
+let openVideoCallId: string | null = null;
 
-export function setOpenConsultationChat(id: string | null) {
-  openChatId = id;
+export function setOpenVideoCall(id: string | null) {
+  openVideoCallId = id;
 }
 
-export function getOpenConsultationChat(): string | null {
-  return openChatId;
+export function getOpenVideoCall(): string | null {
+  return openVideoCallId;
 }

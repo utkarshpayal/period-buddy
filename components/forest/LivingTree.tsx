@@ -47,6 +47,8 @@ function mulberry32(seed: number) {
 }
 
 type Blob = { dx: number; dy: number; r: number };
+/** A single leaf sticking out of a clump's edge: angle (radians) and size. */
+type EdgeLeaf = { a: number; s: number; dark: boolean };
 type Branch = {
   angle: number;
   length: number;
@@ -58,6 +60,9 @@ type Branch = {
   leafR: number;
   blobs: Blob[];
   blossoms: Blob[];
+  edge: EdgeLeaf[];
+  /** Which of the three leaf greens this clump uses (natural colour variation). */
+  hue: number;
   children: Branch[];
 };
 
@@ -96,7 +101,15 @@ function buildBranch(rand: () => number, depth: number, length: number, width: n
     const a = rand() * Math.PI * 2;
     return { dx: Math.cos(a) * leafR * 0.7, dy: Math.sin(a) * leafR * 0.6 - 1, r: 2.1 + rand() * 0.8 };
   });
-  return { angle, length, width, depth, at, birth, bend: (rand() - 0.5) * 0.28, leafR, blobs, blossoms, children };
+  // Leaves poking out around the clump, mostly upward and outward (where light is),
+  // so the crown's outline reads as foliage rather than a stack of circles.
+  const edge: EdgeLeaf[] = Array.from({ length: depth >= 2 ? 6 : 4 }, (_, i) => ({
+    a: -Math.PI / 2 + ((i / (depth >= 2 ? 6 : 4)) - 0.5) * Math.PI * 1.7 + (rand() - 0.5) * 0.5,
+    s: 0.55 + rand() * 0.35,
+    dark: rand() < 0.4,
+  }));
+  const hue = Math.floor(rand() * 3);
+  return { angle, length, width, depth, at, birth, bend: (rand() - 0.5) * 0.28, leafR, blobs, blossoms, edge, hue, children };
 }
 
 type Segment = { d: string; depth: number; w: number; x2: number; y2: number; bark: string | null };
@@ -244,9 +257,19 @@ export type LivingTreeProps = {
   lowDetail?: boolean;
   /** Draw the soil mound and ground shadow (off when the scene has its own ground). */
   showSoil?: boolean;
+  /** The round shadow under the tree (off when the scene casts a directional one). */
+  groundShadow?: boolean;
 };
 
-function LivingTreeBase({ growth, vitality = "thriving", seed = 1, size, lowDetail = false, showSoil = true }: LivingTreeProps) {
+function LivingTreeBase({
+  growth,
+  vitality = "thriving",
+  seed = 1,
+  size,
+  lowDetail = false,
+  showSoil = true,
+  groundShadow = true,
+}: LivingTreeProps) {
   const g = clamp(growth);
   const model = useMemo(() => buildModel(seed), [seed]);
   const palette = PALETTES[vitality];
@@ -274,6 +297,18 @@ function LivingTreeBase({ growth, vitality = "thriving", seed = 1, size, lowDeta
           <Stop offset="0.55" stopColor={palette.mid} />
           <Stop offset="1" stopColor={palette.dark} />
         </RadialGradient>
+        {/* Two more greens, a touch warmer and cooler, for natural variation. */}
+        <RadialGradient id={`${idp}blob1`} cx="30%" cy="24%" r="70%">
+          <Stop offset="0" stopColor={palette.light} />
+          <Stop offset="0.38" stopColor={palette.light} />
+          <Stop offset="0.75" stopColor={palette.mid} />
+          <Stop offset="1" stopColor={palette.dark} />
+        </RadialGradient>
+        <RadialGradient id={`${idp}blob2`} cx="40%" cy="28%" r="80%">
+          <Stop offset="0" stopColor={palette.mid} />
+          <Stop offset="0.6" stopColor={palette.dark} />
+          <Stop offset="1" stopColor={palette.dark} />
+        </RadialGradient>
         <LinearGradient id={`${idp}bark`} x1="0" y1="0" x2="1" y2="0">
           <Stop offset="0" stopColor={palette.trunkDark} />
           <Stop offset="0.45" stopColor={palette.trunk} />
@@ -295,7 +330,9 @@ function LivingTreeBase({ growth, vitality = "thriving", seed = 1, size, lowDeta
 
       {showSoil ? (
         <>
-          {spread > 0 ? <Ellipse cx={CX} cy={GROUND + 3} rx={Math.max(moundRx, spread * 0.9)} ry={6} fill="#1B3A1E" opacity={0.18} /> : null}
+          {spread > 0 && groundShadow ? (
+            <Ellipse cx={CX} cy={GROUND + 3} rx={Math.max(moundRx, spread * 0.9)} ry={6} fill="#1B3A1E" opacity={0.18} />
+          ) : null}
           <Ellipse cx={CX} cy={GROUND + 1} rx={moundRx} ry={5.5} fill={`url(#${idp}soil)`} />
           <Ellipse cx={CX - moundRx * 0.3} cy={GROUND - 1} rx={moundRx * 0.35} ry={1.4} fill="rgba(255,255,255,0.12)" />
         </>
@@ -319,10 +356,26 @@ function LivingTreeBase({ growth, vitality = "thriving", seed = 1, size, lowDeta
 
           {/* Root flare where the trunk meets the soil. */}
           {segments[0] ? (
-            <Path
-              d={`M${CX - segments[0].w * 1.6},${GROUND + 1} Q${CX - segments[0].w * 0.7},${GROUND - 2} ${CX - segments[0].w * 0.7},${GROUND - 9} L${CX + segments[0].w * 0.7},${GROUND - 9} Q${CX + segments[0].w * 0.7},${GROUND - 2} ${CX + segments[0].w * 1.6},${GROUND + 1} Z`}
-              fill={`url(#${idp}bark)`}
-            />
+            <>
+              <Path
+                d={`M${CX - segments[0].w * 1.6},${GROUND + 1} Q${CX - segments[0].w * 0.7},${GROUND - 2} ${CX - segments[0].w * 0.7},${GROUND - 9} L${CX + segments[0].w * 0.7},${GROUND - 9} Q${CX + segments[0].w * 0.7},${GROUND - 2} ${CX + segments[0].w * 1.6},${GROUND + 1} Z`}
+                fill={`url(#${idp}bark)`}
+              />
+              {/* Surface roots spreading into the soil. */}
+              {!lowDetail
+                ? [-1, 1].map((side) => {
+                    const w = segments[0].w;
+                    return (
+                      <Path
+                        key={`r${side}`}
+                        d={`M${CX + side * w * 0.5},${GROUND - 3} Q${CX + side * w * 1.4},${GROUND - 1.5} ${CX + side * w * 2.6},${GROUND + 1.5} L${CX + side * w * 2.3},${GROUND + 2.6} Q${CX + side * w * 1.2},${GROUND + 0.8} ${CX + side * w * 0.3},${GROUND}`}
+                        fill={palette.trunkDark}
+                        opacity={0.85}
+                      />
+                    );
+                  })
+                : null}
+            </>
           ) : null}
           {segments.map((s, i) => (
             <G key={`s${i}`}>
@@ -332,27 +385,61 @@ function LivingTreeBase({ growth, vitality = "thriving", seed = 1, size, lowDeta
             </G>
           ))}
 
-          {/* Leaf clumps, lit from the upper left. */}
+          {/* Single leaves breaking the crown's outline (behind the clumps). */}
+          {!lowDetail
+            ? canopy.map((t, i) =>
+                t.lf > 0.25
+                  ? t.branch.edge.map((e, j) => {
+                      const r = t.branch.leafR * t.lf * 0.95;
+                      const deg = (e.a * 180) / Math.PI + droop * 4;
+                      return (
+                        <G
+                          key={`e${i}-${j}`}
+                          transform={`translate(${t.x + Math.cos(e.a) * r} ${t.y + Math.sin(e.a) * r * 0.85}) rotate(${deg}) scale(${e.s * t.lf * 0.85})`}
+                        >
+                          <Path d={LEAF} fill={e.dark ? palette.dark : palette.mid} />
+                        </G>
+                      );
+                    })
+                  : null,
+              )
+            : null}
+
+          {/* Leaf clumps, lit from the upper left, each in one of three greens. */}
           {canopy.map((t, i) =>
             t.lf > 0 ? (
               <G key={`c${i}`}>
                 {(lowDetail ? t.branch.blobs.slice(0, 1) : t.branch.blobs).map((b, j) => (
-                  <Circle key={j} cx={t.x + b.dx * t.lf} cy={t.y + b.dy * t.lf} r={b.r * t.lf} fill={`url(#${idp}blob)`} />
+                  <Circle
+                    key={j}
+                    cx={t.x + b.dx * t.lf}
+                    cy={t.y + b.dy * t.lf}
+                    r={b.r * t.lf}
+                    fill={`url(#${idp}${["blob", "blob1", "blob2"][lowDetail ? 0 : (t.branch.hue + j) % 3]})`}
+                  />
                 ))}
               </G>
             ) : null,
           )}
+          {/* Dappled sunlight on the lit side of each clump. */}
           {!lowDetail
             ? canopy.map((t, i) =>
                 t.lf > 0 ? (
-                  <Circle
-                    key={`h${i}`}
-                    cx={t.x - t.branch.leafR * 0.3 * t.lf}
-                    cy={t.y - t.branch.leafR * 0.35 * t.lf}
-                    r={t.branch.leafR * 0.5 * t.lf}
-                    fill={palette.light}
-                    opacity={0.22}
-                  />
+                  <G key={`h${i}`} opacity={0.26}>
+                    <Ellipse
+                      cx={t.x - t.branch.leafR * 0.38 * t.lf}
+                      cy={t.y - t.branch.leafR * 0.42 * t.lf}
+                      rx={t.branch.leafR * 0.32 * t.lf}
+                      ry={t.branch.leafR * 0.22 * t.lf}
+                      fill={palette.light}
+                    />
+                    <Circle
+                      cx={t.x - t.branch.leafR * 0.05 * t.lf}
+                      cy={t.y - t.branch.leafR * 0.62 * t.lf}
+                      r={t.branch.leafR * 0.13 * t.lf}
+                      fill="#F1F8E9"
+                    />
+                  </G>
                 ) : null,
               )
             : null}
@@ -383,7 +470,8 @@ export const LivingTree = memo(LivingTreeBase, (a, b) =>
   a.seed === b.seed &&
   a.size === b.size &&
   a.lowDetail === b.lowDetail &&
-  a.showSoil === b.showSoil,
+  a.showSoil === b.showSoil &&
+  a.groundShadow === b.groundShadow,
 );
 
 export const TREE_ASPECT = VIEW_H / VIEW_W;

@@ -148,6 +148,10 @@ export class ApiError extends Error {
   status?: number;
   /** Only set when kind === "featureLocked". */
   lock?: FeatureLockInfo;
+  /** The server's machine-readable `code`, when it sent one (e.g. JOIN_WINDOW_NOT_OPEN). */
+  code?: string;
+  /** The error body's other fields (e.g. `opensAt`), for callers that know the endpoint. */
+  details?: Record<string, unknown>;
 
   constructor(message: string, kind: ApiErrorKind, status?: number, lock?: FeatureLockInfo) {
     super(message);
@@ -534,6 +538,31 @@ export type Consultation = {
   slotTimezone?: string;
   startedAt?: string;
   status: "active" | "cancelled" | "completed" | "paid" | "pending";
+  /** When the video room (self-hosted Jitsi) can be joined, by the server's rules. Null once
+   * the session is closed. */
+  videoCall?: VideoCallInfo | null;
+};
+
+/** Every video call runs on the self-hosted Jitsi server (meet.thenura.care). */
+export type VideoCallInfo = {
+  /** false while the API has no Jitsi server configured. */
+  available: boolean;
+  joinOpensAt: string | null;
+  joinClosesAt: string | null;
+  canJoinNow: boolean;
+};
+
+/** A short-lived pass into one Jitsi room (`consultationApi.joinVideo`, `buddyApi.joinVideo`). */
+export type VideoJoin = {
+  domain: string;
+  roomName: string;
+  meetingUrl: string;
+  token: string;
+  role: "moderator" | "participant";
+  expiresAt: string;
+  joinWindow: { opensAt: string | null; closesAt: string | null };
+  displayName: string;
+  peerName: string;
 };
 
 export type PartnerMessage = {
@@ -1205,7 +1234,13 @@ export async function apiEnvelopeRequest<T>(
           : response.status >= 500
             ? "server"
             : "unknown";
-    throw new ApiError(getErrorMessage(data, response.status), kind, response.status);
+    const error = new ApiError(getErrorMessage(data, response.status), kind, response.status);
+    if (data && typeof data === "object") {
+      const body = data as Record<string, unknown>;
+      if (typeof body.code === "string") error.code = body.code;
+      error.details = body;
+    }
+    throw error;
   }
 
   // Tell still-mounted screens that show this data to refetch (lib/data-sync.ts).
@@ -1602,6 +1637,19 @@ export const consultationApi = {
       method: "PATCH",
     }),
 
+  /** A fresh token for this booking's Jitsi room. Refusals come back as ApiError with `code`:
+   * JOIN_WINDOW_NOT_OPEN (`details.opensAt`), JOIN_WINDOW_CLOSED, CONSULTATION_NOT_LIVE,
+   * PAYMENT_REQUIRED; 503 = video calls are off. Never cache the token. */
+  joinVideo: (consultationId: string) =>
+    apiRequest<VideoJoin>(`/api/consultation/${consultationId}/video/join`, { method: "POST" }),
+
+  /** Informational only: never completes or changes the session. */
+  reportVideoAttendance: (consultationId: string, event: "joined" | "left") =>
+    apiRequest<{ recorded: true }>(`/api/consultation/${consultationId}/video/attendance`, {
+      body: JSON.stringify({ event }),
+      method: "POST",
+    }),
+
   /** Decline a ringing call from the doctor. */
   declineCall: (consultationId: string) =>
     apiRequest<{ declined: true }>(`/api/consultation/${consultationId}/call/decline`, {
@@ -1821,6 +1869,10 @@ export const buddyApi = {
 
   endActive: () =>
     apiRequest<void>("/api/buddies/active", { method: "DELETE" }),
+
+  /** A fresh token for the Jitsi room of my active pairing (404 = no pairing,
+   * 409 = the buddy's account is unavailable, 503 = video calls are off). Never cache it. */
+  joinVideo: () => apiRequest<VideoJoin>("/api/buddies/video/join", { method: "POST" }),
 };
 
 export const nominationsApi = {

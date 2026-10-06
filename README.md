@@ -32,7 +32,7 @@ npx expo start
   backend on your computer (`http://<dev-server-host>:5000`). Either run the backend repo
   with `npm run dev`, or set the variable to `https://www.backend.thenura.care` to use production.
 - **Use a development build, not Expo Go.** The app uses native modules that Expo Go
-  doesn't include (WebRTC video/voice calls, among others). Build one once with
+  doesn't include (secure screen, keep-awake, push, among others). Build one once with
   `eas build --profile development --platform android` (or `ios`), install it, and
   `npx expo start` connects to it.
 

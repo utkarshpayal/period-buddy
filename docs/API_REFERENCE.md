@@ -89,6 +89,11 @@ the shared `ApiError` shape (`kind`: `network`/`timeout`/`server`/
 | GET | `/api/consultation/:id/messages` | Consultation chat history |
 | POST | `/api/consultation/:id/message` | Send a consultation chat message |
 | PATCH | `/api/consultation/:id/cancel` | Cancel, until the slot starts (paid or active); only the doctor or the server completes a session |
+| POST | `/api/consultation/:id/call/decline` | Decline the "your doctor is in the video room" ring (the doctor is told) |
+| POST | `/api/consultation/:id/video/join` | Short-lived Jitsi token for this booking's room (booked patient, paid, inside the join window); refusals carry `code` (`JOIN_WINDOW_NOT_OPEN` + `opensAt`, `JOIN_WINDOW_CLOSED`, `CONSULTATION_NOT_LIVE`, `PAYMENT_REQUIRED`), `503` when Jitsi is off |
+| POST | `/api/consultation/:id/video/attendance` | `{ event: "joined" \| "left" }`, informational only, never changes the session |
+
+Consultations from `/api/consultation/my` carry `videoCall` (`{ available, joinOpensAt, joinClosesAt, canJoinNow }` or `null`), which drives **Join Consultation** (`components/JitsiCall`). Every video call runs on the self-hosted Jitsi server; there is no other video path.
 
 ## `subscriptionApi` — paywall
 
@@ -132,6 +137,7 @@ into `ApiError.kind === "featureLocked"` with a `.lock` payload — see
 | GET | `/api/buddies/messages` | Buddy chat history |
 | POST | `/api/buddies/message` | Send a buddy chat message |
 | DELETE | `/api/buddies/active` | Leave the current match |
+| POST | `/api/buddies/video/join` | Short-lived Jitsi token for my active pairing's room (`404` no pairing, `409` buddy unavailable, `503` video off); rings the buddy |
 
 ## `nominationsApi`
 

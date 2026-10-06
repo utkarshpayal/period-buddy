@@ -4,7 +4,6 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { RefreshControl, ScrollView, StatusBar, Text, TouchableOpacity, View } from "react-native";
 import Animated, { FadeInDown, FadeOut, useReducedMotion } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { EmptyState } from "../../components/EmptyState";
 import { ForestHabitat } from "../../components/forest/ForestHabitat";
 import { LivingTree } from "../../components/forest/LivingTree";
 import { ScreenHeader, SectionHeader } from "../../components/ScreenHeader";
@@ -22,6 +21,9 @@ import {
   type ForestVitality,
 } from "../../lib/api";
 import { formatShortDate, getDateKey } from "../../lib/format";
+import { careHeadline, careStreak, STAGE_GROWTH, weekTotals } from "../../lib/forestView";
+import Svg, { Path } from "react-native-svg";
+import { LinearGradient } from "expo-linear-gradient";
 
 // Your Forest: one tree grows from a seed to full bloom as you do three
 // small tasks a day (log your day, finish a habit, water the tree). Each
@@ -61,7 +63,7 @@ const TASKS: {
 ];
 
 const WEEKDAY = ["S", "M", "T", "W", "T", "F", "S"];
-const SCENE_HEIGHT = 340;
+const SCENE_HEIGHT = 360;
 
 /** For a backend without `growth`: a still-usable picture from the old fields. */
 function legacyGrowth(status: ForestStatus, today: string): ForestGrowth {
@@ -136,6 +138,28 @@ function useTween(target: number, duration: number) {
   return { value, replay: (ms: number) => run(0, target, ms), jump: (v: number) => run(v, v, 0) };
 }
 
+/** Today's 3 tasks as a ring of three segments, with "2/3" in the middle. */
+function CareRing({ done, size, color, track, textColor, font }: { done: number; size: number; color: string; track: string; textColor: string; font: string }) {
+  const r = size / 2 - 5;
+  const c = size / 2;
+  const arc = (i: number) => {
+    // 120° per task, with a small gap between segments.
+    const a1 = ((-90 + i * 120 + 6) * Math.PI) / 180;
+    const a2 = ((-90 + (i + 1) * 120 - 6) * Math.PI) / 180;
+    return `M${c + r * Math.cos(a1)},${c + r * Math.sin(a1)} A${r},${r} 0 0 1 ${c + r * Math.cos(a2)},${c + r * Math.sin(a2)}`;
+  };
+  return (
+    <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
+      <Svg width={size} height={size} style={{ position: "absolute" }}>
+        {[0, 1, 2].map((i) => (
+          <Path key={i} d={arc(i)} stroke={i < done ? color : track} strokeWidth={6} strokeLinecap="round" fill="none" />
+        ))}
+      </Svg>
+      <Text style={{ color: textColor, fontSize: 15, fontWeight: "800", fontFamily: font }}>{`${done}/3`}</Text>
+    </View>
+  );
+}
+
 export default function Forest() {
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
@@ -146,6 +170,13 @@ export default function Forest() {
   const [waterKey, setWaterKey] = useState(0);
   const [celebrateKey, setCelebrateKey] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
+  // "Drag to look around · tap your tree": until the first drag/tap, or a few seconds.
+  const [showHint, setShowHint] = useState(true);
+  useEffect(() => {
+    if (!hasLoaded) return;
+    const t = setTimeout(() => setShowHint(false), 6500);
+    return () => clearTimeout(t);
+  }, [hasLoaded]);
   const [target, setTarget] = useState(0);
   const [tweenMs, setTweenMs] = useState(2200);
   const last = useRef<{ stageIndex: number; treesGrown: number } | null>(null);
@@ -245,7 +276,15 @@ export default function Forest() {
   const toNext = growth ? (growth.nextStage ? growth.pointsToNextStage : growth.pointsPerTree - growth.points) : 0;
   const nextLabel = growth?.nextStage ? STAGE_LABEL[growth.nextStage].toLowerCase() : "your forest";
   const grown = growth?.grownTrees ?? [];
-  const chip = { backgroundColor: "rgba(255,255,255,0.88)" };
+  const chip = { backgroundColor: "rgba(255,255,255,0.9)" };
+  const vitality = growth?.vitality ?? "new";
+  const vitalityColor =
+    vitality === "thriving" ? colors.success : vitality === "new" ? colors.primary : vitality === "dry" ? colors.danger : colors.warning;
+  const todayKey = growth?.today.dateKey ?? getDateKey(new Date());
+  const streak = growth ? careStreak(growth.week, todayKey) : 0;
+  const totals = growth ? weekTotals(growth.week) : { done: 0, possible: 0 };
+  const stageIndex = growth?.stageIndex ?? 0;
+  const stageCount = growth?.stageCount ?? 7;
 
   return (
     <>
@@ -271,6 +310,7 @@ export default function Forest() {
                   grownSeeds={grown.map((t) => t.number)}
                   waterKey={waterKey}
                   celebrateKey={celebrateKey}
+                  onInteract={() => setShowHint(false)}
                 />
                 <View
                   pointerEvents="box-none"
@@ -280,9 +320,12 @@ export default function Forest() {
                     <Text numberOfLines={1} style={{ color: "#1F3B24", fontSize: 15, fontWeight: "800", fontFamily: fonts.heading }}>
                       {growth ? STAGE_LABEL[growth.stage] : "Seed"}
                     </Text>
-                    <Text numberOfLines={1} style={{ color: "#4B5E4E", fontSize: 12.5, fontWeight: "600", marginTop: 1, fontFamily: fonts.body }}>
-                      {VITALITY_LINE[growth?.vitality ?? "new"]}
-                    </Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 }}>
+                      <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: vitalityColor }} />
+                      <Text numberOfLines={1} style={{ flexShrink: 1, color: "#4B5E4E", fontSize: 12.5, fontWeight: "600", fontFamily: fonts.body }}>
+                        {VITALITY_LINE[growth?.vitality ?? "new"]}
+                      </Text>
+                    </View>
                   </View>
                   <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 6 }}>
                     <TouchableOpacity
@@ -304,6 +347,19 @@ export default function Forest() {
                     </View>
                   </View>
                 </View>
+                {showHint && !toast ? (
+                  <Animated.View
+                    entering={FadeInDown.delay(900).duration(400)}
+                    exiting={FadeOut.duration(300)}
+                    pointerEvents="none"
+                    style={{ position: "absolute", left: 0, right: 0, bottom: 16, alignItems: "center" }}
+                  >
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 18, backgroundColor: "rgba(20,32,24,0.62)" }}>
+                      <Ionicons name="hand-left-outline" size={14} color="#FFFFFF" />
+                      <Text style={{ color: "#FFFFFF", fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}>Drag to look around · tap your tree</Text>
+                    </View>
+                  </Animated.View>
+                ) : null}
                 {toast ? (
                   <Animated.View
                     entering={FadeInDown.springify().damping(14)}
@@ -323,59 +379,78 @@ export default function Forest() {
               </View>
             )}
 
-            {/* Stage track: seed → bloom */}
+            {/* Stage: where the tree is, how far to the next, and the whole journey */}
             <View style={{ paddingHorizontal: 18, paddingTop: 16, paddingBottom: 18 }}>
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <View style={{ flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: 8 }}>
+                <View style={{ flexShrink: 1 }}>
+                  <Text style={{ color: colors.mutedText, fontSize: 12, fontWeight: "700", letterSpacing: 0.6, fontFamily: fonts.body }}>
+                    {`STAGE ${stageIndex + 1} OF ${stageCount}`}
+                  </Text>
+                  <Text numberOfLines={1} style={{ color: colors.foreground, fontSize: 19, fontWeight: "800", marginTop: 2, fontFamily: fonts.heading }}>
+                    {growth ? STAGE_LABEL[growth.stage] : "Seed"}
+                  </Text>
+                </View>
+                <Text numberOfLines={1} style={{ flexShrink: 1, color: colors.mutedText, fontSize: 13, fontWeight: "600", textAlign: "right", fontFamily: fonts.body }}>
+                  {growth && growth.totalPoints > 0 ? `${toNext} task${toNext === 1 ? "" : "s"} to ${nextLabel}` : "Every task helps it grow"}
+                </Text>
+              </View>
+              <View style={{ height: 8, borderRadius: 4, marginTop: 12, backgroundColor: colors.surfaceSoft, overflow: "hidden" }}>
+                <LinearGradient
+                  colors={[colors.success, colors.secondary]}
+                  start={{ x: 0, y: 0.5 }}
+                  end={{ x: 1, y: 0.5 }}
+                  style={{ height: 8, borderRadius: 4, width: `${Math.max(4, Math.round((growth?.stageProgress ?? 0) * 100))}%` }}
+                />
+              </View>
+
+              {/* Growth journey: the actual tree at every stage. */}
+              <View
+                accessible
+                accessibilityLabel={`Growth journey: stage ${stageIndex + 1} of ${stageCount}`}
+                style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginTop: 16 }}
+              >
                 {STAGES.map((stage, i) => {
-                  const index = growth?.stageIndex ?? 0;
-                  const fill = i <= index ? 100 : i === index + 1 ? Math.round((growth?.stageProgress ?? 0) * 100) : 0;
+                  const reached = i <= stageIndex;
+                  const current = i === stageIndex;
                   return (
-                    <React.Fragment key={stage}>
-                      {i > 0 ? (
-                        <View style={{ flex: 1, height: 3, borderRadius: 2, backgroundColor: colors.border, overflow: "hidden" }}>
-                          <View style={{ height: 3, width: `${fill}%`, backgroundColor: colors.success }} />
-                        </View>
-                      ) : null}
+                    <View key={stage} style={{ alignItems: "center", flex: 1 }}>
+                      <View style={{ opacity: reached ? 1 : 0.28 }}>
+                        <LivingTree growth={STAGE_GROWTH[i]} seed={(growth?.treesGrown ?? 0) + 1} size={current ? 38 : 30} lowDetail vitality="thriving" />
+                      </View>
                       <View
                         style={{
-                          width: i === index ? 14 : 10,
-                          height: i === index ? 14 : 10,
-                          borderRadius: 7,
-                          backgroundColor: i <= index ? colors.success : colors.border,
-                          borderWidth: i === index ? 3 : 0,
-                          borderColor: colors.successLight,
+                          width: current ? 18 : 6,
+                          height: 6,
+                          borderRadius: 3,
+                          marginTop: 4,
+                          backgroundColor: reached ? colors.success : colors.border,
                         }}
                       />
-                    </React.Fragment>
+                    </View>
                   );
                 })}
-              </View>
-              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 10, gap: 8 }}>
-                <Text numberOfLines={1} style={{ flexShrink: 1, color: colors.foreground, fontSize: 14.5, fontWeight: "700", fontFamily: fonts.body }}>
-                  {growth && growth.totalPoints > 0 ? `${toNext} more task${toNext === 1 ? "" : "s"} to ${nextLabel}` : "Every task you finish helps it grow"}
-                </Text>
-                <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body }}>
-                  {`Stage ${(growth?.stageIndex ?? 0) + 1}/${growth?.stageCount ?? 7}`}
-                </Text>
               </View>
             </View>
           </View>
 
           {/* Today's care */}
           <SectionHeader title="Today's care" style={{ marginTop: 28 }} />
-          <View style={{ borderRadius: 22, backgroundColor: colors.surface, overflow: "hidden", ...getShadow(colors, isDark) }}>
-            <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingTop: 14, paddingBottom: 4, gap: 10 }}>
-              <View style={{ flex: 1, height: 6, borderRadius: 3, backgroundColor: colors.border, overflow: "hidden" }}>
-                <View style={{ height: 6, width: `${(doneToday / 3) * 100}%`, borderRadius: 3, backgroundColor: colors.success }} />
+          <View style={{ borderRadius: 24, backgroundColor: colors.surface, overflow: "hidden", ...getShadow(colors, isDark) }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12 }}>
+              <CareRing done={doneToday} size={58} color={colors.success} track={colors.surfaceSoft} textColor={colors.foreground} font={fonts.mono} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: colors.foreground, fontSize: 16, fontWeight: "800", fontFamily: fonts.heading }}>
+                  {doneToday >= 3 ? "Done for today" : `${doneToday} of 3 done`}
+                </Text>
+                <Text style={{ color: colors.mutedText, fontSize: 13, marginTop: 2, fontFamily: fonts.body }}>{careHeadline(doneToday)}</Text>
               </View>
-              <Text style={{ color: colors.mutedText, fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}>{doneToday}/3 done</Text>
             </View>
-            {TASKS.map((task, i) => {
+            {TASKS.map((task) => {
               const done = taskDone(task.key);
               const isWater = task.key === "water";
               return (
                 <View key={task.key}>
-                  {i > 0 ? <View style={{ height: 1, marginLeft: 68, backgroundColor: colors.border }} /> : null}
+                  <View style={{ height: 1, marginLeft: 70, backgroundColor: colors.border }} />
                   <TouchableOpacity
                     activeOpacity={0.7}
                     disabled={done || (isWater && watering) || !hasLoaded}
@@ -383,7 +458,7 @@ export default function Forest() {
                     accessibilityRole="button"
                     accessibilityState={{ checked: done }}
                     accessibilityLabel={`${task.title}${done ? ", done" : ""}`}
-                    style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 14 }}
+                    style={{ flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 16, paddingVertical: 14 }}
                   >
                     <View
                       style={{
@@ -392,21 +467,46 @@ export default function Forest() {
                         borderRadius: 20,
                         alignItems: "center",
                         justifyContent: "center",
-                        backgroundColor: done ? colors.successLight : colors.input,
+                        backgroundColor: done ? colors.success : isWater ? colors.skyLight : colors.input,
                       }}
                     >
-                      <Ionicons name={done ? "checkmark" : task.icon} size={19} color={done ? colors.success : colors.foreground} />
+                      <Ionicons name={done ? "checkmark" : task.icon} size={19} color={done ? "#FFFFFF" : isWater ? colors.sky : colors.foreground} />
                     </View>
                     <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text numberOfLines={1} style={{ color: done ? colors.mutedText : colors.foreground, fontSize: 15, fontWeight: "700", fontFamily: fonts.body }}>
+                      <Text
+                        numberOfLines={1}
+                        style={{
+                          color: done ? colors.mutedText : colors.foreground,
+                          fontSize: 15,
+                          fontWeight: "700",
+                          fontFamily: fonts.body,
+                          textDecorationLine: done ? "line-through" : "none",
+                        }}
+                      >
                         {task.title}
                       </Text>
-                      <Text numberOfLines={1} style={{ color: done ? colors.success : colors.mutedText, fontSize: 13, marginTop: 2, fontFamily: fonts.body }}>
-                        {done ? "Done · +1 growth" : task.hint}
+                      <Text numberOfLines={1} style={{ color: colors.mutedText, fontSize: 13, marginTop: 2, fontFamily: fonts.body }}>
+                        {task.hint}
                       </Text>
                     </View>
-                    {done ? null : isWater ? (
-                      <View style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16, backgroundColor: colors.primary, opacity: watering ? 0.6 : 1 }}>
+                    {done ? (
+                      <View style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, backgroundColor: colors.successLight }}>
+                        <Text style={{ color: colors.success, fontSize: 12.5, fontWeight: "800", fontFamily: fonts.body }}>+1 growth</Text>
+                      </View>
+                    ) : isWater ? (
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 6,
+                          paddingHorizontal: 14,
+                          height: 36,
+                          borderRadius: 18,
+                          backgroundColor: colors.primary,
+                          opacity: watering ? 0.6 : 1,
+                        }}
+                      >
+                        <Ionicons name="water" size={14} color={colors.buttonText} />
                         <Text style={{ color: colors.buttonText, fontSize: 13.5, fontWeight: "800", fontFamily: fonts.body }}>
                           {watering ? "Watering" : "Water"}
                         </Text>
@@ -424,58 +524,81 @@ export default function Forest() {
           {growth?.week.length ? (
             <>
               <SectionHeader title="This week" barColor={colors.secondary} style={{ marginTop: 28 }} />
-              <View style={{ flexDirection: "row", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 14, borderRadius: 22, backgroundColor: colors.surface }}>
-                {growth.week.map((day) => {
-                  const isToday = day.dateKey === growth.today.dateKey;
-                  return (
-                    <View key={day.dateKey} accessible accessibilityLabel={`${formatShortDate(`${day.dateKey}T12:00:00`)}: ${day.done} of 3 tasks`} style={{ alignItems: "center", gap: 7 }}>
-                      <Text style={{ color: isToday ? colors.foreground : colors.mutedText, fontSize: 12.5, fontWeight: "700", fontFamily: fonts.body }}>
-                        {WEEKDAY[new Date(`${day.dateKey}T12:00:00`).getDay()]}
-                      </Text>
-                      <View
-                        style={{
-                          width: 34,
-                          height: 34,
-                          borderRadius: 17,
-                          alignItems: "center",
-                          justifyContent: "center",
-                          backgroundColor: day.done ? colors.successLight : colors.input,
-                          borderWidth: isToday ? 2 : 0,
-                          borderColor: colors.success,
-                        }}
-                      >
-                        <Ionicons
-                          name={day.done ? "leaf" : "leaf-outline"}
-                          size={15}
-                          color={day.done ? colors.success : colors.mutedText}
-                          style={{ opacity: day.done ? 0.45 + (day.done / 3) * 0.55 : 0.6 }}
-                        />
-                      </View>
+              <View style={{ borderRadius: 24, backgroundColor: colors.surface, paddingHorizontal: 16, paddingVertical: 16, ...getShadow(colors, isDark) }}>
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <View style={{ width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: streak ? colors.warningLight : colors.surfaceSoft }}>
+                      <Ionicons name="flame" size={17} color={streak ? colors.warning : colors.mutedText} />
                     </View>
-                  );
-                })}
+                    <View>
+                      <Text style={{ color: colors.foreground, fontSize: 15, fontWeight: "800", fontFamily: fonts.heading }}>
+                        {streak ? `${streak}-day streak` : "Start a streak"}
+                      </Text>
+                      <Text style={{ color: colors.mutedText, fontSize: 12.5, fontFamily: fonts.body }}>
+                        {streak ? "Keep it going today" : "Do one task a day"}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={{ color: colors.mutedText, fontSize: 13, fontWeight: "700", fontFamily: fonts.mono }}>{`${totals.done}/${totals.possible}`}</Text>
+                </View>
+                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                  {growth.week.map((day) => {
+                    const isToday = day.dateKey === growth.today.dateKey;
+                    const fill = Math.min(3, day.done) / 3;
+                    return (
+                      <View
+                        key={day.dateKey}
+                        accessible
+                        accessibilityLabel={`${formatShortDate(`${day.dateKey}T12:00:00`)}: ${day.done} of 3 tasks`}
+                        style={{ alignItems: "center", gap: 7, flex: 1 }}
+                      >
+                        <View style={{ width: 22, height: 52, borderRadius: 11, justifyContent: "flex-end", overflow: "hidden", backgroundColor: colors.surfaceSoft, borderWidth: isToday ? 2 : 0, borderColor: colors.success }}>
+                          {fill > 0 ? <View style={{ height: `${fill * 100}%`, borderRadius: 9, backgroundColor: fill === 1 ? colors.success : colors.secondary }} /> : null}
+                        </View>
+                        <Text style={{ color: isToday ? colors.foreground : colors.mutedText, fontSize: 12.5, fontWeight: isToday ? "800" : "600", fontFamily: fonts.body }}>
+                          {WEEKDAY[new Date(`${day.dateKey}T12:00:00`).getDay()]}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </View>
               </View>
             </>
           ) : null}
 
           {/* The forest you've grown */}
-          <SectionHeader title="Your forest" barColor={colors.accent} style={{ marginTop: 28 }} />
+          <SectionHeader title="Your forest" barColor={colors.accentText} style={{ marginTop: 28 }} />
           {grown.length ? (
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
               {[...grown].reverse().map((tree) => (
                 <View
                   key={tree.number}
-                  style={{ width: "31%", flexGrow: 1, maxWidth: "32%", alignItems: "center", paddingTop: 8, paddingBottom: 12, borderRadius: 18, backgroundColor: colors.surface }}
+                  accessible
+                  accessibilityLabel={`Tree ${tree.number}, grown ${formatShortDate(`${tree.grownOn}T12:00:00`)}`}
+                  style={{ width: "31%", flexGrow: 1, maxWidth: "32%", borderRadius: 20, overflow: "hidden", backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
                 >
-                  <LivingTree growth={1} seed={tree.number} size={78} lowDetail />
-                  <Text style={{ color: colors.foreground, fontSize: 13.5, fontWeight: "700", marginTop: 2, fontFamily: fonts.body }}>Tree {tree.number}</Text>
-                  <Text style={{ color: colors.mutedText, fontSize: 12.5, fontFamily: fonts.body }}>{formatShortDate(`${tree.grownOn}T12:00:00`)}</Text>
+                  <LinearGradient colors={isDark ? ["#1E3345", "#2A4A3A"] : ["#DDF0FA", "#E9F6E4"]} style={{ alignItems: "center", paddingTop: 10 }}>
+                    <LivingTree growth={1} seed={tree.number} size={76} lowDetail showSoil={false} />
+                    <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 10, backgroundColor: isDark ? "#2C5236" : "#8CC57F" }} />
+                  </LinearGradient>
+                  <View style={{ paddingHorizontal: 10, paddingVertical: 10, alignItems: "center" }}>
+                    <Text style={{ color: colors.foreground, fontSize: 13.5, fontWeight: "800", fontFamily: fonts.body }}>{`Tree ${tree.number}`}</Text>
+                    <Text style={{ color: colors.mutedText, fontSize: 12.5, marginTop: 1, fontFamily: fonts.body }}>{formatShortDate(`${tree.grownOn}T12:00:00`)}</Text>
+                  </View>
                 </View>
               ))}
             </View>
           ) : (
-            <View style={{ borderRadius: 22, backgroundColor: colors.surface }}>
-              <EmptyState compact icon="tree-outline" title="No full-grown trees yet" message="Each grown tree is planted here." />
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 14, borderRadius: 24, padding: 16, backgroundColor: colors.surface, ...getShadow(colors, isDark) }}>
+              <View style={{ width: 64, height: 64, borderRadius: 18, alignItems: "center", justifyContent: "flex-end", overflow: "hidden", backgroundColor: colors.successLight }}>
+                <LivingTree growth={0.16} seed={1} size={58} lowDetail />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: colors.foreground, fontSize: 15, fontWeight: "800", fontFamily: fonts.heading }}>Your first tree is on its way</Text>
+                <Text style={{ color: colors.mutedText, fontSize: 13, lineHeight: 19, marginTop: 2, fontFamily: fonts.body }}>
+                  {"When it's fully grown, it's planted here and on the hill."}
+                </Text>
+              </View>
             </View>
           )}
         </ScrollView>
