@@ -599,7 +599,7 @@ export default function Tracker() {
     [selectedYear],
   );
 
-  const { dayEntries, dayNotes, earnTokens, saveDayEntry } = useAppState();
+  const { dayEntries, dayNotes, earnTokens, saveDayEntry, removeDayEntry } = useAppState();
   // Prefer the history-derived cycle length so future-month phase coloring
   // matches the backend prediction (median/weighted length), not the raw
   // configured value.
@@ -976,6 +976,8 @@ export default function Tracker() {
   }, [selectedDate?.dateKey, todayKey, dayEntries, remoteDayEntries, dayNotes, phaseStyles, ovulationDayPivot, isPhantomPeriodTail, todayStart, openCalendarDay]);
 
   function openDate(date: Date) {
+    // Future days can't be logged; the calendar cells are disabled too.
+    if (getDateKey(date) > getDateKey(new Date())) return;
     const cycleDay = getCycleDay(date, cycleStartDate, activeCycleLength);
     const phase = getCyclePhase(
       cycleDay,
@@ -2043,6 +2045,7 @@ export default function Tracker() {
               .saveLog({
                 dateKey: selectedDate.dateKey,
                 ...entry,
+                replace: true,
               })
               .then((result) => {
                 setRemoteDayEntries((current) => ({
@@ -2055,6 +2058,15 @@ export default function Tracker() {
               })
               .catch(alertLogNotSaved);
           }
+        }}
+        onClearEntry={async () => {
+          if (!selectedDate) return;
+          const { dateKey } = selectedDate;
+          const result = await cycleApi.deleteLog(dateKey);
+          removeDayEntry(dateKey);
+          setRemoteDayEntries(({ [dateKey]: _removed, ...rest }) => rest);
+          // Mirrors the backend taking back the +5 "new log" credit.
+          if (result.deleted) earnTokens(-5);
         }}
         onLogSymptom={(symptom) => {
           if (selectedDate) {

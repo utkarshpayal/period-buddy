@@ -64,5 +64,8 @@ export function useCycleCalendar() {
   /** Patch one day after a save, from the server's copy of the log. */
   const setRemoteEntry = useCallback((dateKey: string, entry: LocalDayEntry) => setRemote((current) => ({ ...current, [dateKey]: entry })), []);
 
-  return { model, entryFor, noteFor, loadYear, setRemoteEntry, todayKey: getDateKey(new Date()), ready: predictions !== null || settings !== null };
+  /** Drop one day after its log is deleted on the server. */
+  const removeRemoteEntry = useCallback((dateKey: string) => setRemote(({ [dateKey]: _removed, ...rest }) => rest), []);
+
+  return { model, entryFor, noteFor, loadYear, setRemoteEntry, removeRemoteEntry, todayKey: getDateKey(new Date()), ready: predictions !== null || settings !== null };
 }

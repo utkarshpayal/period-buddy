@@ -88,8 +88,7 @@ the shared `ApiError` shape (`kind`: `network`/`timeout`/`server`/
 | GET | `/api/consultation/my` | My bookings |
 | GET | `/api/consultation/:id/messages` | Consultation chat history |
 | POST | `/api/consultation/:id/message` | Send a consultation chat message |
-| POST | `/api/consultation/:id/complete` | Mark complete |
-| POST | `/api/consultation/:id/cancel` | Cancel |
+| PATCH | `/api/consultation/:id/cancel` | Cancel, until the slot starts (paid or active); only the doctor or the server completes a session |
 
 ## `subscriptionApi` — paywall
 

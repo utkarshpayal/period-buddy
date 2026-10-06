@@ -17,6 +17,7 @@ import { useTheme } from "../../components/theme";
 import { useCycleCalendar } from "../../hooks/useCycleCalendar";
 import { cycleApi } from "../../lib/api";
 import { mapApiDayEntry, type DayStatus } from "../../lib/cycleCalendar";
+import { getDateKey } from "../../lib/format";
 import { HeaderIconButton } from "../../components/ScreenHeader";
 import { useContentWidth } from "../../lib/layout";
 import { getShadow } from "../../components/ui-tokens";
@@ -57,8 +58,8 @@ export default function CalendarScreen() {
   const width = useContentWidth();
   const palette = usePhasePalette();
   const params = useLocalSearchParams<{ view?: string; month?: string }>();
-  const { model, entryFor, noteFor, loadYear, setRemoteEntry, todayKey } = useCycleCalendar();
-  const { saveDayEntry, earnTokens } = useAppState();
+  const { model, entryFor, noteFor, loadYear, setRemoteEntry, removeRemoteEntry, todayKey } = useCycleCalendar();
+  const { saveDayEntry, removeDayEntry, earnTokens } = useAppState();
 
   const [view, setView] = useState<View_>(params.view === "year" ? "year" : "month");
   const [focusMonth, setFocusMonth] = useState(() => parseMonthParam(params.month));
@@ -82,7 +83,10 @@ export default function CalendarScreen() {
     viewableItems.forEach((v) => loadYearRef.current(v.item));
   }).current;
 
-  const openDay = useCallback((s: DayStatus) => setSelected(s), []);
+  // Future days can't be logged; the calendar cells are disabled too.
+  const openDay = useCallback((s: DayStatus) => {
+    if (s.dateKey <= getDateKey(new Date())) setSelected(s);
+  }, []);
   const openMonth = useCallback((monthDate: Date) => {
     setFocusMonth(monthDate);
     setView("month");
@@ -120,15 +124,24 @@ export default function CalendarScreen() {
     else yearListRef.current?.scrollToIndex({ index: now.getFullYear() - FIRST_YEAR, animated: true });
   };
 
-  const save = (dateKey: string, entry: Parameters<typeof saveDayEntry>[1]) => {
+  /** `replace` marks a full "Save Log" (cleared fields get removed server-side). */
+  const save = (dateKey: string, entry: Parameters<typeof saveDayEntry>[1], replace = false) => {
     saveDayEntry(dateKey, entry);
     cycleApi
-      .saveLog({ dateKey, ...entry })
+      .saveLog({ dateKey, ...entry, replace })
       .then((result) => {
         setRemoteEntry(dateKey, mapApiDayEntry(result.cycleLog));
         if (result.tokensEarned) earnTokens(result.tokensEarned);
       })
       .catch(alertLogNotSaved);
+  };
+
+  const clear = async (dateKey: string) => {
+    const result = await cycleApi.deleteLog(dateKey);
+    removeDayEntry(dateKey);
+    removeRemoteEntry(dateKey);
+    // Mirrors the backend taking back the +5 "new log" credit.
+    if (result.deleted) earnTokens(-5);
   };
 
   return (
@@ -216,7 +229,10 @@ export default function CalendarScreen() {
         entry={selected ? entryFor(selected.dateKey) : undefined}
         details={selected ? (noteFor(selected.dateKey) ?? "") : undefined}
         onSaveEntry={(entry) => {
-          if (selected) save(selected.dateKey, entry);
+          if (selected) save(selected.dateKey, entry, true);
+        }}
+        onClearEntry={async () => {
+          if (selected) await clear(selected.dateKey);
         }}
         onLogSymptom={(symptom) => {
           if (!selected) return;

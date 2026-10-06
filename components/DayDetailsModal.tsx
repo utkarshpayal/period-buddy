@@ -16,6 +16,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { DayEntry } from "./AppState";
 import { alert } from "../lib/alert";
+import { AppModalHost } from "./modals/AppModalHost";
 import { useTheme } from "./theme";
 import { useSecureScreen } from "../lib/screenPrivacy";
 import {
@@ -163,6 +164,7 @@ export default function DayDetailsModal({
   onSaveEntry,
   onSaveNote,
   onLogSymptom,
+  onClearEntry,
   focusSection,
 }: {
   visible: boolean;
@@ -175,6 +177,8 @@ export default function DayDetailsModal({
   onSaveEntry?: (entry: Omit<DayEntry, "updatedAt">) => Promise<void> | void;
   onSaveNote?: (note: string) => void;
   onLogSymptom?: (symptom: string) => void;
+  /** Deletes this day's saved log. The option only shows when there is a saved entry. */
+  onClearEntry?: () => Promise<void>;
   /** When set, the modal scrolls to this section on open (Home quick actions). */
   focusSection?: "symptoms" | "flow" | "mood";
 }) {
@@ -418,6 +422,26 @@ export default function DayDetailsModal({
         error instanceof Error
           ? error.message
           : "Unable to save this day's log right now. Please try again.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  // Clears straight away, with no confirm step. The button only shows for a
+  // day that already has a saved log.
+  async function handleClear() {
+    if (isSaving || !onClearEntry) return;
+    try {
+      setIsSaving(true);
+      await onClearEntry();
+      onClose();
+    } catch (error) {
+      alert(
+        "Couldn't clear",
+        error instanceof Error
+          ? error.message
+          : "Unable to clear this day's log right now. Please try again.",
       );
     } finally {
       setIsSaving(false);
@@ -1111,7 +1135,7 @@ export default function DayDetailsModal({
               flexDirection: "row",
               gap: 8,
               padding: 16,
-              paddingBottom: Math.max(16, insets.bottom + 10),
+              paddingBottom: entry && onClearEntry ? 16 : Math.max(16, insets.bottom + 10),
             }}
           >
             <TouchableOpacity
@@ -1174,8 +1198,36 @@ export default function DayDetailsModal({
               </Text>
             </TouchableOpacity>
           </View>
+
+          {entry && onClearEntry ? (
+            <TouchableOpacity
+              onPress={handleClear}
+              disabled={isSaving}
+              accessibilityRole="button"
+              accessibilityLabel="Clear this day's log"
+              hitSlop={6}
+              style={{
+                alignSelf: "center",
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
+                marginTop: -6,
+                marginBottom: Math.max(12, insets.bottom),
+                opacity: isSaving ? 0.6 : 1,
+              }}
+            >
+              <Ionicons name="trash-outline" size={15} color={colors.mutedText} />
+              <Text style={{ color: colors.mutedText, fontSize: 13, fontWeight: "600", fontFamily: fonts.body }}>
+                Clear this day&apos;s log
+              </Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </KeyboardAvoidingView>
+      {/* Alerts raised while the sheet is open (discard, save errors) draw
+          inside it; the root host's Modal would sit behind this one. Only
+          while visible, so it never takes alerts from the rest of the app. */}
+      {visible ? <AppModalHost inline /> : null}
     </Modal>
   );
 }

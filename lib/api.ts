@@ -14,6 +14,10 @@ const configApiBaseUrl =
   (Constants.expoConfig?.extra?.apiBaseUrl as string | undefined)?.trim() || "https://www.backend.thenura.care";
 
 function getLocalDevApiBaseUrl() {
+  // The browser runs on this machine, so the local backend is on localhost
+  // (Metro's hostUri there can be a LAN IP the backend's CORS doesn't allow).
+  if (Platform.OS === "web") return `http://localhost:${LOCAL_DEV_API_PORT}`;
+
   const constants = Constants as unknown as {
     expoConfig?: { hostUri?: string };
     manifest?: { debuggerHost?: string };
@@ -1450,7 +1454,13 @@ export const cycleApi = {
   getSymptomPredictions: () =>
     apiRequest<SymptomPredictionsResponse>("/api/cycle/symptom-predictions"),
 
-  saveLog: (payload: Omit<DayEntry, "cycleDay" | "phase" | "tokensEarned">) =>
+  /**
+   * `replace: true` sends the day's whole log: fields left out are cleared on
+   * the server instead of keeping their old value. Partial saves omit it.
+   */
+  saveLog: (
+    payload: Omit<DayEntry, "cycleDay" | "phase" | "tokensEarned"> & { replace?: boolean },
+  ) =>
     apiRequest<{ cycleLog: DayEntry; tokensEarned: number }>("/api/cycle/log", {
       // Send the client's timezone offset so the backend anchors the tracking
       // streak to the user's *local* "today", not server UTC (avoids near-
@@ -1467,6 +1477,13 @@ export const cycleApi = {
 
   getDayLog: (dateKey: string) =>
     apiRequest<DayEntry | null>(`/api/cycle/log/${dateKey}`),
+
+  /** Removes a day's log entirely — for a day logged on the wrong date. */
+  deleteLog: (dateKey: string) =>
+    apiRequest<{ deleted: boolean }>(
+      `/api/cycle/log/${dateKey}${toQuery({ timezoneOffsetMinutes: String(new Date().getTimezoneOffset()) })}`,
+      { method: "DELETE" },
+    ),
 
   getStats: () => apiRequest<CycleStats>("/api/cycle/stats"),
 };
@@ -1577,12 +1594,8 @@ export const consultationApi = {
       },
     ),
 
-  completeConsultation: (consultationId: string) =>
-    apiRequest<Consultation>(`/api/consultation/${consultationId}/complete`, {
-      method: "PATCH",
-    }),
-
-  /** Patient cancels a pending/paid booking before it starts; a paid one is refunded by the team. */
+  /** Patient cancels a booking until its slot starts (paid or active); a paid one is refunded by the team.
+   * Only the doctor (or the server, 3 h after the slot) completes a session. */
   cancelConsultation: (consultationId: string, reason?: string) =>
     apiRequest<Consultation>(`/api/consultation/${consultationId}/cancel`, {
       body: JSON.stringify({ reason }),

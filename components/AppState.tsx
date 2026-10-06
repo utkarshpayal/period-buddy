@@ -47,6 +47,7 @@ type AppStateType = {
   addDayNote: (dayKey: string, note: string) => void;
   dayEntries: Record<string, DayEntry>;
   saveDayEntry: (dayKey: string, entry: Omit<DayEntry, "updatedAt">) => void;
+  removeDayEntry: (dayKey: string) => void;
   trackedDays: number;
 };
 
@@ -143,6 +144,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  const removeDayEntry = useCallback((dayKey: string) => {
+    setDayNotes(({ [dayKey]: _removed, ...rest }) => rest);
+    setDayEntries(({ [dayKey]: _removed, ...rest }) => rest);
+  }, []);
+
   useEffect(() => {
     writeStoredAppState({
       reportedPosts: Array.from(reportedPosts),
@@ -166,6 +172,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         addDayNote,
         dayEntries,
         saveDayEntry,
+        removeDayEntry,
         trackedDays,
       }}
     >

@@ -9,6 +9,7 @@ import React, {
 } from "react";
 import {
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -27,6 +28,7 @@ import {
   RTCSessionDescription,
   RTCView,
 } from "react-native-webrtc";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { type ConsultationMessage } from "../lib/api";
 import { startRingTone } from "../lib/ringTone";
 import { useTheme } from "./theme";
@@ -89,6 +91,7 @@ function initialsOf(name: string): string {
 export const ConsultationVideoCall = forwardRef<ConsultationVideoCallHandle, Props>(
   function ConsultationVideoCall({ peerName, peerAvatarUrl, roomId, socketRef, chatMessages, onSendMessage }, ref) {
     const { colors, fonts } = useTheme();
+    const insets = useSafeAreaInsets();
 
     const [phase, setPhase] = useState<Phase>("idle");
     const [endedReason, setEndedReason] = useState("");
@@ -101,6 +104,9 @@ export const ConsultationVideoCall = forwardRef<ConsultationVideoCallHandle, Pro
 
     // In-call chat panel.
     const [chatOpen, setChatOpen] = useState(false);
+    // The composer clears the home indicator / nav bar only while the
+    // keyboard is down; with it up the keyboard already covers that area.
+    const [keyboardUp, setKeyboardUp] = useState(false);
     const [draft, setDraft] = useState("");
     const [unread, setUnread] = useState(0);
     const chatListRef = useRef<ScrollView>(null);
@@ -401,6 +407,23 @@ export const ConsultationVideoCall = forwardRef<ConsultationVideoCallHandle, Pro
       send("call_media", { audioOff: isMutedRef.current, videoOff: next });
     };
 
+    useEffect(() => {
+      if (!chatOpen) return;
+      const show = Keyboard.addListener(
+        Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+        () => setKeyboardUp(true),
+      );
+      const hide = Keyboard.addListener(
+        Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+        () => setKeyboardUp(false),
+      );
+      return () => {
+        show.remove();
+        hide.remove();
+        setKeyboardUp(false);
+      };
+    }, [chatOpen]);
+
     const sendChat = () => {
       const text = draft.trim();
       if (!text) return;
@@ -511,7 +534,10 @@ export const ConsultationVideoCall = forwardRef<ConsultationVideoCallHandle, Pro
               </View>
 
               {/* Controls */}
-              <View className="absolute bottom-14 flex-row items-center gap-4">
+              <View
+                className="absolute flex-row items-center gap-4"
+                style={{ bottom: 56 + insets.bottom }}
+              >
                 <TouchableOpacity
                   onPress={toggleMute}
                   className={controlBtn}
@@ -637,8 +663,12 @@ export const ConsultationVideoCall = forwardRef<ConsultationVideoCallHandle, Pro
                     </ScrollView>
 
                     <View
-                      className="px-3 py-3 border-t flex-row items-center gap-2"
-                      style={{ borderColor: colors.border, backgroundColor: colors.surface }}
+                      className="px-3 pt-3 border-t flex-row items-center gap-2"
+                      style={{
+                        borderColor: colors.border,
+                        backgroundColor: colors.surface,
+                        paddingBottom: 12 + (keyboardUp ? 0 : insets.bottom),
+                      }}
                     >
                       <TextInput
                         placeholder="Type a message…"
