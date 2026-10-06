@@ -19,10 +19,6 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import {
-  ConsultationVideoCall,
-  type ConsultationVideoCallHandle,
-} from "../../components/ConsultationVideoCall";
 import { DoctorPhoto } from "../../components/DoctorPhoto";
 import { DoctorProfileSheet, ratingLabel } from "../../components/DoctorProfileSheet";
 import { RateSessionSheet } from "../../components/RateSessionSheet";
@@ -55,7 +51,9 @@ import {
   groupSlotsByLocalDay,
   shortZoneName,
 } from "../../lib/consultationFormat";
-import { setOpenConsultationChat } from "../../lib/consultationPresence";
+import { setOpenVideoCall } from "../../lib/consultationPresence";
+import { isJoinWindowOpen } from "../../lib/jitsiCall";
+import { JitsiCall } from "../../components/JitsiCall";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { useSecureScreen } from "../../lib/screenPrivacy";
 
@@ -195,14 +193,25 @@ export default function ConsultationScreen() {
   const daySlots = slotDays.find((d) => d.key === selectedDayKey)?.slots ?? [];
   const zoneName = useMemo(() => shortZoneName(), []);
 
-  // Video call: WebRTC "meeting" over the shared consultation WebSocket room, so
-  // patient and doctor connect peer-to-peer instead of via a third-party room.
-  const socketRef = useRef<WebSocket | null>(null);
-  const callRef = useRef<ConsultationVideoCallHandle | null>(null);
-  // Consultation whose call to join as soon as its room is joined (Accept on
-  // the ringing screen / a call push), and whose room the chat socket is in.
-  const pendingCallIdRef = useRef<string | null>(null);
-  const joinedRoomIdRef = useRef<string | null>(null);
+  // Video call (self-hosted Jitsi, components/JitsiCall): the consultation it's
+  // for, and why it ended if the session closed mid-call. Independent of the chat sheet.
+  const [jitsiCall, setJitsiCall] = useState<{ id: string; peerName: string; ended?: string } | null>(null);
+  useEffect(() => {
+    setOpenVideoCall(jitsiCall?.id ?? null);
+    return () => setOpenVideoCall(null);
+  }, [jitsiCall?.id]);
+  // Re-checks the join windows every 30 s so "Join consultation" turns on by itself.
+  const [clock, setClock] = useState(() => Date.now());
+  const hasJitsiSession = myConsultations.some((c) => isLive(c) && Boolean(c.videoCall));
+  useEffect(() => {
+    if (!hasJitsiSession) return;
+    const timer = setInterval(() => setClock(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, [hasJitsiSession]);
+  const openJitsiCall = useCallback((consultation: Consultation) => {
+    const doc = typeof consultation.doctorId === "object" ? consultation.doctorId : null;
+    setJitsiCall({ id: consultation._id, peerName: doc ? getDoctorDisplayName(doc) : "your doctor" });
+  }, []);
 
   // Chat
   const [activeConsultation, setActiveConsultation] = useState<Consultation | null>(null);
@@ -330,12 +339,6 @@ export default function ConsultationScreen() {
     }
   }, [chatModalVisible, load]);
 
-  // Tell the app-wide ringing screen which chat is open (its call UI is here).
-  useEffect(() => {
-    setOpenConsultationChat(chatModalVisible ? activeId : null);
-    return () => setOpenConsultationChat(null);
-  }, [chatModalVisible, activeId]);
-
   /* -------------------------------- Chat -------------------------------- */
 
   /** Refetch /my and swap in the open consultation's fresh copy (status, prescription). */
@@ -362,13 +365,14 @@ export default function ConsultationScreen() {
     }
   }, []);
 
-  const openChat = useCallback(async (consultation: Consultation) => {
+  /** Loads `consultation`'s chat; `show: false` keeps the chat sheet closed (a video call shows it instead). */
+  const openChat = useCallback(async (consultation: Consultation, { show = true }: { show?: boolean } = {}) => {
     activeIdRef.current = consultation._id;
     setActiveConsultation(consultation);
     setChatEnded(false);
     setChatMessages([]);
     setMessagesError(null);
-    setChatModalVisible(true);
+    if (show) setChatModalVisible(true);
     setLoadingMessages(true);
     try {
       const messages = await consultationApi.getMessages(consultation._id);
@@ -381,12 +385,21 @@ export default function ConsultationScreen() {
     }
   }, []);
 
-  // Live chat over the consultation room, only while the session is
-  // paid/active (the server refuses the room otherwise). Reconnects with
-  // backoff, re-joins the room and refetches the log after a drop or when
-  // the app comes back to the foreground.
+  // A video call shows this consultation's chat in a panel: load it (without
+  // opening the chat sheet) when the call is for a different consultation.
   useEffect(() => {
-    if (!chatModalVisible || !activeId || !chatLive) return;
+    if (!jitsiCall || activeIdRef.current === jitsiCall.id) return;
+    const target = myConsultations.find((c) => c._id === jitsiCall.id);
+    if (target) openChat(target, { show: false });
+  }, [jitsiCall, myConsultations, openChat]);
+  const chatInCall = Boolean(jitsiCall && jitsiCall.id === activeId);
+
+  // Live chat over the consultation room, while the chat sheet or a call on
+  // it is open, and only while the session is paid/active (the server refuses
+  // the room otherwise). Reconnects with backoff, re-joins the room and
+  // refetches the log after a drop or when the app comes back to the foreground.
+  useEffect(() => {
+    if ((!chatModalVisible && !chatInCall) || !activeId || !chatLive) return;
     const room = `consultation_${activeId}`;
     let closed = false;
     let denied = false;
@@ -409,7 +422,7 @@ export default function ConsultationScreen() {
       if (event === "consultation_cancelled" || event === "consultation_completed") {
         setChatEnded(true);
         refreshActiveConsultation();
-      } else if (event === "prescription_updated" || event === "call_started") {
+      } else if (event === "prescription_updated") {
         refreshActiveConsultation();
       }
     };
@@ -426,7 +439,6 @@ export default function ConsultationScreen() {
       if (closed) return;
       const ws = new WebSocket(wsUrl);
       socket = ws;
-      socketRef.current = ws;
 
       ws.onopen = () => {
         if (closed) return;
@@ -445,19 +457,13 @@ export default function ConsultationScreen() {
         if (!data || data.room !== room) return;
         if (data.type === "joined") {
           attempts = 0;
-          joinedRoomIdRef.current = activeId;
           setSocketState("connected");
           // Anything sent while we were away arrives in the refetched log.
           if (joinedOnce) refetchMessages();
           joinedOnce = true;
-          if (pendingCallIdRef.current === activeId) {
-            pendingCallIdRef.current = null;
-            callRef.current?.startCall();
-          }
         } else if (data.type === "error") {
           // Room refused: the session isn't paid/active any more.
           denied = true;
-          pendingCallIdRef.current = null;
           setChatEnded(true);
           refreshActiveConsultation();
         } else if (data.type === "left") {
@@ -468,10 +474,6 @@ export default function ConsultationScreen() {
             setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 100);
           }
           if (typeof data.event === "string") handleRoomEvent(data.event);
-        } else if (data.type) {
-          // Everything else on this room is WebRTC call signaling — the
-          // doctor ringing us shows up here as an incoming call.
-          callRef.current?.handleSignal(data);
         }
       };
 
@@ -480,8 +482,6 @@ export default function ConsultationScreen() {
       };
 
       ws.onclose = () => {
-        if (socketRef.current === ws) socketRef.current = null;
-        if (joinedRoomIdRef.current === activeId) joinedRoomIdRef.current = null;
         if (socket === ws) socket = null;
         scheduleReconnect();
       };
@@ -504,16 +504,14 @@ export default function ConsultationScreen() {
       closed = true;
       appStateSub.remove();
       if (timer) clearTimeout(timer);
-      joinedRoomIdRef.current = null;
       if (socket) {
         try {
-          socket.send(JSON.stringify({ type: "leave", room }));
+          if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "leave", room }));
         } catch {}
         socket.close();
       }
-      if (socketRef.current === socket) socketRef.current = null;
     };
-  }, [chatModalVisible, activeId, chatLive, refetchMessages, refreshActiveConsultation]);
+  }, [chatModalVisible, chatInCall, activeId, chatLive, refetchMessages, refreshActiveConsultation]);
 
   // Personal-room events (the doctor cancels/completes while the chat is
   // closed) keep the lists current. Shares the app-wide socket.
@@ -524,6 +522,12 @@ export default function ConsultationScreen() {
     onMessage: (data) => {
       if (data?.type !== "message" || data.room !== personalRoom) return;
       if (data.event !== "consultation_cancelled" && data.event !== "consultation_completed") return;
+      // A call for this session ends with it.
+      const ended =
+        data.event === "consultation_cancelled"
+          ? "This consultation was cancelled, so the call has ended."
+          : "Your doctor has completed this consultation, so the call has ended.";
+      setJitsiCall((call) => (call && call.id === data.consultationId ? { ...call, ended } : call));
       if (data.consultationId === activeIdRef.current) {
         setChatEnded(true);
         refreshActiveConsultation();
@@ -533,8 +537,8 @@ export default function ConsultationScreen() {
     },
   });
 
-  // Deep link: open `?id=`'s chat once the consultations are loaded, and
-  // with `call=1` join its call as soon as the room is joined.
+  // Deep link: open `?id=`'s chat once the consultations are loaded; with
+  // `call=1` (the ringing screen / a call push) open its video call instead.
   const handledLinkRef = useRef<string | null>(null);
   const refetchedForLinkRef = useRef<string | null>(null);
   useEffect(() => {
@@ -557,14 +561,12 @@ export default function ConsultationScreen() {
     router.setParams({ id: undefined, call: undefined });
     if (!target) return;
 
-    const joinCall = params.call === "1" && isLive(target);
-    if (chatModalVisible && activeIdRef.current === target._id) {
-      if (!joinCall) return;
-      if (joinedRoomIdRef.current === target._id) callRef.current?.startCall();
-      else pendingCallIdRef.current = target._id;
+    if (params.call === "1" && isLive(target)) {
+      // The server checks the booking and the window when the call screen asks for its token.
+      openJitsiCall(target);
       return;
     }
-    pendingCallIdRef.current = joinCall ? target._id : null;
+    if (chatModalVisible && activeIdRef.current === target._id) return;
     // iOS won't present the chat while another sheet is still open.
     const sheetOpen = Boolean(profileDoctor || rateTarget);
     setProfileDoctor(null);
@@ -581,6 +583,7 @@ export default function ConsultationScreen() {
     rateTarget,
     loadConsultations,
     openChat,
+    openJitsiCall,
     router,
   ]);
 
@@ -1052,6 +1055,42 @@ export default function ConsultationScreen() {
                           </View>
                         </LinearGradient>
                       </TouchableOpacity>
+                      {session.videoCall &&
+                        (() => {
+                          const available = session.videoCall.available !== false;
+                          const open = available && isJoinWindowOpen(session.videoCall, clock);
+                          const opensAt = session.videoCall.joinOpensAt
+                            ? new Date(session.videoCall.joinOpensAt).getTime()
+                            : null;
+                          const note = !available
+                            ? "Video calls aren't available right now"
+                            : !open && opensAt !== null && opensAt > clock
+                              ? `Video opens ${formatSessionWhen(session.videoCall.joinOpensAt!, { now: new Date(clock) })}`
+                              : !open
+                                ? "The video time for this session is over"
+                                : null;
+                          return (
+                            <TouchableOpacity
+                              onPress={() => openJitsiCall(session)}
+                              disabled={!open}
+                              accessibilityRole="button"
+                              accessibilityLabel={open ? `Join video consultation with ${name}` : note ?? "Video not available"}
+                              accessibilityState={{ disabled: !open }}
+                              className="mt-2 flex-row items-center justify-center gap-2 rounded-2xl py-3"
+                              style={{
+                                backgroundColor: open ? colors.success : colors.surfaceSoft,
+                              }}
+                            >
+                              <Feather name="video" size={16} color={open ? "#FFFFFF" : colors.mutedText} />
+                              <Text
+                                className="text-sm font-extrabold"
+                                style={{ color: open ? "#FFFFFF" : colors.mutedText, fontFamily: fonts.heading }}
+                              >
+                                {open ? "Join Consultation" : note}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })()}
                       {canCancel && (
                         <TouchableOpacity
                           onPress={() => confirmCancel(session)}
@@ -1659,11 +1698,13 @@ export default function ConsultationScreen() {
                   </View>
                 </View>
 
-                {/* Video camera trigger — rings the doctor over WebRTC */}
+                {/* Video call (self-hosted Jitsi) */}
                 {chatLive && (
                   <TouchableOpacity
                     activeOpacity={0.7}
-                    onPress={() => callRef.current?.startCall()}
+                    onPress={() =>
+                      activeConsultation && openJitsiCall(activeConsultation)
+                    }
                     accessibilityRole="button"
                     accessibilityLabel={`Start video call with ${chatDoctor ? getDoctorDisplayName(chatDoctor) : "your doctor"}`}
                     className="p-2 rounded-full"
@@ -1863,19 +1904,39 @@ export default function ConsultationScreen() {
           </KeyboardAvoidingView>
         </Modal>
 
-        {/* WebRTC video meeting — renders its own full-screen Modal (so it floats
-            above the chat sheet) while joining/active. Shares the
-            consultation_<id> WebSocket room with the doctor's clinician portal. */}
-        {activeConsultation && (
-          <ConsultationVideoCall
-            key={activeConsultation._id}
-            ref={callRef}
-            peerName={chatDoctor ? getDoctorDisplayName(chatDoctor) : "Doctor"}
-            peerAvatarUrl={chatDoctor?.avatarUrl}
-            roomId={`consultation_${activeConsultation._id}`}
-            socketRef={socketRef}
-            chatMessages={chatMessages}
-            onSendMessage={(text) => handleSendMessage(text)}
+        {/* Video consultation on the self-hosted Jitsi server (full-screen Modal, floats above the chat). */}
+        {jitsiCall && (
+          <JitsiCall
+            visible
+            callKey={jitsiCall.id}
+            peerName={jitsiCall.peerName}
+            fetchJoin={() => consultationApi.joinVideo(jitsiCall.id)}
+            onAttendance={(event) =>
+              consultationApi.reportVideoAttendance(jitsiCall.id, event).catch(() => undefined)
+            }
+            endedMessage={jitsiCall.ended ?? null}
+            chat={
+              activeConsultation?._id === jitsiCall.id
+                ? {
+                    messages: chatMessages.map((m, i) => ({
+                      id: m._id ?? m.localId ?? `m${i}`,
+                      mine: m.sender === "user",
+                      text: m.text || (m.attachmentUrl ? "Shared a file. Open it in the chat after the call." : ""),
+                      sentAt: m.sentAt,
+                      failed: m.failed,
+                    })),
+                    onSend: (text) => handleSendMessage(text),
+                    canSend: chatLive,
+                    sending: sendingMessage,
+                    loading: loadingMessages,
+                  }
+                : undefined
+            }
+            onClose={() => {
+              setJitsiCall(null);
+              // Joining moves a paid booking to active on the server.
+              loadConsultations();
+            }}
           />
         )}
 

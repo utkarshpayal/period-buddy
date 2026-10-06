@@ -37,6 +37,8 @@ flowchart LR
   api --> cf["Cashfree<br/>payments"]
   api --> fcm["Firebase Cloud Messaging<br/>push"]
   api --> resend["Resend<br/>email"]
+  app -->|"video (WebView)"| jitsi["Jitsi Meet<br/>meet.thenura.care<br/>(own host · Docker)"]
+  admin -->|"video (iframe)"| jitsi
   fcm -.->|push| app
   web -. "/app deep links,<br/>assetlinks.json" .-> app
 ```
@@ -47,6 +49,12 @@ Rules that hold everywhere:
   client talks to MongoDB, S3, Sarvam, Cashfree or Resend directly. The one
   exception is push: the app registers its own FCM/APNs token and receives
   pushes straight from Firebase; the API is what sends them.
+- **Every video call** (doctor consultations, Period Buddy calls) runs on a
+  separate self-hosted Jitsi server; there is no other video path. Clients
+  join it directly, but only with a short-lived token the API signs after
+  checking the booking (patient or assigned doctor, paid, inside the join
+  window) or the buddy pairing. The signing secret is shared only by the API and the Jitsi host
+  (backend `infra/jitsi/README.md`).
 - **One database** (MongoDB Atlas) serves every client. The admin portal and
   the CMS write content and config; the app reads it.
 - **Staff and users are the same `User` collection**, told apart by `role`.
@@ -126,6 +134,7 @@ invited; its role has to be changed in the database.
 | API | Merge to `main` → CodePipeline **`the-nura-care-be`** → CodeBuild (lint, test, Docker image to ECR `nura-api`) → CodeDeploy to EC2 `Nura-Backend` (ap-south-1). Environment comes from Secrets Manager `nura/api/env`; changing it needs a new pipeline run. Failed health checks roll back. Details: backend `docs/INFRASTRUCTURE.md`. |
 | Mobile app | `eas build` (profiles in `eas.json`), then Play Store. Native changes need a new build; JS-only and CMS changes don't. |
 | Admin, CMS, marketing site | Vercel, from `main`. Each needs its `VITE_*` API URL set in Vercel. |
+| Jitsi (video) | Its own Ubuntu host (Lightsail or EC2, never the API server), official `docker-jitsi-meet` pinned in backend `infra/jitsi/install.sh`. The API needs its `JITSI_*` values; until then video calls are unavailable. |
 
 ## Security
 

@@ -287,7 +287,12 @@ export function resolveNotificationTarget(
 ): string {
   // An explicit in-app route (admin pushes pick one in the Content Studio)
   // wins; explicitNotificationRoute() rejects anything that isn't an in-app path.
-  const route = explicitNotificationRoute(data);
+  let route = explicitNotificationRoute(data);
+  // A list row for an old call ("… started a video call") opens the screen
+  // without joining a call that may be long over.
+  if (route && !joinCall) {
+    route = route.replace(/([?&])call=1(&|$)/, (_, lead: string, tail: string) => (tail ? lead : '')) || route;
+  }
   if (route) {
     if (!isViewer) return route;
     const bare = route.split('?')[0].replace(/\/\([^)]*\)/g, '') || '/';

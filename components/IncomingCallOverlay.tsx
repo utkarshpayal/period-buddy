@@ -5,13 +5,15 @@ import { Modal, StatusBar, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRealtimeSocket, type RealtimeMessage } from "../hooks/useRealtimeSocket";
 import { consultationApi } from "../lib/api";
-import { getOpenConsultationChat } from "../lib/consultationPresence";
+import { getOpenVideoCall } from "../lib/consultationPresence";
 import { guardRoute } from "../lib/launchGuard";
 import { startRingTone } from "../lib/ringTone";
 import { DoctorPhoto } from "./DoctorPhoto";
 import { useTheme } from "./theme";
 
+/** The doctor is already in the video room (self-hosted Jitsi), waiting for us. */
 type IncomingCall = {
+  kind: "consultation";
   consultationId: string;
   callerName: string;
   callerAvatarUrl?: string | null;
@@ -21,11 +23,12 @@ type IncomingCall = {
 const RING_TIMEOUT_MS = 45_000;
 
 /**
- * App-wide "your doctor is calling" screen. The server rings the patient on
- * their personal socket room (`incoming_call`) when the doctor starts a call
- * and the patient isn't in that consultation's room. Accept opens the
- * consultation screen, which opens the chat and joins the call
- * (`?id=…&call=1`); Decline tells the server, which ends the doctor's call.
+ * App-wide "your doctor is waiting in the video call" screen. Calls run on the
+ * self-hosted Jitsi server; the API rings the patient on their personal socket
+ * room (`incoming_call`, `kind: "consultation"`, plus a push) when the doctor
+ * gets a join token. Accept opens the call (`/consultation?id=…&call=1`);
+ * Decline tells the doctor. Buddy calls don't ring here: they need both
+ * buddies in the chat, which shows its own Join prompt.
  * Mounted in app/_layout.tsx's AppShell; `enabled` only while signed in.
  */
 export function IncomingCallOverlay({
@@ -47,15 +50,19 @@ export function IncomingCallOverlay({
   const onMessage = useCallback(
     (data: RealtimeMessage) => {
       if (data?.type !== "message" || data.room !== room) return;
+      const callerName = typeof data.callerName === "string" && data.callerName ? data.callerName : "";
+      // Buddy calls only happen with both buddies in the chat, which shows its own prompt.
+      if (data.kind === "buddy") return;
       const consultationId = typeof data.consultationId === "string" ? data.consultationId : "";
       if (!consultationId) return;
       if (data.event === "incoming_call") {
         if (data.callerRole && data.callerRole !== "doctor") return;
-        // The open chat's own call UI shows this call already.
-        if (getOpenConsultationChat() === consultationId) return;
+        // Already in this call.
+        if (getOpenVideoCall() === consultationId) return;
         setCall({
+          kind: "consultation",
           consultationId,
-          callerName: typeof data.callerName === "string" && data.callerName ? data.callerName : "Your doctor",
+          callerName: callerName || "Your doctor",
           callerAvatarUrl: typeof data.callerAvatarUrl === "string" ? data.callerAvatarUrl : null,
         });
       } else if (
@@ -63,7 +70,9 @@ export function IncomingCallOverlay({
         data.event === "consultation_cancelled" ||
         data.event === "consultation_completed"
       ) {
-        setCall((current) => (current?.consultationId === consultationId ? null : current));
+        setCall((current) =>
+          current?.kind === "consultation" && current.consultationId === consultationId ? null : current,
+        );
       }
     },
     [room],
@@ -94,15 +103,15 @@ export function IncomingCallOverlay({
     const target = `/(app)/consultation?id=${call.consultationId}&call=1`;
     setCall(null);
     if (guardRoute(target)) return;
-    // navigate, not push: reuses an open consultation screen (it reacts to the new params).
+    // navigate, not push: reuses an open screen (it reacts to the new params).
     router.navigate(target as Parameters<typeof router.navigate>[0]);
   };
 
   const decline = () => {
     if (!call) return;
-    const { consultationId } = call;
     setCall(null);
-    consultationApi.declineCall(consultationId).catch(() => undefined);
+    // The doctor is told the patient declined.
+    consultationApi.declineCall(call.consultationId).catch(() => undefined);
   };
 
   if (!call) return null;
@@ -139,7 +148,7 @@ export function IncomingCallOverlay({
             className="text-sm font-semibold mt-2 text-center"
             style={{ color: "rgba(255,255,255,0.75)", fontFamily: fonts.body }}
           >
-            Video consultation · calling you…
+            Is in your video consultation
           </Text>
         </View>
 

@@ -160,7 +160,9 @@ export function PartnerViewStateProvider({ children }: { children: React.ReactNo
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
       if (socket) {
         try {
-          socket.send(JSON.stringify({ type: "leave", room: `partner_${profile!._id}` }));
+          if (socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: "leave", room: `partner_${profile!._id}` }));
+          }
         } catch {}
         socket.close();
       }
