@@ -292,7 +292,7 @@ export default function SexualWellbeing() {
     setModalVisible(false);
   }
 
-  // Same card as the hubs' small feature tiles (components/HubFeatureTiles.tsx).
+  // White card with a tinted icon square, like the app's list rows.
   const tileStyle = {
     width: "48%" as const,
     backgroundColor: colors.surface,
@@ -427,7 +427,7 @@ export default function SexualWellbeing() {
           )}
 
           {/* Guides, as a reading list: they're short articles with no cover art, so rows read better than tiles. */}
-          <SectionHeader title="Read" barColor={colors.accent} style={{ marginTop: 26 }} />
+          <SectionHeader title="Read" style={{ marginTop: 26 }} />
           <View style={{ ...tileStyle, width: "100%", padding: 0 }}>
             {visibleCategories.map((category, index) => {
               const meta = [
@@ -546,7 +546,7 @@ export default function SexualWellbeing() {
                   </View>
                 )}
 
-                <SectionHeader title="What to know" barColor={colors.success} style={{ marginTop: 26 }} />
+                <SectionHeader title="What to know" style={{ marginTop: 26 }} />
                 <View style={{ ...tileStyle, width: "100%", paddingVertical: 4 }}>
                   {selectedCategory.extendedGuide.map((line, idx) => (
                     <View

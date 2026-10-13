@@ -298,7 +298,7 @@ function SlideArt({ art, colors, isDark }: { art: Slide["art"]; colors: ThemeCol
           <Text style={{ color: "#FFFFFF", fontSize: 13, fontWeight: "800", marginTop: 6, letterSpacing: 0.6 }}>IN 5 DAYS</Text>
         </LinearGradient>
         {badge("water", colors.roseLight, colors.rose, { top: 6, left: 0 })}
-        {badge("sparkles", colors.mintLight, colors.accentText, { bottom: 4, right: 0 })}
+        {badge("notifications", colors.mintLight, colors.accentText, { bottom: 4, right: 0 })}
       </View>
     );
   }

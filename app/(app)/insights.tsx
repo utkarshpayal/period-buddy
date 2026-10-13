@@ -264,7 +264,7 @@ export default function DailyInsightsScreen() {
                   className="border p-6 items-center mb-3.5"
                   style={{ backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 24 }}
                 >
-                  <Ionicons name="sparkles-outline" size={28} color={colors.mutedText} />
+                  <Ionicons name="bulb-outline" size={28} color={colors.mutedText} />
                   <Text className="mt-3 text-sm font-bold text-center" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
                     Nothing personalized yet
                   </Text>

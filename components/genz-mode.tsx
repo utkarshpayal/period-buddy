@@ -26,7 +26,7 @@ const GENZ_LABELS: Record<string, string> = {
   // Home screen — sections
   Insights: "Big Brain Energy 🧠",
   "See all": "See It All, No Cap",
-  "More for you": "More Fye Stuff ✨",
+  "More for you": "More Fye Stuff",
   Streak: "W Streak 🔥",
 
   // Hub cards (Home → "More for you" + each hub's own header)
@@ -59,7 +59,7 @@ const GENZ_LABELS: Record<string, string> = {
   "Govt. Schemes": "Free Money, Fr 💸",
 
   // Gen Z pack (Home → Shortcuts by default)
-  Shortcuts: "Your Faves ✨",
+  Shortcuts: "Your Faves",
   "Cycle Wrapped": "Wrapped, Bestie 🎁",
   "Your Era": "What Era Am I In? 🪐",
   "Streaks & Badges": "Flex Your W's 🏆",

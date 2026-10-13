@@ -15,7 +15,9 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { DayEntry } from "./AppState";
+import { flowOptions, symptomOptions, type LogOption } from "./logOptions";
 import { alert } from "../lib/alert";
+import type { LogFocus } from "../lib/logFocus";
 import { AppModalHost } from "./modals/AppModalHost";
 import { useTheme } from "./theme";
 import { useSecureScreen } from "../lib/screenPrivacy";
@@ -25,30 +27,6 @@ import {
   MOOD_OPTIONS,
   type LogCategoryTint,
 } from "./ui-tokens";
-
-type LogOption<Value extends string> = {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  value: Value;
-};
-
-// Physical symptoms — the catch-all tag list. "Nausea" also renders again
-// under Digestion & stool (same tag, same toggle) since it belongs to both
-// groupings in the reference app; everything else here is symptoms-only.
-const symptomOptions: LogOption<string>[] = [
-  { icon: "gift-outline", label: "Everything is fine", value: "everything-is-fine" },
-  { icon: "pulse-outline", label: "Cramps", value: "cramps" },
-  { icon: "heart-half-outline", label: "Tender breasts", value: "tender-breasts" },
-  { icon: "flash-outline", label: "Headache", value: "headache" },
-  { icon: "sparkles-outline", label: "Acne", value: "acne" },
-  { icon: "body-outline", label: "Backache", value: "backache" },
-  { icon: "bed-outline", label: "Fatigue", value: "fatigue" },
-  { icon: "restaurant-outline", label: "Cravings", value: "cravings" },
-  { icon: "moon-outline", label: "Insomnia", value: "insomnia" },
-  { icon: "medkit-outline", label: "Abdominal pain", value: "abdominal-pain" },
-  { icon: "flame-outline", label: "Vaginal itching", value: "vaginal-itching" },
-  { icon: "water-outline", label: "Vaginal dryness", value: "vaginal-dryness" },
-];
 
 // Free-form tags stored in DayEntry.symptoms (no backend enum, so these are
 // safe to ship without a server change) for categories the typed fields
@@ -75,7 +53,7 @@ const sexOptions: LogOption<string>[] = [
   { icon: "hand-left-outline", label: "Masturbation", value: "sex-masturbation" },
   { icon: "people-outline", label: "Sensual touch", value: "sex-sensual-touch" },
   { icon: "cube-outline", label: "Sex toys", value: "sex-toys" },
-  { icon: "sparkles-outline", label: "Orgasm", value: "sex-orgasm" },
+  { icon: "heart-circle-outline", label: "Orgasm", value: "sex-orgasm" },
   { icon: "flame-outline", label: "High sex drive", value: "sex-drive-high" },
   { icon: "heart-outline", label: "Natural sex drive", value: "sex-drive-natural" },
   { icon: "heart-half-outline", label: "Low sex drive", value: "sex-drive-low" },
@@ -114,7 +92,7 @@ const skinOptions: LogOption<NonNullable<DayEntry["skin"]>>[] = [
   { icon: "sunny-outline", label: "Clear", value: "clear" },
   { icon: "water-outline", label: "Oily", value: "oily" },
   { icon: "snow-outline", label: "Dry", value: "dry" },
-  { icon: "sparkles-outline", label: "Acne", value: "acne" },
+  { icon: "radio-button-on-outline", label: "Acne", value: "acne" },
 ];
 
 const dischargeOptions: LogOption<NonNullable<DayEntry["discharge"]>>[] = [
@@ -134,14 +112,6 @@ const exerciseOptions: LogOption<string>[] = [
   { icon: "people-outline", label: "Team sports", value: "team-sports" },
   { icon: "walk-outline", label: "Running", value: "running" },
   { icon: "bicycle-outline", label: "Cycling", value: "cycling" },
-];
-
-const flowOptions: LogOption<NonNullable<DayEntry["flow"]>>[] = [
-  { icon: "remove-circle-outline", label: "None", value: "none" },
-  { icon: "ellipse-outline", label: "Spotting", value: "spotting" },
-  { icon: "water-outline", label: "Light", value: "light" },
-  { icon: "water", label: "Medium", value: "medium" },
-  { icon: "rainy-outline", label: "Heavy", value: "heavy" },
 ];
 
 const moodOptions: LogOption<NonNullable<DayEntry["mood"]>>[] = MOOD_OPTIONS;
@@ -180,7 +150,7 @@ export default function DayDetailsModal({
   /** Deletes this day's saved log. The option only shows when there is a saved entry. */
   onClearEntry?: () => Promise<void>;
   /** When set, the modal scrolls to this section on open (Home quick actions). */
-  focusSection?: "symptoms" | "flow" | "mood";
+  focusSection?: LogFocus;
 }) {
   // Opened over Home too (quick actions), which isn't a protected screen.
   useSecureScreen("day-log", visible);
@@ -774,7 +744,7 @@ export default function DayDetailsModal({
             </View>
 
             {/* Vaginal discharge */}
-            <SectionTitle title="Vaginal discharge" icon="water-outline" tint={tints.discharge} />
+            <SectionTitle title="Vaginal discharge" onY={(y) => recordSection("discharge", y)} icon="water-outline" tint={tints.discharge} />
             <View style={styles.optionWrap}>
               {dischargeOptions.map((option) =>
                 renderOption({
@@ -799,7 +769,7 @@ export default function DayDetailsModal({
             </View>
 
             {/* Digestion and stool */}
-            <SectionTitle title="Digestion and stool" icon="nutrition-outline" tint={tints.digestion} />
+            <SectionTitle title="Digestion and stool" onY={(y) => recordSection("digestion", y)} icon="nutrition-outline" tint={tints.digestion} />
             <View style={styles.optionWrap}>
               {renderOption({
                 ...nauseaOption,
@@ -833,7 +803,7 @@ export default function DayDetailsModal({
             </View>
 
             {/* Physical activity */}
-            <SectionTitle title="Physical activity" icon="fitness-outline" tint={tints.activity} />
+            <SectionTitle title="Physical activity" onY={(y) => recordSection("activity", y)} icon="fitness-outline" tint={tints.activity} />
             <View style={styles.optionWrap}>
               {exerciseOptions.map((option) =>
                 renderOption({
@@ -845,7 +815,7 @@ export default function DayDetailsModal({
               )}
             </View>
 
-            <SectionTitle title="Energy" icon="battery-half-outline" tint={tints.energy} />
+            <SectionTitle title="Energy" onY={(y) => recordSection("energy", y)} icon="battery-half-outline" tint={tints.energy} />
             <View style={styles.optionWrap}>
               {energyOptions.map((energy) =>
                 renderOption({
@@ -861,7 +831,7 @@ export default function DayDetailsModal({
               )}
             </View>
 
-            <SectionTitle title="Skin" icon="sparkles-outline" tint={tints.skin} />
+            <SectionTitle title="Skin" onY={(y) => recordSection("skin", y)} icon="happy-outline" tint={tints.skin} />
             <View style={styles.optionWrap}>
               {skinOptions.map((option) =>
                 renderOption({
@@ -873,7 +843,7 @@ export default function DayDetailsModal({
               )}
             </View>
 
-            <SectionTitle title="Sleep Hours" icon="bed-outline" />
+            <SectionTitle title="Sleep Hours" onY={(y) => recordSection("sleep", y)} icon="bed-outline" />
             <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 10 }}>
               <TouchableOpacity
                 onPress={() => setSleepHours((h) => Math.max(0, (h ?? 8) - 1))}
@@ -921,7 +891,7 @@ export default function DayDetailsModal({
               )}
             </View>
 
-            <SectionTitle title="Water Intake" icon="beaker-outline" />
+            <SectionTitle title="Water Intake" onY={(y) => recordSection("water", y)} icon="beaker-outline" />
             <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 10 }}>
               <TouchableOpacity
                 onPress={() => setWaterIntake((w) => Math.max(0, (w ?? 250) - 250))}
@@ -1016,7 +986,7 @@ export default function DayDetailsModal({
               </View>
             </View>
 
-            <SectionTitle title="Stress Level (1 - 10)" icon="pulse" />
+            <SectionTitle title="Stress Level (1 - 10)" onY={(y) => recordSection("stress", y)} icon="pulse" />
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, marginTop: 10 }}>
               {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((level) => {
                 const isSelected = stressLevel === level;
@@ -1050,7 +1020,7 @@ export default function DayDetailsModal({
               })}
             </ScrollView>
 
-            <SectionTitle title="Medications" icon="medkit-outline" />
+            <SectionTitle title="Medications" onY={(y) => recordSection("medications", y)} icon="medkit-outline" />
             <TextInput
               value={medText}
               onChangeText={setMedText}
@@ -1105,7 +1075,7 @@ export default function DayDetailsModal({
               />
             </View>
 
-            <SectionTitle title="Notes" icon="document-text-outline" />
+            <SectionTitle title="Notes" onY={(y) => recordSection("notes", y)} icon="document-text-outline" />
             <TextInput
               value={noteText}
               onChangeText={setNoteText}
@@ -1236,9 +1206,12 @@ function SectionTitle({
   title,
   icon,
   tint,
+  onY,
 }: {
   title: string;
   icon?: keyof typeof Ionicons.glyphMap;
+  /** Reports this heading's top (margin included) so a quick action can scroll to it. */
+  onY?: (y: number) => void;
   /** Colors this section's header icon+dot to match its option chips below. */
   tint?: LogCategoryTint;
 }) {
@@ -1246,7 +1219,10 @@ function SectionTitle({
   const accentColor = tint?.color ?? colors.primary;
 
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 18 }}>
+    <View
+      onLayout={onY ? (e) => onY(e.nativeEvent.layout.y - 18) : undefined}
+      style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 18 }}
+    >
       {icon ? <Ionicons name={icon} size={15} color={accentColor} /> : null}
       <Text
         style={{

@@ -28,6 +28,7 @@ import { alert } from "../../lib/alert";
 import { shareWithAppLink } from "../../lib/share";
 import { SkeletonBlock } from "../../components/Skeleton";
 import { useTheme } from "../../components/theme";
+import { ColumnLabel } from "../../components/ColumnLabel";
 import { getShadow } from "../../components/ui-tokens";
 import { reelsApi, type Reel as ApiReel } from "../../lib/api";
 import { LinearGradient } from "expo-linear-gradient";
@@ -1174,12 +1175,7 @@ export default function Reels() {
                     >
                       {metric.value}
                     </Text>
-                    <Text
-                      className="text-xs font-bold"
-                      style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                    >
-                      {metric.label}
-                    </Text>
+                    <ColumnLabel style={{ fontSize: 13, fontWeight: "700", color: colors.mutedText, fontFamily: fonts.body }}>{metric.label}</ColumnLabel>
                   </View>
                 ))}
               </View>

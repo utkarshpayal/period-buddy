@@ -84,11 +84,14 @@ export default function QA() {
     sessionId: sessionIdParam,
     new: newChatParam,
     topic: topicParam,
+    q: questionParam,
   } = useLocalSearchParams<{
     voiceMode?: string;
     sessionId?: string;
     new?: string;
     topic?: string;
+    /** A question typed elsewhere (Wellness hub's Nura AI box): sent as the first message. */
+    q?: string;
   }>();
   const { earnTokens } = useAppState();
   const { user } = useAuth();
@@ -252,6 +255,15 @@ export default function QA() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run once per sessionIdParam identity, not on every render
   }, [sessionIdParam]);
+
+  // ?q= from the Wellness hub's question box: ask it straight away, once.
+  const askedParamQuestion = useRef(false);
+  useEffect(() => {
+    if (askedParamQuestion.current || sessionIdParam || !questionParam?.trim()) return;
+    askedParamQuestion.current = true;
+    handleTriggerConversation(questionParam);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per screen, on the param it opened with
+  }, [questionParam]);
 
   // Knowledge base containing strict fallback patterns mapping human conversational styles
   const trainedLocalKnowledgeBase = [
@@ -787,7 +799,7 @@ export default function QA() {
                         {isUrgent || message.personalized ? (
                           <View className="mb-1.5 flex-row items-center" style={{ gap: 5 }}>
                             <Ionicons
-                              name={isUrgent ? "warning-outline" : "sparkles-outline"}
+                              name={isUrgent ? "warning-outline" : "calendar-outline"}
                               size={14}
                               color={isUrgent ? colors.danger : colors.primary}
                             />

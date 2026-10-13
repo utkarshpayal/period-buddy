@@ -133,6 +133,16 @@ export type PrivacyConsents = {
 };
 
 /** Settings on the privacy screen (User.privacySettings on the backend). */
+/** Body/response of /api/auth/home-layout (parsed by lib/homeLayout.ts). */
+export type HomeLayoutPayload = {
+  order: string[];
+  hidden: string[];
+  shortcuts: string[] | null;
+  shortcutStyles?: Record<string, { look: "icon" | "tile" | "card"; color: string | null; label: string | null; icon: string | null }>;
+  blocks?: Record<string, { title: string | null; items: string[] | null }>;
+  updatedAt?: string | null;
+};
+
 export type PrivacySettings = {
   /** Pushes say "You have a new update" instead of their text. */
   hideNotificationDetails: boolean;
@@ -526,7 +536,12 @@ export type Consultation = {
   feedback?: string;
   meetingLink?: string;
   paymentStatus?: "failed" | "paid" | "refunded" | "unpaid";
+  /** The prescription as text (every prescription has it). */
   prescription?: string;
+  /** The structured prescription, when the doctor wrote one in the portal's form. */
+  rx?: ConsultationRx | null;
+  /** When the doctor last saved the prescription. */
+  prescribedAt?: string;
   /** 1-5, set once by the patient after a completed session. */
   rating?: number;
   ratedAt?: string;
@@ -1143,6 +1158,9 @@ export async function apiEnvelopeRequest<T>(
   if (token) headers.Authorization = `Bearer ${token}`;
   // Which install and version is asking: shown in Privacy → Signed-in devices.
   headers["X-App-Version"] = APP_VERSION;
+  // The phone's UTC offset, so cycle day, phase and "days until" count from
+  // the person's local today, not server UTC (backend clientTodayKey).
+  headers["X-Timezone-Offset"] = String(new Date().getTimezoneOffset());
   if (path.startsWith("/api/auth/")) headers["X-Device-Id"] = await getDeviceId();
 
   // Time out the request so a dropped/slow connection surfaces a clear error
@@ -1447,6 +1465,16 @@ export const authApi = {
       method: "PUT",
     }),
 
+  /** This person's own Home layout (lib/homeLayout.ts); 404 on backends older than it. */
+  getHomeLayout: () => apiRequest<HomeLayoutPayload>("/api/auth/home-layout"),
+
+  /** Replace the Home layout; `shortcuts: null` = the default shortcuts. */
+  saveHomeLayout: (layout: HomeLayoutPayload) =>
+    apiRequest<HomeLayoutPayload>("/api/auth/home-layout", {
+      body: JSON.stringify(layout),
+      method: "PUT",
+    }),
+
   /** Allow or refuse sending your content to the AI provider. */
   setAiConsent: (granted: boolean) =>
     apiRequest<{ consents: PrivacyConsents }>("/api/auth/privacy/ai-consent", {
@@ -1574,6 +1602,18 @@ export const forestApi = {
     ),
 };
 
+export type ConsultationRxMedicine = { name: string; dose?: string; frequency?: string; timing?: string; duration?: string; notes?: string };
+export type ConsultationRx = {
+  complaints?: string;
+  diagnosis?: string;
+  medicines: ConsultationRxMedicine[];
+  investigations?: string;
+  advice?: string;
+  followUp?: string;
+};
+
+export type PrescriptionDocument = { html: string; fileName: string; number: string };
+
 export const consultationApi = {
   getDoctors: (search?: string) =>
     apiRequest<Doctor[]>(
@@ -1605,6 +1645,10 @@ export const consultationApi = {
     }),
 
   getMyConsultations: () => apiRequest<Consultation[]>("/api/consultation/my"),
+
+  /** The printable prescription (an A4 HTML page) once the doctor has written one. See lib/prescriptionPdf.ts. */
+  getPrescription: (consultationId: string) =>
+    apiRequest<PrescriptionDocument>(`/api/consultation/${consultationId}/prescription`),
 
   /** Works for past sessions too (read-only history). */
   getMessages: (consultationId: string) =>

@@ -1,7 +1,7 @@
 import type { DayEntry as LocalDayEntry } from "../components/AppState";
 import type { DayEntry as ApiDayEntry, Predictions } from "./api";
 import { getCyclePhase, type CyclePhase } from "./cycle";
-import { getDateKey } from "./format";
+import { dateFromDayKey, getDateKey } from "./format";
 
 /**
  * Calendar maths shared by the Tracker's month pager and the full Calendar
@@ -83,19 +83,19 @@ export function buildCalendarModel(
   const cycleLength = predictions?.cycleLength ?? settings?.cycleLength ?? DEFAULT_CYCLE_LENGTH;
   const periodLength = predictions?.periodLength ?? settings?.periodLength ?? 5;
   const cycleStartDate = predictions?.currentPeriodStartDateISO
-    ? new Date(predictions.currentPeriodStartDateISO)
+    ? dateFromDayKey(predictions.currentPeriodStartDateISO)
     : settings?.lastPeriodStartDate
-      ? new Date(settings.lastPeriodStartDate)
+      ? dateFromDayKey(settings.lastPeriodStartDate)
       : addDays(new Date(), -13);
 
   let periodMask: CalendarModel["periodMask"] = null;
   const startISO = predictions?.currentPeriodStartDateISO;
   if (startISO && predictions?.actualPeriodStartISO && predictions?.actualPeriodEndISO) {
-    const start = startOfDay(new Date(startISO));
+    const start = dateFromDayKey(startISO);
     const windowEnd = addDays(start, periodLength - 1);
-    const actualStart = startOfDay(new Date(predictions.actualPeriodStartISO));
+    const actualStart = dateFromDayKey(predictions.actualPeriodStartISO);
     if (actualStart >= start && actualStart <= windowEnd) {
-      periodMask = { start, windowEnd, actualEnd: startOfDay(new Date(predictions.actualPeriodEndISO)) };
+      periodMask = { start, windowEnd, actualEnd: dateFromDayKey(predictions.actualPeriodEndISO) };
     }
   }
 

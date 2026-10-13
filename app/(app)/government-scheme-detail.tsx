@@ -415,7 +415,7 @@ export default function GovernmentSchemeDetail() {
                   ) : (
                     <>
                       <Ionicons
-                        name="sparkles-outline"
+                        name="checkbox-outline"
                         size={15}
                         color={colors.primary}
                       />

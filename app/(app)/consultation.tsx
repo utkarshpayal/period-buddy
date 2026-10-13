@@ -1,6 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -28,6 +27,7 @@ import { alert } from "../../lib/alert";
 import { CashfreeCheckoutModal, type CashfreeResult } from "../../components/CashfreeCheckoutModal";
 import { CashfreeUpiCollectModal, type UpiCollectOutcome } from "../../components/CashfreeUpiCollectModal";
 import { PaymentTrustFooter } from "../../components/subscription/PaymentTrustFooter";
+import { PrescriptionCard } from "../../components/PrescriptionCard";
 import { useTheme } from "../../components/theme";
 import { SkeletonRow } from "../../components/Skeleton";
 import { useRealtimeSocket } from "../../hooks/useRealtimeSocket";
@@ -54,7 +54,8 @@ import {
 import { setOpenVideoCall } from "../../lib/consultationPresence";
 import { isJoinWindowOpen } from "../../lib/jitsiCall";
 import { JitsiCall } from "../../components/JitsiCall";
-import { ScreenHeader } from "../../components/ScreenHeader";
+import { ScreenHeader, SectionHeader } from "../../components/ScreenHeader";
+import { getShadow } from "../../components/ui-tokens";
 import { useSecureScreen } from "../../lib/screenPrivacy";
 
 // Finished sessions the user tapped "Not now" on, so the rating card moves on.
@@ -66,11 +67,21 @@ const SEARCH_DEBOUNCE_MS = 300;
 // Waits between verify retries when the payment went through but the first
 // confirmation call failed (verify is idempotent, so retrying is safe).
 const VERIFY_RETRY_DELAYS_MS = [1500, 3000, 6000, 10000];
-// Past sessions shown before "Show all".
-const PAST_PREVIEW_COUNT = 3;
 
 /** A chat bubble: a server message, or our own still sending / failed one. */
 type ChatMessage = ConsultationMessage & { localId?: string; failed?: boolean };
+
+const SLOT_PERIODS = [
+  { key: "morning", label: "Morning", icon: "sunrise" },
+  { key: "afternoon", label: "Afternoon", icon: "sun" },
+  { key: "evening", label: "Evening", icon: "moon" },
+] as const;
+
+/** Which part of the (local) day a slot starts in. */
+function slotPeriod(start: string): (typeof SLOT_PERIODS)[number]["key"] {
+  const hour = new Date(start).getHours();
+  return hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening";
+}
 
 function getDoctorDisplayName(doctor: Doctor) {
   const legacyName = (doctor as Doctor & { name?: string }).name;
@@ -160,11 +171,15 @@ export default function ConsultationScreen() {
   const [loadError, setLoadError] = useState<{ message: string; offline: boolean } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [showAllPast, setShowAllPast] = useState(false);
+  // The list screen's two tabs: doctors to book (with live bookings), or past sessions.
+  const [listTab, setListTab] = useState<"new" | "past">("new");
   const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   // Booking
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
+  // The page opens as a list of doctors; days and times show only after
+  // "See times" (or Book again / the profile's Book), for that doctor.
+  const [slotsOpen, setSlotsOpen] = useState(false);
   // Doctor whose full profile sheet is open (tapping a doctor in the list).
   const [profileDoctor, setProfileDoctor] = useState<Doctor | null>(null);
   // Finished session being rated, and the star tapped to open the sheet.
@@ -315,14 +330,14 @@ export default function ConsultationScreen() {
     firstDoctorsLoad.current = false;
   }, [debouncedQuery, loadDoctors]);
 
-  // Keep the user's pick across reloads; default to the first doctor only
-  // when none is picked or the picked one is no longer listed.
+  // Keep the user's pick across reloads; nothing is picked until they ask
+  // for a doctor's times, and a pick that's no longer listed is dropped.
   useEffect(() => {
-    setSelectedDoctor((current) => {
-      const fresh = current ? doctors.find((d) => d._id === current._id) : undefined;
-      return fresh ?? doctors[0] ?? null;
-    });
+    setSelectedDoctor((current) => (current ? doctors.find((d) => d._id === current._id) ?? null : null));
   }, [doctors]);
+  useEffect(() => {
+    if (!selectedDoctor) setSlotsOpen(false);
+  }, [selectedDoctor]);
 
   const upsertConsultation = useCallback((consultation: Consultation) => {
     setMyConsultations((prev) => [consultation, ...prev.filter((c) => c._id !== consultation._id)]);
@@ -637,8 +652,13 @@ export default function ConsultationScreen() {
   const getConsultationForDoctor = (doctorId: string) =>
     myConsultations.find((c) => doctorIdOf(c) === doctorId && isLive(c));
 
-  const scrollToSlots = () =>
-    setTimeout(() => scrollRef.current?.scrollTo({ y: Math.max(0, slotsY.current - 16), animated: true }), 350);
+  const scrollToSlots = () => {
+    // Book again lives on the Past tab; the time picker is on New.
+    setListTab("new");
+    setSlotsOpen(true);
+    // Waits for the section to render and report where it is.
+    return setTimeout(() => scrollRef.current?.scrollTo({ y: Math.max(0, slotsY.current - 16), animated: true }), 350);
+  };
 
   const handleBookAndPay = async (doctor: Doctor) => {
     const existing = getConsultationForDoctor(doctor._id);
@@ -898,7 +918,6 @@ export default function ConsultationScreen() {
           (c.paymentStatus === "paid" || c.paymentStatus === "refunded" || Boolean(c.refundStatus))),
     )
     .sort((a, b) => sortTime(b) - sortTime(a));
-  const visiblePast = showAllPast ? pastSessions : pastSessions.slice(0, PAST_PREVIEW_COUNT);
 
   const selectedFee = selectedDoctor ? formatINR(selectedDoctor.pricePerSession) : null;
   const selectedExisting = selectedDoctor ? getConsultationForDoctor(selectedDoctor._id) : undefined;
@@ -939,7 +958,7 @@ export default function ConsultationScreen() {
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
 
       <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
-        <ScreenHeader title="Consultation" />
+        <ScreenHeader title="Gynecologist" subtitle="Private video call & chat" />
 
         <ScrollView
           ref={scrollRef}
@@ -949,7 +968,44 @@ export default function ConsultationScreen() {
             <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={colors.primary} />
           }
         >
-          <View className="mx-6 mt-6">
+          <View className="mx-6 mt-4">
+            {/* New: doctors to book and live bookings. Past: finished sessions. */}
+            <View
+              className="flex-row"
+              accessibilityRole="tablist"
+              style={{ backgroundColor: colors.surface, borderRadius: 999, borderWidth: 1, borderColor: colors.border, padding: 4, marginBottom: 16 }}
+            >
+              {(
+                [
+                  ["new", "New"],
+                  ["past", pastSessions.length ? `Past (${pastSessions.length})` : "Past"],
+                ] as const
+              ).map(([key, label]) => {
+                const active = listTab === key;
+                return (
+                  <TouchableOpacity
+                    key={key}
+                    onPress={() => setListTab(key)}
+                    activeOpacity={0.85}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: active }}
+                    className="flex-1 items-center justify-center"
+                    style={{ height: 40, borderRadius: 999, backgroundColor: active ? colors.primary : "transparent" }}
+                  >
+                    <Text
+                      numberOfLines={1}
+                      maxFontSizeMultiplier={1.3}
+                      style={{ fontSize: 14, fontWeight: active ? "700" : "500", color: active ? colors.buttonText : colors.mutedText, fontFamily: fonts.body }}
+                    >
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {listTab === "new" ? (
+            <>
             {/* Search bar */}
             <View
               className="flex-row items-center rounded-2xl border px-4 shadow-xs"
@@ -957,7 +1013,7 @@ export default function ConsultationScreen() {
             >
               <Feather name="search" size={16} color={colors.mutedText} />
               <TextInput
-                placeholder="Search by name or specialty"
+                placeholder="Search doctors"
                 placeholderTextColor={colors.mutedText}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
@@ -978,140 +1034,152 @@ export default function ConsultationScreen() {
               )}
             </View>
 
-            {/* Upcoming / active sessions */}
+            {/* Your bookings: status, when, and the actions, on a plain card. */}
             {upcomingSessions.length > 0 && (
-              <View className="mt-6 gap-3">
+              <View className="mt-6">
+                <SectionHeader title={upcomingSessions.length > 1 ? "Your bookings" : "Your booking"} />
+                <View style={{ gap: 12 }}>
                 {upcomingSessions.map((session) => {
                   const doc = doctorOf(session);
-                  const name = doc ? getDoctorDisplayName(doc) : "Your Doctor";
+                  const name = doc ? getDoctorDisplayName(doc) : "Your doctor";
                   const startsAt = session.scheduledFor ? new Date(session.scheduledFor).getTime() : null;
                   const endsAt = session.slotEndsAt ? new Date(session.slotEndsAt).getTime() : null;
                   const now = Date.now();
                   // By the slot time, not 'paid' vs 'active': a chat message before
                   // the slot makes it 'active', and the user can still cancel then.
                   const canCancel = startsAt !== null && startsAt > now;
-                  const label =
+                  const status =
                     startsAt === null
                       ? session.status === "active"
-                        ? "Session active · tap to chat"
-                        : "Booked · tap to chat"
+                        ? { text: "In progress", fg: colors.success, bg: colors.successLight }
+                        : { text: "Booked", fg: colors.primary, bg: colors.primaryLight }
                       : startsAt > now
-                        ? `Upcoming · ${formatSessionWhen(session.scheduledFor!, { withZone: true })}`
+                        ? { text: "Upcoming", fg: colors.primary, bg: colors.primaryLight }
                         : endsAt === null || endsAt > now
-                          ? "Happening now · tap to join"
-                          : "Session time over · tap to chat";
+                          ? { text: "Happening now", fg: colors.success, bg: colors.successLight }
+                          : { text: "Time over", fg: colors.mutedText, bg: colors.surfaceSoft };
+                  const video = session.videoCall
+                    ? (() => {
+                        const available = session.videoCall.available !== false;
+                        const open = available && isJoinWindowOpen(session.videoCall, clock);
+                        const opensAt = session.videoCall.joinOpensAt ? new Date(session.videoCall.joinOpensAt).getTime() : null;
+                        const note = !available
+                          ? "Video calls aren't available right now"
+                          : !open && opensAt !== null && opensAt > clock
+                            ? `Video opens ${formatSessionWhen(session.videoCall.joinOpensAt!, { now: new Date(clock) })}`
+                            : !open
+                              ? "The video time for this session is over"
+                              : null;
+                        return { open, note };
+                      })()
+                    : null;
                   return (
-                    <View key={session._id}>
+                    <View
+                      key={session._id}
+                      style={{ backgroundColor: colors.surface, borderRadius: 22, ...getShadow(colors, isDark) }}
+                    >
                       <TouchableOpacity
                         onPress={() => openChat(session)}
                         activeOpacity={0.9}
                         accessibilityRole="button"
-                        accessibilityLabel={`${label}. ${name}. Open chat`}
-                        className="rounded-3xl overflow-hidden"
+                        accessibilityLabel={`${status.text}. ${name}${session.scheduledFor ? `, ${formatSessionWhen(session.scheduledFor, { withZone: true })}` : ""}. Open chat`}
+                        className="flex-row items-center"
+                        style={{ gap: 12, padding: 16, paddingBottom: 12 }}
                       >
-                        <LinearGradient
-                          colors={[colors.primary, colors.primaryLight]}
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 1, y: 1 }}
-                          className="flex-row items-center justify-between p-[18px]"
-                        >
-                          <View className="mr-3">
-                            <DoctorPhoto
-                              name={name}
-                              uri={doc?.avatarUrl}
-                              size={48}
-                              backgroundColor="rgba(255,255,255,0.22)"
-                              textColor="#FFFFFF"
-                              fontFamily={fonts.heading}
-                            />
-                          </View>
-                          <View className="flex-1 pr-3">
-                            <Text
-                              className="text-[12px] font-black uppercase tracking-widest"
-                              style={{ color: "rgba(255,255,255,0.85)", fontFamily: fonts.heading }}
-                            >
-                              {label}
-                            </Text>
-                            <Text
-                              className="text-base font-bold mt-1"
-                              style={{ color: "#FFFFFF", fontFamily: fonts.heading }}
-                            >
-                              {name}
-                            </Text>
-                            <Text
-                              className="text-xs mt-0.5"
-                              style={{ color: "rgba(255,255,255,0.9)", fontFamily: fonts.body }}
-                            >
-                              {doc?.specialty ?? "Gynecologist"} · Chat & video call
-                            </Text>
-                          </View>
-                          <View className="rounded-xl px-3.5 py-2.5" style={{ backgroundColor: "#FFFFFF" }}>
-                            <Text
-                              className="text-xs font-extrabold"
-                              style={{ color: colors.primary, fontFamily: fonts.heading }}
-                            >
-                              Join
-                            </Text>
-                          </View>
-                        </LinearGradient>
+                        <DoctorPhoto
+                          name={name}
+                          uri={doc?.avatarUrl}
+                          size={52}
+                          backgroundColor={colors.primaryLight}
+                          textColor={colors.primary}
+                          fontFamily={fonts.heading}
+                        />
+                        <View className="flex-1" style={{ minWidth: 0, gap: 2 }}>
+                          <Text numberOfLines={2} style={{ fontSize: 16, lineHeight: 22, fontWeight: "700", color: colors.foreground, fontFamily: fonts.heading }}>
+                            {name}
+                          </Text>
+                          <Text numberOfLines={1} style={{ fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}>
+                            {doc?.specialty ?? "Gynecologist"}
+                          </Text>
+                        </View>
+                        <View className="self-start rounded-full" style={{ backgroundColor: status.bg, paddingHorizontal: 10, paddingVertical: 4 }}>
+                          <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: "700", color: status.fg, fontFamily: fonts.body }}>{status.text}</Text>
+                        </View>
                       </TouchableOpacity>
-                      {session.videoCall &&
-                        (() => {
-                          const available = session.videoCall.available !== false;
-                          const open = available && isJoinWindowOpen(session.videoCall, clock);
-                          const opensAt = session.videoCall.joinOpensAt
-                            ? new Date(session.videoCall.joinOpensAt).getTime()
-                            : null;
-                          const note = !available
-                            ? "Video calls aren't available right now"
-                            : !open && opensAt !== null && opensAt > clock
-                              ? `Video opens ${formatSessionWhen(session.videoCall.joinOpensAt!, { now: new Date(clock) })}`
-                              : !open
-                                ? "The video time for this session is over"
-                                : null;
-                          return (
+
+                      {/* When: its own soft box, so the time is the first thing you read. */}
+                      {session.scheduledFor ? (
+                        <View
+                          className="flex-row items-center mx-4 mb-3"
+                          style={{ gap: 10, backgroundColor: colors.background, borderRadius: 14, paddingVertical: 10, paddingHorizontal: 12 }}
+                        >
+                          <View className="items-center justify-center" style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: colors.primaryLight }}>
+                            <Feather name="calendar" size={15} color={colors.primary} />
+                          </View>
+                          <Text numberOfLines={2} style={{ flex: 1, fontSize: 14, lineHeight: 20, fontWeight: "600", color: colors.foreground, fontFamily: fonts.body }}>
+                            {formatSessionWhen(session.scheduledFor, { withZone: true })}
+                          </Text>
+                        </View>
+                      ) : null}
+
+                      {/* Actions: video (when the session has one) and chat, then cancel. */}
+                      <View className="px-4 pb-4" style={{ gap: 10 }}>
+                        <View className="flex-row" style={{ gap: 10 }}>
+                          {video ? (
                             <TouchableOpacity
                               onPress={() => openJitsiCall(session)}
-                              disabled={!open}
+                              disabled={!video.open}
+                              activeOpacity={0.85}
                               accessibilityRole="button"
-                              accessibilityLabel={open ? `Join video consultation with ${name}` : note ?? "Video not available"}
-                              accessibilityState={{ disabled: !open }}
-                              className="mt-2 flex-row items-center justify-center gap-2 rounded-2xl py-3"
-                              style={{
-                                backgroundColor: open ? colors.success : colors.surfaceSoft,
-                              }}
+                              accessibilityLabel={video.open ? `Join video call with ${name}` : video.note ?? "Video not available"}
+                              accessibilityState={{ disabled: !video.open }}
+                              className="flex-1 flex-row items-center justify-center"
+                              style={{ gap: 8, height: 44, borderRadius: 14, backgroundColor: video.open ? colors.success : colors.surfaceSoft }}
                             >
-                              <Feather name="video" size={16} color={open ? "#FFFFFF" : colors.mutedText} />
-                              <Text
-                                className="text-sm font-extrabold"
-                                style={{ color: open ? "#FFFFFF" : colors.mutedText, fontFamily: fonts.heading }}
-                              >
-                                {open ? "Join Consultation" : note}
+                              <Feather name="video" size={16} color={video.open ? "#FFFFFF" : colors.mutedText} />
+                              <Text numberOfLines={1} style={{ fontSize: 14, fontWeight: "700", color: video.open ? "#FFFFFF" : colors.mutedText, fontFamily: fonts.body }}>
+                                {video.open ? "Join video call" : "Video call"}
                               </Text>
                             </TouchableOpacity>
-                          );
-                        })()}
-                      {canCancel && (
-                        <TouchableOpacity
-                          onPress={() => confirmCancel(session)}
-                          disabled={cancellingId === session._id}
-                          accessibilityRole="button"
-                          accessibilityLabel={`Cancel booking with ${name}`}
-                          className="self-end mt-1.5 px-2 py-1"
-                          hitSlop={6}
-                        >
-                          {cancellingId === session._id ? (
-                            <ActivityIndicator size="small" color={colors.mutedText} />
-                          ) : (
-                            <Text className="text-xs font-bold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                              Cancel booking
-                            </Text>
-                          )}
-                        </TouchableOpacity>
-                      )}
+                          ) : null}
+                          <TouchableOpacity
+                            onPress={() => openChat(session)}
+                            activeOpacity={0.85}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Chat with ${name}`}
+                            className="flex-1 flex-row items-center justify-center border"
+                            style={{ gap: 8, height: 44, borderRadius: 14, borderColor: colors.border, backgroundColor: colors.surface }}
+                          >
+                            <Feather name="message-circle" size={16} color={colors.primary} />
+                            <Text style={{ fontSize: 14, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>Chat</Text>
+                          </TouchableOpacity>
+                        </View>
+                        {video && !video.open && video.note ? (
+                          <Text style={{ fontSize: 12.5, color: colors.mutedText, fontFamily: fonts.body, textAlign: "center" }}>{video.note}</Text>
+                        ) : null}
+                        {canCancel && (
+                          <TouchableOpacity
+                            onPress={() => confirmCancel(session)}
+                            disabled={cancellingId === session._id}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Cancel booking with ${name}`}
+                            className="self-center px-2 py-1"
+                            hitSlop={6}
+                          >
+                            {cancellingId === session._id ? (
+                              <ActivityIndicator size="small" color={colors.mutedText} />
+                            ) : (
+                              <Text style={{ fontSize: 13, fontWeight: "600", color: colors.danger, fontFamily: fonts.body }}>
+                                Cancel booking
+                              </Text>
+                            )}
+                          </TouchableOpacity>
+                        )}
+                      </View>
                     </View>
                   );
                 })}
+                </View>
               </View>
             )}
 
@@ -1128,7 +1196,7 @@ export default function ConsultationScreen() {
               const doc = typeof toRate.doctorId === "object" ? toRate.doctorId : null;
               const name = doc ? getDoctorDisplayName(doc) : "your doctor";
               return (
-                <View className="mt-6 rounded-3xl p-[18px]" style={{ backgroundColor: colors.surface }}>
+                <View className="mt-6 rounded-2xl border p-4" style={{ backgroundColor: colors.surface, borderColor: colors.border, ...getShadow(colors, isDark) }}>
                   <View className="flex-row items-start justify-between gap-3">
                     <Text className="flex-1 text-sm font-extrabold" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
                       How was your session with {name}?
@@ -1159,10 +1227,11 @@ export default function ConsultationScreen() {
             })()}
 
             {/* Recommended experts */}
-            <View className="mt-6 gap-3">
-              <Text className="text-[15px] font-bold" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-                {loadingDoctors ? "Loading specialists…" : "Recommended experts"}
-              </Text>
+            <View className="mt-7 gap-3">
+              <SectionHeader
+                title={loadingDoctors ? "Loading specialists…" : debouncedQuery ? "Results" : "Our gynecologists"}
+                style={{ marginBottom: 0 }}
+              />
 
               {loadingDoctors ? (
                 <View className="gap-3">
@@ -1192,7 +1261,7 @@ export default function ConsultationScreen() {
                 />
               ) : (
                 doctors.map((doctor, i) => {
-                  const isSelected = selectedDoctor?._id === doctor._id;
+                  const isSelected = slotsOpen && selectedDoctor?._id === doctor._id;
                   const avatarBgOptions = [colors.primaryLight, colors.accentLight, colors.warningLight];
                   const avatarTextOptions = [colors.primary, colors.foreground, colors.foreground];
                   const avatarBg = avatarBgOptions[i % avatarBgOptions.length];
@@ -1201,21 +1270,23 @@ export default function ConsultationScreen() {
                   const existing = getConsultationForDoctor(doctor._id);
                   const name = getDoctorDisplayName(doctor);
 
-                  // Row and Book button are siblings (not nested) so screen
-                  // readers can reach both.
+                  const experience = doctor.experience
+                    ? `${doctor.experience}${/^\d+$/.test(doctor.experience.trim()) ? " yrs" : ""} exp`
+                    : null;
+                  const languages = doctor.languages?.length ? doctor.languages.slice(0, 2).join(", ") : null;
+                  const meta = [doctor.ratingCount ? `★ ${ratingLabel(doctor, true)}` : "New", experience, languages].filter(Boolean).join(" · ");
+
+                  // Profile tap area and Book button are siblings (not nested)
+                  // so screen readers can reach both.
                   return (
                     <View
                       key={doctor._id}
-                      className="rounded-2xl flex-row items-center"
                       style={{
                         backgroundColor: colors.surface,
-                        borderWidth: isSelected ? 1.5 : 0,
+                        borderRadius: 22,
+                        borderWidth: 1.5,
                         borderColor: isSelected ? colors.primary : "transparent",
-                        shadowColor: colors.shadow,
-                        shadowOffset: { width: 0, height: 6 },
-                        shadowOpacity: isDark ? 0.25 : 0.08,
-                        shadowRadius: 14,
-                        elevation: 2,
+                        ...getShadow(colors, isDark),
                       }}
                     >
                       <TouchableOpacity
@@ -1225,54 +1296,99 @@ export default function ConsultationScreen() {
                           setProfileDoctor(doctor);
                         }}
                         accessibilityRole="button"
-                        accessibilityLabel={`${name}, ${doctor.specialty}`}
+                        accessibilityLabel={`${name}, ${doctor.specialty}. ${meta}`}
                         accessibilityHint="Opens this doctor's full profile"
                         accessibilityState={{ selected: isSelected }}
-                        className="flex-1 flex-row items-center gap-3 p-3.5 pr-2"
+                        className="flex-row items-start"
+                        style={{ gap: 14, padding: 16, paddingBottom: 14 }}
                       >
-                        {/* Avatar */}
                         <DoctorPhoto
                           name={name}
                           uri={doctor.avatarUrl}
-                          size={44}
+                          size={60}
                           backgroundColor={avatarBg}
                           textColor={avatarText}
                           fontFamily={fonts.heading}
                         />
-
-                        {/* Middle info */}
-                        <View className="flex-1">
-                          <Text className="text-[13.5px] font-bold" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
+                        <View className="flex-1" style={{ minWidth: 0, gap: 2 }}>
+                          <Text numberOfLines={2} style={{ fontSize: 16, lineHeight: 22, fontWeight: "700", color: colors.foreground, fontFamily: fonts.heading }}>
                             {name}
                           </Text>
-                          <Text className="text-xs font-semibold mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                            {doctor.specialty} · ★ {ratingLabel(doctor, true)}
-                            {fee ? ` · ${fee}` : ""}
+                          <Text numberOfLines={2} style={{ fontSize: 13, lineHeight: 18, color: colors.mutedText, fontFamily: fonts.body }}>
+                            {doctor.specialty}
                           </Text>
+                          {/* Rating (or New) and experience as small pills, then languages. */}
+                          <View className="flex-row flex-wrap items-center" style={{ gap: 6, marginTop: 6 }}>
+                            {doctor.ratingCount ? (
+                              <View className="flex-row items-center rounded-full" style={{ gap: 3, backgroundColor: colors.warningLight, paddingHorizontal: 8, paddingVertical: 3 }}>
+                                <MaterialCommunityIcons name="star" size={12} color={colors.warning} />
+                                <Text style={{ fontSize: 12, fontWeight: "700", color: colors.warning, fontFamily: fonts.body }}>{ratingLabel(doctor, true)}</Text>
+                              </View>
+                            ) : (
+                              <View className="rounded-full" style={{ backgroundColor: colors.successLight, paddingHorizontal: 8, paddingVertical: 3 }}>
+                                <Text style={{ fontSize: 12, fontWeight: "700", color: colors.success, fontFamily: fonts.body }}>New</Text>
+                              </View>
+                            )}
+                            {experience ? (
+                              <View className="rounded-full" style={{ backgroundColor: colors.background, paddingHorizontal: 8, paddingVertical: 3 }}>
+                                <Text style={{ fontSize: 12, fontWeight: "600", color: colors.foreground, fontFamily: fonts.body }}>{experience}</Text>
+                              </View>
+                            ) : null}
+                          </View>
+                          {languages ? (
+                            <View className="flex-row items-center" style={{ gap: 5, marginTop: 6 }}>
+                              <Feather name="globe" size={12} color={colors.mutedText} />
+                              <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 12.5, color: colors.mutedText, fontFamily: fonts.body }}>{languages}</Text>
+                            </View>
+                          ) : null}
                         </View>
+                        <Feather name="chevron-right" size={18} color={colors.mutedText} style={{ marginTop: 2 }} />
                       </TouchableOpacity>
 
-                      {/* Book button: picks this doctor and jumps to the times */}
-                      <TouchableOpacity
-                        activeOpacity={0.85}
-                        disabled={booking || (!existing && !fee)}
-                        onPress={() => {
-                          if (existing) {
-                            openChat(existing);
-                            return;
-                          }
-                          setSelectedDoctor(doctor);
-                          scrollToSlots();
-                        }}
-                        accessibilityRole="button"
-                        accessibilityLabel={existing ? `Chat with ${name}` : fee ? `Book ${name}` : `${name} isn't bookable yet`}
-                        className="rounded-xl px-3.5 py-2 mr-3.5"
-                        style={{ backgroundColor: colors.primary, opacity: booking || (!existing && !fee) ? 0.5 : 1 }}
+                      {/* Fee and the one action, on their own row so the name keeps its width. */}
+                      <View
+                        className="flex-row items-center justify-between"
+                        style={{ borderTopWidth: 1, borderTopColor: colors.track, gap: 12, paddingHorizontal: 16, paddingVertical: 12 }}
                       >
-                        <Text className="text-xs font-bold" style={{ color: colors.buttonText, fontFamily: fonts.heading }}>
-                          {existing ? "Chat" : "Book"}
-                        </Text>
-                      </TouchableOpacity>
+                        {fee && !existing ? (
+                          <View style={{ flexShrink: 1 }}>
+                            <Text numberOfLines={1} style={{ fontSize: 18, lineHeight: 24, fontWeight: "700", color: colors.foreground, fontFamily: fonts.heading }}>{fee}</Text>
+                            <Text numberOfLines={1} style={{ fontSize: 12, color: colors.mutedText, fontFamily: fonts.body }}>per session</Text>
+                          </View>
+                        ) : (
+                          <Text numberOfLines={2} style={{ flexShrink: 1, fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}>
+                            {existing ? "You have a booking" : "Not bookable yet"}
+                          </Text>
+                        )}
+                        <TouchableOpacity
+                          activeOpacity={0.85}
+                          disabled={booking || (!existing && !fee)}
+                          onPress={() => {
+                            if (existing) {
+                              openChat(existing);
+                              return;
+                            }
+                            setSelectedDoctor(doctor);
+                            scrollToSlots();
+                          }}
+                          accessibilityRole="button"
+                          accessibilityLabel={existing ? `Chat with ${name}` : fee ? `See open times for ${name}` : `${name} isn't bookable yet`}
+                          className="flex-row items-center"
+                          style={{
+                            gap: 8,
+                            paddingHorizontal: 18,
+                            height: 44,
+                            borderRadius: 14,
+                            backgroundColor: colors.primary,
+                            opacity: booking || (!existing && !fee) ? 0.5 : 1,
+                          }}
+                        >
+                          <Feather name={existing ? "message-circle" : "calendar"} size={16} color={colors.buttonText} />
+                          <Text style={{ fontSize: 14, fontWeight: "700", color: colors.buttonText, fontFamily: fonts.body }}>
+                            {existing ? "Open chat" : "See times"}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
                   );
                 })
@@ -1280,18 +1396,39 @@ export default function ConsultationScreen() {
             </View>
 
             {/* SELECT A DATE + SLOT — the doctor's open slots, in local time */}
-            {selectedDoctor && !loadingDoctors && !selectedExisting && (
+            {selectedDoctor && slotsOpen && !loadingDoctors && !selectedExisting && (
               <View
-                className="mt-8"
+                className="mt-5 rounded-2xl border p-4"
+                style={{ backgroundColor: colors.surface, borderColor: colors.primary, ...getShadow(colors, isDark) }}
                 onLayout={(e) => {
                   slotsY.current = e.nativeEvent.layout.y;
                 }}
               >
+                {/* Whose times these are, and a way to close them again. */}
+                <View className="flex-row items-center justify-between" style={{ gap: 12 }}>
+                  <Text numberOfLines={2} style={{ flexShrink: 1, fontSize: 15, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
+                    {`Book with ${getDoctorDisplayName(selectedDoctor)}`}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setSlotsOpen(false);
+                      setSelectedSlotStart(null);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Hide open times"
+                    hitSlop={8}
+                    className="flex-row items-center"
+                    style={{ gap: 2 }}
+                  >
+                    <Text style={{ fontSize: 12.5, fontWeight: "700", color: colors.primary, fontFamily: fonts.body }}>Hide</Text>
+                    <Feather name="chevron-up" size={14} color={colors.primary} />
+                  </TouchableOpacity>
+                </View>
                 <Text
-                  className="text-[11.5px] font-black uppercase tracking-widest mb-3"
-                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                  className="text-[11.5px] font-black uppercase tracking-widest"
+                  style={{ color: colors.mutedText, fontFamily: fonts.body, marginTop: 16, marginBottom: 10 }}
                 >
-                  Select a date
+                  Choose a day
                 </Text>
 
                 {loadingAvailability && !availability ? (
@@ -1344,7 +1481,7 @@ export default function ConsultationScreen() {
                             accessibilityState={{ selected: isDateSelected }}
                             className="rounded-2xl px-4 py-3 items-center justify-center border"
                             style={{
-                              backgroundColor: isDateSelected ? colors.primary : colors.surface,
+                              backgroundColor: isDateSelected ? colors.primary : colors.background,
                               borderColor: isDateSelected ? colors.primary : colors.border,
                               minWidth: 62,
                             }}
@@ -1383,13 +1520,25 @@ export default function ConsultationScreen() {
 
                     {/* Time slots for the chosen date */}
                     <Text
-                      className="text-[11.5px] font-black uppercase tracking-widest mt-6 mb-3"
+                      className="text-[11.5px] font-black uppercase tracking-widest mt-6"
                       style={{ color: colors.mutedText, fontFamily: fonts.body }}
                     >
-                      Select a time
+                      Choose a time
                     </Text>
-                    <View className="flex-row flex-wrap gap-2">
-                      {daySlots.map((slot) => {
+                    {/* Grouped by part of the day: a long run of 10-minute slots is hard to scan. */}
+                    {SLOT_PERIODS.map((period) => {
+                      const slots = daySlots.filter((slot) => slotPeriod(slot.start) === period.key);
+                      if (!slots.length) return null;
+                      return (
+                    <View key={period.key} className="mt-3">
+                    <View className="flex-row items-center mb-2" style={{ gap: 6 }}>
+                      <Feather name={period.icon} size={13} color={colors.mutedText} />
+                      <Text style={{ fontSize: 12.5, fontWeight: "700", color: colors.mutedText, fontFamily: fonts.body }}>
+                        {period.label} · {slots.length}
+                      </Text>
+                    </View>
+                    <View className="flex-row flex-wrap" style={{ gap: 8 }}>
+                      {slots.map((slot) => {
                         const isSlotSelected = selectedSlotStart === slot.start;
                         const time = formatTime(slot.start);
                         return (
@@ -1400,18 +1549,20 @@ export default function ConsultationScreen() {
                             accessibilityRole="button"
                             accessibilityLabel={time}
                             accessibilityState={{ selected: isSlotSelected }}
-                            className="rounded-xl py-3 px-4 items-center justify-center border"
+                            className="rounded-xl py-3 px-1 items-center justify-center border"
                             style={{
-                              backgroundColor: isSlotSelected ? colors.primaryLight : colors.surface,
-                              borderColor: isSlotSelected ? colors.foreground : colors.border,
-                              borderWidth: isSlotSelected ? 1.5 : 1,
-                              minWidth: "30%",
-                              flexGrow: 1,
+                              backgroundColor: isSlotSelected ? colors.primary : colors.background,
+                              borderColor: isSlotSelected ? colors.primary : colors.border,
+                              // Three even columns; the last row doesn't stretch.
+                              width: "31%",
                             }}
                           >
                             <Text
                               className="text-xs font-bold"
-                              style={{ color: colors.foreground, fontFamily: fonts.body }}
+                              numberOfLines={1}
+                              adjustsFontSizeToFit
+                              maxFontSizeMultiplier={1.3}
+                              style={{ color: isSlotSelected ? colors.buttonText : colors.foreground, fontFamily: fonts.body }}
                             >
                               {time}
                             </Text>
@@ -1419,6 +1570,9 @@ export default function ConsultationScreen() {
                         );
                       })}
                     </View>
+                    </View>
+                      );
+                    })}
                     <Text
                       className="text-[11.5px] font-semibold mt-3"
                       style={{ color: colors.mutedText, fontFamily: fonts.body }}
@@ -1430,13 +1584,23 @@ export default function ConsultationScreen() {
               </View>
             )}
 
+            </>
+            ) : null}
+
             {/* Past consultations — read-only chat + prescription */}
-            {pastSessions.length > 0 && (
-              <View className="mt-8 gap-3">
-                <Text className="text-[15px] font-bold" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-                  Past consultations
-                </Text>
-                {visiblePast.map((session) => {
+            {listTab === "past" && pastSessions.length === 0 ? (
+              <EmptyState
+                compact
+                icon="calendar-blank-outline"
+                title="No past bookings yet"
+                message="Finished consultations show up here with their chat and prescription."
+                actionLabel="Find a doctor"
+                onAction={() => setListTab("new")}
+              />
+            ) : null}
+            {listTab === "past" && pastSessions.length > 0 && (
+              <View className="gap-3">
+                {pastSessions.map((session) => {
                   const doc = doctorOf(session);
                   const name = doc ? getDoctorDisplayName(doc) : "Your doctor";
                   const when = session.scheduledFor ?? session.completedAt ?? session.createdAt;
@@ -1449,7 +1613,10 @@ export default function ConsultationScreen() {
                         ? "Cancelled by doctor"
                         : "Cancelled";
                   return (
-                    <View key={session._id} className="rounded-2xl" style={{ backgroundColor: colors.surface }}>
+                    <View
+                      key={session._id}
+                      style={{ backgroundColor: colors.surface, borderRadius: 18, ...getShadow(colors, isDark) }}
+                    >
                       <TouchableOpacity
                         activeOpacity={0.9}
                         onPress={() => openChat(session)}
@@ -1522,10 +1689,11 @@ export default function ConsultationScreen() {
                           }}
                           accessibilityRole="button"
                           accessibilityLabel={`Book again with ${name}`}
-                          className="self-end mr-3.5 mb-3 rounded-xl px-3 py-1.5 border"
-                          style={{ borderColor: colors.primary }}
+                          className="flex-row items-center justify-center py-3 border-t"
+                          style={{ gap: 6, borderColor: colors.border }}
                         >
-                          <Text className="text-xs font-bold" style={{ color: colors.primary, fontFamily: fonts.heading }}>
+                          <Feather name="refresh-cw" size={13} color={colors.primary} />
+                          <Text style={{ fontSize: 13, fontWeight: "800", color: colors.primary, fontFamily: fonts.body }}>
                             Book again
                           </Text>
                         </TouchableOpacity>
@@ -1533,17 +1701,6 @@ export default function ConsultationScreen() {
                     </View>
                   );
                 })}
-                {pastSessions.length > PAST_PREVIEW_COUNT && (
-                  <TouchableOpacity
-                    onPress={() => setShowAllPast((v) => !v)}
-                    accessibilityRole="button"
-                    className="self-center px-3 py-1.5"
-                  >
-                    <Text className="text-xs font-bold" style={{ color: colors.primary, fontFamily: fonts.body }}>
-                      {showAllPast ? "Show less" : `Show all (${pastSessions.length})`}
-                    </Text>
-                  </TouchableOpacity>
-                )}
               </View>
             )}
 
@@ -1557,8 +1714,8 @@ export default function ConsultationScreen() {
           </View>
         </ScrollView>
 
-        {/* Sticky Bottom booking panel */}
-        {selectedDoctor && (
+        {/* Sticky Bottom booking panel: only while choosing a time. */}
+        {selectedDoctor && slotsOpen && !selectedExisting && (
           <View
             className="border-t px-6 py-4"
             style={{
@@ -1738,20 +1895,7 @@ export default function ConsultationScreen() {
                 keyboardShouldPersistTaps="handled"
               >
                 {activeConsultation?.prescription ? (
-                  <View
-                    className="rounded-2xl p-4 mb-4 border"
-                    style={{ backgroundColor: colors.primaryLight, borderColor: colors.primary }}
-                  >
-                    <View className="flex-row items-center gap-2 mb-2">
-                      <Feather name="file-text" size={16} color={colors.primary} />
-                      <Text className="text-sm font-extrabold" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-                        Prescription
-                      </Text>
-                    </View>
-                    <Text className="text-sm leading-5" style={{ color: colors.foreground, fontFamily: fonts.body }} selectable>
-                      {activeConsultation.prescription}
-                    </Text>
-                  </View>
+                  <PrescriptionCard consultation={activeConsultation} doctorName={chatDoctor?.name} />
                 ) : null}
 
                 {loadingMessages ? (

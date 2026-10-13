@@ -13,6 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useDataRefresh } from "../../hooks/useDataRefresh";
 import { EmptyState } from "../../components/EmptyState";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
+import { LoadMoreButton } from "../../components/LoadMoreButton";
 import { SkeletonCardList } from "../../components/Skeleton";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { useTheme } from "../../components/theme";
@@ -282,28 +283,7 @@ export default function SchemeApplications() {
                 );
               })}
 
-              {hasMore ? (
-                <View className="w-full items-center mt-2">
-                  <TouchableOpacity
-                    onPress={handleLoadMore}
-                    disabled={loadingMore}
-                    activeOpacity={0.8}
-                    className="items-center justify-center px-6 py-3 rounded-2xl border"
-                    style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-                  >
-                    {loadingMore ? (
-                      <ActivityIndicator color={colors.primary} />
-                    ) : (
-                      <Text
-                        className="text-xs font-bold"
-                        style={{ color: colors.primary, fontFamily: fonts.body }}
-                      >
-                        Load More
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              ) : null}
+              <LoadMoreButton hasMore={hasMore} loading={loadingMore} onPress={handleLoadMore} />
             </>
           )}
         </ScrollView>

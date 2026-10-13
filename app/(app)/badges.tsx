@@ -6,6 +6,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Dimensions, Easing, Modal, RefreshControl, ScrollView, StatusBar, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
+import { ColumnLabel } from "../../components/ColumnLabel";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { SkeletonCard } from "../../components/Skeleton";
 import { useTheme } from "../../components/theme";
@@ -23,7 +24,7 @@ import { shareViewAsImage } from "../../lib/genz";
 
 const SEEN_KEY = "period-buddy.genz.seen-badges";
 const WHITE = "#FFFFFF";
-const CONFETTI = ["🎉", "✨", "💖", "🔥", "🌸", "⭐", "💅", "🫶"];
+const CONFETTI = ["🎉", "💖", "🔥", "🌸", "🎊", "💅", "🫶", "🌷"];
 
 function Confetti() {
   const { width, height } = Dimensions.get("window");
@@ -160,6 +161,9 @@ export default function BadgesScreen() {
   const streak = data?.streak;
   const milestoneProgress = streak?.nextMilestone ? Math.min(1, streak.current / streak.nextMilestone) : 1;
   const sorted = data ? [...data.badges].sort((a, b) => Number(b.earned) - Number(a.earned)) : [];
+  // Three a row, equal widths, so a short last row lines up with the grid.
+  const badgeRows: Badge[][] = [];
+  for (let i = 0; i < sorted.length; i += 3) badgeRows.push(sorted.slice(i, i + 3));
 
   return (
     <>
@@ -186,26 +190,28 @@ export default function BadgesScreen() {
               contentContainerStyle={{ paddingBottom: 60 }}
               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => reload(true)} tintColor={colors.primary} />}
             >
-              <View className="mx-6 mt-5">
-                <View style={{ borderRadius: 28, ...getShadow(colors, isDark) }}>
-                  <LinearGradient colors={["#FF9F1C", "#FF4D6D", "#C9184A"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ borderRadius: 28, padding: 24 }}>
+              <View className="mx-6 mt-3">
+                <View style={{ borderRadius: 24, ...getShadow(colors, isDark) }}>
+                  <LinearGradient colors={["#FF9F1C", "#FF4D6D", "#C9184A"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ borderRadius: 24, padding: 22 }}>
                     <View className="flex-row items-center justify-between">
                       <View>
                         <Text style={{ color: WHITE, opacity: 0.9, fontSize: 12, letterSpacing: 2, fontFamily: fonts.heading, fontWeight: "800" }}>CURRENT STREAK</Text>
                         <View className="flex-row items-end mt-1" style={{ gap: 6 }}>
-                          <Text style={{ color: WHITE, fontSize: 64, lineHeight: 70, fontFamily: fonts.monoSemiBold }}>{streak.current}</Text>
-                          <Text style={{ color: WHITE, fontSize: 18, fontFamily: fonts.heading, fontWeight: "800", marginBottom: 12 }}>
+                          <Text style={{ color: WHITE, fontSize: 52, lineHeight: 58, fontFamily: fonts.monoSemiBold }}>{streak.current}</Text>
+                          <Text style={{ color: WHITE, fontSize: 17, fontFamily: fonts.heading, fontWeight: "700", marginBottom: 9 }}>
                             {streak.current === 1 ? "day" : "days"}
                           </Text>
                         </View>
                       </View>
-                      <Text style={{ fontSize: 64 }}>{streak.current >= 7 ? "🔥" : streak.current > 0 ? "✨" : "🌱"}</Text>
+                      <View className="items-center justify-center rounded-full" style={{ width: 72, height: 72, backgroundColor: "rgba(255,255,255,0.2)" }}>
+                        <Text style={{ fontSize: 38 }}>{streak.current > 0 ? "🔥" : "🌱"}</Text>
+                      </View>
                     </View>
 
                     {streak.nextMilestone ? (
                       <>
-                        <View className="mt-4 overflow-hidden rounded-full" style={{ height: 10, backgroundColor: "rgba(255,255,255,0.3)" }}>
-                          <View style={{ height: 10, width: `${Math.round(milestoneProgress * 100)}%`, backgroundColor: WHITE, borderRadius: 10 }} />
+                        <View className="mt-4 overflow-hidden rounded-full" style={{ height: 8, backgroundColor: "rgba(255,255,255,0.3)" }}>
+                          <View style={{ height: 8, width: `${Math.round(milestoneProgress * 100)}%`, backgroundColor: WHITE, borderRadius: 8 }} />
                         </View>
                         <Text style={{ color: WHITE, fontSize: 13, fontFamily: fonts.body, fontWeight: "700", marginTop: 8 }}>
                           {`${streak.nextMilestone - streak.current} more ${streak.nextMilestone - streak.current === 1 ? "day" : "days"} to hit ${streak.nextMilestone} 🎯`}
@@ -237,49 +243,72 @@ export default function BadgesScreen() {
                   <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.mono }}>{`${data.earnedCount}/${data.badges.length}`}</Text>
                 </View>
 
-                <View className="flex-row flex-wrap" style={{ gap: 10 }}>
-                  {sorted.map((b) => {
-                    const pct = Math.round((b.progress.current / b.progress.target) * 100);
-                    return (
-                      <TouchableOpacity
-                        key={b.key}
-                        activeOpacity={b.earned ? 0.8 : 1}
-                        onPress={() => b.earned && setCelebrate([b])}
-                        className="rounded-3xl p-3.5 mt-2.5"
-                        style={{
-                          width: "31%",
-                          flexGrow: 1,
-                          backgroundColor: b.earned ? colors.surface : colors.surfaceSoft,
-                          borderColor: b.earned ? colors.gold : colors.border,
-                          borderWidth: b.earned ? 1.5 : 1,
-                          alignItems: "center",
-                        }}
-                        accessibilityLabel={`${b.title}, ${b.earned ? "earned" : `${b.progress.current} of ${b.progress.target}`}`}
-                      >
-                        <Text style={{ fontSize: 34, opacity: b.earned ? 1 : 0.3 }}>{b.earned ? b.emoji : "🔒"}</Text>
-                        <Text
-                          style={{ color: b.earned ? colors.foreground : colors.mutedText, fontSize: 13, fontFamily: fonts.heading, fontWeight: "800", marginTop: 6, textAlign: "center" }}
-                          numberOfLines={2}
-                        >
-                          {b.title}
-                        </Text>
-                        {b.earned ? (
-                          <Text style={{ color: colors.mutedText, fontSize: 12.5, fontFamily: fonts.body, marginTop: 2, textAlign: "center" }} numberOfLines={2}>
-                            {b.description}
-                          </Text>
-                        ) : (
-                          <>
-                            <View className="mt-2 w-full overflow-hidden rounded-full" style={{ height: 5, backgroundColor: colors.border }}>
-                              <View style={{ height: 5, width: `${pct}%`, backgroundColor: colors.primary }} />
+                <View style={{ gap: 10, marginTop: 10 }}>
+                  {badgeRows.map((row) => (
+                    <View key={row[0].key} className="flex-row" style={{ gap: 10 }}>
+                      {row.map((b) => {
+                        const pct = Math.min(100, Math.round((b.progress.current / b.progress.target) * 100));
+                        return (
+                          <TouchableOpacity
+                            key={b.key}
+                            activeOpacity={b.earned ? 0.8 : 1}
+                            onPress={() => b.earned && setCelebrate([b])}
+                            className="rounded-3xl"
+                            style={{
+                              flex: 1,
+                              paddingVertical: 14,
+                              paddingHorizontal: 10,
+                              backgroundColor: colors.surface,
+                              borderColor: b.earned ? colors.gold : colors.border,
+                              borderWidth: b.earned ? 1.5 : 1,
+                              alignItems: "center",
+                              ...(b.earned ? getShadow(colors, isDark) : null),
+                            }}
+                            accessibilityLabel={`${b.title}, ${b.earned ? "earned" : `${b.progress.current} of ${b.progress.target}`}. ${b.description}`}
+                          >
+                            <View
+                              className="items-center justify-center rounded-full"
+                              style={{ width: 54, height: 54, backgroundColor: b.earned ? colors.goldLight : colors.track }}
+                            >
+                              <Text style={{ fontSize: 28, opacity: b.earned ? 1 : 0.35 }}>{b.emoji}</Text>
+                              {b.earned ? null : (
+                                <View
+                                  className="items-center justify-center rounded-full"
+                                  style={{ position: "absolute", right: -3, bottom: -3, width: 22, height: 22, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}
+                                >
+                                  <Feather name="lock" size={11} color={colors.mutedText} />
+                                </View>
+                              )}
                             </View>
-                            <Text style={{ color: colors.mutedText, fontSize: 12.5, fontFamily: fonts.mono, marginTop: 4 }}>
-                              {`${b.progress.current}/${b.progress.target}`}
-                            </Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
+                            <ColumnLabel
+                              lines={2}
+                              lineHeight={17}
+                              style={{ color: b.earned ? colors.foreground : colors.mutedText, fontSize: 13, fontFamily: fonts.heading, fontWeight: "700", marginTop: 10 }}
+                            >
+                              {b.title}
+                            </ColumnLabel>
+                            {b.earned ? (
+                              <Text style={{ color: colors.mutedText, fontSize: 12, lineHeight: 16, fontFamily: fonts.body, marginTop: 3, textAlign: "center" }} numberOfLines={2} maxFontSizeMultiplier={1.3}>
+                                {b.description}
+                              </Text>
+                            ) : (
+                              <>
+                                <View className="mt-2.5 w-full overflow-hidden rounded-full" style={{ height: 4, backgroundColor: colors.track }}>
+                                  <View style={{ height: 4, width: `${pct}%`, backgroundColor: colors.primary }} />
+                                </View>
+                                <Text style={{ color: colors.mutedText, fontSize: 12, fontFamily: fonts.mono, marginTop: 4 }}>
+                                  {`${b.progress.current}/${b.progress.target}`}
+                                </Text>
+                              </>
+                            )}
+                          </TouchableOpacity>
+                        );
+                      })}
+                      {Array.from({ length: 3 - row.length }, (_, k) => (
+                        <View key={`gap-${k}`} style={{ flex: 1 }} />
+                      ))}
+                    </View>
+                  ))}
                 </View>
               </View>
             </ScrollView>

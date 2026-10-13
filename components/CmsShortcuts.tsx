@@ -9,7 +9,7 @@ import { useViewer } from "../hooks/useViewer";
 import { HubTile, hubTilesFor } from "../lib/appConfig";
 
 const PER_ROW = 4;
-const ICON = 52;
+const ICON = 60;
 
 /**
  * Features and link tiles the App CMS moved onto Home or Profile (placement
@@ -22,10 +22,19 @@ const ICON = 52;
  * Coming soon / paused shortcuts are drawn locked and open their sheet
  * (components/LaunchTileParts.tsx).
  */
-export function CmsShortcuts({ placement, style }: { placement: "home" | "profile"; style?: object }) {
+export function CmsShortcuts({
+  placement,
+  tiles: given,
+  style,
+}: {
+  placement: "home" | "profile";
+  /** Tiles to draw instead of the placement's (Home passes the person's own picks). */
+  tiles?: HubTile[];
+  style?: object;
+}) {
   const { config } = useAppConfig();
   const viewer = useViewer();
-  const tiles = hubTilesFor(config, placement, viewer);
+  const tiles = given ?? hubTilesFor(config, placement, viewer);
   if (tiles.length === 0) return null;
 
   const rows: HubTile[][] = [];
@@ -33,7 +42,7 @@ export function CmsShortcuts({ placement, style }: { placement: "home" | "profil
 
   return (
     <View style={style}>
-      <View className="mx-4" style={{ paddingTop: 4, gap: 16 }}>
+      <View className="mx-6" style={{ paddingTop: 4, gap: 16 }}>
         {rows.map((row) => (
           <View key={row[0].key} style={{ flexDirection: "row" }}>
             {row.map((tile) => (
@@ -50,8 +59,9 @@ export function CmsShortcuts({ placement, style }: { placement: "home" | "profil
   );
 }
 
+// Mint is a wash colour; its icons use the darker text-safe mint.
 const tint = (colors: ThemeColors, key: HubTile["colorKey"]) => ({
-  color: colors[key],
+  color: key === "accent" ? colors.accentText : colors[key],
   bg: colors[`${key}Light` as keyof ThemeColors],
 });
 
@@ -86,7 +96,7 @@ function Shortcut({ tile }: { tile: HubTile }) {
     >
       <View>
         <View style={{ width: ICON, height: ICON, borderRadius: ICON / 2, backgroundColor: bg, alignItems: "center", justifyContent: "center" }}>
-          <Ionicons name={tile.icon as keyof typeof Ionicons.glyphMap} size={22} color={color} style={{ opacity: dim }} />
+          <Ionicons name={tile.icon as keyof typeof Ionicons.glyphMap} size={24} color={color} style={{ opacity: dim }} />
           {tile.launch.access === "paused" ? <PauseDot size={18} offset={-2} ring={colors.background} /> : null}
         </View>
         {pill && pillTint ? (
@@ -127,7 +137,8 @@ function Shortcut({ tile }: { tile: HubTile }) {
       </View>
       <Text
         numberOfLines={2}
-        style={{ marginTop: 8, fontSize: 12, lineHeight: 15, fontWeight: "600", color: colors.foreground, textAlign: "center", fontFamily: fonts.body, opacity: dim }}
+        maxFontSizeMultiplier={1.3}
+        style={{ marginTop: 8, fontSize: 12, lineHeight: 16, fontWeight: "500", color: colors.foreground, textAlign: "center", fontFamily: fonts.body, opacity: dim }}
       >
         {label}
       </Text>

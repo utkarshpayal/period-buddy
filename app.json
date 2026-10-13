@@ -24,7 +24,8 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "The Nura uses your camera for video calls and to photograph documents you choose to upload.",
         "NSMicrophoneUsageDescription": "The Nura uses your microphone for voice questions to Nura AI, voice notes and video calls.",
-        "NSFaceIDUsageDescription": "The Nura uses Face ID to unlock the app and keep your data private."
+        "NSFaceIDUsageDescription": "The Nura uses Face ID to unlock the app and keep your data private.",
+        "LSApplicationQueriesSchemes": ["upi", "tez", "gpay", "phonepe", "paytmmp", "credpay", "bhim"]
       },
       "associatedDomains": [
         "applinks:thenura.care"
@@ -181,7 +182,8 @@
         {
           "microphonePermission": "The Nura uses your microphone for voice questions to Nura AI, voice notes and video calls."
         }
-      ]
+      ],
+      "./plugins/withUpiAppQueries"
     ],
     "experiments": {
       "typedRoutes": true,

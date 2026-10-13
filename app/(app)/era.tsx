@@ -3,11 +3,12 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { RefreshControl, ScrollView, StatusBar, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { EmptyState } from "../../components/EmptyState";
+import { ColumnLabel } from "../../components/ColumnLabel";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
-import { ScreenHeader } from "../../components/ScreenHeader";
+import { HeaderIconButton, ScreenHeader } from "../../components/ScreenHeader";
 import { SkeletonCard } from "../../components/Skeleton";
 import { useTheme } from "../../components/theme";
 import { getShadow } from "../../components/ui-tokens";
@@ -30,6 +31,9 @@ const CATEGORIES: { key: CycleSyncCategory; label: string; icon: React.Component
   { key: "vibe", label: "Vibe", icon: "music" },
 ];
 
+/** Fallback emoji for a tip that has none. */
+const CATEGORY_EMOJI: Record<CycleSyncCategory, string> = { move: "🏃‍♀️", fuel: "🥗", selfCare: "🛁", vibe: "🎧" };
+
 const PHASE_ORDER: CyclePhase[] = ["period", "follicular", "ovulation", "luteal"];
 const PHASE_NAMES: Record<CyclePhase, string> = {
   period: "Period",
@@ -39,7 +43,7 @@ const PHASE_NAMES: Record<CyclePhase, string> = {
 };
 
 const WHITE = "#FFFFFF";
-const SIDE = 20;
+const SIDE = 24;
 
 const TRIED_KEY = "nura.era.tried.v1";
 
@@ -88,13 +92,6 @@ type FlatTip = { key: string; category: CycleSyncCategory; tip: CycleSyncTip };
 const flattenTips = (tips: Record<CycleSyncCategory, CycleSyncTip[]>): FlatTip[] =>
   CATEGORIES.flatMap(({ key: category }) => (tips[category] ?? []).map((tip) => ({ key: tipKey(category, tip), category, tip })));
 
-/** Same pick all day, a different one tomorrow. */
-const pickOfTheDay = (tips: FlatTip[]) => {
-  if (!tips.length) return null;
-  const seed = [...todayKey()].reduce((n, c) => (n * 31 + c.charCodeAt(0)) >>> 0, 7);
-  return tips[seed % tips.length];
-};
-
 export default function EraScreen() {
   const router = useRouter();
   const { colors, isDark, fonts } = useTheme();
@@ -115,7 +112,6 @@ export default function EraScreen() {
   const needsSetup = !loading && !error && result === null;
   const { tried, toggle } = useTriedToday();
   const allTips = data ? flattenTips(data.era.tips) : [];
-  const pick = pickOfTheDay(allTips);
   const triedCount = allTips.filter((t) => tried.has(t.key)).length;
 
   return (
@@ -126,16 +122,11 @@ export default function EraScreen() {
           title="Your Era"
           right={
             data ? (
-              <TouchableOpacity
-                onPress={() => shareViewAsImage(shareRef, `I'm in my ${data.era.era.name} ${data.era.era.emoji} What era are you in?`, "era")}
-                hitSlop={10}
-                accessibilityRole="button"
+              <HeaderIconButton
+                icon="share-social-outline"
                 accessibilityLabel="Share my era"
-                className="items-center justify-center rounded-full"
-                style={{ width: 36, height: 36, backgroundColor: colors.surface }}
-              >
-                <Feather name="share-2" size={16} color={colors.foreground} />
-              </TouchableOpacity>
+                onPress={() => shareViewAsImage(shareRef, `I'm in my ${data.era.era.name} ${data.era.era.emoji} What era are you in?`, "era")}
+              />
             ) : null
           }
         />
@@ -177,9 +168,6 @@ export default function EraScreen() {
                       end={{ x: 1, y: 1 }}
                       style={{ borderRadius: 24, padding: 22, overflow: "hidden" }}
                     >
-                      {/* Soft glow for the "aura" look. */}
-                      <View style={{ position: "absolute", width: 220, height: 220, borderRadius: 110, backgroundColor: "rgba(255,255,255,0.16)", top: -90, right: -70 }} />
-
                       <View className="flex-row items-center" style={{ gap: 14 }}>
                         <View className="items-center justify-center rounded-full" style={{ width: 60, height: 60, backgroundColor: "rgba(255,255,255,0.25)" }}>
                           <Text style={{ fontSize: 32 }}>{data.era.era.emoji}</Text>
@@ -203,14 +191,14 @@ export default function EraScreen() {
                           <Text style={{ color: WHITE, fontSize: 16, fontFamily: fonts.monoSemiBold }}>
                             {data.era.daysLeftInPhase === 0 ? "Last day" : `${data.era.daysLeftInPhase} ${data.era.daysLeftInPhase === 1 ? "day" : "days"}`}
                           </Text>
-                          <Text style={{ color: WHITE, opacity: 0.85, fontSize: 12.5, fontFamily: fonts.body, fontWeight: "600" }}>left in this era</Text>
+                          <ColumnLabel style={{ color: WHITE, opacity: 0.85, fontSize: 12.5, fontFamily: fonts.body, fontWeight: "600", textAlign: "left" }}>left in this era</ColumnLabel>
                         </View>
                         <View style={{ width: 1, alignSelf: "stretch", backgroundColor: "rgba(255,255,255,0.35)", marginHorizontal: 14 }} />
                         <View className="flex-1">
                           <Text style={{ color: WHITE, fontSize: 14.5, fontFamily: fonts.body, fontWeight: "700" }} numberOfLines={1}>
                             {`${data.era.nextEra.emoji} ${data.era.nextEra.name.replace(" Era", "")}`}
                           </Text>
-                          <Text style={{ color: WHITE, opacity: 0.85, fontSize: 12.5, fontFamily: fonts.body, fontWeight: "600" }}>up next</Text>
+                          <ColumnLabel style={{ color: WHITE, opacity: 0.85, fontSize: 12.5, fontFamily: fonts.body, fontWeight: "600", textAlign: "left" }}>up next</ColumnLabel>
                         </View>
                       </View>
 
@@ -241,8 +229,7 @@ export default function EraScreen() {
                             >
                               <Text style={{ fontSize: active ? 18 : 16, opacity: active ? 1 : 0.75 }}>{info.emoji}</Text>
                             </View>
-                            <Text
-                              numberOfLines={1}
+                            <ColumnLabel
                               style={{
                                 color: active ? colors.foreground : colors.mutedText,
                                 fontSize: 12.5,
@@ -252,7 +239,7 @@ export default function EraScreen() {
                               }}
                             >
                               {PHASE_NAMES[p]}
-                            </Text>
+                            </ColumnLabel>
                           </View>
                         );
                       })}
@@ -273,42 +260,11 @@ export default function EraScreen() {
                       <View className="mt-2.5 rounded-full overflow-hidden" style={{ height: 5, backgroundColor: colors.border }}>
                         <View style={{ width: `${(triedCount / allTips.length) * 100}%`, height: "100%", backgroundColor: data.era.era.aura[0], borderRadius: 999 }} />
                       </View>
-                      <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body, marginTop: 6 }}>
-                        {triedCount === allTips.length
-                          ? "You tried every tip today. Proud of you 🎉"
-                          : "Tick a tip once you've tried it. Resets every day."}
-                      </Text>
                     </>
                   ) : null}
 
-                  {pick ? (
-                    <TouchableOpacity
-                      onPress={() => toggle(pick.key)}
-                      activeOpacity={0.85}
-                      accessibilityRole="checkbox"
-                      accessibilityState={{ checked: tried.has(pick.key) }}
-                      accessibilityLabel={`Today's pick: ${pick.tip.title}. ${pick.tip.body}`}
-                      className="rounded-3xl mt-4"
-                      style={{ backgroundColor: `${data.era.era.aura[0]}1A`, padding: 16 }}
-                    >
-                      <Text style={{ color: data.era.era.aura[0], fontSize: 12, fontFamily: fonts.body, fontWeight: "800" }}>
-                        {`✨ Today's pick · ${CATEGORIES.find((c) => c.key === pick.category)?.label}`}
-                      </Text>
-                      <View className="flex-row items-start mt-2.5" style={{ gap: 12 }}>
-                        <Text style={{ fontSize: 26, lineHeight: 32 }}>{pick.tip.emoji || "✨"}</Text>
-                        <View className="flex-1">
-                          <Text style={{ color: colors.foreground, fontSize: 16, fontFamily: fonts.heading, fontWeight: "800" }}>{pick.tip.title}</Text>
-                          {pick.tip.body ? (
-                            <Text style={{ color: colors.mutedText, fontSize: 13.5, lineHeight: 20, fontFamily: fonts.body, marginTop: 3 }}>{pick.tip.body}</Text>
-                          ) : null}
-                        </View>
-                        <CheckCircle done={tried.has(pick.key)} color={data.era.era.aura[0]} />
-                      </View>
-                    </TouchableOpacity>
-                  ) : null}
-
                   {/* Category switcher: one segmented control. */}
-                  <View className="flex-row rounded-full mt-5" style={{ backgroundColor: colors.surface, padding: 4 }}>
+                  <View className="flex-row rounded-full mt-4" style={{ backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, padding: 4 }}>
                     {CATEGORIES.map((c) => {
                       const active = c.key === category;
                       const inCategory = allTips.filter((t) => t.category === c.key);
@@ -333,7 +289,7 @@ export default function EraScreen() {
                   </View>
                 </View>
 
-                <View style={{ marginTop: 6 }}>
+                <View style={{ marginTop: 12, marginHorizontal: SIDE, backgroundColor: colors.surface, borderRadius: 22, paddingVertical: 4, ...getShadow(colors, isDark) }}>
                   {data.era.tips[category].length ? (
                     allTips
                       .filter((t) => t.category === category)
@@ -341,12 +297,12 @@ export default function EraScreen() {
                         <TipRow key={item.key} item={item} done={tried.has(item.key)} onToggle={toggle} color={data.era.era.aura[0]} last={i === list.length - 1} />
                       ))
                   ) : (
-                    <EmptyState compact icon="star-four-points-outline" title="No tips here yet" message="Try another tab for today's ideas." />
+                    <EmptyState compact icon="lightbulb-outline" title="No tips here yet" message="Try another tab for today's ideas." />
                   )}
                 </View>
 
                 <Text className="mt-6 text-center" style={{ color: colors.mutedText, fontSize: 12.5, fontFamily: fonts.body, lineHeight: 16, paddingHorizontal: 32 }}>
-                  General wellness ideas, not medical advice. Listen to your body first.
+                  General wellness ideas, not medical advice. Ticks reset every day.
                 </Text>
               </ScrollView>
             ) : null}
@@ -382,10 +338,10 @@ function TipRow({ item, done, onToggle, color, last }: { item: FlatTip; done: bo
       accessibilityLabel={`${tip.title}. ${tip.body}`}
       accessibilityHint={done ? "Marks it as not tried" : "Marks it as tried today"}
       className="flex-row items-start"
-      style={{ paddingHorizontal: SIDE, paddingVertical: 14, gap: 12 }}
+      style={{ paddingHorizontal: 16, paddingVertical: 14, gap: 12 }}
     >
       <View className="items-center justify-center rounded-full" style={{ width: 40, height: 40, backgroundColor: `${color}1F` }}>
-        <Text style={{ fontSize: 19 }}>{tip.emoji || "✨"}</Text>
+        <Text style={{ fontSize: 19 }}>{tip.emoji || CATEGORY_EMOJI[item.category]}</Text>
       </View>
       <View className="flex-1" style={{ opacity: done ? 0.55 : 1 }}>
         <Text style={{ color: colors.foreground, fontSize: 15, fontFamily: fonts.body, fontWeight: "700" }}>{tip.title}</Text>
@@ -393,7 +349,7 @@ function TipRow({ item, done, onToggle, color, last }: { item: FlatTip; done: bo
       </View>
       <CheckCircle done={done} color={color} />
       {!last ? (
-        <View style={{ position: "absolute", bottom: 0, left: SIDE + 40 + 12, right: SIDE, height: StyleSheet.hairlineWidth, backgroundColor: colors.border }} />
+        <View style={{ position: "absolute", bottom: 0, left: 16 + 40 + 12, right: 0, height: 1, backgroundColor: colors.track }} />
       ) : null}
     </TouchableOpacity>
   );
