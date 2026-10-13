@@ -236,7 +236,7 @@ const BANNER_PLACEMENTS: BannerPlacement[] = ["home_top", "home_middle", "popup"
 export const FEATURE_REGISTRY: FeatureDefinition[] = [
   // Care & Insights
   { key: "predictions", title: "Predictions", description: "Cycle forecasts & trends", icon: "trending-up-outline", route: "/(app)/predictions", placement: "care_hub", size: "small", colorKey: "primary" },
-  { key: "insights", title: "Daily Insights", description: "Mood, hormone & energy", icon: "sparkles-outline", route: "/(app)/insights", placement: "care_hub", size: "small", colorKey: "secondary" },
+  { key: "insights", title: "Daily Insights", description: "Mood, hormone & energy", icon: "bulb-outline", route: "/(app)/insights", placement: "care_hub", size: "small", colorKey: "secondary" },
   { key: "symptomTrends", title: "Symptom Trends", description: "Likely by cycle phase", icon: "pulse-outline", route: "/(app)/symptom-predictions", placement: "care_hub", size: "small", colorKey: "accent" },
   { key: "symptomChecker", title: "Symptom Checker", description: "PCOS, thyroid & more", icon: "clipboard-outline", route: "/(app)/symptom-checker", placement: "care_hub", size: "small", colorKey: "info" },
   { key: "graphsReports", title: "Graphs & Reports", description: "Cycle history at a glance", icon: "bar-chart-outline", route: "/(app)/graphs-reports", placement: "care_hub", size: "small", colorKey: "gold" },
@@ -254,11 +254,11 @@ export const FEATURE_REGISTRY: FeatureDefinition[] = [
   { key: "forest", title: "Forest", description: "Grow your wellness tree", icon: "leaf-outline", route: "/(app)/forest", placement: "explore_hub", size: "small", colorKey: "success" },
   { key: "blogs", title: "Blogs", description: "Articles on cycle health", icon: "book-outline", route: "/(app)/blogs", placement: "explore_hub", size: "small", colorKey: "info" },
   { key: "videos", title: "Videos", description: "Short videos and reels", icon: "play-circle-outline", route: "/(app)/reels", placement: "explore_hub", size: "small", colorKey: "primary" },
-  { key: "partnerSync", title: "Partner Sync", description: "Share cycle info & chat", icon: "git-merge-outline", route: "/(app)/partner", placement: "explore_hub", size: "small", colorKey: "accent" },
-  { key: "habits", title: "Habits", description: "Daily habit tracking", icon: "checkmark-done-outline", route: "/(app)/habits", placement: "explore_hub", size: "small", colorKey: "warning" },
-  { key: "buddyNomination", title: "Nominate Buddy", description: "Anonymous peer support", icon: "star-outline", route: "/(app)/buddy-nomination", placement: "explore_hub", size: "small", colorKey: "secondary" },
+  { key: "partnerSync", title: "Partner Sync", description: "Share cycle info & chat", icon: "heart-half-outline", route: "/(app)/partner", placement: "explore_hub", size: "small", colorKey: "accent" },
+  { key: "habits", title: "Habits", description: "Daily habit tracking", icon: "checkmark-circle-outline", route: "/(app)/habits", placement: "explore_hub", size: "small", colorKey: "warning" },
+  { key: "buddyNomination", title: "Nominate Buddy", description: "Anonymous peer support", icon: "person-add-outline", route: "/(app)/buddy-nomination", placement: "explore_hub", size: "small", colorKey: "secondary" },
   // Gen Z pack — Home's Shortcuts block by default
-  { key: "wrapped", title: "Cycle Wrapped", description: "Your month, story-style", icon: "sparkles", route: "/(app)/wrapped", placement: "home", size: "small", colorKey: "rose" },
+  { key: "wrapped", title: "Cycle Wrapped", description: "Your month, story-style", icon: "albums-outline", route: "/(app)/wrapped", placement: "home", size: "small", colorKey: "rose" },
   { key: "cycleEra", title: "Your Era", description: "Phase vibes & cycle syncing", icon: "planet-outline", route: "/(app)/era", placement: "home", size: "small", colorKey: "lavender" },
   { key: "badges", title: "Streaks & Badges", description: "Collect them all", icon: "trophy-outline", route: "/(app)/badges", placement: "home", size: "small", colorKey: "gold" },
   { key: "circles", title: "Bestie Circles", description: "Your squad, your vibes", icon: "people-circle-outline", route: "/(app)/circles", placement: "home", size: "small", colorKey: "mint" },

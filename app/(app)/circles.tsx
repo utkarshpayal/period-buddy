@@ -38,8 +38,8 @@ import { shareWithAppLink } from "../../lib/share";
  * per item), sheets for anything that needs a form.
  */
 
-const CIRCLE_EMOJIS = ["🫶", "💅", "🌸", "🔥", "👯", "🦋", "🍓", "🌙", "✨", "🧸"];
-const VIBE_EMOJIS = ["😴", "🍫", "💅", "🔥", "🥺", "😤", "🫶", "✨", "🩸", "🌙", "🤯", "🥳"];
+const CIRCLE_EMOJIS = ["🫶", "💅", "🌸", "🔥", "👯", "🦋", "🍓", "🌙", "🌷", "🧸"];
+const VIBE_EMOJIS = ["😴", "🍫", "💅", "🔥", "🥺", "😤", "🫶", "💖", "🩸", "🌙", "🤯", "🥳"];
 
 const SIDE = 20;
 
@@ -705,7 +705,7 @@ function CircleView({ id }: { id: string }) {
               ))
             ) : (
               <View className="items-center px-10" style={{ paddingTop: 36 }}>
-                <Text style={{ fontSize: 30 }}>✨</Text>
+                <Text style={{ fontSize: 30 }}>💬</Text>
                 <Text style={{ color: colors.foreground, fontSize: 15, fontFamily: fonts.body, fontWeight: "700", marginTop: 8 }}>Quiet in here</Text>
                 <Text style={{ color: colors.mutedText, fontSize: 13.5, fontFamily: fonts.body, marginTop: 4, textAlign: "center" }}>
                   Share the first vibe and get the conversation going.

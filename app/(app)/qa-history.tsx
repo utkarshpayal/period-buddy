@@ -216,7 +216,7 @@ export default function NuraAiHome() {
           </View>
         ) : sessions?.length ? (
           <>
-            <SectionHeader title="Recent chats" barColor={colors.secondary} style={{ marginTop: 28 }} />
+            <SectionHeader title="Recent chats" style={{ marginTop: 28 }} />
             <View style={{ borderRadius: 20, backgroundColor: colors.surface, overflow: "hidden" }}>
               {sessions.map((session, index) => {
                 const topic = getChatTopic(session.topicId);

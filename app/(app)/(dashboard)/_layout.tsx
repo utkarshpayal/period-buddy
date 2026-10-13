@@ -1,15 +1,10 @@
 import { Tabs, useRouter } from "expo-router";
 import React, { useCallback, useRef, useState, useEffect } from "react";
-import {
-  Image,
-  StyleSheet,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { StyleSheet, TouchableOpacity } from "react-native";
 import { requestRecordingPermissionsAsync } from "expo-audio";
 import { useTheme } from "../../../components/theme";
 import { genZLabel, useGenZMode } from "../../../components/genz-mode";
-import { TabBarItem } from "../../../components/TabBarItem";
+import { CenterAvatarTabIcon, TabBarItem } from "../../../components/TabBarItem";
 
 import { useAuth } from "../../../components/auth-context";
 import { OnboardingFlow, type OnboardingValues } from "../../../components/onboarding/OnboardingFlow";
@@ -19,20 +14,15 @@ import { showPermissionModal } from "../../../lib/modal-host";
 import { useRealtimeSocket, type RealtimeMessage } from "../../../hooks/useRealtimeSocket";
 import { authApi } from "../../../lib/api";
 
-const CENTER_AVATAR_SOURCE = require("../../../assets/images/illustrations/nura-avatar.png");
 
-// Center avatar tab: a full circular avatar floats above the tab bar,
-// overlapping its bottom edge slightly (tabBarStyle has overflow: "visible").
-const AVATAR_SIZE = 76;
-const AVATAR_WRAP_SIZE = 100;
-const AVATAR_WRAP_TOP = -54;
 
 type DashboardTab = {
   name: string;
   label: string;
   iconFocused?: string;
   iconUnfocused?: string;
-  image?: any;
+  /** The raised voice-assistant avatar instead of an icon. */
+  center?: boolean;
 };
 
 const DASHBOARD_TABS: DashboardTab[] = [
@@ -51,7 +41,7 @@ const DASHBOARD_TABS: DashboardTab[] = [
   {
     name: "ai-chat",
     label: "AI Chat",
-    image: CENTER_AVATAR_SOURCE,
+    center: true,
   },
   {
     name: "community",
@@ -67,29 +57,7 @@ const DASHBOARD_TABS: DashboardTab[] = [
   },
 ];
 
-function CenterAvatarTabIcon({ image }: { image: any }) {
-  return (
-    <View style={styles.avatarWrap} pointerEvents="none">
-      <Image source={image} style={styles.avatarImage} resizeMode="contain" />
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  avatarWrap: {
-    position: "absolute",
-    top: AVATAR_WRAP_TOP,
-    width: AVATAR_WRAP_SIZE,
-    height: AVATAR_WRAP_SIZE,
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 10,
-    elevation: 10,
-  },
-  avatarImage: {
-    width: AVATAR_SIZE,
-    height: AVATAR_SIZE,
-  },
   tabButton: {
     flex: 1,
     alignItems: "center",
@@ -235,7 +203,7 @@ export default function DashboardLayout() {
           elevation: 22,
           shadowColor: isDark ? "#000000" : colors.shadow,
           shadowOffset: { width: 0, height: -6 },
-          shadowOpacity: isDark ? 0.45 : 0.12,
+          shadowOpacity: isDark ? 0.45 : 0.08,
           shadowRadius: 20,
         },
         tabBarItemStyle: { height: 48 },
@@ -300,8 +268,8 @@ export default function DashboardLayout() {
               );
             },
             tabBarIcon: ({ focused }) =>
-              tab.image ? (
-                <CenterAvatarTabIcon image={tab.image} />
+              tab.center ? (
+                <CenterAvatarTabIcon />
               ) : (
                 <TabBarItem
                   focused={focused}

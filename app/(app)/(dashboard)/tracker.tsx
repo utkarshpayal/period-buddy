@@ -1,4 +1,4 @@
-import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -16,12 +16,14 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop } from "react-native-svg";
+import Svg, { Circle } from "react-native-svg";
 import type { DayEntry as LocalDayEntry } from "../../../components/AppState";
 import { useAppState } from "../../../components/AppState";
 import { useAuth } from "../../../components/auth-context";
 import DayDetailsModal from "../../../components/DayDetailsModal";
 import { useDataRefresh } from "../../../hooks/useDataRefresh";
+import { useQuickLog } from "../../../hooks/useQuickLog";
+import { useTodayKey } from "../../../hooks/useTodayKey";
 import { useTheme } from "../../../components/theme";
 import { getShadow, getSoftTints } from "../../../components/ui-tokens";
 import {
@@ -33,7 +35,8 @@ import {
   type Predictions,
 } from "../../../lib/api";
 import { getCyclePhase, type CyclePhase } from "../../../lib/cycle";
-import { getDateKey, getMonthKey } from "../../../lib/format";
+import { isLogFocus, type LogFocus } from "../../../lib/logFocus";
+import { dateFromDayKey, getDateKey, getMonthKey } from "../../../lib/format";
 import { HeaderIconButton, TabHeader } from "../../../components/ScreenHeader";
 import { MonthCalendar } from "../../../components/onboarding/parts";
 import { SkeletonBlock } from "../../../components/Skeleton";
@@ -130,7 +133,9 @@ function getMondayFirstWeekday(date: Date) {
 
 function formatSettingsDate(value?: string) {
   if (!value) return getDateKey(new Date());
-  const parsedDate = new Date(value);
+  // A stored day ("…T00:00:00.000Z") is that calendar day; going through
+  // new Date() would shift it back a day west of UTC on every save.
+  const parsedDate = dateFromDayKey(value);
   if (Number.isNaN(parsedDate.getTime())) return value.slice(0, 10);
   return getDateKey(parsedDate);
 }
@@ -303,10 +308,11 @@ function TrackerBodySkeleton() {
   );
 }
 
-const RING_SIZE = 200;
+const RING_SIZE = 196;
 const daysLabel = (n: number) => `${n} ${n === 1 ? "day" : "days"}`;
-const RING_RADIUS = 44;
-const RING_STROKE_WIDTH = 9;
+// In the 100×100 viewBox the ring is drawn in.
+const RING_RADIUS = 43;
+const RING_STROKE_WIDTH = 7;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
 /** Read-only ring showing where today sits in the current cycle. */
@@ -316,6 +322,7 @@ function CycleRing({
   ovulationDayPivot,
   cycleDay,
   nextPeriodDaysAway,
+  nextPeriodDate,
   fertilityReliable,
 }: {
   activeCycleLength: number;
@@ -323,29 +330,29 @@ function CycleRing({
   ovulationDayPivot: number;
   cycleDay: number;
   nextPeriodDaysAway: number;
+  /** Already formatted ("Nov 10"), or undefined before predictions load. */
+  nextPeriodDate?: string;
   /** False when cycles are too irregular for a calendar-based fertile window. */
   fertilityReliable: boolean;
 }) {
-  const { colors, isDark, fonts } = useTheme();
+  const { colors, fonts } = useTheme();
   const displayDay = cycleDay;
   const displayPhase = getCyclePhase(
     displayDay,
     activePeriodLength,
     activeCycleLength,
   );
-  // The progress arc is a clean single-hue gradient tinted by the current
-  // cycle phase (light → full via stopOpacity), so it reads as one cohesive
-  // color instead of the muddy pink→lavender→mint hero mix it used before.
+  // Progress arc in the current phase's colour, solid.
   const ringColor = {
-    period: colors.rose,
-    follicular: colors.accent,
+    period: colors.primary,
+    follicular: colors.accentText,
     ovulation: colors.secondary,
     luteal: colors.warning,
   }[displayPhase];
   // Text-safe version of the phase colour (mint and lavender are too pale
   // to read as text on a light surface).
   const labelColor = {
-    period: colors.rose,
+    period: colors.primaryDark,
     follicular: colors.accentText,
     ovulation: colors.info,
     luteal: colors.warning,
@@ -357,10 +364,15 @@ function CycleRing({
     (displayPhase === "ovulation" ||
       (displayDay >= ovulationDayPivot - 5 && displayDay <= ovulationDayPivot));
 
-  const handleFraction = displayDay / activeCycleLength;
+  const handleFraction = Math.min(displayDay / activeCycleLength, 1);
   const handleAngleRad = (handleFraction * 360 - 90) * (Math.PI / 180);
-  const handleLeft = (50 + RING_RADIUS * Math.cos(handleAngleRad)) * 2;
-  const handleTop = (50 + RING_RADIUS * Math.sin(handleAngleRad)) * 2;
+  const scale = RING_SIZE / 100;
+  const handleLeft = (50 + RING_RADIUS * Math.cos(handleAngleRad)) * scale;
+  const handleTop = (50 + RING_RADIUS * Math.sin(handleAngleRad)) * scale;
+  // The estimated fertile window (5 days before ovulation through the day
+  // after) as a soft lavender band on the track.
+  const fertileStart = (ovulationDayPivot - 6) / activeCycleLength;
+  const fertileLength = (7 / activeCycleLength) * RING_CIRCUMFERENCE;
 
   return (
     <View
@@ -369,26 +381,26 @@ function CycleRing({
       style={{ position: "relative", width: RING_SIZE, height: RING_SIZE }}
     >
       <Svg width={RING_SIZE} height={RING_SIZE} viewBox="0 0 100 100">
-        <Defs>
-          <SvgGradient id="cycleRingGradient" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0" stopColor={ringColor} stopOpacity={0.5} />
-            <Stop offset="1" stopColor={ringColor} stopOpacity={1} />
-          </SvgGradient>
-        </Defs>
+        <Circle cx="50" cy="50" r={RING_RADIUS} fill="none" stroke={colors.primaryLight} strokeWidth={RING_STROKE_WIDTH} />
+        {fertilityReliable ? (
+          <Circle
+            cx="50"
+            cy="50"
+            r={RING_RADIUS}
+            fill="none"
+            stroke={colors.secondaryLight}
+            strokeWidth={RING_STROKE_WIDTH}
+            strokeDasharray={`${fertileLength} ${RING_CIRCUMFERENCE}`}
+            strokeDashoffset={-fertileStart * RING_CIRCUMFERENCE}
+            transform="rotate(-90 50 50)"
+          />
+        ) : null}
         <Circle
           cx="50"
           cy="50"
           r={RING_RADIUS}
           fill="none"
-          stroke={colors.surfaceStrong}
-          strokeWidth={RING_STROKE_WIDTH}
-        />
-        <Circle
-          cx="50"
-          cy="50"
-          r={RING_RADIUS}
-          fill="none"
-          stroke="url(#cycleRingGradient)"
+          stroke={ringColor}
           strokeWidth={RING_STROKE_WIDTH}
           strokeLinecap="round"
           strokeDasharray={`${handleFraction * RING_CIRCUMFERENCE} ${RING_CIRCUMFERENCE}`}
@@ -401,15 +413,14 @@ function CycleRing({
         pointerEvents="none"
         style={{
           position: "absolute",
-          left: handleLeft - 11,
-          top: handleTop - 11,
-          width: 22,
-          height: 22,
-          borderRadius: 11,
-          backgroundColor: colors.primary,
-          borderWidth: 3,
-          borderColor: colors.buttonText,
-          ...getShadow(colors, isDark),
+          left: handleLeft - 10,
+          top: handleTop - 10,
+          width: 20,
+          height: 20,
+          borderRadius: 10,
+          backgroundColor: colors.surface,
+          borderWidth: 4,
+          borderColor: ringColor,
         }}
       />
 
@@ -424,12 +435,12 @@ function CycleRing({
           justifyContent: "center",
           alignItems: "center",
           paddingHorizontal: 28,
-          paddingVertical: 20,
+          gap: 2,
         }}
       >
         <Text
           numberOfLines={1}
-          style={{ color: labelColor, fontSize: 11.5, fontWeight: "800", letterSpacing: 0.8, fontFamily: fonts.body }}
+          style={{ color: labelColor, fontSize: 12, lineHeight: 16, fontWeight: "700", letterSpacing: 1.2, fontFamily: fonts.body }}
         >
           {displayPhase === "period"
             ? "PERIOD"
@@ -443,7 +454,7 @@ function CycleRing({
           numberOfLines={1}
           adjustsFontSizeToFit
           minimumFontScale={0.75}
-          style={{ color: colors.foreground, fontSize: 32, lineHeight: 38, fontWeight: "800", fontFamily: fonts.heading, marginTop: 2 }}
+          style={{ color: colors.foreground, fontSize: 36, lineHeight: 44, fontWeight: "700", letterSpacing: -0.5, fontFamily: fonts.heading }}
         >
           {displayPhase === "period"
             ? `Day ${displayDay}`
@@ -456,11 +467,12 @@ function CycleRing({
                   : daysLabel(nextPeriodDaysAway)}
         </Text>
         {isHighFertility ? (
-          <Text
-            numberOfLines={1}
-            style={{ color: colors.success, fontSize: 12.5, fontWeight: "700", fontFamily: fonts.body, marginTop: 4 }}
-          >
+          <Text numberOfLines={1} style={{ color: colors.success, fontSize: 12, lineHeight: 16, fontWeight: "700", fontFamily: fonts.body }}>
             High fertility
+          </Text>
+        ) : nextPeriodDate && displayPhase === "period" ? (
+          <Text numberOfLines={1} style={{ color: colors.mutedText, fontSize: 12, lineHeight: 16, fontFamily: fonts.body }}>
+            {`Next period ${nextPeriodDate}`}
           </Text>
         ) : null}
       </View>
@@ -471,6 +483,13 @@ function CycleRing({
 export default function Tracker() {
   useSecureScreen("tracker");
   const insets = useSafeAreaInsets();
+  // "Log period" logs today in one tap, "Symptoms" opens the small sheet
+  // (same as Home); "All details" in the sheet opens today's full log here,
+  // once the sheet has closed (useQuickLog).
+  const quickLog = useQuickLog({
+    toastBottom: 62 + Math.max(insets.bottom, 12) + 14,
+    openFullLog: (focus) => openToday(focus),
+  });
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
   // Home's "Symptoms"/"Mood" quick actions deep-link here with ?log=today to
@@ -480,16 +499,11 @@ export default function Tracker() {
     focus?: string;
   }>();
   // Which day-log section Home's quick action wants us to jump to.
-  const focusSection =
-    focusParam === "flow" || focusParam === "symptoms" || focusParam === "mood"
-      ? focusParam
-      : undefined;
+  const focusSection = isLogFocus(focusParam) ? focusParam : undefined;
   const [selectedDate, setSelectedDate] = useState<SelectedDate | null>(null);
   const [dayDetailsVisible, setDayDetailsVisible] = useState(false);
   // Section the day-log modal should scroll to when opened via a quick action.
-  const [modalFocusSection, setModalFocusSection] = useState<
-    "flow" | "symptoms" | "mood" | undefined
-  >(undefined);
+  const [modalFocusSection, setModalFocusSection] = useState<LogFocus | undefined>(undefined);
   const [selectedYear, setSelectedYear] = useState(() =>
     new Date().getFullYear(),
   );
@@ -581,14 +595,14 @@ export default function Tracker() {
   // settings date only until predictions load / when there's no history.
   const cycleStartDate = useMemo(() => {
     if (predictions?.currentPeriodStartDateISO) {
-      return new Date(predictions.currentPeriodStartDateISO);
+      return dateFromDayKey(predictions.currentPeriodStartDateISO);
     }
     if (cycleSettings?.lastPeriodStartDate) {
-      return new Date(cycleSettings.lastPeriodStartDate);
+      return dateFromDayKey(cycleSettings.lastPeriodStartDate);
     }
     return addDays(new Date(), -(CURRENT_CYCLE_DAY - 1));
   }, [predictions, cycleSettings]);
-  const todayKey = getDateKey(new Date());
+  const todayKey = useTodayKey();
 
   const calendarMonths = useMemo(
     () =>
@@ -628,10 +642,10 @@ export default function Tracker() {
     const actualStartISO = predictions?.actualPeriodStartISO;
     const actualEndISO = predictions?.actualPeriodEndISO;
     if (!startISO || !actualStartISO || !actualEndISO) return null;
-    const start = startOfDay(new Date(startISO));
+    const start = dateFromDayKey(startISO);
     const windowEnd = addDays(start, activePeriodLength - 1);
-    const actualStart = startOfDay(new Date(actualStartISO));
-    const actualEnd = startOfDay(new Date(actualEndISO));
+    const actualStart = dateFromDayKey(actualStartISO);
+    const actualEnd = dateFromDayKey(actualEndISO);
     if (actualStart < start || actualStart > windowEnd) return null; // stale/projected
     return { start, windowEnd, actualEnd };
   }, [predictions, activePeriodLength]);
@@ -806,6 +820,13 @@ export default function Tracker() {
   function jumpToToday() {
     setSelectedYear(today.getFullYear());
     setSelectedMonthIndex(today.getMonth());
+  }
+
+  function shiftMonth(delta: -1 | 1) {
+    const target = PAGER_MONTHS[pagerIndexOf(selectedYear, selectedMonthIndex) + delta];
+    if (!target) return;
+    setSelectedYear(target.getFullYear());
+    setSelectedMonthIndex(target.getMonth());
   }
 
   function mapApiDayEntry(log: ApiDayEntry): LocalDayEntry {
@@ -1003,7 +1024,7 @@ export default function Tracker() {
     [calendarWidth, buildCalendarDays, renderCalendarDay],
   );
 
-  function openToday(focus?: "flow" | "symptoms" | "mood") {
+  function openToday(focus?: LogFocus) {
     setModalFocusSection(focus);
     const today = new Date();
     setSelectedYear(today.getFullYear());
@@ -1149,50 +1170,67 @@ export default function Tracker() {
             <>
             {/* Today · Cycle day N — surface card framing the ring */}
             <View
-              className="mx-6 mt-4 items-center rounded-3xl px-5 pb-6 pt-5"
+              className="mx-6 mt-4 items-center"
               style={{
                 backgroundColor: colors.surface,
+                borderRadius: 24,
+                padding: 20,
+                gap: 18,
                 ...getShadow(colors, isDark),
               }}
             >
-              <Text style={{ color: colors.mutedText, fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}>
-                {`Today · Cycle day ${cycleDay}`}
+              <Text style={{ color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "500", fontFamily: fonts.body }}>
+                {`Today · Cycle day ${cycleDay} of ${activeCycleLength}`}
               </Text>
 
-              <View className="items-center justify-center mt-3">
+              <View className="items-center justify-center">
                 <CycleRing
                   activeCycleLength={activeCycleLength}
                   activePeriodLength={activePeriodLength}
                   ovulationDayPivot={ovulationDayPivot}
                   cycleDay={cycleDay}
                   nextPeriodDaysAway={nextPeriodDaysAway}
+                  nextPeriodDate={predictions?.nextPeriodDate}
                   fertilityReliable={predictions?.ovulationReliable !== false}
                 />
               </View>
 
               {/* "Log period" / "Symptoms" quick-entry buttons */}
-              <View className="mt-5 w-full flex-row gap-3">
+              <View className="w-full flex-row" style={{ gap: 10 }}>
                 <TouchableOpacity
                   activeOpacity={0.85}
-                  onPress={() => openToday("flow")}
-                  className="flex-1 flex-row items-center justify-center gap-2 rounded-2xl py-3.5"
-                  style={{ backgroundColor: colors.primary }}
+                  onPress={() => void quickLog.logPeriodNow()}
+                  accessibilityRole="button"
+                  accessibilityLabel={quickLog.periodLoggedToday ? "Period logged today. Change flow" : "Log period for today"}
+                  className="flex-1 flex-row items-center justify-center"
+                  style={{
+                    height: 48,
+                    borderRadius: 16,
+                    gap: 8,
+                    backgroundColor: colors.primary,
+                    shadowColor: colors.primary,
+                    shadowOffset: { width: 0, height: 6 },
+                    shadowOpacity: 0.28,
+                    shadowRadius: 14,
+                    elevation: 4,
+                  }}
                 >
-                  <Feather name="plus" size={15} color={colors.buttonText} />
-                  <Text className="text-sm font-extrabold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-                    Log period
+                  <Feather name={quickLog.periodLoggedToday ? "check" : "plus"} size={18} color={colors.buttonText} />
+                  <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={{ fontSize: 14, fontWeight: "700", color: colors.buttonText, fontFamily: fonts.body }}>
+                    {quickLog.periodLoggedToday ? "Period logged" : "Log period"}
                   </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   activeOpacity={0.85}
-                  onPress={() => openToday("symptoms")}
-                  className="flex-1 flex-row items-center justify-center gap-2 rounded-2xl border py-3.5"
-                  style={{ backgroundColor: "transparent", borderColor: colors.border }}
+                  onPress={() => void quickLog.openSheet("symptoms")}
+                  accessibilityRole="button"
+                  className="flex-1 flex-row items-center justify-center border"
+                  style={{ height: 48, borderRadius: 16, gap: 8, backgroundColor: colors.surface, borderColor: colors.border }}
                 >
-                  <Feather name="edit-3" size={15} color={colors.foreground} />
-                  <Text className="text-sm font-extrabold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
-                    Symptoms
+                  <Feather name="activity" size={18} color={colors.primary} />
+                  <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={{ fontSize: 14, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>
+                    Log symptoms
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1200,10 +1238,10 @@ export default function Tracker() {
 
             {/* Calendar — one month at a time, swiped horizontally. */}
             <View
-              className="mx-6 mt-4 rounded-3xl"
-              style={{ backgroundColor: colors.surface, paddingTop: 18, paddingBottom: 14, ...getShadow(colors, isDark) }}
+              className="mx-6 mt-4"
+              style={{ backgroundColor: colors.surface, borderRadius: 24, paddingTop: 20, paddingBottom: 14, ...getShadow(colors, isDark) }}
             >
-              <View className="flex-row items-center px-5">
+              <View className="flex-row items-center px-5" style={{ gap: 8 }}>
                 <TouchableOpacity
                   activeOpacity={0.7}
                   onPress={() => router.push({ pathname: "/(app)/calendar", params: { month: calendarMonthParam } })}
@@ -1216,10 +1254,10 @@ export default function Tracker() {
                     numberOfLines={1}
                     adjustsFontSizeToFit
                     minimumFontScale={0.85}
-                    style={{ flexShrink: 1, color: colors.foreground, fontSize: 18, fontWeight: "800", fontFamily: fonts.heading }}
+                    style={{ flexShrink: 1, color: colors.foreground, fontSize: 17, lineHeight: 24, fontWeight: "700", fontFamily: fonts.heading }}
                   >
                     {MONTH_NAMES[selectedMonthIndex]}
-                    <Text style={{ color: colors.mutedText, fontWeight: "600" }}>{` ${selectedYear}`}</Text>
+                    <Text style={{ color: colors.mutedText, fontWeight: "400" }}>{` ${selectedYear}`}</Text>
                   </Text>
                   <MaterialCommunityIcons name="calendar-month-outline" size={16} color={colors.mutedText} />
                 </TouchableOpacity>
@@ -1237,6 +1275,20 @@ export default function Tracker() {
                     <MaterialCommunityIcons name="calendar-today" size={16} color={colors.primary} />
                   </TouchableOpacity>
                 )}
+                {([-1, 1] as const).map((delta) => (
+                  <TouchableOpacity
+                    key={delta}
+                    activeOpacity={0.7}
+                    onPress={() => shiftMonth(delta)}
+                    accessibilityRole="button"
+                    accessibilityLabel={delta < 0 ? "Previous month" : "Next month"}
+                    hitSlop={6}
+                    className="items-center justify-center rounded-full border"
+                    style={{ width: 32, height: 32, borderColor: colors.border, backgroundColor: colors.surface }}
+                  >
+                    <Ionicons name={delta < 0 ? "chevron-back" : "chevron-forward"} size={16} color={colors.foreground} />
+                  </TouchableOpacity>
+                ))}
               </View>
 
               <View className="px-5 mt-3">{phaseLegendRow}</View>
@@ -2102,6 +2154,7 @@ export default function Tracker() {
           }
         }}
       />
+      {quickLog.overlays}
     </>
   );
 }

@@ -11,7 +11,7 @@ import { PaymentTrustFooter } from "./PaymentTrustFooter";
 import { PurchaseConfirmSheet } from "./PurchaseConfirmSheet";
 import { PurchaseResultPanel } from "./PurchaseResultPanel";
 import { CashfreeCheckoutModal } from "../CashfreeCheckoutModal";
-import { CashfreeUpiCollectModal } from "../CashfreeUpiCollectModal";
+import { PaymentSheet } from "../PaymentSheet";
 import { usePaymentCheckout } from "../../hooks/usePaymentCheckout";
 import {
   getFriendlyErrorMessage,
@@ -71,6 +71,7 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
   const {
     purchasingKey,
     checkout,
+    checkoutTitle,
     useHostedCheckout,
     setUseHostedCheckout,
     purchaseResult,
@@ -165,11 +166,11 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
     setCouponError(null);
   };
 
-  async function handleConfirmPurchase(preferUpiCollect: boolean) {
+  async function handleConfirmPurchase() {
     if (!confirmTarget) return;
     await startPurchase(confirmTarget.key, confirmTarget.payload, {
       couponCode: confirmTarget.couponPreview ? couponCode.trim() : undefined,
-      preferUpiCollect,
+      title: confirmTarget.label,
     });
     setConfirmTarget(null);
   }
@@ -414,15 +415,16 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
       {/* checkout is only ever set from the non-free branch of startPurchase,
           which never reaches setCheckout without a real Cashfree order — so
           orderId/paymentSessionId (optional on SubscriptionOrder because a
-          free order has neither) are always present here. Hosted checkout
-          (cards/UPI apps/netbanking/wallets) is the default; native UPI-ID
-          collect only opens when the confirm sheet's "pay with a UPI ID"
-          link was used. */}
+          free order has neither) are always present here. PaymentSheet
+          (UPI apps, UPI ID) is the default; its "Card, netbanking or wallet"
+          option switches to Cashfree's hosted checkout. */}
       {checkout && checkout.orderId && checkout.paymentSessionId && !useHostedCheckout && (
-        <CashfreeUpiCollectModal
+        <PaymentSheet
           visible
           mode={checkout.cashfreeMode ?? "production"}
           paymentSessionId={checkout.paymentSessionId}
+          amount={checkout.amount}
+          title={checkoutTitle}
           onVerify={() => verifyUpiOnce(checkout.orderId!)}
           onOutcome={handleUpiOutcome}
           onUseOtherMethod={() => setUseHostedCheckout(true)}

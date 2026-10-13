@@ -32,7 +32,7 @@ export const MOOD_DISPLAY: Record<string, { label: string; emoji: string }> = {
 };
 
 export const moodDisplay = (value: string) =>
-  MOOD_DISPLAY[value] ?? { label: prettifyTag(value), emoji: "✨" };
+  MOOD_DISPLAY[value] ?? { label: prettifyTag(value), emoji: "🙂" };
 
 /** "lower_back_pain" / "lowerBackPain" → "Lower back pain". */
 export function prettifyTag(value: string) {

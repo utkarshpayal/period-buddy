@@ -608,7 +608,7 @@ export default function DocumentsScreen() {
                 className="w-9 h-9 rounded-full items-center justify-center mb-2"
                 style={{ backgroundColor: softTints.pink }}
               >
-                <Ionicons name="sparkles-outline" size={16} color={colors.primary} />
+                <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.primary} />
               </View>
               <Text
                 className="text-xs font-bold"

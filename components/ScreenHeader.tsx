@@ -6,13 +6,13 @@ import { useTheme } from "./theme";
 import { getShadow } from "./ui-tokens";
 
 // Shared page chrome. Everything here copies Home's header (dashboard
-// home.tsx): 24px gutter, 38px round surface buttons with the soft shadow,
-// Manrope 800 titles. Use these instead of hand-rolling a header per screen,
+// home.tsx): 24px gutter, 44px round surface buttons with the soft shadow,
+// Manrope 700 titles. Use these instead of hand-rolling a header per screen,
 // so every page reads as the same app.
 
 type IconName = React.ComponentProps<typeof Ionicons>["name"];
 
-/** 38px round action button, same as Home's notification bell. */
+/** 44px round action button, same as Home's notification bell. */
 export function HeaderIconButton({
   icon,
   onPress,
@@ -40,9 +40,9 @@ export function HeaderIconButton({
       accessibilityState={{ disabled: Boolean(disabled) }}
       hitSlop={6}
       style={{
-        width: 38,
-        height: 38,
-        borderRadius: 19,
+        width: 44,
+        height: 44,
+        borderRadius: 22,
         alignItems: "center",
         justifyContent: "center",
         backgroundColor: active ? colors.primaryLight : colors.surface,
@@ -50,7 +50,7 @@ export function HeaderIconButton({
         ...getShadow(colors, isDark),
       }}
     >
-      <Ionicons name={icon} size={18} color={color ?? (active ? colors.primary : colors.foreground)} />
+      <Ionicons name={icon} size={20} color={color ?? (active ? colors.primary : colors.foreground)} />
     </TouchableOpacity>
   );
 }
@@ -59,24 +59,27 @@ export function HeaderIconButton({
 export function ScreenHeader({
   title,
   subtitle,
+  subtitleLines = 1,
   onBack,
   right,
 }: {
   title: string;
   subtitle?: string;
+  /** 2 for text someone else writes (a CMS intro), so it isn't cut off mid-sentence. */
+  subtitleLines?: 1 | 2;
   onBack?: () => void;
   right?: React.ReactNode;
 }) {
   const router = useRouter();
 
   return (
-    <View className="flex-row items-center px-6 pt-3 pb-2" style={{ gap: 12 }}>
+    <View className="flex-row items-center px-6 pt-3 pb-2" style={{ gap: 14 }}>
       <HeaderIconButton
         icon="chevron-back"
         accessibilityLabel="Go back"
         onPress={onBack ?? (() => (router.canGoBack() ? router.back() : router.replace("/")))}
       />
-      <HeaderTitle title={title} subtitle={subtitle} size={20} />
+      <HeaderTitle title={title} subtitle={subtitle} subtitleLines={subtitleLines} size={20} />
       {right ? <View className="flex-row items-center" style={{ gap: 8 }}>{right}</View> : null}
     </View>
   );
@@ -86,25 +89,35 @@ export function ScreenHeader({
 export function TabHeader({ title, subtitle, right }: { title: string; subtitle?: string; right?: React.ReactNode }) {
   return (
     <View className="flex-row items-center px-6 pt-3 pb-2" style={{ gap: 12 }}>
-      <HeaderTitle title={title} subtitle={subtitle} size={22} />
+      <HeaderTitle title={title} subtitle={subtitle} size={24} />
       {right ? <View className="flex-row items-center" style={{ gap: 8 }}>{right}</View> : null}
     </View>
   );
 }
 
-function HeaderTitle({ title, subtitle, size }: { title: string; subtitle?: string; size: number }) {
+function HeaderTitle({
+  title,
+  subtitle,
+  subtitleLines = 1,
+  size,
+}: {
+  title: string;
+  subtitle?: string;
+  subtitleLines?: 1 | 2;
+  size: number;
+}) {
   const { colors, fonts } = useTheme();
   return (
     <View className="flex-1">
       <Text
         accessibilityRole="header"
         numberOfLines={1}
-        style={{ color: colors.foreground, fontSize: size, fontWeight: "800", letterSpacing: -0.3, fontFamily: fonts.heading }}
+        style={{ color: colors.foreground, fontSize: size, lineHeight: size + 6, fontWeight: "700", letterSpacing: -0.2, fontFamily: fonts.heading }}
       >
         {title}
       </Text>
       {subtitle ? (
-        <Text numberOfLines={1} style={{ color: colors.mutedText, fontSize: 13, marginTop: 1, fontFamily: fonts.body }}>
+        <Text numberOfLines={subtitleLines} style={{ color: colors.mutedText, fontSize: 13, lineHeight: 18, fontFamily: fonts.body }}>
           {subtitle}
         </Text>
       ) : null}
@@ -112,37 +125,32 @@ function HeaderTitle({ title, subtitle, size }: { title: string; subtitle?: stri
   );
 }
 
-/** Home's section title: small colour bar, 14.5/800 title, optional link. */
+/** Home's section title: 17/700 heading, optional "See all"-style link. */
 export function SectionHeader({
   title,
-  barColor,
   actionLabel,
   onAction,
   style,
 }: {
   title: string;
-  barColor?: string;
   actionLabel?: string;
   onAction?: () => void;
   style?: StyleProp<ViewStyle>;
 }) {
   const { colors, fonts } = useTheme();
   return (
-    <View className="flex-row items-center justify-between" style={[{ marginBottom: 10 }, style]}>
-      <View className="flex-row items-center flex-1" style={{ gap: 7 }}>
-        <View style={{ width: 5, height: 14, borderRadius: 3, backgroundColor: barColor ?? colors.primary }} />
-        <Text
-          accessibilityRole="header"
-          numberOfLines={1}
-          style={{ flexShrink: 1, fontSize: 14.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}
-        >
-          {title}
-        </Text>
-      </View>
+    <View className="flex-row items-center justify-between" style={[{ marginBottom: 12, minHeight: 32 }, style]}>
+      <Text
+        accessibilityRole="header"
+        numberOfLines={1}
+        style={{ flexShrink: 1, fontSize: 17, lineHeight: 24, fontWeight: "700", color: colors.foreground, fontFamily: fonts.heading }}
+      >
+        {title}
+      </Text>
       {actionLabel && onAction ? (
         <TouchableOpacity activeOpacity={0.7} onPress={onAction} className="flex-row items-center" style={{ gap: 2 }} hitSlop={8}>
-          <Text style={{ fontSize: 12, fontWeight: "700", color: colors.primary, fontFamily: fonts.body }}>{actionLabel}</Text>
-          <Ionicons name="chevron-forward" size={13} color={colors.primary} />
+          <Text style={{ fontSize: 13, fontWeight: "600", color: colors.primaryDark, fontFamily: fonts.body }}>{actionLabel}</Text>
+          <Ionicons name="chevron-forward" size={16} color={colors.primaryDark} />
         </TouchableOpacity>
       ) : null}
     </View>

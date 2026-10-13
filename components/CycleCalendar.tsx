@@ -2,7 +2,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useMemo } from "react";
 import { Text, TouchableOpacity, View } from "react-native";
 import type { DayEntry as LocalDayEntry } from "./AppState";
-import { useTheme, type ThemeColors } from "./theme";
+import { useTheme } from "./theme";
 import { getSoftTints } from "./ui-tokens";
 import type { CyclePhase } from "../lib/cycle";
 import { MONTH_NAMES, WEEKDAY_LABELS, dayStatus, monthSlots, type CalendarModel, type DayStatus } from "../lib/cycleCalendar";
@@ -33,10 +33,6 @@ export function usePhasePalette(): PhasePalette {
   }, [colors]);
 }
 
-/** Fertile-window wash: translucent secondary when it's hex, else the theme's soft lavender. */
-export const fertileWash = (colors: ThemeColors) =>
-  /^#[0-9a-f]{6}$/i.test(colors.secondary) ? `${colors.secondary}24` : getSoftTints(colors).lavender;
-
 type Lookups = {
   model: CalendarModel;
   entryFor: (dateKey: string) => LocalDayEntry | undefined;
@@ -49,9 +45,11 @@ type Lookups = {
 /**
  * One day circle — the single day design for every calendar (Tracker pager,
  * Calendar screen month view). One visual signal per meaning:
- *   logged period → solid period colour · predicted period → dashed ring ·
- *   past period (not logged) → soft period tint · fertile → soft lavender ·
- *   ovulation → egg · today → primary ring · has a log → dot under the number.
+ *   today → foreground ring over its state fill · logged period → solid
+ *   period colour · predicted period → dashed ring · past period (not logged)
+ *   → soft period tint · fertile → soft lavender · ovulation → lavender ring
+ *   + egg · selected (not today) → primary ring · has a log → dot under the
+ *   number (logged period days too).
  */
 export function CalendarDayCell({
   s,
@@ -72,25 +70,36 @@ export function CalendarDayCell({
   const pastPeriod = isPeriod && !loggedPeriod && !s.isPredictedPeriod;
   const size = Math.min(40, height - 6);
 
-  const background = selected
-    ? colors.primary
-    : loggedPeriod
-      ? palette.period.color
-      : pastPeriod
-        ? palette.period.bg
-        : s.isFertile && !isPeriod
-          ? fertileWash(colors)
-          : "transparent";
-  const filled = selected || loggedPeriod;
-  const ring = s.isToday && !selected ? colors.primary : s.isPredictedPeriod && !selected ? palette.period.color : null;
+  const filled = loggedPeriod;
+  const fertile = s.isFertile && !isPeriod;
+  const background = loggedPeriod
+    ? palette.period.color
+    : pastPeriod
+      ? palette.period.bg
+      : fertile || s.isOvulation
+        ? colors.secondaryLight
+        : "transparent";
+  // Today keeps its state fill and gets a foreground ring, which reads
+  // against every fill in both themes (no pink-on-pink with period days).
+  const ring = s.isToday
+    ? { color: colors.foreground, width: 2, style: "solid" as const }
+    : filled
+      ? null
+      : selected
+        ? { color: colors.primary, width: 2, style: "solid" as const }
+        : s.isPredictedPeriod
+          ? { color: palette.period.color, width: 1.5, style: "dashed" as const }
+          : s.isOvulation
+            ? { color: colors.secondary, width: 1.5, style: "solid" as const }
+            : null;
   const textColor = filled
     ? colors.buttonText
-    : s.isToday
-      ? colors.primary
-      : isPeriod
-        ? palette.period.color
+    : isPeriod
+      ? colors.primaryDark
+      : fertile || s.isOvulation
+        ? colors.info
         : colors.foreground;
-  const showLogDot = s.isLogged && !loggedPeriod;
+  const showLogDot = s.isLogged;
   // Future days can't be logged, so they don't open the log modal.
   const isFuture = s.dateKey > getDateKey(new Date());
 
@@ -102,7 +111,7 @@ export function CalendarDayCell({
       accessibilityRole="button"
       accessibilityState={{ disabled: isFuture }}
       accessibilityLabel={`${s.date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}, ${palette[s.phase].label} phase${s.isToday ? ", today" : ""}${s.isLogged ? ", logged" : ""}${s.isPredictedPeriod ? ", predicted period" : ""}${s.isOvulation ? ", ovulation" : ""}`}
-      style={{ width: `${100 / 7}%`, height, alignItems: "center", justifyContent: "center", opacity: isFuture ? 0.55 : 1 }}
+      style={{ width: `${100 / 7}%`, height, alignItems: "center", justifyContent: "center", opacity: isFuture ? 0.7 : 1 }}
     >
       <View
         style={{
@@ -112,16 +121,16 @@ export function CalendarDayCell({
           alignItems: "center",
           justifyContent: "center",
           backgroundColor: background,
-          borderWidth: ring ? (s.isToday ? 2 : 1.5) : 0,
-          borderColor: ring ?? "transparent",
-          borderStyle: s.isPredictedPeriod && !s.isToday ? "dashed" : "solid",
+          borderWidth: ring?.width ?? 0,
+          borderColor: ring?.color ?? "transparent",
+          borderStyle: ring?.style ?? "solid",
         }}
       >
         <Text
           style={{
             color: textColor,
-            fontSize: 14.5,
-            fontWeight: s.isToday || filled || isPeriod || s.isLogged ? "800" : "500",
+            fontSize: 14,
+            fontWeight: filled || s.isToday || s.isLogged || s.isOvulation ? "700" : "500",
             fontFamily: fonts.body,
           }}
         >
@@ -144,7 +153,7 @@ export function CalendarDayCell({
             width: 5,
             height: 5,
             borderRadius: 3,
-            backgroundColor: selected ? colors.primary : colors.primaryDark,
+            backgroundColor: colors.primary,
           }}
         />
       ) : null}
@@ -152,46 +161,30 @@ export function CalendarDayCell({
   );
 }
 
-/** Legend for CalendarDayCell's signals; the same on every calendar. */
 /**
- * Key for the day cells: five equal columns, each a miniature of the real day
- * treatment with its label underneath. Fixed columns (not a wrapping row) so
- * it's always one tidy band, whatever the screen width or font scale.
+ * Key for the day cells: each signal as a small swatch with its label, in a
+ * row that wraps on narrow screens or large text.
  */
 export function CalendarLegend() {
   const { colors, fonts } = useTheme();
   const palette = usePhasePalette();
-  const chip = { width: 18, height: 18, borderRadius: 9, alignItems: "center", justifyContent: "center" } as const;
-  const item = (label: string, swatch: React.ReactNode) => (
-    <View key={label} style={{ flex: 1, alignItems: "center", gap: 5 }}>
-      {swatch}
-      <Text
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.85}
-        style={{ color: colors.mutedText, fontSize: 12, fontWeight: "600", fontFamily: fonts.body }}
-      >
+  const swatch = { width: 10, height: 10, borderRadius: 5 } as const;
+  const item = (label: string, mark: React.ReactNode) => (
+    <View key={label} style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+      {mark}
+      <Text maxFontSizeMultiplier={1.3} style={{ color: colors.mutedText, fontSize: 12, lineHeight: 16, fontFamily: fonts.body }}>
         {label}
       </Text>
     </View>
   );
   return (
-    <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
-      {item("Period", <View style={{ ...chip, backgroundColor: palette.period.color }} />)}
-      {item("Predicted", <View style={{ ...chip, borderWidth: 1.5, borderStyle: "dashed", borderColor: palette.period.color }} />)}
-      {item("Fertile", <View style={{ ...chip, backgroundColor: fertileWash(colors) }} />)}
-      {item(
-        "Ovulation",
-        <View style={chip}>
-          <MaterialCommunityIcons name="egg" size={14} color={palette.ovulation.color} />
-        </View>,
-      )}
-      {item(
-        "Logged",
-        <View style={{ ...chip, justifyContent: "flex-end", paddingBottom: 1 }}>
-          <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: colors.primaryDark }} />
-        </View>,
-      )}
+    <View style={{ flexDirection: "row", flexWrap: "wrap", rowGap: 8, columnGap: 14 }}>
+      {item("Today", <View style={{ ...swatch, borderWidth: 2, borderColor: colors.foreground }} />)}
+      {item("Period", <View style={{ ...swatch, backgroundColor: palette.period.color }} />)}
+      {item("Predicted", <View style={{ ...swatch, borderWidth: 1.5, borderStyle: "dashed", borderColor: palette.period.color }} />)}
+      {item("Fertile", <View style={{ ...swatch, backgroundColor: colors.secondaryLight, borderWidth: 1, borderColor: colors.secondary }} />)}
+      {item("Ovulation", <MaterialCommunityIcons name="egg" size={12} color={palette.ovulation.color} />)}
+      {item("Logged", <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: colors.primary }} />)}
     </View>
   );
 }
@@ -295,8 +288,9 @@ export const MiniMonth = React.memo(function MiniMonth({
           if (!date) return <View key={i} style={{ width: `${100 / 7}%`, height: MINI_CELL }} />;
           const s = dayStatus(date, model, entryFor, noteFor, todayKey);
           const loggedPeriod = s.phase === "period" && s.isLogged;
-          const bg = loggedPeriod ? palette.period.color : s.isFertile && s.phase !== "period" ? fertileWash(colors) : "transparent";
-          const ring = s.isToday ? colors.primary : s.isPredictedPeriod ? colors.rose : null;
+          // Same signals as CalendarDayCell, scaled down.
+          const bg = loggedPeriod ? palette.period.color : s.isFertile && s.phase !== "period" ? colors.secondaryLight : "transparent";
+          const ring = s.isToday ? colors.foreground : s.isPredictedPeriod ? palette.period.color : null;
           return (
             <View key={i} style={{ width: `${100 / 7}%`, height: MINI_CELL, alignItems: "center", justifyContent: "center" }}>
               <View
@@ -307,7 +301,7 @@ export const MiniMonth = React.memo(function MiniMonth({
                   alignItems: "center",
                   justifyContent: "center",
                   backgroundColor: bg,
-                  borderWidth: ring ? 1 : 0,
+                  borderWidth: ring ? (s.isToday ? 1.5 : 1) : 0,
                   borderColor: ring ?? "transparent",
                   borderStyle: s.isPredictedPeriod && !s.isToday ? "dashed" : "solid",
                 }}

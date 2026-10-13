@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle, Defs, LinearGradient as SvgGradient, Polyline, Stop } from "react-native-svg";
 import { useTheme } from "../../components/theme";
+import { ColumnLabel } from "../../components/ColumnLabel";
 import { SkeletonCard } from "../../components/Skeleton";
 import {
   getHeroGradient,
@@ -625,9 +626,7 @@ export default function Predictions() {
                     <Text className="mt-2 text-lg font-black" style={{ color: colors.foreground, fontFamily: fonts.mono }}>
                       {s.value}
                     </Text>
-                    <Text className="text-xs font-semibold mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                      {s.label}
-                    </Text>
+                    <ColumnLabel style={{ fontSize: 13, fontWeight: "600", marginTop: 2, color: colors.mutedText, fontFamily: fonts.body }}>{s.label}</ColumnLabel>
                   </View>
                 ))}
               </View>

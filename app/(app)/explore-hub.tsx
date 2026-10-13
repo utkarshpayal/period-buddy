@@ -12,7 +12,7 @@ export default function ExploreHub() {
     <HubScreen
       placement="explore_hub"
       title="Explore"
-      intro="Community, content, and everything to explore beyond tracking."
+      intro="Beyond tracking"
     />
   );
 }

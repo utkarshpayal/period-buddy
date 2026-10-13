@@ -10,7 +10,7 @@ Checked against `lib/api.ts` on 2026-09-30.
 **Conventions:** all paths are relative to `EXPO_PUBLIC_API_BASE_URL`. Every
 request carries `Authorization: Bearer <jwt>` automatically unless the
 frontend call passes `skipAuth: true` (the token comes from the OS keystore,
-`lib/sessionStore.ts`). Every request also sends `X-App-Version`, and
+`lib/sessionStore.ts`). Every request also sends `X-App-Version` and `X-Timezone-Offset` (minutes, `Date#getTimezoneOffset`; cycle endpoints count "today" from it), and
 `/api/auth/*` requests send `X-Device-Id` so the backend can list devices.
 Every response is
 `{ data, error, message, ... }`; `apiRequest` unwraps `.data` for you,
@@ -45,6 +45,8 @@ the shared `ApiError` shape (`kind`: `network`/`timeout`/`server`/
 | GET | `/api/auth/privacy` | AI consent and privacy settings |
 | PUT | `/api/auth/privacy/settings` | `hideNotificationDetails`, `newSignInAlerts`, `aiChatRetentionDays` |
 | PUT | `/api/auth/privacy/ai-consent` | Turn AI features on/off (AI endpoints answer 403 `AI_CONSENT_REQUIRED` while off) |
+| GET | `/api/auth/home-layout` | This person's Home layout (`order`, `hidden`, `shortcuts`, `shortcutStyles`, `blocks`; null = default) |
+| PUT | `/api/auth/home-layout` | Replace it (Profile → Customize Home) |
 | GET | `/api/auth/export-data` | "Download my data" (once per 5 minutes) |
 
 ## `cycleApi` — cycle tracking

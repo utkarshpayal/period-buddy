@@ -7,6 +7,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from "react-native-reanimated";
+import { NuraAvatar } from "./NuraAvatar";
 import { useTheme } from "./theme";
 
 /**
@@ -105,6 +106,41 @@ export function TabBarItem({
       >
         {label}
       </Text>
+    </View>
+  );
+}
+
+const AVATAR_CIRCLE = 64;
+const AVATAR_RING = 4;
+
+/**
+ * The raised center tab (voice assistant) shared by both tab bars: Nura's
+ * avatar (components/NuraAvatar.tsx) with a surface-coloured ring, so it sits on the bar's top edge like a button.
+ */
+export function CenterAvatarTabIcon() {
+  const { colors, isDark } = useTheme();
+  const inner = AVATAR_CIRCLE - AVATAR_RING * 2;
+  return (
+    <View
+      pointerEvents="none"
+      style={{
+        position: "absolute",
+        top: -38,
+        width: AVATAR_CIRCLE,
+        height: AVATAR_CIRCLE,
+        borderRadius: AVATAR_CIRCLE / 2,
+        borderWidth: AVATAR_RING,
+        borderColor: colors.surface,
+        backgroundColor: colors.surface,
+        zIndex: 10,
+        elevation: 10,
+        shadowColor: isDark ? "#000000" : colors.shadow,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: isDark ? 0.4 : 0.14,
+        shadowRadius: 20,
+      }}
+    >
+      <NuraAvatar size={inner} />
     </View>
   );
 }

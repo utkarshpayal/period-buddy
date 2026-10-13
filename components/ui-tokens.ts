@@ -88,9 +88,10 @@ export function getHeroGradient(colors: ThemeColors, isDark: boolean) {
   // Saturated in both themes — this card always carries white text, so it
   // can't use the pale *Light tint tokens (dark mode already avoided that;
   // light mode used to use them and the text became unreadable).
+  // Light: rose into a deeper berry, so the card stays one warm colour.
   return isDark
     ? [colors.primaryDark, colors.primary, colors.secondary]
-    : [colors.primary, colors.primaryDark, colors.secondary];
+    : [colors.primary, colors.primaryDark, "#B23D80"];
 }
 
 export function getActionGradient(colors: ThemeColors) {
@@ -156,8 +157,8 @@ export function getSeverityColor(
 export function getShadow(colors: ThemeColors, isDark: boolean) {
   return {
     shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: isDark ? 0.28 : 0.08,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: isDark ? 0.28 : 0.06,
     shadowRadius: 24,
     elevation: 3,
   };

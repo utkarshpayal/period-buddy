@@ -1,11 +1,11 @@
 import { requestRecordingPermissionsAsync } from "expo-audio";
 import { Tabs, useRouter } from "expo-router";
 import React, { useEffect } from "react";
-import { Image, StyleSheet, TouchableOpacity, View } from "react-native";
+import { StyleSheet, TouchableOpacity } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../../../components/auth-context";
 import { useTheme } from "../../../components/theme";
-import { TabBarItem } from "../../../components/TabBarItem";
+import { CenterAvatarTabIcon, TabBarItem } from "../../../components/TabBarItem";
 import { showPermissionModal } from "../../../lib/modal-host";
 import { PartnerViewStateProvider } from "../../../components/partner-view-state";
 
@@ -13,17 +13,14 @@ import { PartnerViewStateProvider } from "../../../components/partner-view-state
 // sizes, colors, center-avatar treatment) so the partner view reads as the
 // same app, not a stripped-down mode — just with tabs relevant to a
 // read-only viewer instead of the account owner's own tracking tools.
-const CENTER_AVATAR_SOURCE = require("../../../assets/images/illustrations/nura-avatar.png");
-const AVATAR_SIZE = 76;
-const AVATAR_WRAP_SIZE = 100;
-const AVATAR_WRAP_TOP = -54;
 
 type PartnerTab = {
   name: string;
   label: string;
   iconFocused?: string;
   iconUnfocused?: string;
-  image?: any;
+  /** The raised voice-assistant avatar instead of an icon. */
+  center?: boolean;
 };
 
 // Route names here are deliberately distinct from the owner dashboard's tab
@@ -37,34 +34,12 @@ type PartnerTab = {
 const PARTNER_TABS: PartnerTab[] = [
   { name: "overview", label: "Home", iconFocused: "home", iconUnfocused: "home-outline" },
   { name: "chat", label: "Chat", iconFocused: "chatbubble", iconUnfocused: "chatbubble-outline" },
-  { name: "voice", label: "AI Chat", image: CENTER_AVATAR_SOURCE },
+  { name: "voice", label: "AI Chat", center: true },
   { name: "forum", label: "Community", iconFocused: "people", iconUnfocused: "people-outline" },
   { name: "account", label: "Profile", iconFocused: "person", iconUnfocused: "person-outline" },
 ];
 
-function CenterAvatarTabIcon({ image }: { image: any }) {
-  return (
-    <View style={styles.avatarWrap} pointerEvents="none">
-      <Image source={image} style={styles.avatarImage} resizeMode="contain" />
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  avatarWrap: {
-    position: "absolute",
-    top: AVATAR_WRAP_TOP,
-    width: AVATAR_WRAP_SIZE,
-    height: AVATAR_WRAP_SIZE,
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 10,
-    elevation: 10,
-  },
-  avatarImage: {
-    width: AVATAR_SIZE,
-    height: AVATAR_SIZE,
-  },
   tabButton: {
     flex: 1,
     alignItems: "center",
@@ -112,7 +87,7 @@ export default function PartnerViewLayout() {
             elevation: 22,
             shadowColor: isDark ? "#000000" : colors.shadow,
             shadowOffset: { width: 0, height: -6 },
-            shadowOpacity: isDark ? 0.45 : 0.12,
+            shadowOpacity: isDark ? 0.45 : 0.08,
             shadowRadius: 20,
           },
           tabBarItemStyle: { height: 48 },
@@ -160,8 +135,8 @@ export default function PartnerViewLayout() {
                 return <TouchableOpacity {...cleanProps} activeOpacity={0.9} style={styles.tabButton} />;
               },
               tabBarIcon: ({ focused }) =>
-                tab.image ? (
-                  <CenterAvatarTabIcon image={tab.image} />
+                tab.center ? (
+                  <CenterAvatarTabIcon />
                 ) : (
                   <TabBarItem
                     focused={focused}

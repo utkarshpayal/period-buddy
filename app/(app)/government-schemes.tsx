@@ -2,7 +2,6 @@ import { Feather, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   RefreshControl,
   ScrollView,
   Text,
@@ -13,6 +12,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { EmptyState } from "../../components/EmptyState";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
+import { LoadMoreButton } from "../../components/LoadMoreButton";
 import { SkeletonCardList } from "../../components/Skeleton";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { useTheme } from "../../components/theme";
@@ -420,7 +420,7 @@ export default function GovernmentSchemes() {
                 className="text-sm font-black mb-2"
                 style={{ color: colors.foreground, fontFamily: fonts.heading }}
               >
-                ✨ Recommended for You
+                Recommended for you
               </Text>
               {recommended.map((s) => (
                 <SchemeCard key={`rec-${s._id}`} scheme={s} />
@@ -454,28 +454,7 @@ export default function GovernmentSchemes() {
           ) : (
             <>
               {displaySchemes.map((s) => <SchemeCard key={s._id} scheme={s} />)}
-              {hasMore ? (
-                <View className="w-full items-center mt-2">
-                  <TouchableOpacity
-                    onPress={handleLoadMore}
-                    disabled={loadingMore}
-                    activeOpacity={0.8}
-                    className="items-center justify-center px-6 py-3 rounded-2xl border"
-                    style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-                  >
-                    {loadingMore ? (
-                      <ActivityIndicator color={colors.primary} />
-                    ) : (
-                      <Text
-                        className="text-xs font-bold"
-                        style={{ color: colors.primary, fontFamily: fonts.body }}
-                      >
-                        Load More
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              ) : null}
+              <LoadMoreButton hasMore={hasMore} loading={loadingMore} onPress={handleLoadMore} />
             </>
           )}
         </ScrollView>

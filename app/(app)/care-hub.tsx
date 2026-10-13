@@ -15,7 +15,7 @@ export default function CareHub() {
     <HubScreen
       placement="care_hub"
       title="Care & Insights"
-      intro="Forecasts and insights for your health."
+      intro="Forecasts and expert care"
     />
   );
 }

@@ -96,7 +96,7 @@ function mapCommunityPost(post: CommunityPost): Post {
   return {
     id: post.id ?? post._id,
     author: isOwner ? "You" : post.isAnonymous ? "Anonymous member" : "Community member",
-    avatar: isOwner ? "✨" : "NU",
+    avatar: isOwner ? "YO" : "NU",
     content: post.content,
     attachment: post.attachments?.[0],
     poll: post.poll,
@@ -1833,7 +1833,7 @@ export default function CommunityScreen() {
                 className="w-10 h-10 rounded-full items-center justify-center"
                 style={{ backgroundColor: colors.primaryLight }}
               >
-                <Text className="text-lg">✨</Text>
+                <Feather name="edit-3" size={18} color={colors.primary} />
               </View>
               <TextInput
                 multiline

@@ -634,7 +634,7 @@ function BuddyNomination() {
                     // Plain styles: NativeWind's className doesn't reach Reanimated views.
                     style={{ marginBottom: 24 }}
                   >
-                    <SectionHeader title="Your buddy" barColor={colors.success} />
+                    <SectionHeader title="Your buddy" />
                     <PressableFeedback
                       onPress={() => setIsChatConsoleOpen(true)}
                       accessibilityRole="button"

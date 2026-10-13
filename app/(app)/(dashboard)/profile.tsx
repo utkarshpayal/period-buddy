@@ -34,6 +34,7 @@ import { PromoBanners } from "../../../components/PromoBanners";
 import { useUserStats } from "../../../hooks/useUserStats";
 import { useDataRefresh } from "../../../hooks/useDataRefresh";
 import { SectionHeader, TabHeader } from "../../../components/ScreenHeader";
+import { ColumnLabel } from "../../../components/ColumnLabel";
 
 // Rotated across earned badge cards, like the hub tiles' per-feature colours.
 const BADGE_TINTS = ["primary", "secondary", "accent", "warning", "sky", "success"] as const;
@@ -347,7 +348,7 @@ export default function Profile() {
       <View className="flex-row" style={{ marginHorizontal: 24, marginTop: 20, gap: 10 }}>
         {[
           { label: "Days tracked", value: dashboard?.trackedDays ?? 0, icon: "calendar-outline" as const, color: colors.primary },
-          { label: "Care points", value: walletBalance, icon: "star" as const, color: colors.accent },
+          { label: "Care points", value: walletBalance, icon: "trophy-outline" as const, color: colors.success },
           { label: "Day streak", value: streakCount, icon: "flame" as const, color: colors.warning },
         ].map((m) => (
           <View
@@ -357,13 +358,22 @@ export default function Profile() {
             className="flex-1 items-center rounded-2xl"
             style={{ backgroundColor: colors.surface, paddingVertical: 14, paddingHorizontal: 6 }}
           >
-            <View className="flex-row items-center" style={{ gap: 5 }}>
+            <View className="flex-row items-center" style={{ gap: 5, maxWidth: "100%" }}>
               <Ionicons name={m.icon} size={15} color={m.color} />
-              <Text style={{ color: colors.foreground, fontSize: 17, fontWeight: "800", fontFamily: fonts.heading }}>{m.value}</Text>
+              {/* Big numbers shrink to fit instead of pushing the column wider. */}
+              <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}
+                maxFontSizeMultiplier={1.3}
+                style={{ flexShrink: 1, color: colors.foreground, fontSize: 17, fontWeight: "800", fontFamily: fonts.heading }}
+              >
+                {m.value.toLocaleString("en-US")}
+              </Text>
             </View>
-            <Text numberOfLines={1} style={{ color: colors.mutedText, fontSize: 12.5, fontWeight: "600", fontFamily: fonts.body, marginTop: 3 }}>
+            <ColumnLabel style={{ color: colors.mutedText, fontSize: 12.5, fontWeight: "600", fontFamily: fonts.body, marginTop: 3 }}>
               {m.label}
-            </Text>
+            </ColumnLabel>
           </View>
         ))}
       </View>
@@ -378,6 +388,16 @@ export default function Profile() {
       <>
         {sectionLabel(sectionText(sections, "preferences", "Preferences"))}
         <View style={card}>
+          {menuRow(
+            {
+              icon: "grid-outline",
+              label: "Customize Home",
+              tint: softTints.lavender,
+              color: colors.secondary,
+              onPress: () => router.push("/customize-home"),
+            },
+            false,
+          )}
           {menuRow(
             {
               icon: "options-outline",
@@ -476,7 +496,7 @@ export default function Profile() {
                 <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.mono, marginBottom: 12 }}>
                   {`${badges.earnedCount} of ${badges.badges.length} earned`}
                 </Text>
-                {/* Same card as the hubs' small feature tiles (components/HubFeatureTiles.tsx). */}
+                {/* White card with a tinted icon square, like the app's list rows. */}
                 <View className="flex-row flex-wrap" style={{ gap: 10 }}>
                   {earnedBadges.map((b, i) => {
                     const tintKey = BADGE_TINTS[i % BADGE_TINTS.length];

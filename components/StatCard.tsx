@@ -46,26 +46,30 @@ export default function StatCard({
   if (variant === "tile") {
     return (
       <View
-        className="flex-1 flex-row items-center rounded-2xl px-4 py-3.5"
-        style={{ backgroundColor, gap: 10, ...containerStyle }}
+        className="flex-1 flex-row items-center"
+        style={{ backgroundColor, gap: 12, padding: 14, borderRadius: 20, ...containerStyle }}
       >
         <View
-          className="w-9 h-9 rounded-full items-center justify-center"
-          style={{ backgroundColor: iconBg }}
+          className="items-center justify-center"
+          style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: iconBg }}
         >
-          <Ionicons name={icon} size={17} color={iconColor} />
+          <Ionicons name={icon} size={20} color={iconColor} />
         </View>
-        <View className="flex-1">
+        <View className="flex-1" style={{ minWidth: 0 }}>
           <Text
-            className="text-[17px] font-black tracking-tight"
-            style={{ color: valueColor, fontFamily: valueFontFamily }}
+            style={{ fontSize: 20, lineHeight: 26, fontWeight: "700", color: valueColor, fontFamily: valueFontFamily }}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.75}
+            maxFontSizeMultiplier={1.4}
           >
             {value}
           </Text>
           {label ? (
             <Text
-              className="text-xs font-bold mt-0.5"
-              style={{ color: labelColor, fontFamily: labelFontFamily }}
+              style={{ fontSize: 13, lineHeight: 18, color: labelColor, fontFamily: labelFontFamily }}
+              numberOfLines={1}
+              maxFontSizeMultiplier={1.4}
             >
               {label}
             </Text>
@@ -81,24 +85,28 @@ export default function StatCard({
     // wraps it across multiple lines.
     return (
       <View
-        className="flex-1 items-center rounded-2xl px-2 py-3.5"
-        style={{ backgroundColor, ...containerStyle }}
+        className="flex-1 items-center px-2 py-3.5"
+        style={{ backgroundColor, borderRadius: 20, ...containerStyle }}
       >
         <View
-          className="w-9 h-9 rounded-full items-center justify-center mb-2"
-          style={{ backgroundColor: iconBg }}
+          className="items-center justify-center mb-2"
+          style={{ width: 40, height: 40, borderRadius: 13, backgroundColor: iconBg }}
         >
-          <Ionicons name={icon} size={17} color={iconColor} />
+          <Ionicons name={icon} size={18} color={iconColor} />
         </View>
         <Text
-          className="text-[17px] font-black tracking-tight"
-          style={{ color: valueColor, fontFamily: valueFontFamily }}
+          style={{ fontSize: 18, lineHeight: 24, fontWeight: "700", color: valueColor, fontFamily: valueFontFamily }}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.75}
+          maxFontSizeMultiplier={1.4}
         >
           {value}
         </Text>
         {label ? (
           <Text
             className="text-xs font-bold mt-0.5 text-center"
+            maxFontSizeMultiplier={1.4}
             style={{ color: labelColor, fontFamily: labelFontFamily }}
             numberOfLines={1}
             adjustsFontSizeToFit

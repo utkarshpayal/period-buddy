@@ -153,56 +153,56 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             track: "#4A2E3A",
           }
         : {
-            // Buddy light — soft rose/blush with lavender & mint accents.
-            background: "#F6EEF1",
+            // Buddy light — soft blush with lavender & mint accents (the
+            // "Cycle App Home" design: deep rose primary, warm plum text).
+            background: "#FBF6F8",
             surface: "#FFFFFF",
             surfaceSoft: "#FCF5F7",
             surfaceStrong: "#F3DEE6",
-            primary: "#E8618F",
-            primaryDark: "#C94A78",
-            primaryLight: "#F7CADA",
-            secondary: "#B9A6E0",          // lavender
-            secondaryLight: "#EEE6FA",
+            primary: "#D63F72",
+            // Text-safe rose (links, small labels on white).
+            primaryDark: "#C2386A",
+            primaryLight: "#FCE3EC",
+            secondary: "#8A6BDB",          // lavender
+            secondaryLight: "#EFE9FA",
             accent: "#9FD8C9",             // mint
-            accentLight: "#DDF0E2",
+            accentLight: "#E5F4EC",
             // ~6.1:1 on white / ~5.1:1 on accentLight — accent itself is
             // only ~1.6:1 as text, so this darkened mint is what actually
             // reads as text/label color while accent stays for icon/wash use.
             accentText: "#1F6E5B",
-            foreground: "#3A2A32",
-            // Was #F3DEE6 (~1.3:1 vs surface/background — barely visible as
-            // an input/card outline); bumped for more definition while
-            // staying a soft, non-harsh line.
-            border: "#E3C6D2",
-            button: "#E8618F",
+            foreground: "#241A20",
+            // Soft line for cards and outlined buttons; still visible as an
+            // input outline on the blush background.
+            border: "#EADCE2",
+            button: "#D63F72",
             buttonText: "#FFFFFF",
-            text: "#3A2A32",
-            // Was #8B7680 (~4.2:1 on white, ~3.7:1 on background — fails or
-            // barely clears WCAG AA's 4.5:1 for normal text, and this token
-            // is used 400+ times app-wide including every placeholder).
-            mutedText: "#6E5A63",
+            text: "#241A20",
+            // ~5.6:1 on white: clears WCAG AA for the 400+ places it's used
+            // as helper text and placeholders.
+            mutedText: "#75666D",
             input: "#FCF5F7",
-            success: "#3E8A5A",
-            successLight: "#DDF0E2",
-            warning: "#B4711F",
-            warningLight: "#FCE3C4",
+            success: "#2F8558",
+            successLight: "#E5F4EC",
+            warning: "#B5681B",
+            warningLight: "#FDF0DD",
             danger: "#B03A56",
             dangerLight: "#FADCE1",
-            info: "#6B5CA5",
-            infoLight: "#EEE6FA",
+            info: "#6B4FB8",
+            infoLight: "#EFE9FA",
             rose: "#E8618F",
-            roseLight: "#F7CADA",
-            lavender: "#B9A6E0",
-            lavenderLight: "#EEE6FA",
-            mint: "#9FD8C9",
-            mintLight: "#DDF0E2",
-            sky: "#5B8FCE",
-            skyLight: "#E1EBFA",
-            gold: "#C99A2E",
-            goldLight: "#FBF0D4",
-            shadow: "rgba(230, 110, 150, 0.16)",
-            overlay: "rgba(58, 42, 50, 0.4)",
-            track: "#E3E7ED",
+            roseLight: "#FCE3EC",
+            lavender: "#8A6BDB",
+            lavenderLight: "#EFE9FA",
+            mint: "#2F8558",
+            mintLight: "#E5F4EC",
+            sky: "#4A78C2",
+            skyLight: "#E6EEFA",
+            gold: "#B5681B",
+            goldLight: "#FDF0DD",
+            shadow: "rgba(60, 20, 40, 1)",
+            overlay: "rgba(36, 26, 32, 0.4)",
+            track: "#F4ECF0",
           }),
         ...overrides,
       } as ThemeColors,

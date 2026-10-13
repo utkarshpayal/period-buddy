@@ -1,19 +1,22 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { RefreshControl, ScrollView, StatusBar, Text, TouchableOpacity, View } from "react-native";
-import Animated, { FadeInDown, FadeOut, useReducedMotion } from "react-native-reanimated";
+import { InteractionManager, RefreshControl, ScrollView, StatusBar, Text, TouchableOpacity, View } from "react-native";
+import Animated, { FadeIn, FadeInDown, FadeOut, useReducedMotion } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ForestHabitat } from "../../components/forest/ForestHabitat";
 import { LivingTree } from "../../components/forest/LivingTree";
 import { ScreenHeader, SectionHeader } from "../../components/ScreenHeader";
 import { SkeletonBlock } from "../../components/Skeleton";
+import { Loader } from "../../components/Loader";
 import { useTheme } from "../../components/theme";
 import { getShadow } from "../../components/ui-tokens";
 import { useDataRefresh } from "../../hooks/useDataRefresh";
 import { alert } from "../../lib/alert";
 import {
   forestApi,
+  getFriendlyErrorMessage,
+  isNetworkError,
   type ForestGrowth,
   type ForestGrowthStage,
   type ForestStatus,
@@ -160,11 +163,75 @@ function CareRing({ done, size, color, track, textColor, font }: { done: number;
   );
 }
 
+/** Grown trees drawn at first; each is a full SVG tree, so a big forest opens on "Show all". */
+const GROWN_PREVIEW = 9;
+
+/**
+ * The page's shape while the forest loads: a soft sky-and-meadow scene with
+ * the loader in it, then placeholders for the stage, today's care and the
+ * forest. Nothing shows made-up numbers ("Seed", "0 of 3") before real data.
+ */
+function ForestSkeleton() {
+  const { colors, isDark } = useTheme();
+  const card = { borderRadius: 24, backgroundColor: colors.surface, ...getShadow(colors, isDark) };
+  return (
+    <View accessibilityLabel="Loading your forest" accessible>
+      <View style={{ ...card, borderRadius: 28, overflow: "hidden" }}>
+        <LinearGradient
+          colors={isDark ? ["#1E3345", "#22382E", "#2C5236"] : ["#DDF0FA", "#EAF6F0", "#CFE9C4"]}
+          style={{ height: SCENE_HEIGHT, alignItems: "center", justifyContent: "center" }}
+        >
+          <Loader label="Growing your forest…" />
+          <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 56, backgroundColor: isDark ? "#2C5236" : "#A8D79A", opacity: 0.6 }} />
+        </LinearGradient>
+        <View style={{ padding: 18, gap: 10 }}>
+          <SkeletonBlock width={90} height={11} />
+          <SkeletonBlock width={140} height={20} />
+          <SkeletonBlock height={8} radius={4} style={{ marginTop: 4 }} />
+          <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 8 }}>
+            {STAGES.map((s) => (
+              <SkeletonBlock key={s} width={26} height={30} radius={13} />
+            ))}
+          </View>
+        </View>
+      </View>
+      <SkeletonBlock width={130} height={16} style={{ marginTop: 30, marginBottom: 12 }} />
+      <View style={[card, { padding: 16, gap: 16 }]}>
+        {[0, 1, 2, 3].map((i) => (
+          <View key={i} style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+            <SkeletonBlock width={i === 0 ? 58 : 40} height={i === 0 ? 58 : 40} radius={29} />
+            <View style={{ flex: 1, gap: 7 }}>
+              <SkeletonBlock width="55%" height={14} />
+              <SkeletonBlock width="80%" height={11} />
+            </View>
+          </View>
+        ))}
+      </View>
+      <SkeletonBlock width={110} height={16} style={{ marginTop: 30, marginBottom: 12 }} />
+      <View style={{ flexDirection: "row", gap: 10 }}>
+        {[0, 1, 2].map((i) => (
+          <SkeletonBlock key={i} width="31%" height={130} radius={20} style={{ flexGrow: 1 }} />
+        ))}
+      </View>
+    </View>
+  );
+}
+
 export default function Forest() {
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
   const [status, setStatus] = useState<ForestStatus | null>(null);
   const [hasLoaded, setHasLoaded] = useState(false);
+  // First load failed with nothing on screen: show an error with Retry
+  // instead of an empty seed that looks like a brand-new forest.
+  const [loadError, setLoadError] = useState<{ message: string; offline: boolean } | null>(null);
+  // The scene is heavy to draw; mount it after the screen's opening animation.
+  const [sceneReady, setSceneReady] = useState(false);
+  useEffect(() => {
+    const task = InteractionManager.runAfterInteractions(() => setSceneReady(true));
+    return () => task.cancel();
+  }, []);
+  const [showAllTrees, setShowAllTrees] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [watering, setWatering] = useState(false);
   const [waterKey, setWaterKey] = useState(0);
@@ -224,12 +291,18 @@ export default function Forest() {
   const load = useCallback(async () => {
     try {
       applyStatus(await forestApi.getStatus(getDateKey(new Date())));
-    } catch {
-      // Keep whatever is on screen.
-    } finally {
+      setLoadError(null);
       setHasLoaded(true);
+    } catch (err) {
+      // Keep what's on screen; only an empty screen needs the error state.
+      if (!last.current) setLoadError({ message: getFriendlyErrorMessage(err), offline: isNetworkError(err) });
     }
   }, [applyStatus]);
+
+  const retry = useCallback(() => {
+    setLoadError(null);
+    load();
+  }, [load]);
 
   useEffect(() => {
     load();
@@ -296,11 +369,34 @@ export default function Forest() {
           contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 6, paddingBottom: 48 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
         >
+          {loadError ? (
+            <View style={{ alignItems: "center", paddingVertical: 56, paddingHorizontal: 12 }}>
+              <View style={{ width: 120, height: 120, borderRadius: 60, alignItems: "center", justifyContent: "flex-end", overflow: "hidden", backgroundColor: colors.successLight }}>
+                <LivingTree growth={0.3} seed={1} size={100} lowDetail vitality="wilting" />
+              </View>
+              <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "800", marginTop: 18, fontFamily: fonts.heading, textAlign: "center" }}>
+                {loadError.offline ? "You're offline" : "Couldn't load your forest"}
+              </Text>
+              <Text style={{ color: colors.mutedText, fontSize: 13.5, marginTop: 6, fontFamily: fonts.body, textAlign: "center" }}>
+                {loadError.offline ? "Your trees are safe. Connect to the internet and try again." : loadError.message}
+              </Text>
+              <TouchableOpacity
+                onPress={retry}
+                accessibilityRole="button"
+                activeOpacity={0.85}
+                style={{ marginTop: 20, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 22, height: 46, borderRadius: 23, backgroundColor: colors.primary }}
+              >
+                <Ionicons name="refresh" size={16} color={colors.buttonText} />
+                <Text style={{ color: colors.buttonText, fontSize: 14.5, fontWeight: "800", fontFamily: fonts.body }}>Try again</Text>
+              </TouchableOpacity>
+            </View>
+          ) : !hasLoaded || !sceneReady ? (
+            <ForestSkeleton />
+          ) : (
+          <Animated.View entering={FadeIn.duration(350)}>
           {/* The living scene */}
           <View style={{ borderRadius: 28, overflow: "hidden", backgroundColor: colors.surface, ...getShadow(colors, isDark) }}>
-            {!hasLoaded ? (
-              <SkeletonBlock width="100%" height={SCENE_HEIGHT} radius={0} />
-            ) : (
+            {(
               <View>
                 <ForestHabitat
                   height={SCENE_HEIGHT}
@@ -371,7 +467,7 @@ export default function Forest() {
                       accessibilityLiveRegion="polite"
                       style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, backgroundColor: "rgba(31,59,36,0.92)" }}
                     >
-                      <Ionicons name="sparkles" size={15} color="#FFE082" />
+                      <Ionicons name="leaf" size={15} color="#A5D6A7" />
                       <Text style={{ color: "#FFFFFF", fontSize: 14, fontWeight: "700", fontFamily: fonts.body }}>{toast}</Text>
                     </View>
                   </Animated.View>
@@ -523,7 +619,7 @@ export default function Forest() {
           {/* This week */}
           {growth?.week.length ? (
             <>
-              <SectionHeader title="This week" barColor={colors.secondary} style={{ marginTop: 28 }} />
+              <SectionHeader title="This week" style={{ marginTop: 28 }} />
               <View style={{ borderRadius: 24, backgroundColor: colors.surface, paddingHorizontal: 16, paddingVertical: 16, ...getShadow(colors, isDark) }}>
                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -567,10 +663,10 @@ export default function Forest() {
           ) : null}
 
           {/* The forest you've grown */}
-          <SectionHeader title="Your forest" barColor={colors.accentText} style={{ marginTop: 28 }} />
+          <SectionHeader title="Your forest" style={{ marginTop: 28 }} />
           {grown.length ? (
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
-              {[...grown].reverse().map((tree) => (
+              {[...grown].reverse().slice(0, showAllTrees ? undefined : GROWN_PREVIEW).map((tree) => (
                 <View
                   key={tree.number}
                   accessible
@@ -588,7 +684,19 @@ export default function Forest() {
                 </View>
               ))}
             </View>
-          ) : (
+          ) : null}
+          {grown.length > GROWN_PREVIEW ? (
+            <TouchableOpacity
+              onPress={() => setShowAllTrees((v) => !v)}
+              accessibilityRole="button"
+              style={{ alignSelf: "center", paddingVertical: 12, paddingHorizontal: 12, marginTop: 4 }}
+            >
+              <Text style={{ color: colors.primaryDark, fontSize: 14, fontWeight: "600", textDecorationLine: "underline", fontFamily: fonts.body }}>
+                {showAllTrees ? "Show less" : `Show all ${grown.length} trees`}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+          {grown.length ? null : (
             <View style={{ flexDirection: "row", alignItems: "center", gap: 14, borderRadius: 24, padding: 16, backgroundColor: colors.surface, ...getShadow(colors, isDark) }}>
               <View style={{ width: 64, height: 64, borderRadius: 18, alignItems: "center", justifyContent: "flex-end", overflow: "hidden", backgroundColor: colors.successLight }}>
                 <LivingTree growth={0.16} seed={1} size={58} lowDetail />
@@ -600,6 +708,8 @@ export default function Forest() {
                 </Text>
               </View>
             </View>
+          )}
+          </Animated.View>
           )}
         </ScrollView>
       </SafeAreaView>

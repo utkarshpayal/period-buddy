@@ -5,6 +5,7 @@ import { Platform, View } from "react-native";
 import { AppLockProvider, useAppLock } from "../components/AppLock";
 import { AppConfigProvider } from "../components/app-config";
 import { AppConfigSync } from "../components/AppConfigSync";
+import { TodayWatcher } from "../hooks/useTodayKey";
 import { AppGate } from "../components/AppGate";
 import { AppLockScreen } from "../components/AppLockScreen";
 import { AuthProvider, useAuth } from "../components/auth-context";
@@ -214,6 +215,7 @@ function AppShell() {
       <AppGate />
       {/* Refetches the App CMS config on sign-in/out; feeds the launch route guard. */}
       <AppConfigSync />
+      <TodayWatcher />
       <ScreenPrivacySync />
       {/* "Your doctor is calling" — rings over the personal socket room. */}
       <IncomingCallOverlay

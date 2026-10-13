@@ -8,9 +8,7 @@ import type { CouponPreview } from "../../lib/api";
 
 /**
  * "Confirm your purchase" step shown between tapping Buy and the checkout UI
- * opening (docs/fixes.md 6.2) — also where 6.1's UPI-vs-hosted-checkout choice is
- * made, since it's a safer place to offer that than injecting a link over
- * either live payment surface.
+ * opening (docs/fixes.md 6.2). How to pay is picked next, on PaymentSheet.
  */
 export function PurchaseConfirmSheet({
   visible,
@@ -34,7 +32,7 @@ export function PurchaseConfirmSheet({
   /** Shown instead when a coupon code is entered but wasn't previewed against this item (e.g. a plan on PaywallModal). */
   couponNote?: string;
   confirming: boolean;
-  onConfirm: (preferUpiCollect: boolean) => void;
+  onConfirm: () => void;
   onClose: () => void;
 }) {
   const { colors, fonts } = useTheme();
@@ -109,7 +107,7 @@ export function PurchaseConfirmSheet({
             </View>
 
             <TouchableOpacity
-              onPress={() => onConfirm(false)}
+              onPress={onConfirm}
               activeOpacity={0.9}
               disabled={confirming}
               className="mt-5 items-center rounded-full py-4"
@@ -123,19 +121,6 @@ export function PurchaseConfirmSheet({
                 </Text>
               )}
             </TouchableOpacity>
-
-            {!couponPreview?.free ? (
-              <TouchableOpacity
-                onPress={() => onConfirm(true)}
-                activeOpacity={0.7}
-                disabled={confirming}
-                className="items-center mt-3.5 py-1"
-              >
-                <Text className="text-xs font-bold" style={{ color: colors.primary, fontFamily: fonts.body }}>
-                  Or pay directly with a UPI ID
-                </Text>
-              </TouchableOpacity>
-            ) : null}
 
             <PaymentTrustFooter compact />
           </View>

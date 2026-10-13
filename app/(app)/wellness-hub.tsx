@@ -6,18 +6,16 @@ import { HubScreen } from "../../components/HubScreen";
  * and sexual wellbeing. Reached from Home's "Wellness & Support" entry card
  * (see (dashboard)/home.tsx).
  *
- * Most-used-first: by default Nura AI and Health Concerns are "large"
- * full-width rows and the lower-frequency tiles sit in a "More support"
- * grid below (docs/fixes.md 2.7). The App CMS (lib/appConfig.ts) can
- * reorder, resize, hide or move any of them.
+ * Most-used-first: Nura AI leads as a hero card with a question box, then
+ * Health Concerns, then a "More support" list (lib/hubLayout.ts). The App
+ * CMS (lib/appConfig.ts) can reorder, hide or move any of them.
  */
 export default function WellnessHub() {
   return (
     <HubScreen
       placement="wellness_hub"
       title="Wellness & Support"
-      intro="Support for your body and mind — private, judgment-free, and always here."
-      smallHeading="More support"
+      intro="Private and judgment-free"
     />
   );
 }
