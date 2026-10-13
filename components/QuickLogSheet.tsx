@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Modal, Pressable, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { DayEntry } from "./AppState";
 import { flowOptions, symptomOptions, type LogOption } from "./logOptions";
@@ -30,8 +30,9 @@ function initialPicks(kind: QuickLogKind, entry: DayEntry | null | undefined): s
 
 /**
  * Home's quick log: one category of today's log in a bottom sheet (flow,
- * symptoms or mood), saved with one tap. "All details" opens the full day
- * log at that section for everything else.
+ * symptoms or mood), saved with one tap. "All details" saves any unsaved
+ * picks, closes the sheet, and opens the full day log at that section once
+ * `onDismissed` reports the sheet is gone.
  */
 export function QuickLogSheet({
   kind,
@@ -40,6 +41,7 @@ export function QuickLogSheet({
   onClose,
   onSave,
   onOpenFullLog,
+  onDismissed,
 }: {
   kind: QuickLogKind | null;
   entry: DayEntry | null | undefined;
@@ -47,12 +49,28 @@ export function QuickLogSheet({
   onClose: () => void;
   onSave: (patch: DayLogPatch) => Promise<boolean>;
   onOpenFullLog: (kind: QuickLogKind) => void;
+  /** The sheet has finished closing (after its slide-out on iOS). */
+  onDismissed?: () => void;
 }) {
   const { colors, fonts } = useTheme();
   const insets = useSafeAreaInsets();
   const [picks, setPicks] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   useSecureScreen("quick-log", kind !== null);
+  // The last opened kind, so the sheet keeps its content while it slides out.
+  const [shownKind, setShownKind] = useState<QuickLogKind | null>(kind);
+  const onDismissedRef = useRef(onDismissed);
+  onDismissedRef.current = onDismissed;
+
+  useEffect(() => {
+    if (kind) {
+      setShownKind(kind);
+      return;
+    }
+    // iOS reports the end of the slide-out through `onDismiss`; elsewhere the
+    // next modal can open straight away.
+    if (Platform.OS !== "ios") onDismissedRef.current?.();
+  }, [kind]);
 
   useEffect(() => {
     if (kind) setPicks(initialPicks(kind, entry));
@@ -61,13 +79,15 @@ export function QuickLogSheet({
   }, [kind]);
 
   const tints = getLogCategoryTints(colors);
-  const options: LogOption<string>[] = kind === "mood" ? MOOD_OPTIONS : symptomOptions;
-  const tint: LogCategoryTint = kind === "flow" ? tints.flow : kind === "mood" ? tints.mood : tints.symptoms;
-  const initial = useMemo(() => (kind ? initialPicks(kind, entry) : []), [kind, entry]);
+  const options: LogOption<string>[] = shownKind === "mood" ? MOOD_OPTIONS : symptomOptions;
+  const tint: LogCategoryTint = shownKind === "flow" ? tints.flow : shownKind === "mood" ? tints.mood : tints.symptoms;
+  const initial = useMemo(() => (shownKind ? initialPicks(shownKind, entry) : []), [shownKind, entry]);
   const changed = [...picks].sort().join() !== [...initial].sort().join();
 
-  if (!kind) return null;
-  const copy = kind === "flow" && isPeriodFlow(entry?.flow) ? { ...COPY.flow, title: "Period flow" } : COPY[kind];
+  if (!shownKind) return null;
+  // Narrowed for the handlers below; while closing it's the kind that was open.
+  const sheetKind: QuickLogKind = shownKind;
+  const copy = sheetKind === "flow" && isPeriodFlow(entry?.flow) ? { ...COPY.flow, title: "Period flow" } : COPY[sheetKind];
 
   // Flow is one question: tapping an answer saves it and closes the sheet.
   const saveFlow = async (value: NonNullable<DayEntry["flow"]>) => {
@@ -84,15 +104,16 @@ export function QuickLogSheet({
     setPicks((current) => {
       if (current.includes(value)) return current.filter((v) => v !== value);
       // "Everything is fine" can't sit next to a symptom.
-      if (kind === "symptoms") return value === FINE ? [FINE] : [...current.filter((v) => v !== FINE), value];
+      if (sheetKind === "symptoms") return value === FINE ? [FINE] : [...current.filter((v) => v !== FINE), value];
       return [...current, value];
     });
   };
 
-  const save = async () => {
-    if (saving) return;
+  /** Saves the picks; resolves true when saved (or nothing to save). */
+  const savePicks = async (): Promise<boolean> => {
+    if (sheetKind === "flow" || !changed) return true;
     let patch: DayLogPatch;
-    if (kind === "mood") {
+    if (sheetKind === "mood") {
       const moods = picks as NonNullable<DayEntry["mood"]>[];
       patch = { mood: moods[0], moods };
     } else {
@@ -103,11 +124,29 @@ export function QuickLogSheet({
     setSaving(true);
     const ok = await onSave(patch);
     setSaving(false);
-    if (ok) onClose();
+    return ok;
+  };
+
+  const save = async () => {
+    if (saving) return;
+    if (await savePicks()) onClose();
+  };
+
+  // Picks made here aren't dropped: they're saved before the full log opens.
+  const openFullLog = async () => {
+    if (saving) return;
+    if (await savePicks()) onOpenFullLog(sheetKind);
   };
 
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
+    <Modal
+      visible={kind !== null}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+      onDismiss={() => onDismissedRef.current?.()}
+      statusBarTranslucent
+    >
       <View style={{ flex: 1, justifyContent: "flex-end" }}>
         <Pressable
           onPress={onClose}
@@ -147,7 +186,7 @@ export function QuickLogSheet({
             </TouchableOpacity>
           </View>
 
-          {kind === "flow" ? (
+          {sheetKind === "flow" ? (
             <>
               <View style={{ flexDirection: "row", gap: 10, marginTop: 20 }}>
                 {flowOptions
@@ -270,8 +309,10 @@ export function QuickLogSheet({
             </>
           )}
           <TouchableOpacity
-            onPress={() => onOpenFullLog(kind)}
+            onPress={() => void openFullLog()}
+            disabled={saving}
             accessibilityRole="button"
+            accessibilityHint={changed && sheetKind !== "flow" ? "Saves your picks first" : undefined}
             style={{ alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 4, paddingVertical: 12, marginTop: 2 }}
           >
             <Text style={{ fontSize: 13.5, fontWeight: "700", color: colors.primary, fontFamily: fonts.body }}>All details for today</Text>

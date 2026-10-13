@@ -9,7 +9,7 @@ import { EmptyState } from "../../components/EmptyState";
 import { useTheme } from "../../components/theme";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
 import { CashfreeCheckoutModal } from "../../components/CashfreeCheckoutModal";
-import { CashfreeUpiCollectModal } from "../../components/CashfreeUpiCollectModal";
+import { PaymentSheet } from "../../components/PaymentSheet";
 import { PaymentTrustFooter } from "../../components/subscription/PaymentTrustFooter";
 import { PurchaseConfirmSheet } from "../../components/subscription/PurchaseConfirmSheet";
 import { PurchaseResultPanel } from "../../components/subscription/PurchaseResultPanel";
@@ -70,6 +70,7 @@ export default function SubscriptionScreen() {
   const {
     purchasingKey,
     checkout,
+    checkoutTitle,
     useHostedCheckout,
     setUseHostedCheckout,
     purchaseResult,
@@ -150,11 +151,11 @@ export default function SubscriptionScreen() {
     }
   }
 
-  async function handleConfirmPurchase(preferUpiCollect: boolean) {
+  async function handleConfirmPurchase() {
     if (!confirmTarget) return;
     const outcome = await startPurchase(confirmTarget.key, confirmTarget.payload, {
       couponCode: couponPreview ? couponCode.trim() : undefined,
-      preferUpiCollect,
+      title: confirmTarget.label,
     });
     setConfirmTarget(null);
     if (outcome?.free) {
@@ -503,15 +504,16 @@ export default function SubscriptionScreen() {
       {/* checkout is only ever set from startPurchase's non-free branch,
           which never reaches setCheckout without a real Cashfree order — so
           orderId/paymentSessionId (optional on SubscriptionOrder because a
-          free order has neither) are always present here. Hosted checkout
-          (cards/UPI apps/netbanking/wallets) is the default; native UPI-ID
-          collect only opens when the confirm sheet's "pay with a UPI ID"
-          link was used. */}
+          free order has neither) are always present here. PaymentSheet
+          (UPI apps, UPI ID) is the default; its "Card, netbanking or wallet"
+          option switches to Cashfree's hosted checkout. */}
       {checkout && checkout.orderId && checkout.paymentSessionId && !useHostedCheckout && (
-        <CashfreeUpiCollectModal
+        <PaymentSheet
           visible
           mode={checkout.cashfreeMode ?? "production"}
           paymentSessionId={checkout.paymentSessionId}
+          amount={checkout.amount}
+          title={checkoutTitle}
           onVerify={() => verifyUpiOnce(checkout.orderId!)}
           onOutcome={handleUpiOutcome}
           onUseOtherMethod={() => setUseHostedCheckout(true)}

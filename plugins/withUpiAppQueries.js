@@ -3,6 +3,7 @@
 // payments to GPay/PhonePe/Paytm/etc. through these schemes, and Cashfree
 // asks for this block before it turns on UPI apps for a WebView checkout.
 // iOS's equivalent is LSApplicationQueriesSchemes in app.json.
+// Keep both lists in step with the app schemes lib/upiIntent.ts opens.
 const { withAndroidManifest } = require("expo/config-plugins");
 
 const UPI_SCHEMES = ["upi", "tez", "gpay", "phonepe", "paytmmp", "credpay", "bhim"];

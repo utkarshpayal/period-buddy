@@ -1,8 +1,9 @@
 import { useRouter } from "expo-router";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { flowOptions } from "../components/logOptions";
 import { QuickLogSheet, type QuickLogKind } from "../components/QuickLogSheet";
 import { UndoToast, type ToastContent } from "../components/UndoToast";
+import { alert } from "../lib/alert";
 import { logFocusRoute, type LogFocus } from "../lib/logFocus";
 import { isPeriodFlow, useTodayLog, type DayLogPatch } from "./useTodayLog";
 
@@ -13,6 +14,8 @@ import { isPeriodFlow, useTodayLog, type DayLogPatch } from "./useTodayLog";
  *   in a toast. Nothing is logged until a flow is picked.
  * - Symptoms and Mood open a small sheet with just that part of today's log.
  * - Anything else opens the full day log at that section.
+ * The sheets open only once today's log is known (loading it again if the
+ * first fetch failed), so a save can't erase what's already logged.
  * Render `overlays` once, at the end of the screen.
  */
 export function useQuickLog({
@@ -28,9 +31,25 @@ export function useQuickLog({
   const [sheet, setSheet] = useState<QuickLogKind | null>(null);
   const [toast, setToast] = useState<ToastContent | null>(null);
   const periodLoggedToday = isPeriodFlow(today.entry?.flow);
-  
+  // "All details" waits for the sheet to finish closing: iOS can't present
+  // the full log's modal while this one is still animating away.
+  const pendingFullLog = useRef<LogFocus | null>(null);
+  const { loaded, reload } = today;
+
+  /** Open a quick-log sheet once today's log is known. */
+  const openSheet = useCallback(
+    async (kind: QuickLogKind) => {
+      if (!loaded && !(await reload())) {
+        alert("Couldn't load today's log", "Check your connection and try again.");
+        return;
+      }
+      setSheet(kind);
+    },
+    [loaded, reload],
+  );
+
   // Log period only asks for the flow; picking one saves it (see QuickLogSheet).
-  const logPeriodNow = useCallback(() => setSheet("flow"), []);
+  const logPeriodNow = useCallback(() => openSheet("flow"), [openSheet]);
 
   /** Sheet saves; a flow change also shows a toast with Undo. */
   const saveFromSheet = useCallback(
@@ -45,7 +64,7 @@ export function useQuickLog({
           icon: "checkmark-circle",
           title: !isPeriodFlow(patch.flow) ? "Period removed for today" : wasPeriod ? "Flow updated" : "Period logged for today",
           detail: isPeriodFlow(patch.flow) && label ? `${label} flow` : undefined,
-          actions: [{ label: "Undo", onPress: () => void today.restore(previous) }],
+          actions: [{ label: "Undo", onPress: () => void today.restoreFlow(previous) }],
         });
       }
       return ok;
@@ -61,10 +80,10 @@ export function useQuickLog({
   const onQuickAction = useCallback(
     (key: LogFocus) => {
       if (key === "flow") void logPeriodNow();
-      else if (key === "symptoms" || key === "mood") setSheet(key);
+      else if (key === "symptoms" || key === "mood") void openSheet(key);
       else fullLog(key);
     },
-    [logPeriodNow, fullLog],
+    [logPeriodNow, openSheet, fullLog],
   );
 
   /** How many things of `key` are logged today, for a button's badge. */
@@ -86,12 +105,17 @@ export function useQuickLog({
         onClose={() => setSheet(null)}
         onSave={saveFromSheet}
         onOpenFullLog={(kind) => {
+          pendingFullLog.current = kind;
           setSheet(null);
-          fullLog(kind);
+        }}
+        onDismissed={() => {
+          const focus = pendingFullLog.current;
+          pendingFullLog.current = null;
+          if (focus) fullLog(focus);
         }}
       />
     </>
   );
 
-  return { today, periodLoggedToday, logPeriodNow, onQuickAction, openSheet: setSheet, loggedCount, overlays };
+  return { today, periodLoggedToday, logPeriodNow, onQuickAction, openSheet, loggedCount, overlays };
 }

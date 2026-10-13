@@ -5,6 +5,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { alert } from "../lib/alert";
 import { getFriendlyErrorMessage, type PrescriptionDocument } from "../lib/api";
 import { fetchPrescription, prescriptionAction } from "../lib/prescriptionPdf";
+import { cleanupTempFiles } from "../lib/tempFiles";
+import { AppModalHost } from "./modals/AppModalHost";
 import { PrescriptionDocumentView } from "./PrescriptionDocumentView";
 import { useTheme } from "./theme";
 
@@ -44,6 +46,12 @@ export function PrescriptionViewer({
     if (visible) void load();
   }, [visible, load]);
 
+  // A PDF saved from here has been read by the other app by now (lib/tempFiles.ts).
+  const close = () => {
+    cleanupTempFiles();
+    onClose();
+  };
+
   const run = async (action: "download" | "print") => {
     if (!doc || busy) return;
     setBusy(action);
@@ -57,7 +65,7 @@ export function PrescriptionViewer({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={close}>
       <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
         <View className="flex-row items-center px-5 pt-5 pb-3 gap-3">
           <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: colors.primaryLight }}>
@@ -72,7 +80,7 @@ export function PrescriptionViewer({
             </Text>
           </View>
           <TouchableOpacity
-            onPress={onClose}
+            onPress={close}
             accessibilityRole="button"
             accessibilityLabel="Close prescription"
             className="p-2 rounded-full"
@@ -146,6 +154,8 @@ export function PrescriptionViewer({
           Show it at any pharmacy, on your phone or printed.
         </Text>
       </SafeAreaView>
+      {/* Its alerts (a failed download or print) draw over this sheet. */}
+      {visible ? <AppModalHost inline /> : null}
     </Modal>
   );
 }

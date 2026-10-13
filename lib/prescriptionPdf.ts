@@ -39,13 +39,14 @@ async function sharePdf(doc: PrescriptionDocument) {
     /* keep the generated name rather than fail the download */
   }
   const fileUri = target.exists ? target.uri : uri;
-  if (await Sharing.isAvailableAsync()) {
-    await Sharing.shareAsync(fileUri, {
-      mimeType: "application/pdf",
-      dialogTitle: "Save or share your prescription",
-      UTI: "com.adobe.pdf",
-    });
+  if (!(await Sharing.isAvailableAsync())) {
+    throw new Error("Saving files isn't available on this phone. Use Print instead, or show the prescription on screen.");
   }
+  await Sharing.shareAsync(fileUri, {
+    mimeType: "application/pdf",
+    dialogTitle: "Save or share your prescription",
+    UTI: "com.adobe.pdf",
+  });
 }
 
 /**

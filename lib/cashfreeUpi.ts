@@ -1,3 +1,6 @@
+import { Platform } from "react-native";
+import { parseUpiIntentLinks } from "./upiIntent";
+
 /**
  * UPI Collect goes straight from the app to Cashfree's Order Pay API
  * (POST /pg/orders/sessions) — this call takes only the order's public
@@ -64,6 +67,49 @@ export async function payWithUpiCollect(params: {
       return { type: "error", message: data?.message || "Couldn't start the UPI payment request." };
     }
     return { type: "pending", cfPaymentId: data.cf_payment_id };
+  } catch {
+    return { type: "error", message: "Couldn't reach the payment network. Check your connection." };
+  }
+}
+
+/**
+ * UPI intent ("pay with a UPI app"): asks Cashfree for this order's
+ * `upi://pay?…` links, which the payment sheet opens in the app the person
+ * picks. Like collect it only starts the payment; callers poll verify.
+ * Native only: the client headers below would fail the browser's CORS
+ * preflight (see payWithUpiCollect), and there are no UPI apps on web anyway.
+ */
+export type UpiIntentResult =
+  | { type: "ok"; links: NonNullable<ReturnType<typeof parseUpiIntentLinks>> }
+  | { type: "error"; message: string };
+
+export async function startUpiIntent(params: {
+  mode: "sandbox" | "production";
+  paymentSessionId: string;
+}): Promise<UpiIntentResult> {
+  try {
+    const response = await fetch(`${API_BASE(params.mode)}/orders/sessions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-version": "2026-01-01",
+        "x-client-device": "mobile",
+        "x-client-os": Platform.OS === "ios" ? "ios" : "android",
+        "x-client-rendering-type": "native",
+        "x-client-browser": "others",
+      },
+      body: JSON.stringify({
+        payment_session_id: params.paymentSessionId,
+        payment_method: { upi: { channel: "link" } },
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      return { type: "error", message: data?.message || "Couldn't start the UPI payment." };
+    }
+    const links = parseUpiIntentLinks(data);
+    if (!links) return { type: "error", message: "Couldn't start the UPI payment. Try your UPI ID or another method." };
+    return { type: "ok", links };
   } catch {
     return { type: "error", message: "Couldn't reach the payment network. Check your connection." };
   }

@@ -4,6 +4,7 @@ import { WebView } from "react-native-webview";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "./theme";
 import { alert } from "../lib/alert";
+import { upiLaunchUrls } from "../lib/upiIntent";
 import { AppModalHost } from "./modals/AppModalHost";
 
 export type CashfreeResult =
@@ -101,12 +102,21 @@ export function CashfreeCheckoutModal({ visible, mode, orderId, paymentSessionId
       // WebView silently no-op'ing on a scheme it can't navigate to.
       // Android 11+ can only see these apps because of the <queries> block
       // from plugins/withUpiAppQueries.js (iOS: LSApplicationQueriesSchemes).
-      Linking.openURL(upiIntentToUrl(url)).catch(() => {
+      // An intent: link opens the app that was tapped, else plain upi://.
+      void (async () => {
+        for (const candidate of upiLaunchUrls(url)) {
+          try {
+            await Linking.openURL(candidate);
+            return;
+          } catch {
+            /* not installed: try the next one */
+          }
+        }
         alert(
           "UPI app not found",
           "We couldn't open that UPI app on this phone. Try another app, or pay with your UPI ID.",
         );
-      });
+      })();
       return false;
     }
     return true;
@@ -147,17 +157,4 @@ export function CashfreeCheckoutModal({ visible, mode, orderId, paymentSessionId
       <AppModalHost inline />
     </Modal>
   );
-}
-
-/**
- * Android `intent://pay?…#Intent;scheme=upi;package=…;end` links can't go
- * through Linking.openURL (React Native doesn't parse intent: URIs), so turn
- * them back into the plain `upi://pay?…` link they wrap. Anything else is
- * returned unchanged.
- */
-export function upiIntentToUrl(url: string): string {
-  const match = /^intent:\/\/([^#]*)#Intent;(.*)$/i.exec(url);
-  if (!match) return url;
-  const scheme = /(?:^|;)scheme=([^;]+)/i.exec(match[2])?.[1];
-  return scheme ? `${scheme}://${match[1]}` : url;
 }

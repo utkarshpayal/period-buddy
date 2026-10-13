@@ -41,14 +41,17 @@ export const DEFAULT_SHORTCUT_STYLE: ShortcutStyle = { look: "icon", color: null
 export type BlockOptions = { title: string | null; items: string[] | null };
 type Choice = { key: string; label: string; icon: string };
 
-/** Stats the "Streak & points" block can show (Home computes the values). */
+/**
+ * Stats the "Stats" block can show (Home computes the values). The labels
+ * are the ones Home prints under each value, so a pick is recognisable.
+ */
 export const STAT_OPTIONS: Choice[] = [
-  { key: "streak", label: "Day streak", icon: "flame" },
-  { key: "points", label: "Care points", icon: "trophy" },
+  { key: "streak", label: "Logging streak", icon: "water" },
+  { key: "points", label: "Wallet points", icon: "trophy-outline" },
   { key: "cycleDay", label: "Cycle day", icon: "sync-outline" },
-  { key: "nextPeriod", label: "Next period", icon: "calendar-outline" },
+  { key: "nextPeriod", label: "To period", icon: "calendar-outline" },
   { key: "trackedDays", label: "Days tracked", icon: "checkmark-done-outline" },
-  { key: "forest", label: "Forest health", icon: "leaf-outline" },
+  { key: "forest", label: "Forest", icon: "leaf-outline" },
 ];
 export const HUB_OPTIONS: Choice[] = [
   { key: "care", label: "Care & Insights", icon: "pulse-outline" },

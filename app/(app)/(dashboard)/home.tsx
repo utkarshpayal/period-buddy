@@ -35,13 +35,13 @@ import { useAppConfig } from "../../../components/app-config";
 import { PromoBanners } from "../../../components/PromoBanners";
 import { useContentWidth } from "../../../lib/layout";
 import { useHomeLayout } from "../../../components/home-layout";
-import { applyHomeLayout, blockItems, blockTitle, styledShortcuts } from "../../../lib/homeLayout";
+import { STAT_OPTIONS, applyHomeLayout, blockItems, blockTitle, styledShortcuts } from "../../../lib/homeLayout";
 import { LOG_FOCUS } from "../../../lib/logFocus";
 import { useQuickLog } from "../../../hooks/useQuickLog";
 import { HeaderIconButton, SectionHeader } from "../../../components/ScreenHeader";
 import { HomeShortcuts } from "../../../components/HomeShortcuts";
 import { EmptyState } from "../../../components/EmptyState";
-import { getCycleDay } from "../../../lib/cycleCalendar";
+import { buildCurrentWeekStrip } from "../../../lib/weekStrip";
 import { dateFromDayKey } from "../../../lib/format";
 import { useTodayKey } from "../../../hooks/useTodayKey";
 
@@ -74,49 +74,10 @@ const PHASE_WATERMARK_ICONS: Record<string, React.ComponentProps<typeof Ionicons
   luteal: "moon",
 };
 
-const WEEKDAY_LETTERS = ["M", "T", "W", "T", "F", "S", "S"];
-
 function addDays(date: Date, days: number) {
   const next = new Date(date);
   next.setDate(next.getDate() + days);
   return next;
-}
-
-
-// Builds the current Mon–Sun week (day letter + date number), plus, for each
-// day, whether it falls in the period or fertile window — same thresholds
-// tracker.tsx's calendar uses — so the strip reads as real cycle context
-// instead of a plain date picker.
-function buildCurrentWeekStrip(
-  today: Date,
-  cycleStartDate: Date,
-  cycleLength: number,
-  periodLength: number,
-  ovulationDayPivot: number,
-) {
-  const jsDay = today.getDay(); // 0 = Sun ... 6 = Sat
-  const mondayOffset = jsDay === 0 ? -6 : 1 - jsDay;
-  const monday = new Date(today);
-  monday.setDate(today.getDate() + mondayOffset);
-  monday.setHours(0, 0, 0, 0);
-  const todayStart = new Date(today);
-  todayStart.setHours(0, 0, 0, 0);
-
-  return Array.from({ length: 7 }, (_, i) => {
-    const date = new Date(monday);
-    date.setDate(monday.getDate() + i);
-    const cycleDayForDate = getCycleDay(date, cycleStartDate, cycleLength);
-    return {
-      letter: WEEKDAY_LETTERS[i],
-      dayNumber: date.getDate(),
-      isToday: date.getTime() === todayStart.getTime(),
-      isFuture: date.getTime() > todayStart.getTime(),
-      isPeriod: cycleDayForDate <= periodLength,
-      isFertile:
-        cycleDayForDate >= ovulationDayPivot - 5 &&
-        cycleDayForDate <= ovulationDayPivot + 1,
-    };
-  });
 }
 
 // Only the unread total is needed for the bell's dot — ask for a single item
@@ -165,7 +126,7 @@ export default function Home() {
   const viewer = useViewer();
   // The CMS's blocks for this viewer, then the person's own hides/order on
   // top (Profile → Customize Home, lib/homeLayout.ts).
-  const { layout: homeLayout } = useHomeLayout();
+  const { layout: homeLayout, ready: homeLayoutReady } = useHomeLayout();
   const shownHome = applyHomeLayout(shownSections(appConfig, "home", viewer), homeLayout);
   const homeShortcuts = styledShortcuts(appConfig, viewer, homeLayout);
   // A hub with nothing visible for this user drops off "More for you".
@@ -313,7 +274,13 @@ export default function Home() {
       icon: "calendar-outline",
       color: colors.primary,
       bg: colors.primaryLight,
-      value: !homeLoaded ? "…" : daysToPeriod == null ? "–" : withUnit(`${Math.max(daysToPeriod, 0)}`, "days"),
+      value: !homeLoaded
+        ? "…"
+        : daysToPeriod == null
+          ? "–"
+          : daysToPeriod < 0
+            ? withUnit(`${-daysToPeriod}`, -daysToPeriod === 1 ? "day late" : "days late")
+            : withUnit(`${daysToPeriod}`, daysToPeriod === 1 ? "day" : "days"),
       label: "To period",
     },
     trackedDays: { icon: "checkmark-done-outline", color: colors.info, bg: colors.infoLight, value: isStatsLoading ? "…" : `${loggedDays}`, label: "Days tracked" },
@@ -377,7 +344,7 @@ export default function Home() {
               iconColor={stat.color}
               iconBg={stat.bg}
               value={stat.value}
-              label={stat.label}
+              label={STAT_OPTIONS.find((o) => o.key === key)?.label ?? stat.label}
               valueColor={colors.foreground}
               labelColor={colors.mutedText}
               valueFontFamily={fonts.heading}
@@ -840,10 +807,18 @@ export default function Home() {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
           }
         >
-          {shownHome.map((section) => (
-            <React.Fragment key={section.key}>{homeSections[section.key]}</React.Fragment>
-          ))}
-          {shownHome.every((s) => s.key.startsWith("promo_")) ? (
+          {/* Wait for the person's saved layout so Home doesn't draw the default first. */}
+          {!homeLayoutReady ? (
+            <View className="mx-6 mt-3" style={{ gap: 16 }}>
+              <SkeletonBlock width="100%" height={72} radius={20} />
+              <SkeletonBlock width="100%" height={150} radius={24} />
+            </View>
+          ) : (
+            shownHome.map((section) => (
+              <React.Fragment key={section.key}>{homeSections[section.key]}</React.Fragment>
+            ))
+          )}
+          {homeLayoutReady && shownHome.every((s) => s.key.startsWith("promo_")) ? (
             <EmptyState
               icon="view-grid-outline"
               title="Your Home is empty"

@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ScrollView, StatusBar, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppConfig } from "../../components/app-config";
@@ -65,6 +65,9 @@ export default function CustomizeHome() {
   const { config } = useAppConfig();
   const viewer = useViewer();
   const { layout, setLayout } = useHomeLayout();
+  // Text boxes may commit as they unmount, after a newer layout was rendered.
+  const layoutRef = useRef(layout);
+  layoutRef.current = layout;
   // The one block or shortcut whose options are open.
   const [openBlock, setOpenBlock] = useState<HomeSectionKey | null>(null);
   const [styling, setStyling] = useState<string | null>(null);
@@ -98,14 +101,21 @@ export default function CustomizeHome() {
     setStyling(key);
   };
 
-  // A template that brings its own shortcuts replaces the ones picked by hand, so ask first.
+  // A template replaces blocks, headings, picks and (if it has them) shortcuts
+  // and their styles, so ask first unless there's nothing of their own to lose.
   const applyTemplate = (p: (typeof HOME_PRESETS)[number]) => {
     const apply = () => setLayout(applyPreset(layout, p));
-    if (!p.shortcuts || layout.shortcuts === null || preset === p.key) return apply();
-    alert(`Use “${p.label}”?`, "Its shortcuts replace the ones you picked. You can change them again afterwards.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Use template", onPress: apply },
-    ]);
+    if (preset === p.key || isDefaultLayout(layout)) return apply();
+    alert(
+      `Use “${p.label}”?`,
+      p.shortcuts
+        ? "It replaces your blocks, headings, picks and shortcuts. You can change them again afterwards."
+        : "It replaces your blocks, headings and picks. You can change them again afterwards.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Use template", onPress: apply },
+      ],
+    );
   };
 
   const reset = () =>
@@ -149,7 +159,7 @@ export default function CustomizeHome() {
   );
   /** Up/down stacked in one column, so a row keeps its width for the name. */
   const reorder = (name: string, onMove: (dir: -1 | 1) => void, first: boolean, last: boolean) => (
-    <View style={{ width: 30, alignItems: "center" }}>
+    <View style={{ width: 34, alignItems: "center" }}>
       {(
         [
           [-1, "chevron-up", `Move ${name} up`, first],
@@ -160,11 +170,11 @@ export default function CustomizeHome() {
           key={dir}
           onPress={() => onMove(dir)}
           disabled={disabled}
-          hitSlop={{ left: 8, right: 8, top: dir === -1 ? 6 : 0, bottom: dir === 1 ? 6 : 0 }}
+          hitSlop={{ left: 8, right: 8, top: dir === -1 ? 8 : 0, bottom: dir === 1 ? 8 : 0 }}
           accessibilityRole="button"
           accessibilityLabel={a11y}
           accessibilityState={{ disabled }}
-          style={{ height: 20, width: 30, alignItems: "center", justifyContent: "center", opacity: disabled ? 0.25 : 1 }}
+          style={{ height: 26, width: 34, alignItems: "center", justifyContent: "center", opacity: disabled ? 0.25 : 1 }}
         >
           <Ionicons name={icon} size={17} color={colors.mutedText} />
         </TouchableOpacity>
@@ -230,7 +240,7 @@ export default function CustomizeHome() {
               placeholder={settings.title.fallback ?? "No heading"}
               maxLength={TITLE_MAX}
               accessibilityLabel="Heading"
-              onCommit={(title) => setLayout(withBlockOptions(layout, key, { title }))}
+              onCommit={(title) => setLayout(withBlockOptions(layoutRef.current, key, { title }))}
             />
           </View>
         ) : null}
@@ -271,7 +281,12 @@ export default function CustomizeHome() {
             placeholder={original ? label(original) : tile.title}
             maxLength={LABEL_MAX}
             accessibilityLabel="Shortcut name"
-            onCommit={(text) => set({ label: text })}
+            onCommit={(text) => {
+              const current = layoutRef.current;
+              // Removed while its name was being typed.
+              if (current.shortcuts && !current.shortcuts.includes(tile.key)) return;
+              setLayout(withShortcutStyle(current, tile.key, { label: text }));
+            }}
           />
         </View>
         <View style={{ gap: 6 }}>
@@ -290,13 +305,14 @@ export default function CustomizeHome() {
                 <TouchableOpacity
                   key={key}
                   onPress={() => set({ color: key === ownKey ? null : key })}
+                  hitSlop={6}
                   accessibilityRole="radio"
                   accessibilityState={{ selected: on }}
                   accessibilityLabel={`${key} colour${key === ownKey ? " (original)" : ""}`}
                   style={{
-                    width: 30,
-                    height: 30,
-                    borderRadius: 15,
+                    width: 34,
+                    height: 34,
+                    borderRadius: 17,
                     backgroundColor: colors[key],
                     alignItems: "center",
                     justifyContent: "center",
@@ -562,11 +578,23 @@ function TextField({
 }) {
   const { colors, fonts } = useTheme();
   const [text, setText] = useState(value);
-  useEffect(() => setText(value), [value]);
+  // What's saved, the latest text and handler, for the commit on unmount.
+  const saved = useRef(value || null);
+  const latest = useRef({ text, onCommit });
+  latest.current = { text, onCommit };
+  useEffect(() => {
+    setText(value);
+    saved.current = value || null;
+  }, [value]);
   const commit = () => {
-    const next = text.trim() || null;
-    if (next !== (value || null)) onCommit(next);
+    const next = latest.current.text.trim() || null;
+    if (next === saved.current) return;
+    saved.current = next;
+    latest.current.onCommit(next);
   };
+  // Closing the panel (or leaving the screen) while typing removes the box
+  // without a reliable blur, so save what was typed then.
+  useEffect(() => () => commit(), []);
   return (
     <TextInput
       value={text}

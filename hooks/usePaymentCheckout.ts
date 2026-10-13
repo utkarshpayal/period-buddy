@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import type { CashfreeResult } from "../components/CashfreeCheckoutModal";
-import type { UpiCollectOutcome } from "../components/CashfreeUpiCollectModal";
-import { getFriendlyErrorMessage, subscriptionApi, type SubscriptionOrder } from "../lib/api";
+import type { PaymentSheetOutcome } from "../components/PaymentSheet";
+import { getFriendlyErrorMessage, isNetworkError, subscriptionApi, type SubscriptionOrder } from "../lib/api";
 
 export type PurchaseResult =
   | { type: "success" }
@@ -32,24 +32,26 @@ function wait(ms: number) {
 export function usePaymentCheckout() {
   const [purchasingKey, setPurchasingKey] = useState<string | null>(null);
   const [checkout, setCheckout] = useState<SubscriptionOrder | null>(null);
-  // Hosted checkout (cards/UPI apps/netbanking/wallets, Cashfree's own
-  // branded page) is the default, prominent entry — native UPI-ID collect is
-  // an opt-in alternative a caller can request via `startPurchase`'s
-  // `preferUpiCollect` option, not the landing surface (docs/fixes.md 6.1).
-  const [useHostedCheckout, setUseHostedCheckout] = useState(true);
+  // Nura's own PaymentSheet (UPI apps, UPI ID, then "Card, netbanking or
+  // wallet") is the landing surface; that last option switches to Cashfree's
+  // hosted checkout. The sheet opens UPI apps directly, which the hosted page
+  // inside a WebView can't do reliably.
+  const [useHostedCheckout, setUseHostedCheckout] = useState(false);
+  /** What is being paid for, shown on the sheet. */
+  const [checkoutTitle, setCheckoutTitle] = useState<string | undefined>(undefined);
   const [purchaseResult, setPurchaseResult] = useState<PurchaseResult | null>(null);
   const lastOrder = useRef<SubscriptionOrder | null>(null);
 
   function reset() {
     setCheckout(null);
     setPurchaseResult(null);
-    setUseHostedCheckout(true);
+    setUseHostedCheckout(false);
   }
 
   async function startPurchase(
     key: string,
     payload: PurchasePayload,
-    options?: { couponCode?: string; preferUpiCollect?: boolean },
+    options?: { couponCode?: string; title?: string },
   ): Promise<{ free: boolean } | null> {
     setPurchasingKey(key);
     try {
@@ -59,7 +61,8 @@ export function usePaymentCheckout() {
         setPurchaseResult({ type: "success" });
         return { free: true };
       }
-      setUseHostedCheckout(!options?.preferUpiCollect);
+      setUseHostedCheckout(false);
+      setCheckoutTitle(options?.title);
       setCheckout(order);
       return { free: false };
     } catch (err) {
@@ -121,19 +124,19 @@ export function usePaymentCheckout() {
     }
   };
 
-  // Polled by CashfreeUpiCollectModal every few seconds while the user
-  // approves the request in their UPI app.
+  // Polled by PaymentSheet every few seconds while the user pays in their
+  // UPI app. A dropped connection is "still pending", not a failed payment.
   const verifyUpiOnce = async (orderId: string): Promise<"paid" | "pending" | "failed"> => {
     if (!checkout) return "failed";
     try {
       const result = await subscriptionApi.verifyPayment({ entitlementId: checkout.entitlementId, orderId });
       return "pending" in result ? "pending" : "paid";
-    } catch {
-      return "failed";
+    } catch (err) {
+      return isNetworkError(err) ? "pending" : "failed";
     }
   };
 
-  const handleUpiOutcome = (result: UpiCollectOutcome) => {
+  const handleUpiOutcome = (result: PaymentSheetOutcome) => {
     setCheckout(null);
     if (result.type === "dismiss") return;
     if (result.type === "failed") {
@@ -166,6 +169,7 @@ export function usePaymentCheckout() {
   return {
     purchasingKey,
     checkout,
+    checkoutTitle,
     useHostedCheckout,
     setUseHostedCheckout,
     purchaseResult,

@@ -73,9 +73,11 @@ export function HubScreen({
         <ScreenHeader
           title={customTitle ?? genZLabel(title, genZModeEnabled)}
           subtitle={showIntro ? sectionText(sections, "intro", intro) : undefined}
+          subtitleLines={2}
         />
 
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingTop: 12, paddingBottom: 48, gap: 20 }}>
+        {/* "handled": the Nura AI hero's send button works on the first tap while the keyboard is up. */}
+        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingTop: 12, paddingBottom: 48, gap: 20 }}>
           {sections.map((s) => (blocks[s.key] ? <React.Fragment key={s.key}>{blocks[s.key]}</React.Fragment> : null))}
         </ScrollView>
       </SafeAreaView>

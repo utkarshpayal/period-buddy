@@ -160,15 +160,23 @@ export function HubHero({ tile }: { tile: HubTile }) {
   return tile.key === "nuraAi" ? <AskHero tile={tile} /> : <BookHero tile={tile} />;
 }
 
+// White text clears 4.5:1 on each stop.
+const BOOK_HERO_DARK: [string, string, string] = ["#B23D64", "#9A3060", "#7B2D6B"];
+
 /** Rose card with one call to action (Care & Insights → consultation). */
 function BookHero({ tile }: { tile: HubTile }) {
   const { colors, isDark, fonts } = useTheme();
   const onPress = useTilePress(tile);
   const title = useTileTitle(tile);
+  // Dark mode's hero gradient ends in pale pink/lavender, too light under
+  // white text, so this card keeps deep berry stops there. Rose on the white
+  // button/badge likewise needs a deeper shade than dark mode's primaryDark.
+  const gradient = isDark ? BOOK_HERO_DARK : (getHeroGradient(colors, isDark) as [string, string, ...string[]]);
+  const roseOnWhite = isDark ? "#A3305A" : colors.primaryDark;
   return (
     <View className="mx-6">
       <LinearGradient
-        colors={getHeroGradient(colors, isDark) as [string, string, ...string[]]}
+        colors={gradient}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={{
@@ -184,7 +192,7 @@ function BookHero({ tile }: { tile: HubTile }) {
       >
         <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
           <View style={{ width: 52, height: 52, borderRadius: 16, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center" }}>
-            <MaterialCommunityIcons name="doctor" size={28} color={colors.primary} />
+            <MaterialCommunityIcons name="doctor" size={28} color={roseOnWhite} />
           </View>
           <View style={{ flex: 1, gap: 2 }}>
             <Text numberOfLines={2} maxFontSizeMultiplier={1.4} style={{ fontSize: 17, lineHeight: 24, fontWeight: "700", color: "#FFFFFF", fontFamily: fonts.heading }}>
@@ -222,11 +230,11 @@ function BookHero({ tile }: { tile: HubTile }) {
           accessibilityLabel={`${title}, book a call`}
           style={{ height: 48, borderRadius: 14, backgroundColor: "#FFFFFF", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 }}
         >
-          <Ionicons name="calendar-outline" size={18} color={colors.primaryDark} />
-          <Text maxFontSizeMultiplier={1.3} style={{ fontSize: 15, fontWeight: "700", color: colors.primaryDark, fontFamily: fonts.body }}>
+          <Ionicons name="calendar-outline" size={18} color={roseOnWhite} />
+          <Text maxFontSizeMultiplier={1.3} style={{ fontSize: 15, fontWeight: "700", color: roseOnWhite, fontFamily: fonts.body }}>
             Book a call
           </Text>
-          <Ionicons name="arrow-forward" size={16} color={colors.primaryDark} />
+          <Ionicons name="arrow-forward" size={16} color={roseOnWhite} />
         </TouchableOpacity>
       </LinearGradient>
     </View>
@@ -301,7 +309,7 @@ function AskHero({ tile }: { tile: HubTile }) {
             accessibilityLabel="Send"
             style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" }}
           >
-            <Ionicons name="arrow-up" size={18} color="#FFFFFF" />
+            <Ionicons name="arrow-up" size={18} color={colors.buttonText} />
           </TouchableOpacity>
         </View>
     </View>

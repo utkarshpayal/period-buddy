@@ -25,7 +25,7 @@ import { EmptyState } from "../../components/EmptyState";
 import { useAuth } from "../../components/auth-context";
 import { alert } from "../../lib/alert";
 import { CashfreeCheckoutModal, type CashfreeResult } from "../../components/CashfreeCheckoutModal";
-import { CashfreeUpiCollectModal, type UpiCollectOutcome } from "../../components/CashfreeUpiCollectModal";
+import { PaymentSheet, type PaymentSheetOutcome } from "../../components/PaymentSheet";
 import { PaymentTrustFooter } from "../../components/subscription/PaymentTrustFooter";
 import { PrescriptionCard } from "../../components/PrescriptionCard";
 import { useTheme } from "../../components/theme";
@@ -57,6 +57,8 @@ import { JitsiCall } from "../../components/JitsiCall";
 import { ScreenHeader, SectionHeader } from "../../components/ScreenHeader";
 import { getShadow } from "../../components/ui-tokens";
 import { useSecureScreen } from "../../lib/screenPrivacy";
+import { cleanupTempFiles } from "../../lib/tempFiles";
+import { AppModalHost } from "../../components/modals/AppModalHost";
 
 // Finished sessions the user tapped "Not now" on, so the rating card moves on.
 const SKIPPED_RATINGS_KEY = "period-buddy.consultation.skipped-ratings";
@@ -155,6 +157,8 @@ export default function ConsultationScreen() {
   const insets = useSafeAreaInsets();
   const mountedRef = useRef(true);
   useEffect(() => {
+    // Prescription PDFs saved on an earlier visit (lib/tempFiles.ts).
+    cleanupTempFiles();
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
@@ -679,11 +683,10 @@ export default function ConsultationScreen() {
         setTimeout(() => openChat(order.consultation!), 400);
         return;
       }
-      // Hosted checkout (cards/UPI apps/netbanking/wallets) is the
-      // prominent, default entry — see PaywallModal.tsx's identically
-      // motivated default (docs/fixes.md 6.1). CashfreeUpiCollectModal's own
-      // "Pay another way" link still offers the reverse switch.
-      setUseHostedCheckout(true);
+      // PaymentSheet (UPI apps, UPI ID) first; its "Card, netbanking or
+      // wallet" option switches to the hosted checkout. Same as
+      // hooks/usePaymentCheckout.ts.
+      setUseHostedCheckout(false);
       setCheckoutOrder(order);
       // setBooking(false) happens once the checkout modal resolves.
     } catch (err) {
@@ -796,12 +799,13 @@ export default function ConsultationScreen() {
         orderId,
       });
       return "pending" in result ? "pending" : "paid";
-    } catch {
-      return "failed";
+    } catch (err) {
+      // A dropped connection is "still pending", not a failed payment.
+      return isNetworkError(err) ? "pending" : "failed";
     }
   };
 
-  const handleUpiOutcome = async (result: UpiCollectOutcome) => {
+  const handleUpiOutcome = async (result: PaymentSheetOutcome) => {
     const order = checkoutOrder;
     setCheckoutOrder(null);
     if (!order || result.type === "dismiss") {
@@ -813,7 +817,7 @@ export default function ConsultationScreen() {
       alert("Payment failed", result.message || "Your UPI payment didn't go through, so nothing was booked. Please try again.");
       return;
     }
-    // The polling in CashfreeUpiCollectModal already confirmed the order is
+    // The polling in PaymentSheet already confirmed the order is
     // PAID — verifying again both re-confirms and fetches the booked session.
     await confirmBooking(order, true);
   };
@@ -1414,11 +1418,14 @@ export default function ConsultationScreen() {
                       setSlotsOpen(false);
                       setSelectedSlotStart(null);
                     }}
+                    // Not while a payment is being confirmed: the note saying so is in the booking bar.
+                    disabled={booking}
                     accessibilityRole="button"
                     accessibilityLabel="Hide open times"
+                    accessibilityState={{ disabled: booking }}
                     hitSlop={8}
                     className="flex-row items-center"
-                    style={{ gap: 2 }}
+                    style={{ gap: 2, opacity: booking ? 0.5 : 1 }}
                   >
                     <Text style={{ fontSize: 12.5, fontWeight: "700", color: colors.primary, fontFamily: fonts.body }}>Hide</Text>
                     <Feather name="chevron-up" size={14} color={colors.primary} />
@@ -1714,8 +1721,9 @@ export default function ConsultationScreen() {
           </View>
         </ScrollView>
 
-        {/* Sticky Bottom booking panel: only while choosing a time. */}
-        {selectedDoctor && slotsOpen && !selectedExisting && (
+        {/* Sticky Bottom booking panel: only while choosing a time (on the New tab, with
+            the picker), or while a payment is being confirmed. */}
+        {(listTab === "new" || booking) && selectedDoctor && slotsOpen && !selectedExisting && (
           <View
             className="border-t px-6 py-4"
             style={{
@@ -2046,6 +2054,8 @@ export default function ConsultationScreen() {
               ) : null}
             </View>
           </KeyboardAvoidingView>
+          {/* Alerts raised in the chat (e.g. a failed prescription download) draw over it. */}
+          {chatModalVisible ? <AppModalHost inline /> : null}
         </Modal>
 
         {/* Video consultation on the self-hosted Jitsi server (full-screen Modal, floats above the chat). */}
@@ -2084,16 +2094,15 @@ export default function ConsultationScreen() {
           />
         )}
 
-        {/* Cashfree Checkout — hosted checkout (cards/UPI apps/netbanking/
-            wallets) is the default; CashfreeUpiCollectModal's own "Pay
-            another way" link switches back to it if native UPI-ID collect
-            was ever made reachable from this screen (it currently isn't —
-            see the fixed `useHostedCheckout(true)` above). */}
+        {/* PaymentSheet (UPI apps, UPI ID) first; "Card, netbanking or
+            wallet" switches to Cashfree's hosted checkout. */}
         {checkoutOrder && !useHostedCheckout && (
-          <CashfreeUpiCollectModal
+          <PaymentSheet
             visible
             mode={checkoutOrder.cashfreeMode ?? "production"}
             paymentSessionId={checkoutOrder.paymentSessionId!}
+            amount={checkoutOrder.amount}
+            title={selectedDoctor ? `Consultation with ${selectedDoctor.name}` : "Doctor consultation"}
             onVerify={() => verifyUpiOnce(checkoutOrder.orderId!)}
             onOutcome={handleUpiOutcome}
             onUseOtherMethod={() => setUseHostedCheckout(true)}

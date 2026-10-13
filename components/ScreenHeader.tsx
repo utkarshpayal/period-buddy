@@ -59,11 +59,14 @@ export function HeaderIconButton({
 export function ScreenHeader({
   title,
   subtitle,
+  subtitleLines = 1,
   onBack,
   right,
 }: {
   title: string;
   subtitle?: string;
+  /** 2 for text someone else writes (a CMS intro), so it isn't cut off mid-sentence. */
+  subtitleLines?: 1 | 2;
   onBack?: () => void;
   right?: React.ReactNode;
 }) {
@@ -76,7 +79,7 @@ export function ScreenHeader({
         accessibilityLabel="Go back"
         onPress={onBack ?? (() => (router.canGoBack() ? router.back() : router.replace("/")))}
       />
-      <HeaderTitle title={title} subtitle={subtitle} size={20} />
+      <HeaderTitle title={title} subtitle={subtitle} subtitleLines={subtitleLines} size={20} />
       {right ? <View className="flex-row items-center" style={{ gap: 8 }}>{right}</View> : null}
     </View>
   );
@@ -92,7 +95,17 @@ export function TabHeader({ title, subtitle, right }: { title: string; subtitle?
   );
 }
 
-function HeaderTitle({ title, subtitle, size }: { title: string; subtitle?: string; size: number }) {
+function HeaderTitle({
+  title,
+  subtitle,
+  subtitleLines = 1,
+  size,
+}: {
+  title: string;
+  subtitle?: string;
+  subtitleLines?: 1 | 2;
+  size: number;
+}) {
   const { colors, fonts } = useTheme();
   return (
     <View className="flex-1">
@@ -104,7 +117,7 @@ function HeaderTitle({ title, subtitle, size }: { title: string; subtitle?: stri
         {title}
       </Text>
       {subtitle ? (
-        <Text numberOfLines={1} style={{ color: colors.mutedText, fontSize: 13, lineHeight: 18, fontFamily: fonts.body }}>
+        <Text numberOfLines={subtitleLines} style={{ color: colors.mutedText, fontSize: 13, lineHeight: 18, fontFamily: fonts.body }}>
           {subtitle}
         </Text>
       ) : null}

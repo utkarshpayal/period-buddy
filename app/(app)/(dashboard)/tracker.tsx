@@ -484,7 +484,8 @@ export default function Tracker() {
   useSecureScreen("tracker");
   const insets = useSafeAreaInsets();
   // "Log period" logs today in one tap, "Symptoms" opens the small sheet
-  // (same as Home); "All details" in the sheet opens today's full log here.
+  // (same as Home); "All details" in the sheet opens today's full log here,
+  // once the sheet has closed (useQuickLog).
   const quickLog = useQuickLog({
     toastBottom: 62 + Math.max(insets.bottom, 12) + 14,
     openFullLog: (focus) => openToday(focus),
@@ -1222,7 +1223,7 @@ export default function Tracker() {
 
                 <TouchableOpacity
                   activeOpacity={0.85}
-                  onPress={() => quickLog.openSheet("symptoms")}
+                  onPress={() => void quickLog.openSheet("symptoms")}
                   accessibilityRole="button"
                   className="flex-1 flex-row items-center justify-center border"
                   style={{ height: 48, borderRadius: 16, gap: 8, backgroundColor: colors.surface, borderColor: colors.border }}

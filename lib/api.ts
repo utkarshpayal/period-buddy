@@ -132,7 +132,6 @@ export type PrivacyConsents = {
   };
 };
 
-/** Settings on the privacy screen (User.privacySettings on the backend). */
 /** Body/response of /api/auth/home-layout (parsed by lib/homeLayout.ts). */
 export type HomeLayoutPayload = {
   order: string[];
@@ -143,6 +142,7 @@ export type HomeLayoutPayload = {
   updatedAt?: string | null;
 };
 
+/** Settings on the privacy screen (User.privacySettings on the backend). */
 export type PrivacySettings = {
   /** Pushes say "You have a new update" instead of their text. */
   hideNotificationDetails: boolean;
@@ -1636,7 +1636,7 @@ export const consultationApi = {
   // booking couldn't be made (it will be refunded).
   // A pending UPI-collect approval (or any other still-open Cashfree
   // order) comes back as { pending: true } rather than a Consultation —
-  // callers polling this (CashfreeUpiCollectModal) must check for that
+  // callers polling this (PaymentSheet) must check for that
   // shape before treating the response as a booked session.
   verifyPayment: (payload: { consultationId: string; orderId: string }) =>
     apiRequest<Consultation | { pending: true }>("/api/consultation/verify", {
