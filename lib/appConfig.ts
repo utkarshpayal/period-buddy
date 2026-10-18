@@ -262,7 +262,7 @@ export const FEATURE_REGISTRY: FeatureDefinition[] = [
   { key: "checkinCall", title: "Check-in Call", description: "Buddy calls you, hands-free", icon: "call-outline", route: "/(app)/checkin-call", placement: "wellness_hub", size: "small", colorKey: "sky" },
   // Explore
   { key: "forest", title: "Forest", description: "Grow your wellness tree", icon: "leaf-outline", route: "/(app)/forest", placement: "explore_hub", size: "small", colorKey: "success" },
-  { key: "blogs", title: "Blogs", description: "Articles on cycle health", icon: "book-outline", route: "/(app)/blogs", placement: "explore_hub", size: "small", colorKey: "info" },
+  { key: "blogs", title: "Articles", description: "Articles on cycle health", icon: "book-outline", route: "/(app)/blogs", placement: "explore_hub", size: "small", colorKey: "info" },
   { key: "videos", title: "Videos", description: "Short videos and reels", icon: "play-circle-outline", route: "/(app)/reels", placement: "explore_hub", size: "small", colorKey: "primary" },
   { key: "partnerSync", title: "Partner Sync", description: "Share cycle info & chat", icon: "heart-half-outline", route: "/(app)/partner", placement: "explore_hub", size: "small", colorKey: "accent" },
   { key: "habits", title: "Habits", description: "Daily habit tracking", icon: "checkmark-circle-outline", route: "/(app)/habits", placement: "explore_hub", size: "small", colorKey: "warning" },

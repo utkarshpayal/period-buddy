@@ -128,27 +128,45 @@ function HeaderTitle({
 /** Home's section title: 17/700 heading, optional "See all"-style link. */
 export function SectionHeader({
   title,
+  subtitle,
   actionLabel,
   onAction,
   style,
 }: {
   title: string;
+  /** One short muted line under the title. */
+  subtitle?: string;
   actionLabel?: string;
   onAction?: () => void;
   style?: StyleProp<ViewStyle>;
 }) {
   const { colors, fonts } = useTheme();
   return (
-    <View className="flex-row items-center justify-between" style={[{ marginBottom: 12, minHeight: 32 }, style]}>
-      <Text
-        accessibilityRole="header"
-        numberOfLines={1}
-        style={{ flexShrink: 1, fontSize: 17, lineHeight: 24, fontWeight: "700", color: colors.foreground, fontFamily: fonts.heading }}
-      >
-        {title}
-      </Text>
+    <View className="flex-row items-center justify-between" style={[{ marginBottom: 12, minHeight: 32, gap: 12 }, style]}>
+      <View style={{ flexShrink: 1 }}>
+        <Text
+          accessibilityRole="header"
+          numberOfLines={1}
+          style={{ fontSize: 17, lineHeight: 24, fontWeight: "700", color: colors.foreground, fontFamily: fonts.heading }}
+        >
+          {title}
+        </Text>
+        {subtitle ? (
+          <Text numberOfLines={1} maxFontSizeMultiplier={1.4} style={{ marginTop: 1, fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}>
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
       {actionLabel && onAction ? (
-        <TouchableOpacity activeOpacity={0.7} onPress={onAction} className="flex-row items-center" style={{ gap: 2 }} hitSlop={8}>
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={onAction}
+          className="flex-row items-center"
+          style={{ gap: 2 }}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={actionLabel}
+        >
           <Text style={{ fontSize: 13, fontWeight: "600", color: colors.primaryDark, fontFamily: fonts.body }}>{actionLabel}</Text>
           <Ionicons name="chevron-forward" size={16} color={colors.primaryDark} />
         </TouchableOpacity>

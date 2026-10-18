@@ -31,6 +31,10 @@ function useRangeForm(range: Range, setRange: (r: Range) => void) {
   const calendars = (
     <>
       <CalendarModal
+        title="Start date"
+        rangeStart={range.start || undefined}
+        rangeEnd={range.end || undefined}
+        rangeEdge="start"
         initialDateKey={range.start || undefined}
         maximumDate={range.end ? dateKeyToDate(range.end) : new Date()}
         onClose={() => setStartOpen(false)}
@@ -41,6 +45,10 @@ function useRangeForm(range: Range, setRange: (r: Range) => void) {
         visible={startOpen}
       />
       <CalendarModal
+        title="End date"
+        rangeStart={range.start || undefined}
+        rangeEnd={range.end || undefined}
+        rangeEdge="end"
         initialDateKey={range.end || undefined}
         maximumDate={new Date()}
         minimumDate={range.start ? dateKeyToDate(range.start) : undefined}
@@ -93,10 +101,10 @@ function RangeFields({
         />
         <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
           <View style={{ flex: 1 }}>
-            <DateField value={range.start ? formatDateLabel(range.start) : ""} placeholder="Start date" onPress={openStart} />
+            <DateField label="From" value={range.start ? formatDateLabel(range.start) : ""} placeholder="Start date" onPress={openStart} />
           </View>
           <View style={{ flex: 1 }}>
-            <DateField value={range.end ? formatDateLabel(range.end) : ""} placeholder="End date" onPress={openEnd} />
+            <DateField label="To" value={range.end ? formatDateLabel(range.end) : ""} placeholder="End date" onPress={openEnd} />
           </View>
         </View>
       </View>

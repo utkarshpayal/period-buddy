@@ -33,6 +33,7 @@ export function buildCurrentWeekStrip(
   const todayStart = startOfDay(today);
   const start = startOfDay(cycleStartDate);
   const mondayOffset = (todayStart.getDay() + 6) % 7;
+  const todaySince = Math.round((todayStart.getTime() - start.getTime()) / MS_PER_DAY) + 1;
   const monday = new Date(todayStart);
   monday.setDate(todayStart.getDate() - mondayOffset);
 
@@ -42,14 +43,16 @@ export function buildCurrentWeekStrip(
     const isFuture = date.getTime() > todayStart.getTime();
     const sinceStart = Math.round((date.getTime() - start.getTime()) / MS_PER_DAY) + 1;
     const inCurrentCycle = sinceStart >= 1 && !isFuture;
-    const cycleDay = inCurrentCycle ? sinceStart : getCycleDay(date, start, cycleLength);
+    // While late, the period can start any day: future days project from tomorrow.
+    const lateStart = todaySince > cycleLength ? new Date(todayStart.getTime() + MS_PER_DAY) : null;
+    const cycleDay = inCurrentCycle ? sinceStart : isFuture && lateStart ? getCycleDay(date, lateStart, cycleLength) : getCycleDay(date, start, cycleLength);
     return {
       letter: WEEKDAY_LETTERS[i],
       dayNumber: date.getDate(),
       isToday: date.getTime() === todayStart.getTime(),
       isFuture,
       isPeriod: cycleDay <= periodLength,
-      isFertile: cycleDay >= ovulationDayPivot - 5 && cycleDay <= ovulationDayPivot + 1,
+      isFertile: cycleDay >= ovulationDayPivot - 5 && cycleDay <= ovulationDayPivot,
     };
   });
 }

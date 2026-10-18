@@ -17,8 +17,9 @@ test("week strip: Monday first, today and future flagged", () => {
 
 test("week strip: period started this week shows its days, fertile window from the pivot", () => {
   assert.deepEqual(marks(buildCurrentWeekStrip(today, new Date(2025, 9, 14), 28, 5, 15), "isPeriod"), [14, 15, 16, 17, 18]);
-  // Cycle started 1 Oct: days 13–19 are cycle days 13–19, fertile 10–16.
-  assert.deepEqual(marks(buildCurrentWeekStrip(today, new Date(2025, 9, 1), 28, 5, 15), "isFertile"), [13, 14, 15, 16]);
+  // Cycle started 1 Oct: days 13–19 are cycle days 13–19; fertile is the 5 days
+  // before ovulation (day 15) plus ovulation day, so 10–15.
+  assert.deepEqual(marks(buildCurrentWeekStrip(today, new Date(2025, 9, 1), 28, 5, 15), "isFertile"), [13, 14, 15]);
 });
 
 test("week strip: a late period doesn't paint the days since it was due as period days", () => {
@@ -28,4 +29,12 @@ test("week strip: a late period doesn't paint the days since it was due as perio
   // Days before the current cycle still wrap onto the previous one.
   const before = buildCurrentWeekStrip(today, new Date(2025, 9, 17), 28, 5, 15);
   assert.deepEqual(marks(before, "isPeriod"), [17, 18, 19]);
+});
+
+test("week strip: while late, upcoming days project from tomorrow, not a wrapped cycle", () => {
+  // Started 13 Sep, 28-day cycle: due 11 Oct, today (cycle day 33) is late.
+  const days = buildCurrentWeekStrip(today, new Date(2025, 8, 13), 28, 5, 15);
+  const future = days.filter((d) => d.isFuture);
+  // The period could start any day, so every upcoming day this week is a possible period day.
+  assert.ok(future.length === 0 || future.every((d) => d.isPeriod));
 });

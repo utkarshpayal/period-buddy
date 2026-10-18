@@ -1,11 +1,10 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   RefreshControl,
   ScrollView,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -14,7 +13,10 @@ import { EmptyState } from "../../components/EmptyState";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
 import { LoadMoreButton } from "../../components/LoadMoreButton";
 import { SkeletonCardList } from "../../components/Skeleton";
-import { ScreenHeader } from "../../components/ScreenHeader";
+import { HeaderIconButton, ScreenHeader, SectionHeader } from "../../components/ScreenHeader";
+import { FilterChips, type FilterChipOption } from "../../components/FilterChips";
+import { SearchBar } from "../../components/SearchBar";
+import { useAuth } from "../../components/auth-context";
 import { useTheme } from "../../components/theme";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
 import { useSubscriptionAccess } from "../../hooks/useSubscriptionAccess";
@@ -48,17 +50,20 @@ const SCHEMES_CACHE_KEY = "schemes:list:default:p1";
 const SCHEME_CATEGORIES_CACHE_KEY = "schemes:categories";
 const SCHEMES_RECOMMENDED_CACHE_KEY = "schemes:recommended";
 const SCHEMES_STALE_MS = 5 * 60_000;
+const ALL_CATEGORIES = "__all__";
 
-const LEVEL_FILTERS: { key: "all" | GovernmentLevel; label: string }[] = [
-  { key: "all", label: "All" },
-  { key: "central", label: "Central" },
-  { key: "state", label: "Rajasthan" },
-];
+type LevelKey = "all" | GovernmentLevel;
+
+const isIoniconName = (name: string): name is keyof typeof Ionicons.glyphMap =>
+  Object.prototype.hasOwnProperty.call(Ionicons.glyphMap, name);
 
 function SchemeCard({ scheme }: { scheme: GovernmentBenefit }) {
   const { colors, fonts, isDark } = useTheme();
   const router = useRouter();
   const softTints = getSoftTints(colors);
+  const levelLabel =
+    scheme.governmentLevel === "central" ? "Central" : scheme.state || "State";
+  const actionLabel = SCHEME_ACTION_LABELS[scheme.actionType] || "View";
 
   return (
     <TouchableOpacity
@@ -66,39 +71,46 @@ function SchemeCard({ scheme }: { scheme: GovernmentBenefit }) {
       onPress={() =>
         router.push(`/government-scheme-detail?id=${scheme.slug}`)
       }
-      className="rounded-2xl p-4 mb-3"
-      style={{ backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
+      accessibilityRole="button"
+      accessibilityLabel={`${scheme.name}. ${levelLabel}. ${actionLabel}`}
+      style={{
+        backgroundColor: colors.surface,
+        borderColor: colors.border,
+        borderWidth: 1,
+        borderRadius: 24,
+        padding: 16,
+        marginBottom: 12,
+        ...getShadow(colors, isDark),
+      }}
     >
-      <View className="flex-row items-start">
+      <View className="flex-row items-start" style={{ gap: 12 }}>
         <View
-          className="p-2.5 rounded-xl mr-3"
-          style={{ backgroundColor: softTints.pink }}
+          className="items-center justify-center"
+          style={{ width: 42, height: 42, borderRadius: 14, backgroundColor: softTints.pink }}
         >
-          <Ionicons name="ribbon-outline" size={20} color={colors.primary} />
+          <Ionicons name="ribbon-outline" size={20} color={colors.primaryDark} />
         </View>
-        <View className="flex-1">
-          <View className="flex-row items-center flex-wrap gap-1.5 mb-1">
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <View className="flex-row items-center flex-wrap" style={{ gap: 6, marginBottom: 6 }}>
             <View
-              className="px-2 py-0.5 rounded-full"
-              style={{ backgroundColor: softTints.lavender }}
+              style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: softTints.lavender }}
             >
               <Text
-                className="text-xs font-bold"
-                style={{ color: colors.accentText, fontFamily: fonts.body }}
+                numberOfLines={1}
+                maxFontSizeMultiplier={1.3}
+                style={{ fontSize: 13, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}
               >
-                {scheme.governmentLevel === "central"
-                  ? "Central"
-                  : scheme.state || "State"}
+                {levelLabel}
               </Text>
             </View>
             {scheme.shortName ? (
               <View
-                className="px-2 py-0.5 rounded-full"
-                style={{ backgroundColor: softTints.amber }}
+                style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: softTints.amber }}
               >
                 <Text
-                  className="text-xs font-bold"
-                  style={{ color: colors.warning, fontFamily: fonts.mono }}
+                  numberOfLines={1}
+                  maxFontSizeMultiplier={1.3}
+                  style={{ fontSize: 13, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}
                 >
                   {scheme.shortName}
                 </Text>
@@ -106,31 +118,25 @@ function SchemeCard({ scheme }: { scheme: GovernmentBenefit }) {
             ) : null}
           </View>
           <Text
-            className="text-sm font-bold"
-            style={{ color: colors.foreground, fontFamily: fonts.heading }}
+            numberOfLines={2}
+            style={{ flexShrink: 1, fontSize: 15, lineHeight: 21, fontWeight: "700", color: colors.foreground, fontFamily: fonts.heading }}
           >
             {scheme.name}
           </Text>
           <Text
             numberOfLines={2}
-            className="text-xs mt-1"
-            style={{ color: colors.mutedText, fontFamily: fonts.body }}
+            style={{ marginTop: 4, fontSize: 14, lineHeight: 20, fontWeight: "400", color: colors.foreground, fontFamily: fonts.body }}
           >
             {scheme.description}
           </Text>
-          <View className="flex-row items-center mt-2">
+          <View className="flex-row items-center" style={{ marginTop: 10, gap: 2 }}>
             <Text
-              className="text-xs font-bold"
-              style={{ color: colors.primary, fontFamily: fonts.body }}
+              maxFontSizeMultiplier={1.4}
+              style={{ fontSize: 13, fontWeight: "700", color: colors.primaryDark, fontFamily: fonts.body }}
             >
-              {SCHEME_ACTION_LABELS[scheme.actionType] || "View"}
+              {actionLabel}
             </Text>
-            <Feather
-              name="chevron-right"
-              size={14}
-              color={colors.primary}
-              style={{ marginLeft: 2 }}
-            />
+            <Feather name="chevron-right" size={15} color={colors.primaryDark} />
           </View>
         </View>
       </View>
@@ -139,13 +145,16 @@ function SchemeCard({ scheme }: { scheme: GovernmentBenefit }) {
 }
 
 export default function GovernmentSchemes() {
-  const { colors, fonts, isDark } = useTheme();
+  const { colors, fonts } = useTheme();
   const router = useRouter();
-  const softTints = getSoftTints(colors);
+  const { user } = useAuth();
+  // The state chip filters to the signed-in user's own state; no state on
+  // the profile means no state chip (Central + All still work).
+  const userState = user?.state?.trim() || "";
 
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [level, setLevel] = useState<"all" | GovernmentLevel>("all");
+  const [level, setLevel] = useState<LevelKey>("all");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
   const [categories, setCategories] = useState<SchemeCategoryMeta[]>(
@@ -166,11 +175,18 @@ export default function GovernmentSchemes() {
   const { hasAccess, isLoading: subscriptionLoading, refresh: refreshSubscriptionAccess } = useSubscriptionAccess();
   const locked = !subscriptionLoading && !hasAccess(SCHEMES_FEATURE_KEY);
 
-  // Show the paywall the moment it's clear the user can't browse schemes at
-  // all — don't wait for them to tap into a scheme first.
+  // A locked user sees the locked card first; the paywall opens only when
+  // they tap it (not the moment the screen opens).
+
+  // Shown when a quiet revalidation fails and the saved list stays on screen.
+  const [showingSaved, setShowingSaved] = useState(false);
+  const schemesCountRef = useRef(schemes.length);
+  schemesCountRef.current = schemes.length;
+
+  // If the profile's state is cleared, drop the now-hidden state filter.
   useEffect(() => {
-    if (locked) setPaywallVisible(true);
-  }, [locked]);
+    if (!userState && level === "state") setLevel("all");
+  }, [userState, level]);
 
   // Page-based pagination with a "Load More" button (mirrors blogs.tsx).
   const PAGE_SIZE = 10;
@@ -192,12 +208,12 @@ export default function GovernmentSchemes() {
     (targetPage: number) => ({
       search: debouncedSearch || undefined,
       category: activeCategory || undefined,
-      state: level === "state" ? "Rajasthan" : undefined,
+      state: level === "state" && userState ? userState : undefined,
       governmentLevel: level === "central" ? ("central" as GovernmentLevel) : undefined,
       page: targetPage,
       limit: PAGE_SIZE,
     }),
-    [debouncedSearch, activeCategory, level],
+    [debouncedSearch, activeCategory, level, userState],
   );
 
   const load = useCallback(
@@ -227,6 +243,7 @@ export default function GovernmentSchemes() {
         else if (!hasCachedList) setLoading(true);
         setError(null);
         setOffline(false);
+        setShowingSaved(false);
 
         // Categories + recommended only need loading once (no active filters).
         const shouldLoadMeta = categories.length === 0 || isRefresh || hasCachedList;
@@ -254,8 +271,11 @@ export default function GovernmentSchemes() {
         if (catRes) setCategories(catRes.categories);
         if (recRes) setRecommended(recRes.schemes);
       } catch (err) {
-        // A failed quiet revalidation keeps the cached first page on screen.
-        if (!hasCachedList || isRefresh) {
+        // A failed quiet revalidation (or pull-to-refresh over a list that's
+        // already showing) keeps that list on screen with a small notice.
+        if (hasCachedList || (isRefresh && schemesCountRef.current > 0)) {
+          setShowingSaved(true);
+        } else {
           setError(getFriendlyErrorMessage(err));
           setOffline(isNetworkError(err));
         }
@@ -301,31 +321,49 @@ export default function GovernmentSchemes() {
     return schemes.filter((s) => !recommendedIds.has(s._id));
   }, [schemes, recommended, showRecommended]);
 
-  const headerRight = useMemo(
-    () => (
-      <TouchableOpacity
-        activeOpacity={0.7}
-        onPress={() => router.push("/scheme-applications")}
-        className="px-3 py-1.5 rounded-full flex-row items-center"
-        style={{ backgroundColor: softTints.pink }}
-      >
-        <Ionicons name="folder-open-outline" size={14} color={colors.primary} />
-        <Text
-          className="text-xs font-bold ml-1"
-          style={{ color: colors.primary, fontFamily: fonts.body }}
-        >
-          My Applications
-        </Text>
-      </TouchableOpacity>
-    ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [colors, softTints],
+  // "All schemes" minus the recommended ones can come back empty: hide that
+  // section then, unless another page could still fill it.
+  const showAllSection = !showRecommended || displaySchemes.length > 0 || hasMore;
+
+  const levelOptions = useMemo<FilterChipOption<LevelKey>[]>(
+    () => [
+      { key: "all", label: "All" },
+      { key: "central", label: "Central" },
+      ...(userState ? [{ key: "state" as const, label: userState }] : []),
+    ],
+    [userState],
+  );
+
+  const categoryOptions = useMemo<FilterChipOption<string>[]>(
+    () => [
+      { key: ALL_CATEGORIES, label: "All topics" },
+      ...categories.map((cat) => ({
+        key: cat.key,
+        label: cat.label,
+        icon: isIoniconName(cat.icon) ? cat.icon : undefined,
+      })),
+    ],
+    [categories],
+  );
+
+  const clearFilters = () => {
+    setSearch("");
+    setActiveCategory(null);
+    setLevel("all");
+  };
+
+  const headerRight = (
+    <HeaderIconButton
+      icon="folder-open-outline"
+      accessibilityLabel="My applications"
+      onPress={() => router.push("/scheme-applications")}
+    />
   );
 
   if (subscriptionLoading) {
     return (
       <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
-        <ScreenHeader title="Govt. Schemes" />
+        <ScreenHeader title="Govt. schemes" />
         <SkeletonCardList count={4} style={{ paddingTop: 16 }} />
       </SafeAreaView>
     );
@@ -334,11 +372,11 @@ export default function GovernmentSchemes() {
   if (locked) {
     return (
       <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
-        <ScreenHeader title="Govt. Schemes" />
+        <ScreenHeader title="Govt. schemes" />
         <View className="flex-1 items-center justify-center px-6">
           <LockedFeatureCard
-            title="Government Schemes & Benefits"
-            description="Browse and apply for health schemes."
+            title="Government schemes and benefits"
+            description="See health schemes you may be able to get, and keep track of them."
             onPress={() => setPaywallVisible(true)}
           />
         </View>
@@ -354,101 +392,35 @@ export default function GovernmentSchemes() {
 
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
-      <ScreenHeader title="Govt. Schemes" right={headerRight} />
+      <ScreenHeader
+        title="Govt. schemes"
+        subtitle="Health benefits you may be able to get"
+        right={headerRight}
+      />
 
-      {/* Search box */}
-      <View className="px-6 mt-4">
-        <View
-          className="flex-row items-center rounded-2xl px-3.5 h-12"
-          style={{ backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
-        >
-          <Ionicons name="search-outline" size={18} color={colors.mutedText} />
-          <TextInput
-            value={search}
-            onChangeText={setSearch}
-            placeholder="Search schemes (e.g. PMMVY, maternity)"
-            placeholderTextColor={colors.mutedText}
-            className="flex-1 ml-2 text-sm"
-            style={{ color: colors.foreground, fontFamily: fonts.body }}
-          />
-          {search ? (
-            <TouchableOpacity onPress={() => setSearch("")}>
-              <Ionicons name="close-circle" size={18} color={colors.mutedText} />
-            </TouchableOpacity>
-          ) : null}
-        </View>
+      <View style={{ paddingHorizontal: 24, marginTop: 8 }}>
+        <SearchBar
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search schemes (e.g. PMMVY, maternity)"
+        />
       </View>
 
-      {/* Central / Rajasthan filters */}
-      <View className="flex-row px-6 mt-3 gap-2">
-        {LEVEL_FILTERS.map((f) => {
-          const active = level === f.key;
-          return (
-            <TouchableOpacity
-              key={f.key}
-              activeOpacity={0.8}
-              onPress={() => setLevel(f.key)}
-              className="px-4 py-2 rounded-full"
-              style={{
-                backgroundColor: active ? colors.primary : colors.surface,
-                ...getShadow(colors, isDark),
-              }}
-            >
-              <Text
-                className="text-xs font-bold"
-                style={{
-                  color: active ? "#fff" : colors.mutedText,
-                  fontFamily: fonts.body,
-                }}
-              >
-                {f.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+      {/* All / Central / the user's own state */}
+      <FilterChips
+        options={levelOptions}
+        value={level}
+        onChange={setLevel}
+        style={{ marginTop: 12, flexGrow: 0 }}
+      />
 
-      {/* Category filter chips */}
       {categories.length > 0 ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          className="mt-3 max-h-10"
-          contentContainerStyle={{ paddingHorizontal: 24, gap: 8 }}
-        >
-          {categories.map((cat) => {
-            const active = activeCategory === cat.key;
-            return (
-              <TouchableOpacity
-                key={cat.key}
-                activeOpacity={0.8}
-                onPress={() =>
-                  setActiveCategory(active ? null : cat.key)
-                }
-                className="flex-row items-center px-3 py-1.5 rounded-full self-start"
-                style={{
-                  backgroundColor: active ? colors.accent : colors.surface,
-                  ...getShadow(colors, isDark),
-                }}
-              >
-                <Ionicons
-                  name={cat.icon as never}
-                  size={13}
-                  color={active ? "#fff" : colors.mutedText}
-                />
-                <Text
-                  className="text-xs font-bold ml-1"
-                  style={{
-                    color: active ? "#fff" : colors.mutedText,
-                    fontFamily: fonts.body,
-                  }}
-                >
-                  {cat.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+        <FilterChips
+          options={categoryOptions}
+          value={activeCategory ?? ALL_CATEGORIES}
+          onChange={(key) => setActiveCategory(key === ALL_CATEGORIES ? null : key)}
+          style={{ marginTop: 8, flexGrow: 0 }}
+        />
       ) : null}
 
       <LoadingErrorState
@@ -460,8 +432,9 @@ export default function GovernmentSchemes() {
         skeleton={<SkeletonCardList count={4} style={{ paddingTop: 16 }} />}
       >
         <ScrollView
-          className="flex-1 mt-4"
-          contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 40 }}
+          keyboardShouldPersistTaps="handled"
+          className="flex-1"
+          contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 16, paddingBottom: 40 }}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -470,49 +443,43 @@ export default function GovernmentSchemes() {
             />
           }
         >
-          {showRecommended ? (
-            <View className="mb-5">
-              <Text
-                className="text-sm font-black mb-2"
-                style={{ color: colors.foreground, fontFamily: fonts.heading }}
-              >
-                Recommended for you
+          {showingSaved ? (
+            <View
+              className="flex-row items-center"
+              style={{ gap: 8, marginBottom: 14, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 14, backgroundColor: colors.surfaceSoft }}
+            >
+              <Ionicons name="cloud-offline-outline" size={16} color={colors.mutedText} />
+              <Text style={{ flex: 1, color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "400", fontFamily: fonts.body }}>
+                Showing saved schemes. Pull down to refresh.
               </Text>
+            </View>
+          ) : null}
+
+          {showRecommended ? (
+            <View style={{ marginBottom: showAllSection ? 28 : 0 }}>
+              <SectionHeader title="Recommended for you" subtitle="Based on your profile" />
               {recommended.map((s) => (
                 <SchemeCard key={`rec-${s._id}`} scheme={s} />
               ))}
             </View>
           ) : null}
 
-          <Text
-            className="text-sm font-black mb-2"
-            style={{ color: colors.foreground, fontFamily: fonts.heading }}
-          >
-            {hasFilters ? "Results" : "All Schemes"}
-          </Text>
-
           {schemes.length === 0 ? (
             <EmptyState
+              compact
               icon="file-search-outline"
               title="No schemes found"
-              message="Try a different search or clear the filters."
+              message={hasFilters ? "Try a different search or clear the filters." : "Pull down to check again."}
               actionLabel={hasFilters ? "Clear filters" : undefined}
-              onAction={
-                hasFilters
-                  ? () => {
-                      setSearch("");
-                      setActiveCategory(null);
-                      setLevel("all");
-                    }
-                  : undefined
-              }
+              onAction={hasFilters ? clearFilters : undefined}
             />
-          ) : (
+          ) : showAllSection ? (
             <>
+              <SectionHeader title={hasFilters ? "Results" : "All schemes"} />
               {displaySchemes.map((s) => <SchemeCard key={s._id} scheme={s} />)}
               <LoadMoreButton hasMore={hasMore} loading={loadingMore} onPress={handleLoadMore} />
             </>
-          )}
+          ) : null}
         </ScrollView>
       </LoadingErrorState>
     </SafeAreaView>

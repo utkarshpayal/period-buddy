@@ -35,7 +35,7 @@ export const SHARED_HUB_TILES: Record<SharedHubTileId, SharedHubTile> = {
     icon: "book-outline",
     id: "blogs",
     route: "/(app)/blogs",
-    title: "Blogs",
+    title: "Articles",
   },
   healthConcerns: {
     bgKey: "warningLight",

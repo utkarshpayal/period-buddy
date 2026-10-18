@@ -144,34 +144,43 @@ export function FieldLabel({ children }: { children: React.ReactNode }) {
 }
 
 /** Tappable field showing a date (or a placeholder), opens a calendar. */
-export function DateField({ value, placeholder, onPress }: { value: string; placeholder: string; onPress: () => void }) {
+export function DateField({ value, placeholder, onPress, label }: { value: string; placeholder: string; onPress: () => void; label?: string }) {
   const { colors, fonts } = useTheme();
   return (
     <TouchableOpacity
       activeOpacity={0.8}
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={value || placeholder}
+      accessibilityLabel={label ? `${label}: ${value || placeholder}` : value || placeholder}
       style={{
         flexDirection: "row",
         alignItems: "center",
         gap: 10,
-        paddingHorizontal: 16,
-        minHeight: 50,
-        borderRadius: 14,
+        paddingHorizontal: 14,
+        minHeight: label ? 58 : 50,
+        borderRadius: 16,
         backgroundColor: colors.input,
         borderWidth: 1,
-        borderColor: colors.border,
+        borderColor: value ? colors.primary : colors.border,
       }}
     >
-      <Ionicons name="calendar-outline" size={17} color={value ? colors.primary : colors.mutedText} />
-      <Text
-        numberOfLines={1}
-        style={{ flex: 1, fontSize: 15, fontWeight: value ? "600" : "400", color: value ? colors.foreground : colors.mutedText, fontFamily: fonts.body }}
-      >
-        {value || placeholder}
-      </Text>
-      <Ionicons name="chevron-down" size={16} color={colors.mutedText} />
+      <View style={{ width: 30, height: 30, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: value ? colors.primaryLight : colors.surfaceSoft }}>
+        <Ionicons name="calendar-outline" size={15} color={value ? colors.primaryDark : colors.mutedText} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        {label ? (
+          <Text maxFontSizeMultiplier={1.3} style={{ fontSize: 11.5, fontWeight: "700", letterSpacing: 0.4, textTransform: "uppercase", color: colors.mutedText, fontFamily: fonts.body }}>
+            {label}
+          </Text>
+        ) : null}
+        <Text
+          numberOfLines={1}
+          maxFontSizeMultiplier={1.3}
+          style={{ fontSize: 15, fontWeight: value ? "700" : "400", color: value ? colors.foreground : colors.mutedText, fontFamily: fonts.body, marginTop: label ? 1 : 0 }}
+        >
+          {value || placeholder}
+        </Text>
+      </View>
     </TouchableOpacity>
   );
 }

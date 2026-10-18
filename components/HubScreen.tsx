@@ -1,6 +1,7 @@
 import React from "react";
-import { ScrollView, StatusBar, Text, View } from "react-native";
+import { ScrollView, StatusBar, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { EmptyState } from "./EmptyState";
 import { HubHero, HubTileGrid, HubTileList } from "./HubFeatureTiles";
 import { PromoBanners } from "./PromoBanners";
 import { ScreenHeader, SectionHeader } from "./ScreenHeader";
@@ -30,7 +31,7 @@ export function HubScreen({
   /** One short line; shown under the title. */
   intro: string;
 }) {
-  const { colors, isDark, fonts } = useTheme();
+  const { colors, isDark } = useTheme();
   const { enabled: genZModeEnabled } = useGenZMode();
   const { config } = useAppConfig();
   const viewer = useViewer();
@@ -60,9 +61,7 @@ export function HubScreen({
           ))}
         </View>
       ) : (
-        <Text className="mx-6" style={{ fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}>
-          Nothing here right now — check back soon.
-        </Text>
+        <EmptyState compact icon="view-grid-outline" title="Nothing here yet" message="New features will show up here. Check back soon." />
       ),
   };
 

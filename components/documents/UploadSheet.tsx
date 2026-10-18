@@ -208,6 +208,7 @@ export function UploadSheet({
       }
       overlay={
         <CalendarModal
+          title="Document date"
           initialDateKey={dateKey || undefined}
           maximumDate={new Date()}
           onClose={() => setCalendarVisible(false)}
