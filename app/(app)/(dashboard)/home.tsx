@@ -261,7 +261,10 @@ export default function Home() {
   const insightCardWidth = Math.min(290, screenWidth - 92);
 
   // Every stat the "Stats" block can show; the person picks which (lib/homeLayout.ts).
-  const daysToPeriod = predictions?.nextPeriodDaysAway ?? dashboard?.predictions?.nextPeriodDaysAway;
+  // Negative while late, so the stat reads "N days late".
+  const daysToPeriod = predictions?.isLate
+    ? -(predictions.daysLate ?? 0)
+    : predictions?.nextPeriodDaysAway ?? dashboard?.predictions?.nextPeriodDaysAway;
   // A number with a small muted unit after it ("1 day").
   const withUnit = (value: string, unit: string) => (
     <>

@@ -704,7 +704,8 @@ export default function DocumentsScreen() {
                   >
                     {group.label}
                   </Text>
-                  <View style={{ flexDirection: columns === 2 ? "row" : "column", flexWrap: "wrap", gap }}>
+                  {/* Wrap only in the 2-column grid: a wrapping column shrinks cards to their content on native. */}
+                  <View style={columns === 2 ? { flexDirection: "row", flexWrap: "wrap", gap } : { gap }}>
                     {group.docs.map((doc) => (
                       <DocumentCard
                         key={doc._id}

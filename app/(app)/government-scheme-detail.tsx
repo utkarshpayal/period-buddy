@@ -1,6 +1,6 @@
-import { Feather, Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -17,7 +17,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { EmptyState } from "../../components/EmptyState";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
 import { SkeletonBlock, SkeletonCard } from "../../components/Skeleton";
-import { ScreenHeader } from "../../components/ScreenHeader";
+import { HeaderIconButton, ScreenHeader } from "../../components/ScreenHeader";
 import { useAuth } from "../../components/auth-context";
 import { useTheme } from "../../components/theme";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
@@ -39,9 +39,17 @@ import {
   type SchemeEligibilityResult,
 } from "../../lib/api";
 import {
-  SCHEME_ACTION_CTA,
+  canonicalStateName,
+  filterIndianStates,
   governmentHospitalMapsUrl,
+  schemePrimaryAction,
+  schemePrimaryCta,
+  trackHelperText,
 } from "../../lib/schemeHelpers";
+
+type IconName = keyof typeof Ionicons.glyphMap;
+
+const BODY = { fontSize: 15, lineHeight: 22, fontWeight: "400" } as const;
 
 function Section({
   title,
@@ -49,20 +57,27 @@ function Section({
   children,
 }: {
   title: string;
-  icon: keyof typeof Ionicons.glyphMap;
+  icon: IconName;
   children: React.ReactNode;
 }) {
   const { colors, fonts, isDark } = useTheme();
   return (
     <View
-      className="rounded-2xl p-4 mb-3"
-      style={{ backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
+      style={{
+        backgroundColor: colors.surface,
+        borderColor: colors.border,
+        borderWidth: 1,
+        borderRadius: 24,
+        padding: 18,
+        marginBottom: 16,
+        ...getShadow(colors, isDark),
+      }}
     >
-      <View className="flex-row items-center mb-2.5">
-        <Ionicons name={icon} size={16} color={colors.primary} />
+      <View className="flex-row items-center" style={{ gap: 8, marginBottom: 10 }}>
+        <Ionicons name={icon} size={18} color={colors.primaryDark} />
         <Text
-          className="text-sm font-black ml-2"
-          style={{ color: colors.foreground, fontFamily: fonts.heading }}
+          accessibilityRole="header"
+          style={{ flexShrink: 1, fontSize: 16, fontWeight: "700", color: colors.foreground, fontFamily: fonts.heading }}
         >
           {title}
         </Text>
@@ -75,21 +90,66 @@ function Section({
 function Bullet({ text }: { text: string }) {
   const { colors, fonts } = useTheme();
   return (
-    <View className="flex-row mb-1.5">
-      <Text style={{ color: colors.primary }}>•</Text>
-      <Text
-        className="text-xs ml-2 flex-1"
-        style={{ color: colors.mutedText, fontFamily: fonts.body }}
-      >
+    <View className="flex-row" style={{ marginBottom: 8, gap: 10 }}>
+      <View style={{ width: 6, height: 6, borderRadius: 3, marginTop: 8, backgroundColor: colors.primary }} />
+      <Text style={{ ...BODY, flex: 1, color: colors.foreground, fontFamily: fonts.body }}>
         {text}
       </Text>
     </View>
   );
 }
 
+/** Secondary button: primaryLight fill, primaryDark text, 48px tall. */
+function SecondaryButton({
+  icon,
+  label,
+  onPress,
+  loading,
+  disabled,
+  accessibilityLabel,
+  style,
+}: {
+  icon: IconName;
+  label: string;
+  onPress: () => void;
+  loading?: boolean;
+  disabled?: boolean;
+  accessibilityLabel?: string;
+  style?: object;
+}) {
+  const { colors, fonts } = useTheme();
+  return (
+    <TouchableOpacity
+      activeOpacity={0.8}
+      onPress={onPress}
+      disabled={disabled || loading}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? label}
+      accessibilityState={{ disabled: Boolean(disabled || loading), busy: Boolean(loading) }}
+      className="flex-row items-center justify-center"
+      style={[{ minHeight: 48, borderRadius: 16, paddingHorizontal: 14, gap: 8, backgroundColor: colors.primaryLight }, style]}
+    >
+      {loading ? (
+        <ActivityIndicator size="small" color={colors.primaryDark} />
+      ) : (
+        <>
+          <Ionicons name={icon} size={18} color={colors.primaryDark} />
+          <Text
+            numberOfLines={1}
+            maxFontSizeMultiplier={1.3}
+            style={{ flexShrink: 1, fontSize: 15, fontWeight: "700", color: colors.primaryDark, fontFamily: fonts.body }}
+          >
+            {label}
+          </Text>
+        </>
+      )}
+    </TouchableOpacity>
+  );
+}
+
 export default function GovernmentSchemeDetail() {
   const insets = useSafeAreaInsets();
-  const { colors, fonts, isDark } = useTheme();
+  const { colors, fonts } = useTheme();
   const router = useRouter();
   const { user, updateUser } = useAuth();
   const softTints = getSoftTints(colors);
@@ -114,30 +174,29 @@ export default function GovernmentSchemeDetail() {
     isLoading: subscriptionLoading,
     refresh: refreshSubscriptionAccess,
   } = useSubscriptionAccess();
-  // Whole-screen gate, same key the Apply action already uses — reached
+  // Whole-screen gate, same key the Track action already uses — reached
   // directly via a deep link (share, notification) can otherwise bypass the
-  // list screen's own gate, so this screen re-checks independently.
+  // list screen's own gate, so this screen re-checks independently. A locked
+  // user sees the locked card; the paywall opens only when they tap it.
   const locked = !subscriptionLoading && !hasAccess("government_scheme_applications");
-  // Distinguishes "paywall opened just because the screen is locked" (do
-  // nothing extra once purchased — the screen unlocks on its own once
-  // useSubscriptionAccess refreshes) from "paywall opened because Apply was
-  // tapped" (retry the apply once purchased, same as before this screen was
-  // gated on entry too).
+  // Distinguishes "paywall opened from the locked card" (do nothing extra
+  // once purchased — the screen unlocks on its own once useSubscriptionAccess
+  // refreshes) from "paywall opened because Track was tapped" (retry the save
+  // once purchased).
   const [unlockShouldApply, setUnlockShouldApply] = useState(false);
-
-  useEffect(() => {
-    if (locked) setPaywallVisible(true);
-  }, [locked]);
 
   // Interactive eligibility checker inputs (seeded from the user's profile).
   const [checkerOpen, setCheckerOpen] = useState(false);
   const [ageInput, setAgeInput] = useState("");
   const [pregnantInput, setPregnantInput] = useState<boolean | null>(null);
   const [stateInput, setStateInput] = useState("");
+  const [statePickerOpen, setStatePickerOpen] = useState(false);
+  const [stateQuery, setStateQuery] = useState("");
+  const stateMatches = useMemo(() => filterIndianStates(stateQuery), [stateQuery]);
 
-  // Detect whether this scheme is already tracked in My Applications —
+  // Detect whether this scheme is already tracked in My applications —
   // re-checked when applications change (e.g. one removed on the My
-  // Applications screen pushed from here).
+  // applications screen pushed from here).
   const [applicationsVersion, setApplicationsVersion] = useState(0);
   useDataRefresh(["schemeApplications"], () => setApplicationsVersion((v) => v + 1));
   useEffect(() => {
@@ -171,6 +230,8 @@ export default function GovernmentSchemeDetail() {
 
   // Open the interactive checker, seeding fields from the user's profile.
   const openChecker = () => {
+    setStatePickerOpen(false);
+    setStateQuery("");
     if (!user) return setCheckerOpen(true);
     if (user.dateOfBirth) {
       const age = Math.floor(
@@ -179,7 +240,7 @@ export default function GovernmentSchemeDetail() {
       );
       if (Number.isFinite(age) && age > 0) setAgeInput(String(age));
     }
-    if (user.state) setStateInput(user.state);
+    if (user.state) setStateInput(canonicalStateName(user.state));
     setCheckerOpen(true);
   };
 
@@ -222,10 +283,10 @@ export default function GovernmentSchemeDetail() {
       const res = await schemeApplicationsApi.create({ schemeId: scheme._id });
       setSaved(true);
       alert(
-        res.alreadyExists ? "Already saved" : "Saved to My Applications",
+        res.alreadyExists ? "Already tracking" : "Saved to My applications",
         res.alreadyExists
-          ? "This scheme is already in My Applications, where you can track it."
-          : "We've saved this so you can track it. Complete the official steps to finish.",
+          ? "This scheme is already in My applications, where you can follow up."
+          : "You can follow up from My applications. To apply, finish the official steps.",
         [
           { text: "View", onPress: () => router.push("/scheme-applications") },
           { text: "Done", style: "cancel" },
@@ -243,6 +304,7 @@ export default function GovernmentSchemeDetail() {
     }
   };
 
+  // Subscription gate on the save/track action (the server can still 402).
   const handleApply = () => {
     if (!hasAccess("government_scheme_applications")) {
       setUnlockShouldApply(true);
@@ -252,33 +314,42 @@ export default function GovernmentSchemeDetail() {
     submitApplication();
   };
 
+  const handleTrack = () => (saved ? router.push("/scheme-applications") : handleApply());
+
+  const primaryAction = scheme
+    ? schemePrimaryAction(scheme.actionType, Boolean(scheme.officialUrl))
+    : null;
+
   const handlePrimaryAction = () => {
     if (!scheme) return;
-    switch (scheme.actionType) {
-      case "APPLY":
-        handleApply();
+    switch (primaryAction) {
+      case "track":
+        handleTrack();
         break;
-      case "CHECK_ELIGIBILITY":
+      case "checker":
         openChecker();
         break;
-      case "FIND_FACILITY":
+      case "maps":
         // Open a maps search for nearby government hospitals (scoped to the
         // user's state when known). The scheme's `officialUrl` is an info page,
-        // not a facility locator, so it stays on the "Official Website" button.
+        // not a facility locator, so it stays on the "Official website" button.
         openUrl(governmentHospitalMapsUrl(user?.state));
         break;
-      case "EXTERNAL_APPLICATION":
-      case "LEARN_MORE":
+      case "official":
       default:
         openUrl(scheme.officialUrl);
         break;
     }
   };
 
-  const actionConfig = scheme ? SCHEME_ACTION_CTA[scheme.actionType] : null;
+  const primaryCta = scheme
+    ? primaryAction === "track" && saved
+      ? { label: "Tracking · View in My applications", icon: "checkmark-circle" }
+      : schemePrimaryCta(scheme.actionType, Boolean(scheme.officialUrl))
+    : null;
 
   // Deep links back to this screen ("government-scheme-detail?id=<slug>");
-  // a recipient without access still lands here and sees the paywall above.
+  // a recipient without access still lands here and sees the locked card.
   const handleShare = async () => {
     if (!scheme) return;
     try {
@@ -291,29 +362,38 @@ export default function GovernmentSchemeDetail() {
     }
   };
 
+  const mayBeEligible = eligibility?.status === "may_be_eligible";
+  const levelLabel = scheme
+    ? scheme.governmentLevel === "central"
+      ? "Central government"
+      : `${scheme.state || "State"} government`
+    : "";
+
+  const pillText = {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.foreground,
+    fontFamily: fonts.body,
+  } as const;
+
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
       <ScreenHeader
-        title="Scheme Details"
+        title="Scheme details"
         right={
-          scheme ? (
-            <TouchableOpacity
-              onPress={handleShare}
-              activeOpacity={0.7}
-              accessibilityRole="button"
+          scheme && !locked ? (
+            <HeaderIconButton
+              icon="share-social-outline"
               accessibilityLabel="Share scheme"
-              className="w-9 h-9 items-center justify-center rounded-full"
-              style={{ backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
-            >
-              <Feather name="share-2" size={17} color={colors.foreground} />
-            </TouchableOpacity>
+              onPress={handleShare}
+            />
           ) : null
         }
       />
       <LoadingErrorState
         // Also wait on the subscription check — otherwise the real scheme
         // content can render for a frame before `locked` flips true and
-        // swaps it for the paywall, flashing paid data at a locked user.
+        // swaps it for the locked card, flashing paid data at a locked user.
         loading={loading || subscriptionLoading}
         error={error}
         offline={offline}
@@ -329,7 +409,7 @@ export default function GovernmentSchemeDetail() {
             <SkeletonBlock width="60%" height={14} />
             <SkeletonCard />
             <SkeletonCard />
-            <SkeletonBlock width="100%" height={52} radius={16} />
+            <SkeletonBlock width="100%" height={48} radius={16} />
           </View>
         }
       >
@@ -338,60 +418,43 @@ export default function GovernmentSchemeDetail() {
             <View className="flex-1 items-center justify-center px-6">
               <LockedFeatureCard
                 title={scheme.name}
-                description="Unlock to see details and apply."
+                description="Unlock to see the details and track this scheme."
                 onPress={() => setPaywallVisible(true)}
               />
             </View>
           ) : (
           <>
             <ScrollView
-              className="flex-1 mt-4"
-              contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 24 }}
+              className="flex-1"
+              contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 12, paddingBottom: 28 }}
             >
               {/* Title block */}
-              <View className="flex-row items-center flex-wrap gap-1.5 mb-2">
-                <View
-                  className="px-2.5 py-1 rounded-full"
-                  style={{ backgroundColor: softTints.lavender }}
-                >
-                  <Text
-                    className="text-xs font-bold"
-                    style={{ color: colors.accentText, fontFamily: fonts.body }}
-                  >
-                    {scheme.governmentLevel === "central"
-                      ? "Central Government"
-                      : `${scheme.state} Government`}
+              <View className="flex-row items-center flex-wrap" style={{ gap: 6, marginBottom: 10 }}>
+                <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: softTints.lavender }}>
+                  <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={pillText}>
+                    {levelLabel}
                   </Text>
                 </View>
                 {scheme.shortName ? (
-                  <View
-                    className="px-2.5 py-1 rounded-full"
-                    style={{ backgroundColor: softTints.amber }}
-                  >
-                    <Text
-                      className="text-xs font-bold"
-                      style={{ color: colors.warning, fontFamily: fonts.mono }}
-                    >
+                  <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: softTints.amber }}>
+                    <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={pillText}>
                       {scheme.shortName}
                     </Text>
                   </View>
                 ) : null}
               </View>
               <Text
-                className="text-xl font-black"
-                style={{ color: colors.foreground, fontFamily: fonts.heading }}
+                accessibilityRole="header"
+                style={{ fontSize: 22, lineHeight: 29, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}
               >
                 {scheme.name}
               </Text>
-              <Text
-                className="text-sm mt-2 mb-4"
-                style={{ color: colors.mutedText, fontFamily: fonts.body }}
-              >
+              <Text style={{ ...BODY, marginTop: 8, marginBottom: 20, color: colors.foreground, fontFamily: fonts.body }}>
                 {scheme.description}
               </Text>
 
               {scheme.benefits?.length ? (
-                <Section title="Benefits" icon="gift-outline">
+                <Section title="What you get" icon="gift-outline">
                   {scheme.benefits.map((b, i) => (
                     <Bullet key={i} text={b} />
                   ))}
@@ -399,133 +462,97 @@ export default function GovernmentSchemeDetail() {
               ) : null}
 
               {/* Eligibility + checker */}
-              <Section title="Eligibility" icon="people-outline">
+              <Section title="Who can get it" icon="people-outline">
                 {scheme.eligibility.map((e, i) => (
                   <Bullet key={i} text={e.text} />
                 ))}
 
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  onPress={openChecker}
-                  disabled={checking}
-                  className="mt-2 flex-row items-center justify-center rounded-xl py-2.5"
-                  style={{ backgroundColor: softTints.pink }}
-                >
-                  {checking ? (
-                    <ActivityIndicator size="small" color={colors.primary} />
-                  ) : (
-                    <>
-                      <Ionicons
-                        name="checkbox-outline"
-                        size={15}
-                        color={colors.primary}
-                      />
-                      <Text
-                        className="text-xs font-bold ml-1.5"
-                        style={{ color: colors.primary, fontFamily: fonts.body }}
-                      >
-                        Check if I may be eligible
-                      </Text>
-                    </>
-                  )}
-                </TouchableOpacity>
+                {primaryAction !== "checker" ? (
+                  <SecondaryButton
+                    icon="checkbox-outline"
+                    label="Check if I may be eligible"
+                    onPress={openChecker}
+                    loading={checking}
+                    style={{ marginTop: 6 }}
+                  />
+                ) : null}
 
                 {eligibility ? (
                   <View
-                    className="mt-3 rounded-xl p-3"
+                    accessibilityLiveRegion="polite"
                     style={{
-                      backgroundColor:
-                        eligibility.status === "may_be_eligible"
-                          ? softTints.emerald
-                          : softTints.danger,
+                      marginTop: 12,
+                      borderRadius: 16,
+                      padding: 14,
+                      backgroundColor: mayBeEligible ? softTints.emerald : softTints.amber,
                     }}
                   >
-                    <View className="flex-row items-center mb-1">
+                    <View className="flex-row items-center" style={{ gap: 8, marginBottom: 4 }}>
                       <Ionicons
-                        name={
-                          eligibility.status === "may_be_eligible"
-                            ? "checkmark-circle"
-                            : "information-circle"
-                        }
-                        size={16}
-                        color={
-                          eligibility.status === "may_be_eligible"
-                            ? colors.success
-                            : colors.danger
-                        }
+                        name={mayBeEligible ? "checkmark-circle" : "information-circle"}
+                        size={18}
+                        color={mayBeEligible ? colors.success : colors.warning}
                       />
-                      <Text
-                        className="text-xs font-black ml-1.5"
-                        style={{
-                          color:
-                            eligibility.status === "may_be_eligible"
-                              ? colors.success
-                              : colors.danger,
-                          fontFamily: fonts.heading,
-                        }}
-                      >
-                        {eligibility.status === "may_be_eligible"
-                          ? "You may be eligible"
-                          : "You may not meet all criteria"}
+                      <Text style={{ flexShrink: 1, fontSize: 15, fontWeight: "700", color: colors.foreground, fontFamily: fonts.heading }}>
+                        {mayBeEligible ? "You may be eligible" : "You may not meet all the rules"}
                       </Text>
                     </View>
-                    <Text
-                      className="text-xs"
-                      style={{ color: colors.foreground, fontFamily: fonts.body }}
-                    >
+                    <Text style={{ fontSize: 14, lineHeight: 20, fontWeight: "400", color: colors.foreground, fontFamily: fonts.body }}>
                       {eligibility.message}
+                    </Text>
+                    {!mayBeEligible && eligibility.unmetCriteria?.length ? (
+                      <View style={{ marginTop: 8 }}>
+                        {eligibility.unmetCriteria.map((c, i) => (
+                          <Text
+                            key={i}
+                            style={{ fontSize: 14, lineHeight: 20, fontWeight: "400", color: colors.foreground, fontFamily: fonts.body }}
+                          >
+                            • {c}
+                          </Text>
+                        ))}
+                      </View>
+                    ) : null}
+                    <Text style={{ marginTop: 8, fontSize: 13, lineHeight: 18, fontWeight: "400", color: colors.mutedText, fontFamily: fonts.body }}>
+                      Only the scheme office can confirm if you qualify.
                     </Text>
                   </View>
                 ) : null}
               </Section>
 
               {scheme.documents?.length ? (
-                <Section title="Documents Required" icon="document-text-outline">
+                <Section title="Documents you need" icon="document-text-outline">
                   {scheme.documents.map((d, i) => (
                     <Bullet key={i} text={d} />
                   ))}
                 </Section>
               ) : null}
 
-              {scheme.applicationMethod ? (
-                <Section title="How to Apply / Access" icon="clipboard-outline">
-                  <Text
-                    className="text-xs mb-2"
-                    style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                  >
-                    {scheme.applicationMethod}
-                  </Text>
+              {scheme.applicationMethod || scheme.applicationSteps?.length ? (
+                <Section title="How to apply or get it" icon="clipboard-outline">
+                  {scheme.applicationMethod ? (
+                    <Text style={{ ...BODY, marginBottom: 12, color: colors.foreground, fontFamily: fonts.body }}>
+                      {scheme.applicationMethod}
+                    </Text>
+                  ) : null}
                   {scheme.applicationSteps?.map((s, i) => (
-                    <View key={i} className="flex-row mb-2">
+                    <View key={i} className="flex-row" style={{ gap: 12, marginBottom: 12 }}>
                       <View
-                        className="w-5 h-5 rounded-full items-center justify-center mr-2"
-                        style={{ backgroundColor: softTints.pink }}
+                        className="items-center justify-center"
+                        style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: softTints.pink }}
                       >
                         <Text
-                          className="text-[11.5px] font-bold"
-                          style={{ color: colors.primary, fontFamily: fonts.mono }}
+                          maxFontSizeMultiplier={1.3}
+                          style={{ fontSize: 13, fontWeight: "700", color: colors.primaryDark, fontFamily: fonts.mono }}
                         >
                           {i + 1}
                         </Text>
                       </View>
-                      <View className="flex-1">
-                        <Text
-                          className="text-xs font-bold"
-                          style={{
-                            color: colors.foreground,
-                            fontFamily: fonts.body,
-                          }}
-                        >
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 15, lineHeight: 22, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>
                           {s.title}
                         </Text>
                         {s.detail ? (
-                          <Text
-                            className="text-xs"
-                            style={{
-                              color: colors.mutedText,
-                              fontFamily: fonts.body,
-                            }}
-                          >
+                          <Text style={{ ...BODY, color: colors.foreground, fontFamily: fonts.body }}>
                             {s.detail}
                           </Text>
                         ) : null}
@@ -536,136 +563,115 @@ export default function GovernmentSchemeDetail() {
               ) : null}
 
               {scheme.whereToGet ? (
-                <Section title="Where to Get It" icon="navigate-outline">
-                  <Text
-                    className="text-xs"
-                    style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                  >
+                <Section title="Where to get it" icon="navigate-outline">
+                  <Text style={{ ...BODY, color: colors.foreground, fontFamily: fonts.body }}>
                     {scheme.whereToGet}
                   </Text>
                 </Section>
               ) : null}
 
-              {/* Save/track for schemes whose primary CTA isn't already Apply */}
-              {scheme.actionType !== "APPLY" ? (
-                <TouchableOpacity
-                  activeOpacity={0.85}
-                  onPress={() => (saved ? router.push("/scheme-applications") : handleApply())}
-                  disabled={applying}
-                  className="flex-row items-center justify-center rounded-xl py-2.5 mb-3"
-                  style={{ backgroundColor: softTints.pink }}
-                >
-                  {applying ? (
-                    <ActivityIndicator size="small" color={colors.primary} />
-                  ) : (
-                    <>
-                      <Ionicons
-                        name={saved ? "checkmark-circle" : "bookmark-outline"}
-                        size={15}
-                        color={colors.primary}
-                      />
-                      <Text
-                        className="text-xs font-bold ml-1.5"
-                        style={{ color: colors.primary, fontFamily: fonts.body }}
-                      >
-                        {saved ? "Saved — View in My Applications" : "Save to My Applications"}
-                      </Text>
-                    </>
-                  )}
-                </TouchableOpacity>
+              {/* Track in My applications — secondary unless it's the primary action */}
+              {primaryAction !== "track" ? (
+                <View style={{ marginBottom: 16 }}>
+                  <SecondaryButton
+                    icon={saved ? "checkmark-circle" : "bookmark-outline"}
+                    label={saved ? "Tracking · View in My applications" : "Track this scheme"}
+                    onPress={handleTrack}
+                    loading={applying}
+                  />
+                  {!saved ? (
+                    <Text style={{ marginTop: 6, fontSize: 13, lineHeight: 18, fontWeight: "400", color: colors.mutedText, fontFamily: fonts.body }}>
+                      {trackHelperText(scheme.actionType)}
+                    </Text>
+                  ) : null}
+                </View>
               ) : null}
 
-              {/* Secondary actions */}
-              <View className="flex-row gap-2 mb-3">
-                {scheme.helpline ? (
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    onPress={() =>
-                      Linking.openURL(
-                        `tel:${scheme.helpline?.split(/[/ ]/)[0]}`,
-                      ).catch(() => {})
-                    }
-                    className="flex-1 flex-row items-center justify-center rounded-xl py-2.5"
-                    style={{ backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
-                  >
-                    <Ionicons name="call-outline" size={14} color={colors.primary} />
-                    <Text
-                      className="text-xs font-bold ml-1.5"
-                      style={{ color: colors.foreground, fontFamily: fonts.body }}
-                    >
-                      Helpline
-                    </Text>
-                  </TouchableOpacity>
-                ) : null}
-                {scheme.officialUrl ? (
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    onPress={() => openUrl(scheme.officialUrl)}
-                    className="flex-1 flex-row items-center justify-center rounded-xl py-2.5"
-                    style={{ backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
-                  >
-                    <Ionicons name="globe-outline" size={14} color={colors.primary} />
-                    <Text
-                      className="text-xs font-bold ml-1.5"
-                      style={{ color: colors.foreground, fontFamily: fonts.body }}
-                    >
-                      Official Website
-                    </Text>
-                  </TouchableOpacity>
-                ) : null}
-              </View>
+              {/* Other ways to reach the scheme */}
+              {(() => {
+                const showOfficial = Boolean(scheme.officialUrl) && primaryAction !== "official";
+                if (!scheme.helpline && !showOfficial) return null;
+                return (
+                  <View className="flex-row" style={{ gap: 10, marginBottom: 16 }}>
+                    {scheme.helpline ? (
+                      <SecondaryButton
+                        icon="call-outline"
+                        label="Helpline"
+                        accessibilityLabel={`Call helpline ${scheme.helpline}`}
+                        onPress={() =>
+                          Linking.openURL(`tel:${scheme.helpline?.split(/[/ ]/)[0]}`).catch(() => {})
+                        }
+                        style={{ flex: 1 }}
+                      />
+                    ) : null}
+                    {showOfficial ? (
+                      <SecondaryButton
+                        icon="globe-outline"
+                        label="Official website"
+                        onPress={() => openUrl(scheme.officialUrl)}
+                        style={{ flex: 1 }}
+                      />
+                    ) : null}
+                  </View>
+                );
+              })()}
 
-              {/* Source + verification */}
-              <View className="flex-row items-start mt-1 mb-2">
-                <Ionicons
-                  name="shield-checkmark-outline"
-                  size={13}
-                  color={colors.mutedText}
-                  style={{ marginTop: 1 }}
-                />
-                <Text
-                  className="text-xs ml-1.5 flex-1"
-                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                >
-                  Source: {scheme.source || "Government of India"}
-                  {scheme.lastVerifiedAt
-                    ? ` · Verified ${formatShortDate(scheme.lastVerifiedAt)}`
-                    : ""}
-                </Text>
-              </View>
+              {/* Source + last checked + one calm disclaimer */}
+              <Text style={{ fontSize: 13, lineHeight: 18, fontWeight: "400", color: colors.mutedText, fontFamily: fonts.body }}>
+                Source: {scheme.source || "Government of India"}
+                {scheme.lastVerifiedAt
+                  ? ` · Last checked ${formatShortDate(scheme.lastVerifiedAt)}`
+                  : ""}
+              </Text>
+              <Text style={{ marginTop: 4, fontSize: 13, lineHeight: 18, fontWeight: "400", color: colors.mutedText, fontFamily: fonts.body }}>
+                Scheme rules can change. The scheme office makes the final decision.
+              </Text>
             </ScrollView>
 
             {/* Sticky primary action */}
-            {actionConfig ? (
+            {primaryCta ? (
               <View
-                className="px-6 pt-3 pb-5 border-t"
-                style={{ borderColor: colors.border, backgroundColor: colors.background }}
+                style={{
+                  paddingHorizontal: 24,
+                  paddingTop: 12,
+                  paddingBottom: 16,
+                  borderTopWidth: 1,
+                  borderColor: colors.border,
+                  backgroundColor: colors.background,
+                }}
               >
                 <TouchableOpacity
                   activeOpacity={0.85}
                   onPress={handlePrimaryAction}
-                  disabled={applying}
-                  className="flex-row items-center justify-center rounded-2xl py-3.5"
-                  style={{ backgroundColor: colors.primary }}
+                  disabled={applying || checking}
+                  accessibilityRole="button"
+                  accessibilityLabel={primaryCta.label}
+                  accessibilityState={{ disabled: applying || checking, busy: applying }}
+                  className="flex-row items-center justify-center"
+                  style={{ height: 48, borderRadius: 16, gap: 8, paddingHorizontal: 16, backgroundColor: colors.primary }}
                 >
-                  {applying ? (
-                    <ActivityIndicator size="small" color="#fff" />
+                  {applying && primaryAction === "track" ? (
+                    <ActivityIndicator size="small" color={colors.buttonText} />
                   ) : (
                     <>
-                      <Ionicons
-                        name={actionConfig.icon as keyof typeof Ionicons.glyphMap}
-                        size={18}
-                        color="#fff"
-                      />
+                      <Ionicons name={primaryCta.icon as IconName} size={18} color={colors.buttonText} />
                       <Text
-                        className="text-sm font-black ml-2"
-                        style={{ color: "#fff", fontFamily: fonts.heading }}
+                        numberOfLines={1}
+                        maxFontSizeMultiplier={1.3}
+                        style={{ flexShrink: 1, fontSize: 15, fontWeight: "700", color: colors.buttonText, fontFamily: fonts.heading }}
                       >
-                        {actionConfig.label}
+                        {primaryCta.label}
                       </Text>
                     </>
                   )}
                 </TouchableOpacity>
+                {primaryAction === "track" && !saved ? (
+                  <Text
+                    style={{ marginTop: 6, textAlign: "center", fontSize: 13, lineHeight: 18, fontWeight: "400", color: colors.mutedText, fontFamily: fonts.body }}
+                  >
+                    {trackHelperText(scheme.actionType)}
+                  </Text>
+                ) : null}
               </View>
             ) : null}
           </>
@@ -691,130 +697,230 @@ export default function GovernmentSchemeDetail() {
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           className="flex-1 justify-end"
-          style={{ backgroundColor: "rgba(0,0,0,0.4)" }}
+          style={{ backgroundColor: colors.overlay }}
         >
           <View
-            className="rounded-t-3xl px-6 pt-5"
-            style={{ backgroundColor: colors.background, paddingBottom: Math.max(insets.bottom, 12) + 20 }}
+            style={{
+              borderTopLeftRadius: 28,
+              borderTopRightRadius: 28,
+              paddingHorizontal: 24,
+              paddingTop: 16,
+              maxHeight: "92%",
+              backgroundColor: colors.background,
+              paddingBottom: Math.max(insets.bottom, 12) + 16,
+            }}
           >
-            <View className="flex-row items-center justify-between mb-1">
-              <Text
-                className="text-lg font-black"
-                style={{ color: colors.foreground, fontFamily: fonts.heading }}
-              >
-                Check eligibility
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <View className="flex-row items-center justify-between" style={{ gap: 12 }}>
+                <Text
+                  accessibilityRole="header"
+                  style={{ flexShrink: 1, fontSize: 18, fontWeight: "700", color: colors.foreground, fontFamily: fonts.heading }}
+                >
+                  Check if you may be eligible
+                </Text>
+                <TouchableOpacity
+                  onPress={() => setCheckerOpen(false)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close"
+                  className="items-center justify-center"
+                  style={{ width: 44, height: 44, borderRadius: 22, marginRight: -10 }}
+                >
+                  <Ionicons name="close" size={24} color={colors.foreground} />
+                </TouchableOpacity>
+              </View>
+              <Text style={{ marginBottom: 18, fontSize: 14, lineHeight: 20, fontWeight: "400", color: colors.foreground, fontFamily: fonts.body }}>
+                Answer a few questions for a better guess. Only the scheme office can confirm it.
               </Text>
-              <TouchableOpacity onPress={() => setCheckerOpen(false)}>
-                <Ionicons name="close" size={22} color={colors.mutedText} />
-              </TouchableOpacity>
-            </View>
-            <Text
-              className="text-xs mb-4"
-              style={{ color: colors.mutedText, fontFamily: fonts.body }}
-            >
-              Answer a few questions for a better estimate. This is only guidance — the
-              official authority confirms eligibility.
-            </Text>
 
-            {/* Age */}
-            <Text
-              className="text-xs font-bold mb-1.5"
-              style={{ color: colors.foreground, fontFamily: fonts.body }}
-            >
-              Your age
-            </Text>
-            <TextInput
-              value={ageInput}
-              onChangeText={(t) => setAgeInput(t.replace(/[^0-9]/g, ""))}
-              keyboardType="number-pad"
-              placeholder="e.g. 24"
-              placeholderTextColor={colors.mutedText}
-              className="rounded-xl px-3.5 h-11 text-sm mb-4"
-              style={{
-                backgroundColor: colors.surface,
-                color: colors.foreground,
-                fontFamily: fonts.body,
-                ...getShadow(colors, isDark),
-              }}
-            />
+              {/* Age */}
+              <Text style={{ marginBottom: 8, fontSize: 14, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>
+                Your age
+              </Text>
+              <TextInput
+                value={ageInput}
+                onChangeText={(t) => setAgeInput(t.replace(/[^0-9]/g, ""))}
+                keyboardType="number-pad"
+                placeholder="e.g. 24"
+                placeholderTextColor={colors.mutedText}
+                accessibilityLabel="Your age"
+                maxLength={3}
+                maxFontSizeMultiplier={1.4}
+                style={{
+                  height: 48,
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  paddingHorizontal: 14,
+                  marginBottom: 18,
+                  fontSize: 15,
+                  backgroundColor: colors.surface,
+                  color: colors.foreground,
+                  fontFamily: fonts.body,
+                }}
+              />
 
-            {/* Pregnant */}
-            <Text
-              className="text-xs font-bold mb-1.5"
-              style={{ color: colors.foreground, fontFamily: fonts.body }}
-            >
-              Are you currently pregnant?
-            </Text>
-            <View className="flex-row gap-2 mb-4">
-              {[
-                { label: "Yes", value: true },
-                { label: "No", value: false },
-              ].map((opt) => {
-                const active = pregnantInput === opt.value;
-                return (
-                  <TouchableOpacity
-                    key={opt.label}
-                    activeOpacity={0.8}
-                    onPress={() => setPregnantInput(active ? null : opt.value)}
-                    className="flex-1 items-center rounded-xl py-2.5"
-                    style={{
-                      backgroundColor: active ? colors.primary : colors.surface,
-                      ...getShadow(colors, isDark),
-                    }}
-                  >
-                    <Text
-                      className="text-xs font-bold"
+              {/* Pregnant */}
+              <Text style={{ marginBottom: 8, fontSize: 14, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>
+                Are you pregnant right now?
+              </Text>
+              <View className="flex-row" style={{ gap: 10, marginBottom: 18 }}>
+                {[
+                  { label: "Yes", value: true },
+                  { label: "No", value: false },
+                ].map((opt) => {
+                  const active = pregnantInput === opt.value;
+                  return (
+                    <TouchableOpacity
+                      key={opt.label}
+                      activeOpacity={0.8}
+                      onPress={() => setPregnantInput(active ? null : opt.value)}
+                      accessibilityRole="button"
+                      accessibilityLabel={opt.label}
+                      accessibilityState={{ selected: active }}
+                      className="flex-1 items-center justify-center"
                       style={{
-                        color: active ? "#fff" : colors.mutedText,
-                        fontFamily: fonts.body,
+                        height: 48,
+                        borderRadius: 16,
+                        borderWidth: 1,
+                        borderColor: active ? colors.primary : colors.border,
+                        backgroundColor: active ? colors.primary : colors.surface,
                       }}
                     >
-                      {opt.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+                      <Text
+                        maxFontSizeMultiplier={1.3}
+                        style={{ fontSize: 15, fontWeight: "700", color: active ? colors.buttonText : colors.foreground, fontFamily: fonts.body }}
+                      >
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
 
-            {/* State */}
-            <Text
-              className="text-xs font-bold mb-1.5"
-              style={{ color: colors.foreground, fontFamily: fonts.body }}
-            >
-              Your state / UT
-            </Text>
-            <TextInput
-              value={stateInput}
-              onChangeText={setStateInput}
-              placeholder="e.g. Rajasthan"
-              placeholderTextColor={colors.mutedText}
-              className="rounded-xl px-3.5 h-11 text-sm mb-5"
-              style={{
-                backgroundColor: colors.surface,
-                color: colors.foreground,
-                fontFamily: fonts.body,
-                ...getShadow(colors, isDark),
-              }}
-            />
-
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={submitEligibility}
-              disabled={checking}
-              className="items-center justify-center rounded-2xl py-3.5"
-              style={{ backgroundColor: colors.primary }}
-            >
-              {checking ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
+              {/* State picker */}
+              <Text style={{ marginBottom: 8, fontSize: 14, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>
+                Your state or UT
+              </Text>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => setStatePickerOpen((v) => !v)}
+                accessibilityRole="button"
+                accessibilityLabel={stateInput ? `Your state: ${stateInput}. Change` : "Choose your state"}
+                accessibilityState={{ expanded: statePickerOpen }}
+                className="flex-row items-center"
+                style={{
+                  height: 48,
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  borderColor: statePickerOpen ? colors.primary : colors.border,
+                  paddingHorizontal: 14,
+                  gap: 8,
+                  backgroundColor: colors.surface,
+                }}
+              >
                 <Text
-                  className="text-sm font-black"
-                  style={{ color: "#fff", fontFamily: fonts.heading }}
+                  numberOfLines={1}
+                  maxFontSizeMultiplier={1.4}
+                  style={{ flex: 1, fontSize: 15, fontWeight: "400", color: stateInput ? colors.foreground : colors.mutedText, fontFamily: fonts.body }}
                 >
-                  See my result
+                  {stateInput || "Choose your state"}
                 </Text>
-              )}
-            </TouchableOpacity>
+                <Ionicons name={statePickerOpen ? "chevron-up" : "chevron-down"} size={18} color={colors.mutedText} />
+              </TouchableOpacity>
+              {statePickerOpen ? (
+                <View
+                  style={{
+                    marginTop: 8,
+                    borderRadius: 16,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    backgroundColor: colors.surface,
+                    overflow: "hidden",
+                  }}
+                >
+                  <TextInput
+                    value={stateQuery}
+                    onChangeText={setStateQuery}
+                    placeholder="Search states"
+                    placeholderTextColor={colors.mutedText}
+                    accessibilityLabel="Search states"
+                    autoCorrect={false}
+                    maxFontSizeMultiplier={1.4}
+                    style={{
+                      height: 44,
+                      paddingHorizontal: 14,
+                      fontSize: 15,
+                      borderBottomWidth: 1,
+                      borderColor: colors.border,
+                      color: colors.foreground,
+                      fontFamily: fonts.body,
+                    }}
+                  />
+                  <ScrollView style={{ maxHeight: 220 }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                    {stateMatches.length === 0 ? (
+                      <Text style={{ padding: 14, fontSize: 14, fontWeight: "400", color: colors.mutedText, fontFamily: fonts.body }}>
+                        No state matches “{stateQuery.trim()}”.
+                      </Text>
+                    ) : (
+                      stateMatches.map((name) => {
+                        const selected = name === stateInput;
+                        return (
+                          <TouchableOpacity
+                            key={name}
+                            activeOpacity={0.7}
+                            onPress={() => {
+                              setStateInput(name);
+                              setStatePickerOpen(false);
+                              setStateQuery("");
+                            }}
+                            accessibilityRole="button"
+                            accessibilityLabel={name}
+                            accessibilityState={{ selected }}
+                            className="flex-row items-center"
+                            style={{
+                              minHeight: 44,
+                              paddingHorizontal: 14,
+                              gap: 8,
+                              backgroundColor: selected ? colors.primaryLight : "transparent",
+                            }}
+                          >
+                            <Text
+                              numberOfLines={2}
+                              style={{ flex: 1, fontSize: 15, fontWeight: selected ? "700" : "400", color: selected ? colors.primaryDark : colors.foreground, fontFamily: fonts.body }}
+                            >
+                              {name}
+                            </Text>
+                            {selected ? <Ionicons name="checkmark" size={18} color={colors.primaryDark} /> : null}
+                          </TouchableOpacity>
+                        );
+                      })
+                    )}
+                  </ScrollView>
+                </View>
+              ) : null}
+
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={submitEligibility}
+                disabled={checking}
+                accessibilityRole="button"
+                accessibilityLabel="See my result"
+                accessibilityState={{ disabled: checking, busy: checking }}
+                className="items-center justify-center"
+                style={{ marginTop: 22, height: 48, borderRadius: 16, backgroundColor: colors.primary }}
+              >
+                {checking ? (
+                  <ActivityIndicator size="small" color={colors.buttonText} />
+                ) : (
+                  <Text
+                    maxFontSizeMultiplier={1.3}
+                    style={{ fontSize: 15, fontWeight: "700", color: colors.buttonText, fontFamily: fonts.heading }}
+                  >
+                    See my result
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>

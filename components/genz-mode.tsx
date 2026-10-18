@@ -51,7 +51,7 @@ const GENZ_LABELS: Record<string, string> = {
 
   // Explore hub
   Forest: "Grow Your Glow 🌱",
-  Blogs: "The Read 📖",
+  Articles: "The Read 📖",
   Videos: "The Watch List 🎬",
   "Partner Sync": "Bae Sync 💑",
   Habits: "Daily W's ✅",

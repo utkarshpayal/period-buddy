@@ -394,6 +394,23 @@ export type Predictions = {
   /** count of implausible "double cycle" lengths excluded from the estimate */
   outliersRemoved?: number;
 
+  /** Days since the period was due with none logged; isLate from 1 day. */
+  isLate?: boolean;
+  daysLate?: number;
+  /** FIGO normal range for this person's age (24–38 adults, 21–45 teens). */
+  normalCycleRange?: { min: number; max: number };
+  /** Typical cycle length is outside normalCycleRange. */
+  outsideNormalRange?: boolean;
+  /** Days the last logged period lasted; longPeriod when > 8 (FIGO). */
+  lastPeriodDays?: number | null;
+  longPeriod?: boolean;
+  /** No period for 90+ days while still logging. */
+  noPeriodTooLong?: boolean;
+  peakFertileStartISO?: string;
+  peakFertileEndISO?: string;
+  fertileWindowStartISO?: string;
+  fertileWindowEndISO?: string;
+
   // Staleness — set when the user has stopped logging for 2+ predicted cycles,
   // so the projection is a guess rather than a measurement.
   daysSinceLastActualPeriod?: number | null;
@@ -2807,6 +2824,7 @@ export const reportApi = {
 };
 
 export type SymptomPrediction = {
+  /** Finished cycles with any log in this phase (the likelihood's denominator). */
   cyclesAnalyzed: number;
   likelihood: number;
   occurrences: number;
@@ -2817,6 +2835,8 @@ export type SymptomPrediction = {
 export type SymptomPredictionsResponse = {
   nextCycleStart: string | null;
   predictions: SymptomPrediction[];
+  /** Finished cycles analysed (the current one isn't counted). */
+  cyclesAnalyzed?: number;
 };
 
 export const insightsApi = {
@@ -2987,7 +3007,8 @@ export type ScreeningCondition = "pcos" | "endometriosis" | "fibroid" | "thyroid
 export type ScreeningQuestion = {
   id: string;
   text: string;
-  type: "yesno" | "scale";
+  /** The backend sends "boolean" for yes/no questions. */
+  type: "boolean" | "yesno" | "scale";
 };
 
 export type ScreeningQuestionsResponse = {
@@ -3006,6 +3027,10 @@ export type ScreeningAssessmentResponse = {
   riskLevel: ScreeningRiskLevel;
   score: number;
   summary: string;
+  /** Question ids of red-flag answers: talk to a doctor whatever the score. */
+  redFlags?: string[];
+  /** Optional caveat, e.g. adult PCOS criteria don't apply to teens. */
+  note?: string | null;
 };
 
 export type ScreeningHistoryItem = {

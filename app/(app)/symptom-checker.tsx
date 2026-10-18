@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Linking,
   ScrollView,
   StatusBar,
   Text,
@@ -25,8 +26,19 @@ import {
   type ScreeningCondition,
   type ScreeningQuestion,
 } from "../../lib/api";
+import {
+  EMERGENCY_NUMBER,
+  RED_FLAG_ITEMS,
+  hasResultRedFlags,
+  soonRedFlags,
+  triageRedFlags,
+} from "../../lib/redFlagScreen";
 
-type Step = "pick" | "questions" | "results";
+// "prescreen" (the "Any of these right now?" red-flag checklist) comes before
+// any questionnaire; "urgent" is the get-care card it leads to.
+type Step = "prescreen" | "urgent" | "pick" | "questions" | "results";
+
+type AssessmentResult = ScreeningAssessmentResponse;
 
 const CONDITIONS: { id: ScreeningCondition; label: string; icon: keyof typeof MaterialCommunityIcons.glyphMap; desc: string }[] = [
   { id: "pcos", label: "PCOS", icon: "chart-donut", desc: "Irregular cycles, hormonal signs" },
@@ -76,7 +88,8 @@ export default function SymptomCheckerScreen() {
     high: { color: colors.danger, bg: softTints.danger, label: "Talk to a doctor" },
   };
 
-  const [step, setStep] = useState<Step>("pick");
+  const [step, setStep] = useState<Step>("prescreen");
+  const [redFlagPicks, setRedFlagPicks] = useState<string[]>([]);
   const [condition, setCondition] = useState<ScreeningCondition | null>(null);
   const [questions, setQuestions] = useState<ScreeningQuestion[]>([]);
   const [questionIndex, setQuestionIndex] = useState(0);
@@ -84,7 +97,7 @@ export default function SymptomCheckerScreen() {
   const [loadingQuestions, setLoadingQuestions] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<ScreeningAssessmentResponse | null>(null);
+  const [result, setResult] = useState<AssessmentResult | null>(null);
   const [paywallVisible, setPaywallVisible] = useState(false);
   const {
     hasAccess,
@@ -125,6 +138,14 @@ export default function SymptomCheckerScreen() {
       return;
     }
     await loadCondition(pick);
+  }
+
+  function toggleRedFlag(id: string) {
+    setRedFlagPicks((prev) => (prev.includes(id) ? prev.filter((pick) => pick !== id) : [...prev, id]));
+  }
+
+  function callEmergency() {
+    Linking.openURL(`tel:${EMERGENCY_NUMBER}`).catch(() => {});
   }
 
   function handleAnswer(question: ScreeningQuestion, value: number | boolean) {
@@ -212,7 +233,11 @@ export default function SymptomCheckerScreen() {
       <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
         <ScreenHeader
           title="Symptom Checker"
-          onBack={() => (step === "pick" ? router.back() : handleBackQuestion())}
+          onBack={() => {
+            if (step === "prescreen" || step === "pick") router.back();
+            else if (step === "urgent") setStep("prescreen");
+            else handleBackQuestion();
+          }}
         />
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }}>
@@ -224,6 +249,160 @@ export default function SymptomCheckerScreen() {
                 onPress={() => setPaywallVisible(true)}
               />
             ) : null}
+
+            {!locked && step === "prescreen" && (
+              <>
+                <Text className="text-lg font-black mb-1" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
+                  Any of these right now?
+                </Text>
+                <Text className="text-[13px] font-semibold leading-5 mb-5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                  Tick anything that&apos;s happening to you now. These need a doctor, not a questionnaire.
+                </Text>
+                <View style={{ gap: 10 }}>
+                  {RED_FLAG_ITEMS.map((item) => {
+                    const checked = redFlagPicks.includes(item.id);
+                    return (
+                      <TouchableOpacity
+                        key={item.id}
+                        onPress={() => toggleRedFlag(item.id)}
+                        activeOpacity={0.8}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked }}
+                        className="flex-row items-center border p-4"
+                        style={{
+                          backgroundColor: checked ? softTints.danger : colors.surface,
+                          borderColor: checked ? colors.danger : colors.border,
+                          borderRadius: 18,
+                        }}
+                      >
+                        <MaterialCommunityIcons
+                          name={checked ? "checkbox-marked" : "checkbox-blank-outline"}
+                          size={22}
+                          color={checked ? colors.danger : colors.mutedText}
+                        />
+                        <Text className="flex-1 ml-3 text-sm font-semibold leading-5" style={{ color: colors.foreground, fontFamily: fonts.body }}>
+                          {item.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <View style={{ gap: 10, marginTop: 20 }}>
+                  {redFlagPicks.length > 0 ? (
+                    <TouchableOpacity
+                      onPress={() => setStep("urgent")}
+                      activeOpacity={0.85}
+                      className="py-4 rounded-2xl items-center"
+                      style={{ backgroundColor: colors.danger }}
+                    >
+                      <Text className="text-sm font-black" style={{ color: "#FFFFFF", fontFamily: fonts.body }}>
+                        Continue
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  <TouchableOpacity
+                    onPress={() => {
+                      setRedFlagPicks([]);
+                      setStep("pick");
+                    }}
+                    activeOpacity={0.85}
+                    className="py-4 rounded-2xl items-center border"
+                    style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+                  >
+                    <Text className="text-sm font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
+                      None of these
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+
+            {!locked && step === "urgent" && (
+              <>
+                {triageRedFlags(redFlagPicks) === "emergency" ? (
+                  <View className="border p-5 mb-5" style={{ backgroundColor: softTints.danger, borderColor: colors.danger, borderRadius: 24 }}>
+                    <View className="flex-row items-center mb-2" style={{ gap: 10 }}>
+                      <MaterialCommunityIcons name="alert-circle" size={24} color={colors.danger} />
+                      <Text className="flex-1 text-lg font-black" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
+                        Please get medical care now
+                      </Text>
+                    </View>
+                    <Text className="text-sm leading-5 font-medium mb-4" style={{ color: colors.foreground, fontFamily: fonts.body }}>
+                      What you ticked can be a sign of something serious. Call {EMERGENCY_NUMBER} or go to the nearest hospital
+                      emergency department now. Don&apos;t wait to see if it passes.
+                    </Text>
+                    <TouchableOpacity
+                      onPress={callEmergency}
+                      activeOpacity={0.85}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Call ${EMERGENCY_NUMBER}`}
+                      className="py-4 rounded-2xl items-center flex-row justify-center gap-2"
+                      style={{ backgroundColor: colors.danger }}
+                    >
+                      <Feather name="phone" size={16} color="#FFFFFF" />
+                      <Text className="text-base font-black" style={{ color: "#FFFFFF", fontFamily: fonts.body }}>
+                        Call {EMERGENCY_NUMBER}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+
+                {soonRedFlags(redFlagPicks).length > 0 ? (
+                  <View
+                    className="border p-5 mb-5"
+                    style={{ backgroundColor: colors.surface, borderColor: colors.warning, borderRadius: 24, ...getShadow(colors, isDark) }}
+                  >
+                    <View className="flex-row items-center mb-2" style={{ gap: 10 }}>
+                      <MaterialCommunityIcons name="stethoscope" size={22} color={colors.warning} />
+                      <Text className="flex-1 text-base font-black" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
+                        See a gynaecologist soon
+                      </Text>
+                    </View>
+                    <Text className="text-sm leading-5 font-medium mb-4" style={{ color: colors.foreground, fontFamily: fonts.body }}>
+                      {soonRedFlags(redFlagPicks)
+                        .map((item) => item.label)
+                        .join(" and ")}{" "}
+                      isn&apos;t usually an emergency, but it isn&apos;t normal either. Please book a check-up in the next few days, even
+                      if it&apos;s light or has stopped.
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => router.push("/(app)/consultation" as any)}
+                      activeOpacity={0.85}
+                      className="py-4 rounded-2xl items-center"
+                      style={{ backgroundColor: colors.primary }}
+                    >
+                      <Text className="text-sm font-black" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
+                        Talk to a gynaecologist
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+
+                <View style={{ gap: 10 }}>
+                  {triageRedFlags(redFlagPicks) === "soon" ? (
+                    <TouchableOpacity
+                      onPress={() => setStep("pick")}
+                      activeOpacity={0.85}
+                      className="py-4 rounded-2xl items-center border"
+                      style={{ backgroundColor: colors.surface, borderColor: colors.border }}
+                    >
+                      <Text className="text-sm font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
+                        Continue to the symptom checker
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  <TouchableOpacity
+                    onPress={() => setStep("prescreen")}
+                    activeOpacity={0.85}
+                    className="py-3 items-center"
+                  >
+                    <Text className="text-[13px] font-bold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+                      Change my answers
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
 
             {!locked && step === "pick" && (
               <>
@@ -307,7 +486,9 @@ export default function SymptomCheckerScreen() {
                     </Text>
                   </View>
 
-                  {currentQuestion.type === "yesno" ? (
+                  {/* The server sends "boolean" for yes/no questions (older builds
+                      checked for "yesno" and showed the 0-3 scale instead). */}
+                  {currentQuestion.type !== "scale" ? (
                     <View className="flex-row gap-3">
                       {[
                         { label: "No", value: false, icon: "close-circle-outline" as const },
@@ -431,6 +612,34 @@ export default function SymptomCheckerScreen() {
                     </Text>
                   </View>
                 </View>
+
+                {hasResultRedFlags(result) ? (
+                  <View
+                    className="border p-5 mb-5"
+                    style={{ backgroundColor: softTints.danger, borderColor: colors.danger, borderRadius: 24 }}
+                  >
+                    <View className="flex-row items-center mb-2" style={{ gap: 10 }}>
+                      <MaterialCommunityIcons name="stethoscope" size={22} color={colors.danger} />
+                      <Text className="flex-1 text-base font-black" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
+                        Talk to a doctor about this
+                      </Text>
+                    </View>
+                    <Text className="text-sm leading-5 font-medium mb-4" style={{ color: colors.foreground, fontFamily: fonts.body }}>
+                      Some of your answers are worth getting checked soon, whatever your score. The list under &quot;For your doctor
+                      visit&quot; shows which ones.
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => router.push("/(app)/consultation" as any)}
+                      activeOpacity={0.85}
+                      className="py-3.5 rounded-2xl items-center"
+                      style={{ backgroundColor: colors.danger }}
+                    >
+                      <Text className="text-sm font-black" style={{ color: "#FFFFFF", fontFamily: fonts.body }}>
+                        Talk to a gynaecologist
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
 
                 <View
                   className="rounded-2xl px-4 py-3.5 mb-5"

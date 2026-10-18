@@ -92,7 +92,7 @@ export function IconCircle({
   );
 }
 
-/** White card with the app's soft shadow. */
+/** Surface card: 1px border in both themes, radius 24, the app's soft shadow. */
 export function WellbeingCard({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
   const { colors, isDark } = useTheme();
   return (
@@ -100,8 +100,8 @@ export function WellbeingCard({ children, style }: { children: React.ReactNode; 
       style={[
         {
           backgroundColor: colors.surface,
-          borderRadius: 22,
-          borderWidth: isDark ? 0 : 1,
+          borderRadius: 24,
+          borderWidth: 1,
           borderColor: colors.border,
           ...getShadow(colors, isDark),
         },
@@ -142,7 +142,7 @@ export function WellbeingIntro({
           >
             {title}
           </Text>
-          <Text style={{ color: colors.foreground, opacity: 0.75, fontSize: 13, lineHeight: 19, marginTop: 2, fontFamily: fonts.body }}>
+          <Text maxFontSizeMultiplier={1.4} style={{ color: colors.foreground, fontSize: 14, lineHeight: 20, fontWeight: "400", marginTop: 3, fontFamily: fonts.body }}>
             {body}
           </Text>
         </View>
@@ -155,8 +155,8 @@ export function WellbeingIntro({
               className="flex-row items-center"
               style={{ gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: colors.surface }}
             >
-              <WellbeingGlyph name={chip.icon} size={13} color={tone.fg} />
-              <Text maxFontSizeMultiplier={1.3} style={{ color: colors.foreground, fontSize: 12, fontWeight: "700", fontFamily: fonts.body }}>
+              <WellbeingGlyph name={chip.icon} size={14} color={tone.fg} />
+              <Text maxFontSizeMultiplier={1.3} style={{ color: colors.foreground, fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}>
                 {chip.label}
               </Text>
             </View>
@@ -172,8 +172,8 @@ export function MetaPill({ icon, label }: { icon: string; label: string }) {
   const { colors, fonts } = useTheme();
   return (
     <View className="flex-row items-center" style={{ gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, backgroundColor: colors.surfaceSoft }}>
-      <WellbeingGlyph name={icon} size={12} color={colors.mutedText} />
-      <Text maxFontSizeMultiplier={1.3} style={{ color: colors.mutedText, fontSize: 12, fontWeight: "600", fontFamily: fonts.body }}>
+      <WellbeingGlyph name={icon} size={13} color={colors.mutedText} />
+      <Text maxFontSizeMultiplier={1.3} style={{ color: colors.mutedText, fontSize: 13, fontWeight: "600", fontFamily: fonts.body }}>
         {label}
       </Text>
     </View>
@@ -195,6 +195,7 @@ export function ArticleRow({
   onPress,
   first,
   fallbackIcon,
+  selected,
 }: {
   icon: string | undefined;
   tone: WellbeingTone;
@@ -205,6 +206,8 @@ export function ArticleRow({
   onPress: () => void;
   first?: boolean;
   fallbackIcon?: string;
+  /** Marks the row that is open below (hygiene's topic list); undefined = a plain link row. */
+  selected?: boolean;
 }) {
   const { colors, fonts } = useTheme();
   return (
@@ -212,12 +215,13 @@ export function ArticleRow({
       activeOpacity={0.7}
       onPress={onPress}
       accessibilityRole="button"
+      accessibilityState={selected === undefined ? undefined : { selected }}
       accessibilityLabel={[eyebrow, title, summary].filter(Boolean).join(". ")}
       className="flex-row"
-      style={{ gap: 14, paddingHorizontal: 16, paddingVertical: 16 }}
+      style={{ gap: 14, paddingHorizontal: 16, paddingVertical: 16, borderRadius: selected ? 20 : 0, backgroundColor: selected ? tone.bg : "transparent" }}
     >
       {!first ? <View style={{ position: "absolute", top: 0, left: 74, right: 0, height: 1, backgroundColor: colors.border }} /> : null}
-      <IconCircle icon={icon} tone={tone} size={44} fallback={fallbackIcon} />
+      <IconCircle icon={icon} tone={tone} size={44} fallback={fallbackIcon} solid={selected} />
       <View className="flex-1" style={{ minWidth: 0 }}>
         {eyebrow ? (
           <Text
@@ -236,7 +240,7 @@ export function ArticleRow({
           {title}
         </Text>
         {summary ? (
-          <Text numberOfLines={2} maxFontSizeMultiplier={1.4} style={{ color: colors.mutedText, fontSize: 13, lineHeight: 19, marginTop: 3, fontFamily: fonts.body }}>
+          <Text numberOfLines={2} maxFontSizeMultiplier={1.4} style={{ color: colors.mutedText, fontSize: 13.5, lineHeight: 19, fontWeight: "400", marginTop: 3, fontFamily: fonts.body }}>
             {summary}
           </Text>
         ) : null}
@@ -249,7 +253,11 @@ export function ArticleRow({
         ) : null}
       </View>
       <View style={{ justifyContent: "center" }}>
-        <Ionicons name="chevron-forward" size={18} color={colors.mutedText} />
+        {selected ? (
+          <Ionicons name="checkmark-circle" size={20} color={tone.fg} />
+        ) : (
+          <Ionicons name="chevron-forward" size={18} color={colors.mutedText} />
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -274,7 +282,7 @@ export function DetailSection({
     <View style={[{ marginTop: 24 }, style]}>
       <View className="flex-row items-center" style={{ gap: 10, marginBottom: 12 }}>
         <IconCircle icon={icon} tone={tone} size={30} />
-        <Text accessibilityRole="header" style={{ color: colors.foreground, fontSize: 16, fontWeight: "700", fontFamily: fonts.heading }}>
+        <Text accessibilityRole="header" style={{ flexShrink: 1, color: colors.foreground, fontSize: 16, lineHeight: 22, fontWeight: "700", fontFamily: fonts.heading }}>
           {title}
         </Text>
       </View>
@@ -298,7 +306,7 @@ export function KeyPointList({ points, tone }: { points: string[]; tone?: Wellbe
           <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: check.bg, alignItems: "center", justifyContent: "center", marginTop: 1 }}>
             <Ionicons name="checkmark" size={14} color={check.fg} />
           </View>
-          <Text style={{ flex: 1, color: colors.foreground, fontSize: 14.5, lineHeight: 22, fontFamily: fonts.body }}>{point}</Text>
+          <Text style={{ flex: 1, color: colors.foreground, fontSize: 15, lineHeight: 23, fontWeight: "400", fontFamily: fonts.body }}>{point}</Text>
         </View>
       ))}
     </WellbeingCard>
@@ -312,8 +320,8 @@ export function BulletList({ items, color }: { items: string[]; color: string })
     <View style={{ gap: 8 }}>
       {items.map((item, idx) => (
         <View key={idx} className="flex-row items-start" style={{ gap: 10 }}>
-          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color, marginTop: 8 }} />
-          <Text style={{ flex: 1, color: colors.foreground, fontSize: 14, lineHeight: 21, fontFamily: fonts.body }}>{item}</Text>
+          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color, marginTop: 9 }} />
+          <Text style={{ flex: 1, color: colors.foreground, fontSize: 15, lineHeight: 23, fontWeight: "400", fontFamily: fonts.body }}>{item}</Text>
         </View>
       ))}
     </View>
@@ -332,10 +340,10 @@ export function MediaButtons({ videoUrl, audioUrl, style }: { videoUrl?: string;
       accessibilityRole="link"
       accessibilityLabel={label}
       className="flex-1 flex-row items-center justify-center"
-      style={{ height: 46, borderRadius: 23, gap: 8, backgroundColor: colors.primaryLight }}
+      style={{ height: 48, borderRadius: 24, gap: 8, backgroundColor: colors.primaryLight }}
     >
       <Ionicons name={icon} size={18} color={colors.primaryDark} />
-      <Text style={{ color: colors.primaryDark, fontSize: 14, fontWeight: "800", fontFamily: fonts.body }}>{label}</Text>
+      <Text maxFontSizeMultiplier={1.3} style={{ color: colors.primaryDark, fontSize: 15, fontWeight: "700", fontFamily: fonts.body }}>{label}</Text>
     </TouchableOpacity>
   );
   return (
@@ -346,7 +354,7 @@ export function MediaButtons({ videoUrl, audioUrl, style }: { videoUrl?: string;
   );
 }
 
-/** "Talk to a gynecologist" nudge card with a Consult button. */
+/** "Talk to a gynaecologist" nudge card with a Consult button. */
 export function ConsultNudge({ title, body, onPress, style }: { title: string; body: string; onPress: () => void; style?: StyleProp<ViewStyle> }) {
   const { colors, fonts } = useTheme();
   const tone = getWellbeingTones(colors).rose;
@@ -358,7 +366,7 @@ export function ConsultNudge({ title, body, onPress, style }: { title: string; b
           <Text numberOfLines={2} maxFontSizeMultiplier={1.4} style={{ color: colors.foreground, fontSize: 15, lineHeight: 21, fontWeight: "700", fontFamily: fonts.heading }}>
             {title}
           </Text>
-          <Text maxFontSizeMultiplier={1.4} style={{ color: colors.mutedText, fontSize: 13, lineHeight: 18, marginTop: 2, fontFamily: fonts.body }}>
+          <Text maxFontSizeMultiplier={1.4} style={{ color: colors.foreground, fontSize: 13.5, lineHeight: 19, fontWeight: "400", marginTop: 2, fontFamily: fonts.body }}>
             {body}
           </Text>
         </View>
@@ -367,11 +375,12 @@ export function ConsultNudge({ title, body, onPress, style }: { title: string; b
         onPress={onPress}
         activeOpacity={0.85}
         accessibilityRole="button"
+        accessibilityLabel="Talk to a gynaecologist"
         className="flex-row items-center justify-center"
-        style={{ marginTop: 14, height: 46, borderRadius: 23, backgroundColor: colors.primary, gap: 8 }}
+        style={{ marginTop: 14, height: 48, borderRadius: 16, backgroundColor: colors.primary, gap: 8 }}
       >
         <Ionicons name="chatbubbles-outline" size={17} color={colors.buttonText} />
-        <Text style={{ color: colors.buttonText, fontSize: 14.5, fontWeight: "800", fontFamily: fonts.body }}>Talk to a gynecologist</Text>
+        <Text maxFontSizeMultiplier={1.3} style={{ color: colors.buttonText, fontSize: 15, fontWeight: "700", fontFamily: fonts.body }}>Talk to a gynaecologist</Text>
       </TouchableOpacity>
     </WellbeingCard>
   );
@@ -383,7 +392,7 @@ export function PrivacyNote({ text, style }: { text: string; style?: StyleProp<V
   return (
     <View className="flex-row items-start" style={[{ gap: 10, paddingHorizontal: 4 }, style]}>
       <Ionicons name="lock-closed-outline" size={15} color={colors.mutedText} style={{ marginTop: 2 }} />
-      <Text style={{ flex: 1, color: colors.mutedText, fontSize: 13, lineHeight: 19, fontFamily: fonts.body }}>{text}</Text>
+      <Text style={{ flex: 1, color: colors.mutedText, fontSize: 13, lineHeight: 19, fontWeight: "400", fontFamily: fonts.body }}>{text}</Text>
     </View>
   );
 }
@@ -396,9 +405,9 @@ export function ArticleListSkeleton({ rows = 4 }: { rows?: number }) {
         <View key={i} className="flex-row" style={{ gap: 14, padding: 16 }}>
           <SkeletonBlock width={44} height={44} radius={22} />
           <View className="flex-1" style={{ gap: 8 }}>
-            <SkeletonBlock width="60%" height={14} />
-            <SkeletonBlock width="95%" height={12} />
-            <SkeletonBlock width="40%" height={12} />
+            <SkeletonBlock width="60%" height={15} />
+            <SkeletonBlock width="95%" height={13} />
+            <SkeletonBlock width="40%" height={13} />
           </View>
         </View>
       ))}
@@ -425,18 +434,19 @@ export function WellbeingEmpty({
   return (
     <WellbeingCard style={{ alignItems: "center", paddingVertical: 28, paddingHorizontal: 24 }}>
       <IconCircle icon={icon} tone={tone} size={56} />
-      <Text style={{ marginTop: 14, color: colors.foreground, fontSize: 15.5, fontWeight: "700", textAlign: "center", fontFamily: fonts.heading }}>{title}</Text>
+      <Text style={{ marginTop: 14, color: colors.foreground, fontSize: 15, lineHeight: 21, fontWeight: "700", textAlign: "center", fontFamily: fonts.heading }}>{title}</Text>
       {message ? (
-        <Text style={{ marginTop: 4, color: colors.mutedText, fontSize: 13, lineHeight: 19, textAlign: "center", fontFamily: fonts.body }}>{message}</Text>
+        <Text style={{ marginTop: 4, color: colors.foreground, fontSize: 13.5, lineHeight: 19, fontWeight: "400", textAlign: "center", fontFamily: fonts.body }}>{message}</Text>
       ) : null}
       {actionLabel && onAction ? (
         <TouchableOpacity
           onPress={onAction}
           activeOpacity={0.8}
           accessibilityRole="button"
-          style={{ marginTop: 14, paddingHorizontal: 18, height: 40, borderRadius: 20, justifyContent: "center", backgroundColor: colors.primaryLight }}
+          accessibilityLabel={actionLabel}
+          style={{ marginTop: 16, paddingHorizontal: 20, height: 44, borderRadius: 22, justifyContent: "center", backgroundColor: colors.primaryLight }}
         >
-          <Text style={{ color: colors.primaryDark, fontSize: 13.5, fontWeight: "800", fontFamily: fonts.body }}>{actionLabel}</Text>
+          <Text maxFontSizeMultiplier={1.3} style={{ color: colors.primaryDark, fontSize: 14, fontWeight: "700", fontFamily: fonts.body }}>{actionLabel}</Text>
         </TouchableOpacity>
       ) : null}
     </WellbeingCard>
@@ -463,14 +473,15 @@ export function DetailSheetHeader({
       <IconCircle icon={icon} tone={tone} size={48} />
       <View className="flex-1">
         {eyebrow ? (
-          <Text numberOfLines={1} style={{ color: tone.fg, fontSize: 11.5, fontWeight: "800", letterSpacing: 0.6, textTransform: "uppercase", fontFamily: fonts.body }}>
+          <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={{ color: tone.fg, fontSize: 11.5, fontWeight: "800", letterSpacing: 0.6, textTransform: "uppercase", fontFamily: fonts.body }}>
             {eyebrow}
           </Text>
         ) : null}
         <Text
           accessibilityRole="header"
           numberOfLines={2}
-          style={{ color: colors.foreground, fontSize: 20, lineHeight: 26, fontWeight: "800", letterSpacing: -0.3, fontFamily: fonts.heading }}
+          maxFontSizeMultiplier={1.4}
+          style={{ flexShrink: 1, color: colors.foreground, fontSize: 22, lineHeight: 28, fontWeight: "800", letterSpacing: -0.3, fontFamily: fonts.heading }}
         >
           {title}
         </Text>
@@ -479,11 +490,47 @@ export function DetailSheetHeader({
         onPress={onClose}
         accessibilityRole="button"
         accessibilityLabel="Close"
-        hitSlop={6}
-        style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
+        hitSlop={4}
+        style={{ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
       >
         <Ionicons name="close" size={20} color={colors.foreground} />
       </TouchableOpacity>
+    </View>
+  );
+}
+
+/**
+ * "When to see a doctor" callout: soft danger wash, warning icon, foreground
+ * text. Sits right after an article's summary so the safety line is never
+ * buried at the bottom of a long guide.
+ */
+export function DoctorCallout({
+  title = "When to see a doctor",
+  body,
+  style,
+}: {
+  title?: string;
+  body: string;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { colors, fonts } = useTheme();
+  return (
+    <View
+      accessible
+      accessibilityLabel={`${title}. ${body}`}
+      className="flex-row items-start"
+      style={[
+        { gap: 12, padding: 16, borderRadius: 20, backgroundColor: colors.dangerLight, borderWidth: 1, borderColor: colors.border },
+        style,
+      ]}
+    >
+      <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" }}>
+        <Ionicons name="alert-circle-outline" size={19} color={colors.danger} />
+      </View>
+      <View className="flex-1" style={{ minWidth: 0 }}>
+        <Text style={{ color: colors.foreground, fontSize: 15, lineHeight: 21, fontWeight: "700", fontFamily: fonts.heading }}>{title}</Text>
+        <Text style={{ color: colors.foreground, fontSize: 15, lineHeight: 22, fontWeight: "400", fontFamily: fonts.body, marginTop: 4 }}>{body}</Text>
+      </View>
     </View>
   );
 }

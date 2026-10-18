@@ -11,6 +11,12 @@ import {
   applicantLabel,
   applicantEmail,
   governmentHospitalMapsUrl,
+  schemePrimaryAction,
+  schemePrimaryCta,
+  trackHelperText,
+  INDIAN_STATES_AND_UTS,
+  filterIndianStates,
+  canonicalStateName,
 } from "../schemeHelpers";
 import type { SchemeApplication } from "../api";
 
@@ -91,4 +97,39 @@ test("governmentHospitalMapsUrl scopes to the user's state when known", () => {
   // Blank/whitespace state falls back to "near me".
   assert.equal(governmentHospitalMapsUrl("   "), nearMe);
   assert.equal(governmentHospitalMapsUrl(null), nearMe);
+});
+
+test("APPLY's in-app action is labelled as tracking, not applying", () => {
+  assert.equal(SCHEME_ACTION_CTA.APPLY.label, "Track this scheme");
+  assert.ok(!/^apply$/i.test(SCHEME_ACTION_LABELS.APPLY));
+  assert.match(trackHelperText("APPLY"), /official site/);
+  assert.doesNotMatch(trackHelperText("FIND_FACILITY"), /Apply/);
+});
+
+test("primary action follows actionType", () => {
+  assert.equal(schemePrimaryAction("APPLY", true), "official");
+  assert.equal(schemePrimaryAction("APPLY", false), "track");
+  assert.equal(schemePrimaryAction("CHECK_ELIGIBILITY", true), "checker");
+  // FIND_FACILITY never opens officialUrl — it opens the maps search.
+  assert.equal(schemePrimaryAction("FIND_FACILITY", true), "maps");
+  assert.equal(schemePrimaryAction("EXTERNAL_APPLICATION", true), "official");
+  assert.equal(schemePrimaryAction("LEARN_MORE", true), "official");
+  assert.equal(schemePrimaryCta("APPLY", true).label, "Apply on official site");
+  assert.equal(schemePrimaryCta("APPLY", false).label, "Track this scheme");
+  assert.equal(schemePrimaryCta("FIND_FACILITY", true).label, "Find Government Hospital");
+});
+
+test("every application status explains what happens next", () => {
+  for (const meta of Object.values(APPLICATION_STATUS_META)) {
+    assert.ok(meta.next.length > 0);
+  }
+});
+
+test("state picker helpers", () => {
+  assert.equal(INDIAN_STATES_AND_UTS.length, 36);
+  assert.equal(filterIndianStates("").length, 36);
+  assert.deepEqual(filterIndianStates("raja"), ["Rajasthan"]);
+  assert.equal(canonicalStateName(" rajasthan "), "Rajasthan");
+  assert.equal(canonicalStateName("Atlantis"), "Atlantis");
+  assert.equal(canonicalStateName(undefined), "");
 });

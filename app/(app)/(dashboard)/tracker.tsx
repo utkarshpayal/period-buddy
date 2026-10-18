@@ -325,6 +325,7 @@ function CycleRing({
   nextPeriodDaysAway,
   nextPeriodDate,
   fertilityReliable,
+  daysLate = 0,
 }: {
   activeCycleLength: number;
   activePeriodLength: number;
@@ -335,6 +336,8 @@ function CycleRing({
   nextPeriodDate?: string;
   /** False when cycles are too irregular for a calendar-based fertile window. */
   fertilityReliable: boolean;
+  /** Days since the period was due with none logged (0 = not late). */
+  daysLate?: number;
 }) {
   const { colors, fonts } = useTheme();
   const displayDay = cycleDay;
@@ -373,7 +376,7 @@ function CycleRing({
   // The estimated fertile window (5 days before ovulation through the day
   // after) as a soft lavender band on the track.
   const fertileStart = (ovulationDayPivot - 6) / activeCycleLength;
-  const fertileLength = (7 / activeCycleLength) * RING_CIRCUMFERENCE;
+  const fertileLength = (6 / activeCycleLength) * RING_CIRCUMFERENCE;
 
   return (
     <View
@@ -457,7 +460,9 @@ function CycleRing({
           minimumFontScale={0.75}
           style={{ color: colors.foreground, fontSize: 36, lineHeight: 44, fontWeight: "700", letterSpacing: -0.5, fontFamily: fonts.heading }}
         >
-          {displayPhase === "period"
+          {daysLate > 0
+            ? `${daysLate} ${daysLate === 1 ? "day" : "days"} late`
+            : displayPhase === "period"
             ? `Day ${displayDay}`
             : displayPhase === "ovulation"
               ? "Today"
@@ -945,7 +950,7 @@ export default function Tracker() {
     );
     const hasFlowLog = Boolean(entry?.flow && entry.flow !== "none");
     const isOvulationPeak = cell.cycleDay === ovulationDayPivot;
-    const isFertileDay = cell.cycleDay >= ovulationDayPivot - 5 && cell.cycleDay <= ovulationDayPivot + 1;
+    const isFertileDay = cell.cycleDay >= ovulationDayPivot - 5 && cell.cycleDay <= ovulationDayPivot;
     const isPeriod = cell.phase === "period";
     // Predicted highlight is forward-looking only, and never pads past the
     // actually-logged current period.
@@ -1173,6 +1178,7 @@ export default function Tracker() {
                   nextPeriodDaysAway={nextPeriodDaysAway}
                   nextPeriodDate={predictions?.nextPeriodDate}
                   fertilityReliable={predictions?.ovulationReliable !== false}
+                  daysLate={predictions?.isLate ? predictions.daysLate ?? 0 : 0}
                 />
               </View>
 
@@ -1590,8 +1596,8 @@ export default function Tracker() {
                 },
                 {
                   icon: "book-open",
-                  title: "Blogs",
-                  desc: "Articles on cycle health and care",
+                  title: "Articles",
+                  desc: "Reads and short videos on your health",
                   action: () => {
                     setSearchVisible(false);
                     router.push("/(app)/blogs");

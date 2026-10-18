@@ -37,7 +37,7 @@ export function MedicalReviewBadge({
       <Text
         maxFontSizeMultiplier={1.3}
         numberOfLines={2}
-        style={{ flexShrink: 1, color: tint, fontSize: 12, fontWeight: "700", fontFamily: fonts.body }}
+        style={{ flexShrink: 1, color: tint, fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}
       >
         {text}
       </Text>
