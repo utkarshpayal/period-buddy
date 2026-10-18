@@ -11,7 +11,7 @@ import { useTheme, type ThemeColors } from "../../components/theme";
 import { getShadow } from "../../components/ui-tokens";
 import { useAsyncLoad } from "../../hooks/useAsyncLoad";
 import { cycleApi, reportApi, type DayEntry, type HealthReportCycleStats, type Predictions } from "../../lib/api";
-import { getDateKey, getMonthKey } from "../../lib/format";
+import { dateFromDayKey, formatShortDate, getDateKey, getMonthKey } from "../../lib/format";
 
 type GraphsData = {
   cycleLengths: number[];
@@ -65,112 +65,154 @@ async function loadGraphsData(): Promise<GraphsData> {
   };
 }
 
+type CardTint = { light: string; accent: string; text: string };
+
 function StatCard({
   title,
   tint,
   icon,
-  onPress,
   children,
 }: {
   title: string;
-  tint: { from: string; to: string; accent: string };
-  icon: React.ReactNode;
-  onPress?: () => void;
+  tint: CardTint;
+  icon: (props: { size: number; color: string }) => React.ReactNode;
   children: React.ReactNode;
 }) {
   const { colors, isDark, fonts } = useTheme();
-  const Wrapper = onPress ? TouchableOpacity : View;
 
   return (
-    <Wrapper
-      activeOpacity={0.88}
-      onPress={onPress}
-      style={{ borderRadius: 26, overflow: "hidden", marginBottom: 14, ...getShadow(colors, isDark) }}
+    <View
+      style={{
+        borderRadius: 24,
+        marginBottom: 14,
+        backgroundColor: colors.surface,
+        borderWidth: 1.5,
+        // Accent-tinted border so each card reads as its own colour, in dark
+        // mode too (where the pale *Light washes are nearly invisible).
+        borderColor: `${tint.accent}${isDark ? "59" : "47"}`,
+        ...getShadow(colors, isDark),
+        shadowOpacity: isDark ? 0.4 : 0.1,
+        elevation: 4,
+      }}
     >
       <LinearGradient
-        colors={[tint.from, tint.to]}
+        colors={[isDark ? `${tint.accent}33` : tint.light, colors.surface]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={{ padding: 20, minHeight: 118 }}
+        style={{ padding: 18, minHeight: 124, borderRadius: 22.5, overflow: "hidden" }}
       >
-        <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between" }}>
+        {/* Decorative watermark icon, bottom-right — purely visual. */}
+        <View pointerEvents="none" style={{ position: "absolute", right: 12, bottom: 8, opacity: isDark ? 0.12 : 0.1 }}>
+          {icon({ size: 64, color: tint.accent })}
+        </View>
+
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <View
+            style={{
+              width: 34,
+              height: 34,
+              borderRadius: 11,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: tint.accent,
+            }}
+          >
+            {icon({ size: 18, color: colors.surface })}
+          </View>
           <Text
-            style={{ color: tint.accent, fontSize: 12.5, fontWeight: "800", fontFamily: fonts.heading }}
+            numberOfLines={1}
+            style={{ flexShrink: 1, color: tint.text, fontSize: 14.5, fontWeight: "800", fontFamily: fonts.heading }}
           >
             {title}
           </Text>
-          <View
-            style={{
-              width: 30,
-              height: 30,
-              borderRadius: 15,
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: "rgba(255,255,255,0.55)",
-            }}
-          >
-            <Feather name="arrow-up-right" size={14} color={tint.accent} />
-          </View>
         </View>
 
-        <View style={{ marginTop: 10 }}>{children}</View>
-
-        {/* Decorative watermark icon, bottom-right — purely visual, matches the
-            reference app's illustrated stat cards. */}
-        <View style={{ position: "absolute", right: 14, bottom: 10, opacity: 0.28 }}>{icon}</View>
+        <View style={{ marginTop: 14 }}>{children}</View>
       </LinearGradient>
-    </Wrapper>
+    </View>
   );
 }
 
-function CycleLengthBars({
-  values,
-  colors,
-  fonts,
-  accent,
-}: {
-  values: number[];
-  colors: ThemeColors;
-  fonts: { mono: string };
-  accent: string;
-}) {
+function StatValue({ value, unit, caption }: { value: string | null; unit?: string; caption: string }) {
+  const { colors, fonts } = useTheme();
+  return (
+    <View>
+      {value != null ? (
+        <Text style={{ color: colors.foreground, fontFamily: fonts.mono }}>
+          <Text style={{ fontSize: 30, fontWeight: "800" }}>{value}</Text>
+          {unit ? <Text style={{ fontSize: 15, fontWeight: "700", color: colors.mutedText }}>{` ${unit}`}</Text> : null}
+        </Text>
+      ) : (
+        <Text style={{ color: colors.foreground, fontSize: 17, fontWeight: "800", fontFamily: fonts.heading }}>No data yet</Text>
+      )}
+      <Text style={{ color: colors.mutedText, fontSize: 13, fontWeight: "600", marginTop: 2, fontFamily: fonts.body }}>
+        {caption}
+      </Text>
+    </View>
+  );
+}
+
+const CYCLE_ROW_LABELS = ["Latest", "Previous", "2 cycles ago"];
+
+function CycleLengthBars({ values, colors, tint }: { values: number[]; colors: ThemeColors; tint: CardTint }) {
+  const { isDark, fonts } = useTheme();
   if (values.length === 0) {
     return (
-      <Text style={{ color: accent, fontSize: 12, fontWeight: "600", opacity: 0.85 }}>
-        Log a couple more cycles to see your trend here.
-      </Text>
+      <StatValue value={null} caption="Log a couple more cycles to see your trend here." />
     );
   }
 
-  const max = Math.max(...values, 20);
+  const latestFirst = [...values].reverse();
+  const max = Math.max(...values, 35);
+  const avg = values.reduce((sum, v) => sum + v, 0) / values.length;
 
   return (
-    <View style={{ gap: 8, width: "78%" }}>
-      {values.map((value, index) => {
-        const widthPct = Math.max((value / max) * 100, 22);
-        // Most recent cycle reads fully opaque; older ones fade slightly —
-        // draws the eye to "now" without needing separate labels.
-        const opacity = 1 - (values.length - 1 - index) * 0.22;
-        return (
-          <View
-            key={`${value}-${index}`}
-            style={{
-              alignSelf: "flex-start",
-              minWidth: 74,
-              width: `${widthPct}%`,
-              borderRadius: 999,
-              paddingVertical: 6,
-              paddingHorizontal: 12,
-              backgroundColor: "rgba(255,255,255,0.62)",
-              opacity: Math.max(opacity, 0.45),
-            }}
-          >
-            <Text style={{ color: accent, fontSize: 12, fontWeight: "800", fontFamily: fonts.mono }}>
-              {value} days
+    <View>
+      <StatValue
+        value={String(latestFirst[0])}
+        unit="days"
+        caption={values.length > 1 ? `Latest cycle · average ${Math.round(avg * 10) / 10} days` : "Latest cycle"}
+      />
+      <View style={{ gap: 9, marginTop: 14 }}>
+        {latestFirst.map((value, index) => (
+          <View key={`${value}-${index}`} style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            <Text
+              numberOfLines={1}
+              maxFontSizeMultiplier={1.3}
+              style={{ width: 92, color: colors.mutedText, fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}
+            >
+              {CYCLE_ROW_LABELS[index] ?? `${index} cycles ago`}
+            </Text>
+            <View
+              style={{
+                flex: 1,
+                height: 12,
+                borderRadius: 999,
+                overflow: "hidden",
+                backgroundColor: isDark ? colors.track : colors.surface,
+                borderWidth: isDark ? 0 : 1,
+                borderColor: `${tint.accent}30`,
+              }}
+            >
+              <View
+                style={{
+                  width: `${Math.max((value / max) * 100, 8)}%`,
+                  height: "100%",
+                  borderRadius: 999,
+                  // Latest cycle solid; older ones lighter so "now" stands out.
+                  backgroundColor: index === 0 ? tint.accent : `${tint.accent}8C`,
+                }}
+              />
+            </View>
+            <Text
+              maxFontSizeMultiplier={1.3}
+              style={{ width: 40, textAlign: "right", color: colors.foreground, fontSize: 14, fontWeight: "800", fontFamily: fonts.mono }}
+            >
+              {value}d
             </Text>
           </View>
-        );
-      })}
+        ))}
+      </View>
     </View>
   );
 }
@@ -236,15 +278,18 @@ export default function GraphsAndReportsScreen() {
     refreshOn: ["cycle"],
   });
 
+  // `accent` fills shapes (icon badge, bars, border); `text` is the
+  // title colour — a darker step in light mode so it clears contrast on the
+  // pale tint wash (accent/rose alone sit near 3:1 there).
   const cardTints = useMemo(
     () => ({
-      cycle: { from: colors.roseLight, to: colors.surface, accent: colors.rose },
-      weight: { from: colors.successLight, to: colors.surface, accent: colors.success },
-      bbt: { from: colors.warningLight, to: colors.surface, accent: colors.warning },
-      water: { from: colors.skyLight, to: colors.surface, accent: colors.sky },
-      sleep: { from: colors.accentLight, to: colors.surface, accent: colors.accent },
+      cycle: { light: colors.roseLight, accent: colors.rose, text: isDark ? colors.rose : colors.primaryDark },
+      weight: { light: colors.successLight, accent: colors.success, text: colors.success },
+      bbt: { light: colors.warningLight, accent: colors.warning, text: colors.warning },
+      water: { light: colors.skyLight, accent: colors.sky, text: colors.sky },
+      sleep: { light: colors.lavenderLight, accent: colors.secondary, text: colors.info },
     }),
-    [colors],
+    [colors, isDark],
   );
 
   const avgSleep = data?.report?.averages.sleepHours;
@@ -283,66 +328,57 @@ export default function GraphsAndReportsScreen() {
                 <StatCard
                   title="Cycle length"
                   tint={cardTints.cycle}
-                  icon={<MaterialCommunityIcons name="calendar-sync-outline" size={54} color={cardTints.cycle.accent} />}
+                  icon={(p) => <MaterialCommunityIcons name="calendar-sync-outline" {...p} />}
                 >
-                  <CycleLengthBars
-                    values={data.cycleLengths}
-                    colors={colors}
-                    fonts={fonts}
-                    accent={cardTints.cycle.accent}
-                  />
+                  <CycleLengthBars values={data.cycleLengths} colors={colors} tint={cardTints.cycle} />
                 </StatCard>
 
                 <StatCard
                   title="Weight"
                   tint={cardTints.weight}
-                  icon={<MaterialCommunityIcons name="scale-bathroom" size={52} color={cardTints.weight.accent} />}
+                  icon={(p) => <MaterialCommunityIcons name="scale-bathroom" {...p} />}
                 >
-                  <Text style={{ color: cardTints.weight.accent, fontSize: 22, fontWeight: "900", fontFamily: fonts.mono }}>
-                    {data.latestWeight ? `${data.latestWeight.value} kg` : "No data yet"}
-                  </Text>
-                  <Text style={{ color: cardTints.weight.accent, fontSize: 12.5, marginTop: 2, opacity: 0.8, fontFamily: fonts.body }}>
-                    {data.latestWeight ? `Last logged ${data.latestWeight.dateKey}` : "Log your weight in a day entry"}
-                  </Text>
+                  <StatValue
+                    value={data.latestWeight ? String(data.latestWeight.value) : null}
+                    unit="kg"
+                    caption={data.latestWeight ? `Last logged ${formatShortDate(dateFromDayKey(data.latestWeight.dateKey))}` : "Log your weight in a day entry"}
+                  />
                 </StatCard>
 
                 <StatCard
                   title="Basal body temperature"
                   tint={cardTints.bbt}
-                  icon={<MaterialCommunityIcons name="thermometer" size={54} color={cardTints.bbt.accent} />}
+                  icon={(p) => <MaterialCommunityIcons name="thermometer" {...p} />}
                 >
-                  <Text style={{ color: cardTints.bbt.accent, fontSize: 22, fontWeight: "900", fontFamily: fonts.mono }}>
-                    {data.latestTemperature ? `${data.latestTemperature.value}°C` : "No data yet"}
-                  </Text>
-                  <Text style={{ color: cardTints.bbt.accent, fontSize: 12.5, marginTop: 2, opacity: 0.8, fontFamily: fonts.body }}>
-                    {data.latestTemperature ? `Last logged ${data.latestTemperature.dateKey}` : "Log BBT in a day entry"}
-                  </Text>
+                  <StatValue
+                    value={data.latestTemperature ? String(data.latestTemperature.value) : null}
+                    unit="°C"
+                    caption={data.latestTemperature ? `Last logged ${formatShortDate(dateFromDayKey(data.latestTemperature.dateKey))}` : "Log BBT in a day entry"}
+                  />
                 </StatCard>
 
                 <StatCard
                   title="Water intake"
                   tint={cardTints.water}
-                  icon={<Ionicons name="water" size={50} color={cardTints.water.accent} />}
+                  icon={(p) => <Ionicons name="water" {...p} />}
                 >
-                  <Text style={{ color: cardTints.water.accent, fontSize: 22, fontWeight: "900", fontFamily: fonts.mono }}>
-                    {avgWater != null ? `${Math.round(avgWater)} ml` : "No data yet"}
-                  </Text>
-                  <Text style={{ color: cardTints.water.accent, fontSize: 12.5, marginTop: 2, opacity: 0.8, fontFamily: fonts.body }}>
-                    {avgWater != null ? "90-day daily average" : "Log water intake in a day entry"}
-                  </Text>
+                  <StatValue
+                    value={avgWater != null ? String(Math.round(avgWater)) : null}
+                    unit="ml"
+                    caption={avgWater != null ? "90-day daily average" : "Log water intake in a day entry"}
+                  />
                 </StatCard>
 
                 <StatCard
                   title="Sleep"
                   tint={cardTints.sleep}
-                  icon={<Ionicons name="moon" size={50} color={cardTints.sleep.accent} />}
+                  icon={(p) => <Ionicons name="moon" {...p} />}
                 >
-                  <Text style={{ color: cardTints.sleep.accent, fontSize: 22, fontWeight: "900", fontFamily: fonts.mono }}>
-                    {avgSleep != null ? `${avgSleep.toFixed(1)} hrs` : "No data yet"}
-                  </Text>
-                  <Text style={{ color: cardTints.sleep.accent, fontSize: 12.5, marginTop: 2, opacity: 0.8, fontFamily: fonts.body }}>
-                    {avgSleep != null ? "90-day nightly average" : "Log sleep hours in a day entry"}
-                  </Text>
+                  <StatValue
+                    value={avgSleep != null ? avgSleep.toFixed(1) : null}
+                    unit="hrs"
+                    caption={avgSleep != null ? "90-day nightly average" : "Log sleep hours in a day entry"}
+                  />
                 </StatCard>
 
                 <Text

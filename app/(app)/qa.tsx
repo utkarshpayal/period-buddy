@@ -1,7 +1,6 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
-import { createAudioPlayer, type AudioPlayer } from "expo-audio";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -38,7 +37,8 @@ import {
   type QaChatMessage,
   type VoiceAgentPendingAction,
 } from "../../lib/api";
-import { resolveAudioUri } from "../../lib/audio";
+import { useSpokenReply } from "../../hooks/useSpokenReply";
+import { isMeaningfulTranscript } from "../../lib/voiceSpeech";
 import { CHAT_TOPICS, getChatTopic, isTopicLocked } from "../../lib/chatTopics";
 import { SUPPORTED_LANGUAGES } from "../../lib/languages";
 import { HeaderIconButton } from "../../components/ScreenHeader";
@@ -122,17 +122,19 @@ export default function QA() {
   const [language, setLanguage] = useState<LanguageCode>("en-IN");
   const [languages, setLanguages] = useState<Language[]>(SUPPORTED_LANGUAGES);
   const [languagePickerVisible, setLanguagePickerVisible] = useState(false);
-  const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
-  const [synthesizingMessageId, setSynthesizingMessageId] = useState<string | null>(null);
+  const { speak, stop: stopSpeaking, playingId: playingMessageId, preparingId: synthesizingMessageId } = useSpokenReply(language);
   const [voiceMode, setVoiceMode] = useState(voiceModeParam === "1");
   const [pendingVoiceAction, setPendingVoiceAction] = useState<VoiceAgentPendingAction | undefined>();
-  const playerRef = useRef<AudioPlayer | null>(null);
+  // Live captions in the voice overlay: the last thing heard and the answer.
+  const [voiceCaption, setVoiceCaption] = useState<{ heard: string; reply: string }>({ heard: "", reply: "" });
 
-  const { handleMicPress, isRecording, isTranscribing, level, voiceError } = useVoiceInput({
+  const { handleMicPress, isRecording, isTranscribing, level, listeningPaused, voiceError } = useVoiceInput({
     language,
     voiceMode,
     onTranscript: (transcript) => {
       if (voiceMode) {
+        // Background noise transcribed as "." or "hmm": just listen again.
+        if (!isMeaningfulTranscript(transcript)) return;
         handleVoiceAgentTurn(transcript);
       } else {
         setTypedQuestion((prev) => (prev.trim() ? `${prev.trim()} ${transcript}` : transcript));
@@ -151,12 +153,12 @@ export default function QA() {
   // Paused while a voice-mode failure is showing (voiceError) so the user has
   // time to actually read it before the mic starts listening again.
   useEffect(() => {
-    if (!voiceMode || isRecording || isTranscribing || isCompanionTyping || isPreparingReply || isSpeakingReply || voiceError) return;
+    if (!voiceMode || isRecording || isTranscribing || isCompanionTyping || isPreparingReply || isSpeakingReply || voiceError || listeningPaused) return;
     const timer = setTimeout(() => {
       handleMicPress();
     }, 450);
     return () => clearTimeout(timer);
-  }, [voiceMode, isRecording, isTranscribing, isCompanionTyping, isPreparingReply, isSpeakingReply, voiceError, handleMicPress]);
+  }, [voiceMode, isRecording, isTranscribing, isCompanionTyping, isPreparingReply, isSpeakingReply, voiceError, handleMicPress, listeningPaused]);
 
   const voiceStatus: VoiceStatus = isTranscribing
     ? "processing"
@@ -178,38 +180,32 @@ export default function QA() {
       .catch(() => {});
     return () => {
       isMounted = false;
-      playerRef.current?.release();
     };
   }, []);
 
+  // Leaving voice mode cuts the reply off instead of letting it talk on.
+  useEffect(() => {
+    if (!voiceMode) stopSpeaking();
+    setVoiceCaption({ heard: "", reply: "" });
+  }, [voiceMode, stopSpeaking]);
+
+  /** The orb in voice mode: interrupts a reply that's being spoken (barge-in), else the mic as usual. */
+  const handleVoiceOrbPress = useCallback(() => {
+    if (playingMessageId || synthesizingMessageId) stopSpeaking();
+    handleMicPress();
+  }, [handleMicPress, playingMessageId, stopSpeaking, synthesizingMessageId]);
+
   async function handleListen(message: ChatMessage) {
-    if (playingMessageId === message.id) {
-      playerRef.current?.pause();
-      setPlayingMessageId(null);
+    if (playingMessageId === message.id || synthesizingMessageId === message.id) {
+      stopSpeaking();
       return;
     }
-
-    playerRef.current?.pause();
-    playerRef.current?.release();
-    playerRef.current = null;
-
-    setSynthesizingMessageId(message.id);
     try {
-      const { audioBase64, audioCodec } = await speechApi.synthesize({ languageCode: language, text: message.text });
-      const uri = await resolveAudioUri(audioBase64, audioCodec);
-      const player = createAudioPlayer({ uri });
-      playerRef.current = player;
-      player.addListener("playbackStatusUpdate", (status) => {
-        if (status.didJustFinish) {
-          setPlayingMessageId((current) => (current === message.id ? null : current));
-        }
-      });
-      player.play();
-      setPlayingMessageId(message.id);
+      await speak(message.id, message.text);
     } catch (error) {
-      alert("Couldn't play audio", error instanceof Error ? error.message : "Please try again.");
-    } finally {
-      setSynthesizingMessageId(null);
+      const text = error instanceof Error ? error.message : "Please try again.";
+      // Voice mode is a full-screen Modal; a second native alert over it is unreliable.
+      if (!voiceMode) alert("Couldn't play audio", text);
     }
   }
 
@@ -344,7 +340,11 @@ export default function QA() {
     };
   }
 
-  const AFFIRMATIVE_PATTERN = /\b(yes|yeah|yep|confirm|correct|sure|save it|do it|go ahead)\b/i;
+  // English plus common Hindi/Hinglish yeses ("haan", "theek hai", "kar do", हाँ);
+  // a "no" anywhere ("ji nahi", "don't", मत) wins, so it never confirms by mistake.
+  const AFFIRMATIVE_PATTERN =
+    /\b(yes|yeah|yep|yup|ok|okay|confirm|correct|sure|save it|do it|go ahead|haan|han|haa|ji haan|theek hai|thik hai|kar do)\b|हाँ|हां|ठीक है|कर दो/i;
+  const NEGATIVE_PATTERN = /\b(no|nope|not|don'?t|cancel|stop|nahi|nahin|mat)\b|नहीं|मत/i;
 
   /**
    * Voice mode's action-capable path — routes transcripts through the
@@ -360,15 +360,22 @@ export default function QA() {
       ...prev,
       { id: `msg_u_${Date.now()}`, sender: "user", text: cleanTranscript, time: formatCurrentTime() },
     ]);
+    setVoiceCaption({ heard: cleanTranscript, reply: "" });
     setIsCompanionTyping(true);
 
     try {
-      const confirming = Boolean(pendingVoiceAction) && AFFIRMATIVE_PATTERN.test(cleanTranscript);
+      const confirming =
+        Boolean(pendingVoiceAction) && AFFIRMATIVE_PATTERN.test(cleanTranscript) && !NEGATIVE_PATTERN.test(cleanTranscript);
+      const history = chatLog
+        .filter((m) => !m.id.startsWith("init_"))
+        .slice(-8)
+        .map((m) => ({ role: m.sender === "user" ? ("user" as const) : ("assistant" as const), text: m.text }));
       const reply = await voiceAgentApi.converse(
         cleanTranscript,
         language,
         pendingVoiceAction,
         confirming,
+        history,
       );
 
       let replyMessage: ChatMessage;
@@ -397,6 +404,7 @@ export default function QA() {
       }
 
       setChatLog((prev) => [...prev, replyMessage]);
+      setVoiceCaption({ heard: cleanTranscript, reply: replyMessage.text });
       handleListen(replyMessage);
     } catch (error) {
       const failureMessage: ChatMessage = {
@@ -406,6 +414,7 @@ export default function QA() {
         time: formatCurrentTime(),
       };
       setChatLog((prev) => [...prev, failureMessage]);
+      setVoiceCaption({ heard: cleanTranscript, reply: failureMessage.text });
       handleListen(failureMessage);
     } finally {
       setIsCompanionTyping(false);
@@ -962,10 +971,11 @@ export default function QA() {
           fonts={fonts}
           languageLabel={selectedLanguage.label}
           level={level}
-          onCancel={() => setPendingVoiceAction(undefined)}
           onClose={() => setVoiceMode(false)}
-          onMicPress={handleMicPress}
+          onMicPress={handleVoiceOrbPress}
+          replyPreview={voiceCaption.reply}
           status={voiceStatus}
+          transcriptPreview={voiceCaption.heard}
         />
       ) : null}
 

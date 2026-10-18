@@ -1,7 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useIsFocused } from "@react-navigation/native";
+import { requireOptionalNativeModule } from "expo";
 import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { InteractionManager, RefreshControl, ScrollView, StatusBar, Text, TouchableOpacity, View } from "react-native";
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { AppState, InteractionManager, Platform, RefreshControl, ScrollView, StatusBar, Text, TouchableOpacity, View } from "react-native";
 import Animated, { FadeIn, FadeInDown, FadeOut, useReducedMotion } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ForestHabitat } from "../../components/forest/ForestHabitat";
@@ -9,6 +11,7 @@ import { LivingTree } from "../../components/forest/LivingTree";
 import { ScreenHeader, SectionHeader } from "../../components/ScreenHeader";
 import { SkeletonBlock } from "../../components/Skeleton";
 import { Loader } from "../../components/Loader";
+import { useAuth } from "../../components/auth-context";
 import { useTheme } from "../../components/theme";
 import { getShadow } from "../../components/ui-tokens";
 import { useDataRefresh } from "../../hooks/useDataRefresh";
@@ -24,7 +27,24 @@ import {
   type ForestVitality,
 } from "../../lib/api";
 import { formatShortDate, getDateKey } from "../../lib/format";
-import { careHeadline, careStreak, STAGE_GROWTH, weekTotals } from "../../lib/forestView";
+import {
+  flushWaterings,
+  patchForestMemory,
+  queuedWaterings,
+  queueWatering,
+  readForestCache,
+  writeForestCache,
+} from "../../lib/forestCache";
+import {
+  careHeadline,
+  careStreak,
+  lastSyncedLabel,
+  rollCachedDay,
+  shouldUseLowDetail,
+  STAGE_GROWTH,
+  weekTotals,
+  withOfflineWater,
+} from "../../lib/forestView";
 import Svg, { Path } from "react-native-svg";
 import { LinearGradient } from "expo-linear-gradient";
 
@@ -138,8 +158,79 @@ function useTween(target: number, duration: number) {
     },
     [],
   );
-  return { value, replay: (ms: number) => run(0, target, ms), jump: (v: number) => run(v, v, 0) };
+  const targetRef = useRef(target);
+  targetRef.current = target;
+  const replay = useCallback((ms: number) => run(0, targetRef.current, ms), [run]);
+  const jump = useCallback((v: number) => run(v, v, 0), [run]);
+  return { value, replay, jump };
 }
+
+/** The status request gives up after this; the screen's own watchdog a little later. */
+const STATUS_TIMEOUT_MS = 12000;
+const WATCHDOG_MS = STATUS_TIMEOUT_MS + 3000;
+/** The scene mounts after the opening animation, or after this at the latest. */
+const SCENE_FALLBACK_MS = 700;
+/** While offline, try again this often (only while the screen is in front). */
+const OFFLINE_RETRY_MS = 30000;
+/** A foreground refresh happens when the copy on screen is older than this. */
+const STALE_MS = 2 * 60 * 1000;
+
+class ForestTimeout extends Error {
+  constructor() {
+    super("Your forest is taking too long to load.");
+    this.name = "ForestTimeout";
+  }
+}
+
+/** Rejects if `promise` hasn't settled in `ms`, so a stuck request can't keep the skeleton up forever. */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new ForestTimeout()), ms);
+    promise.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
+
+let lowDetailDevice: boolean | undefined;
+/** Low-end phone (little memory or an old model): draw the lighter scene. */
+function isLowDetailDevice(): boolean {
+  if (lowDetailDevice !== undefined) return lowDetailDevice;
+  lowDetailDevice = false;
+  if (Platform.OS === "web") return lowDetailDevice;
+  try {
+    if (requireOptionalNativeModule("ExpoDevice")) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Device = require("expo-device") as typeof import("expo-device");
+      lowDetailDevice = shouldUseLowDetail({ memoryBytes: Device.totalMemory, yearClass: Device.deviceYearClass });
+    }
+  } catch {
+    lowDetailDevice = false;
+  }
+  return lowDetailDevice;
+}
+
+type HabitatHandle = { replay: (ms: number) => void; jump: (v: number) => void };
+
+/**
+ * The scene with its growth tween. The tween's per-frame state lives here, so
+ * only the scene redraws while the tree grows, not the whole page.
+ */
+const TweenedHabitat = forwardRef<
+  HabitatHandle,
+  Omit<React.ComponentProps<typeof ForestHabitat>, "growth"> & { target: number; tweenMs: number }
+>(function TweenedHabitat({ target, tweenMs, ...props }, ref) {
+  const tween = useTween(target, tweenMs);
+  useImperativeHandle(ref, () => ({ replay: tween.replay, jump: tween.jump }), [tween.replay, tween.jump]);
+  return <ForestHabitat {...props} growth={tween.value} />;
+});
 
 /** Today's 3 tasks as a ring of three segments, with "2/3" in the middle. */
 function CareRing({ done, size, color, track, textColor, font }: { done: number; size: number; color: string; track: string; textColor: string; font: string }) {
@@ -220,16 +311,40 @@ function ForestSkeleton() {
 export default function Forest() {
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
+  const { user } = useAuth();
+  const userId = user?._id ?? null;
+  const focused = useIsFocused();
+  const lowDetail = useMemo(isLowDetailDevice, []);
   const [status, setStatus] = useState<ForestStatus | null>(null);
   const [hasLoaded, setHasLoaded] = useState(false);
   // First load failed with nothing on screen: show an error with Retry
   // instead of an empty seed that looks like a brand-new forest.
   const [loadError, setLoadError] = useState<{ message: string; offline: boolean } | null>(null);
+  // Where what's on screen came from: `live` = this visit's server answer;
+  // otherwise the offline copy saved at `savedAt`. `pending` = waterings
+  // made offline, not yet sent.
+  const [sync, setSync] = useState({ live: false, offline: false, savedAt: 0, pending: 0 });
+  const syncRef = useRef(sync);
+  syncRef.current = sync;
+  const [syncing, setSyncing] = useState(false);
   // The scene is heavy to draw; mount it after the screen's opening animation.
+  // runAfterInteractions can wait forever behind a stuck interaction handle
+  // (a looping animation elsewhere), so a timer mounts it regardless.
   const [sceneReady, setSceneReady] = useState(false);
   useEffect(() => {
-    const task = InteractionManager.runAfterInteractions(() => setSceneReady(true));
-    return () => task.cancel();
+    let done = false;
+    const ready = () => {
+      if (done) return;
+      done = true;
+      setSceneReady(true);
+    };
+    const task = InteractionManager.runAfterInteractions(ready);
+    const fallback = setTimeout(ready, SCENE_FALLBACK_MS);
+    return () => {
+      done = true;
+      task.cancel();
+      clearTimeout(fallback);
+    };
   }, []);
   const [showAllTrees, setShowAllTrees] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -250,9 +365,10 @@ export default function Forest() {
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
-  const tween = useTween(target, tweenMs);
-  const tweenRef = useRef(tween);
-  tweenRef.current = tween;
+  const habitatRef = useRef<HabitatHandle>(null);
+  const statusRef = useRef<ForestStatus | null>(null);
+  // A write from this screen (watering) refreshes it already; skip the echo refetch.
+  const ownWriteAt = useRef(0);
 
   const growth = status ? (status.growth ?? legacyGrowth(status, getDateKey(new Date()))) : null;
 
@@ -266,6 +382,7 @@ export default function Forest() {
     const g = next.growth ?? legacyGrowth(next, getDateKey(new Date()));
     const prev = last.current;
     last.current = { stageIndex: g.stageIndex, treesGrown: g.treesGrown };
+    statusRef.current = next;
     setStatus(next);
 
     if (prev && g.treesGrown > prev.treesGrown) {
@@ -274,7 +391,7 @@ export default function Forest() {
       setTarget(1);
       later(() => celebrate("Fully grown! It joined your forest"), 1200);
       later(() => {
-        tweenRef.current.jump(0);
+        habitatRef.current?.jump(0);
         setTweenMs(1600);
         setTarget(g.growth);
       }, 3600);
@@ -288,16 +405,50 @@ export default function Forest() {
     }
   }, []);
 
+  // A watering made offline that hasn't synced yet stays ticked on screen.
+  const withQueued = useCallback((next: ForestStatus, queued: string[]) => {
+    const today = getDateKey(new Date());
+    return queued.includes(today) ? withOfflineWater(next, today) : next;
+  }, []);
+
+  const showToast = useCallback((message: string) => {
+    setToast(message);
+    timers.current.push(setTimeout(() => setToast(null), 3200));
+  }, []);
+
+  // Stale-while-revalidate: the saved copy (if any) draws at once, the server's
+  // answer replaces it. Queued waterings go out first, so the answer counts them.
+  const liveRef = useRef(false);
+  const loadingRef = useRef(false);
   const load = useCallback(async () => {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
+    setSyncing(true);
+    const today = getDateKey(new Date());
     try {
-      applyStatus(await forestApi.getStatus(getDateKey(new Date())));
+      // Throws when offline, so an offline open doesn't wait for a second timeout.
+      const flushed = userId ? await withTimeout(flushWaterings(userId, today), WATCHDOG_MS) : null;
+      if (flushed) ownWriteAt.current = Date.now();
+      const fresh = flushed ?? (await withTimeout(forestApi.getStatus(today, { timeoutMs: STATUS_TIMEOUT_MS }), WATCHDOG_MS));
+      const queued = userId ? await queuedWaterings(userId) : [];
+      liveRef.current = true;
+      applyStatus(withQueued(fresh, queued));
+      if (userId) writeForestCache(userId, fresh);
+      setSync({ live: true, offline: false, savedAt: Date.now(), pending: queued.length });
       setLoadError(null);
       setHasLoaded(true);
     } catch (err) {
+      const offline = isNetworkError(err) || err instanceof ForestTimeout;
       // Keep what's on screen; only an empty screen needs the error state.
-      if (!last.current) setLoadError({ message: getFriendlyErrorMessage(err), offline: isNetworkError(err) });
+      if (!last.current) {
+        setLoadError({ message: err instanceof ForestTimeout ? err.message : getFriendlyErrorMessage(err), offline });
+      }
+      setSync((s) => ({ ...s, live: false, offline }));
+    } finally {
+      loadingRef.current = false;
+      setSyncing(false);
     }
-  }, [applyStatus]);
+  }, [applyStatus, userId, withQueued]);
 
   const retry = useCallback(() => {
     setLoadError(null);
@@ -305,13 +456,52 @@ export default function Forest() {
   }, [load]);
 
   useEffect(() => {
+    let cancelled = false;
+    if (userId) {
+      Promise.all([readForestCache(userId), queuedWaterings(userId)])
+        .then(([cached, queued]) => {
+          // The server already answered, or nothing saved: nothing to show early.
+          if (cancelled || !cached || liveRef.current) return;
+          applyStatus(withQueued(rollCachedDay(cached.status, getDateKey(new Date())), queued));
+          setSync((s) => ({ ...s, live: false, savedAt: cached.savedAt, pending: queued.length }));
+          setLoadError(null);
+          setHasLoaded(true);
+        })
+        .catch(() => {});
+    }
     load();
+    return () => {
+      cancelled = true;
+    };
+    // Once per visit; later refreshes come from focus, foreground and pull-to-refresh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Back in the app: send queued waterings and refresh an offline or old copy.
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state !== "active") return;
+      const s = syncRef.current;
+      if (s.offline || s.pending > 0 || !s.live || Date.now() - s.savedAt > STALE_MS) load();
+    });
+    return () => sub.remove();
   }, [load]);
 
+  // Offline and looking at the forest: try again now and then.
+  useEffect(() => {
+    if (!focused || (!sync.offline && sync.pending === 0)) return;
+    const id = setInterval(() => load(), OFFLINE_RETRY_MS);
+    return () => clearInterval(id);
+  }, [focused, sync.offline, sync.pending, load]);
+
   // Logging your day or ticking a habit elsewhere grows the tree when you come back.
-  useDataRefresh(["forest", "cycle", "habits"], async () => {
+  useDataRefresh(["forest", "cycle", "habits"], async ({ whileFocused }) => {
+    if (whileFocused && Date.now() - ownWriteAt.current < 5000) return;
     try {
-      applyStatus(await forestApi.getStatus(getDateKey(new Date())));
+      const fresh = await forestApi.getStatus(getDateKey(new Date()), { timeoutMs: STATUS_TIMEOUT_MS });
+      applyStatus(fresh);
+      if (userId) writeForestCache(userId, fresh);
+      setSync((s) => ({ ...s, live: true, offline: false, savedAt: Date.now() }));
     } catch {
       // Quiet refresh.
     }
@@ -330,25 +520,53 @@ export default function Forest() {
     if (watering) return;
     setWatering(true);
     setWaterKey((k) => k + 1);
+    const today = getDateKey(new Date());
+    ownWriteAt.current = Date.now();
     try {
-      const today = getDateKey(new Date());
       const [result] = await Promise.all([
-        forestApi.logCare({ careType: "water", dateKey: today, today, note: "Watered from the app" }),
+        forestApi.logCare({ careType: "water", dateKey: today, today, note: "Watered from the app" }, { timeoutMs: STATUS_TIMEOUT_MS }),
         new Promise((resolve) => setTimeout(resolve, 900)), // let the drops land first
       ]);
+      liveRef.current = true;
       applyStatus(result.status);
+      if (userId) writeForestCache(userId, result.status);
+      setSync((s) => ({ ...s, live: true, offline: false, savedAt: Date.now() }));
     } catch (error) {
-      alert("Couldn't water your tree", error instanceof Error ? error.message : "Please try again.");
+      const current = statusRef.current;
+      if (isNetworkError(error) && userId && current) {
+        // Offline: keep it on the phone and send it once we're back online.
+        await queueWatering(userId, today);
+        const next = withOfflineWater(current, today);
+        applyStatus(next);
+        patchForestMemory(userId, next);
+        const queued = await queuedWaterings(userId);
+        setSync((s) => ({ ...s, live: false, offline: true, pending: queued.length }));
+        showToast("Watered. It'll sync when you're back online");
+      } else {
+        alert("Couldn't water your tree", error instanceof Error ? error.message : "Please try again.");
+      }
     } finally {
       setWatering(false);
     }
   }
 
+  const hideHint = useCallback(() => setShowHint(false), []);
   const doneToday = growth?.today.done ?? 0;
   const taskDone = (key: ForestTaskKey) => growth?.today.tasks.find((t) => t.key === key)?.done ?? false;
   const toNext = growth ? (growth.nextStage ? growth.pointsToNextStage : growth.pointsPerTree - growth.points) : 0;
   const nextLabel = growth?.nextStage ? STAGE_LABEL[growth.nextStage].toLowerCase() : "your forest";
-  const grown = growth?.grownTrees ?? [];
+  const grownTrees = growth?.grownTrees;
+  const grown = useMemo(() => grownTrees ?? [], [grownTrees]);
+  const grownSeeds = useMemo(() => grown.map((t) => t.number), [grown]);
+  const syncLine = sync.live
+    ? null
+    : sync.pending > 0 && sync.offline
+      ? "Offline · your watering will sync when you're back online"
+      : sync.offline
+        ? `Offline · ${sync.savedAt ? lastSyncedLabel(sync.savedAt, Date.now()) : "showing your saved forest"}`
+        : syncing && sync.savedAt
+          ? `Syncing… · ${lastSyncedLabel(sync.savedAt, Date.now())}`
+          : null;
   const chip = { backgroundColor: "rgba(255,255,255,0.9)" };
   const vitality = growth?.vitality ?? "new";
   const vitalityColor =
@@ -394,19 +612,35 @@ export default function Forest() {
             <ForestSkeleton />
           ) : (
           <Animated.View entering={FadeIn.duration(350)}>
+          {syncLine ? (
+            <View
+              accessible
+              accessibilityLiveRegion="polite"
+              style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginBottom: 10 }}
+            >
+              <Ionicons name={sync.offline ? "cloud-offline-outline" : "sync-outline"} size={13} color={colors.mutedText} />
+              <Text numberOfLines={1} style={{ flexShrink: 1, color: colors.mutedText, fontSize: 13, fontWeight: "600", fontFamily: fonts.body }}>
+                {syncLine}
+              </Text>
+            </View>
+          ) : null}
           {/* The living scene */}
           <View style={{ borderRadius: 28, overflow: "hidden", backgroundColor: colors.surface, ...getShadow(colors, isDark) }}>
             {(
               <View>
-                <ForestHabitat
+                <TweenedHabitat
+                  ref={habitatRef}
                   height={SCENE_HEIGHT}
-                  growth={tween.value}
+                  target={target}
+                  tweenMs={tweenMs}
                   vitality={growth?.vitality ?? "new"}
                   treeSeed={(growth?.treesGrown ?? 0) + 1}
-                  grownSeeds={grown.map((t) => t.number)}
+                  grownSeeds={grownSeeds}
                   waterKey={waterKey}
                   celebrateKey={celebrateKey}
-                  onInteract={() => setShowHint(false)}
+                  onInteract={hideHint}
+                  lowDetail={lowDetail}
+                  active={focused}
                 />
                 <View
                   pointerEvents="box-none"
@@ -425,7 +659,7 @@ export default function Forest() {
                   </View>
                   <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 6 }}>
                     <TouchableOpacity
-                      onPress={() => tween.replay(4200)}
+                      onPress={() => habitatRef.current?.replay(4200)}
                       accessibilityRole="button"
                       accessibilityLabel="Watch your tree grow"
                       activeOpacity={0.8}

@@ -158,6 +158,16 @@ export type AppSettings = {
     message: string;
     androidUrl: string | null;
     iosUrl: string | null;
+    /** "What's new" bullet points under the message (≤5). */
+    highlights: string[];
+    /** The store button's label. */
+    ctaLabel: string;
+    /** false: people below latestVersion get no "Later" button. */
+    dismissible: boolean;
+    /** Show the prompt to every store-app user, whatever their version. */
+    forceShowAll: boolean;
+    /** The prompt shows once per id (null: once per latestVersion). */
+    promptId: string | null;
   };
 };
 
@@ -245,10 +255,10 @@ export const FEATURE_REGISTRY: FeatureDefinition[] = [
   // Wellness & Support
   // ?new=1 always starts a fresh chat — qa.tsx redirects a bare push to the
   // chat-history list instead (see docs/fixes.md 2.3).
-  { key: "nuraAi", title: "Nura AI", description: "Ask privately, anytime", icon: "help-circle-outline", route: "/(app)/qa", placement: "wellness_hub", size: "large", colorKey: "info" },
-  { key: "healthConcerns", title: "Health Concerns", description: "Irregularities & symptoms", icon: "alert-circle-outline", route: "/(app)/health-issues", placement: "wellness_hub", size: "large", colorKey: "warning" },
-  { key: "hygiene", title: "Hygiene & Care", description: "Product guidance & comfort", icon: "leaf-outline", route: "/(app)/hygiene", placement: "wellness_hub", size: "small", colorKey: "accent" },
-  { key: "sexualWellbeing", title: "Sexual Wellbeing", description: "Consent, intimacy & safety", icon: "heart-outline", route: "/(app)/sexual-wellbeing", placement: "wellness_hub", size: "small", colorKey: "secondary" },
+  { key: "nuraAi", title: "Nura AI", description: "Ask privately, anytime", icon: "sparkles-outline", route: "/(app)/qa", placement: "wellness_hub", size: "large", colorKey: "info" },
+  { key: "healthConcerns", title: "Health Concerns", description: "Irregularities & symptoms", icon: "medkit-outline", route: "/(app)/health-issues", placement: "wellness_hub", size: "large", colorKey: "warning" },
+  { key: "hygiene", title: "Hygiene & Care", description: "Product guidance & comfort", icon: "water-outline", route: "/(app)/hygiene", placement: "wellness_hub", size: "small", colorKey: "accent" },
+  { key: "sexualWellbeing", title: "Sexual Wellbeing", description: "Consent, intimacy & safety", icon: "heart-circle-outline", route: "/(app)/sexual-wellbeing", placement: "wellness_hub", size: "small", colorKey: "secondary" },
   { key: "checkinCall", title: "Check-in Call", description: "Buddy calls you, hands-free", icon: "call-outline", route: "/(app)/checkin-call", placement: "wellness_hub", size: "small", colorKey: "sky" },
   // Explore
   { key: "forest", title: "Forest", description: "Grow your wellness tree", icon: "leaf-outline", route: "/(app)/forest", placement: "explore_hub", size: "small", colorKey: "success" },
@@ -362,6 +372,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
     message: "Update The Nura to get the latest features and fixes.",
     androidUrl: null,
     iosUrl: null,
+    highlights: [],
+    ctaLabel: "Update now",
+    dismissible: true,
+    forceShowAll: false,
+    promptId: null,
   },
 };
 
@@ -613,6 +628,13 @@ export function parseAppConfig(raw: unknown): AppConfig {
       message: text(u.message, 300) ?? DEFAULT_SETTINGS.update.message,
       androidUrl: isHttpsUrl(u.androidUrl) ? u.androidUrl : null,
       iosUrl: isHttpsUrl(u.iosUrl) ? u.iosUrl : null,
+      highlights: Array.isArray(u.highlights)
+        ? u.highlights.map((h) => text(h, 80)).filter((h): h is string => h !== null).slice(0, 5)
+        : [],
+      ctaLabel: text(u.ctaLabel, 24) ?? DEFAULT_SETTINGS.update.ctaLabel,
+      dismissible: u.dismissible !== false,
+      forceShowAll: u.forceShowAll === true,
+      promptId: typeof u.promptId === "string" && /^[A-Za-z0-9._-]{1,40}$/.test(u.promptId) ? u.promptId : null,
     },
   };
 
@@ -819,14 +841,39 @@ export const bannersFor = (
 
 /**
  * What the app-wide gate should show: maintenance (blocks everything),
- * a required update (blocks), an optional update (dismissible), or nothing.
- * The optional prompt is keyed by `latestVersion` so dismissing it once
- * hides it until the CMS announces a newer version.
+ * a required update (below `minVersion`, blocks), the update prompt, or
+ * nothing.
+ *
+ * The prompt shows below `latestVersion`, or to everyone when the CMS turns
+ * on `forceShowAll`. It's keyed by `promptKey` (`promptId`, else
+ * `latestVersion`), so closing it once hides it until the CMS announces a
+ * newer version or sets a new prompt id. `dismissible: false` only holds for
+ * people who really are out of date (and have a store link to go to); anyone
+ * already current can always close it.
  */
+export type UpdatePrompt = {
+  kind: "update";
+  required: boolean;
+  dismissible: boolean;
+  title: string;
+  message: string;
+  highlights: string[];
+  ctaLabel: string;
+  storeUrl: string | null;
+  /** The version the prompt is about (null for a forceShowAll prompt without one). */
+  version: string | null;
+  /** What to remember once the prompt is closed. */
+  promptKey: string;
+};
+
 export type GateState =
   | { kind: "none" }
   | { kind: "maintenance"; title: string; message: string }
-  | { kind: "update"; required: boolean; title: string; message: string; storeUrl: string | null; version: string };
+  | UpdatePrompt;
+
+export function updatePromptKey(update: AppSettings["update"]): string {
+  return update.promptId ?? update.latestVersion ?? "all";
+}
 
 export function gateState(settings: AppSettings, viewer: Viewer, dismissedUpdate: string | null): GateState {
   if (settings.maintenance.enabled) {
@@ -836,11 +883,15 @@ export function gateState(settings: AppSettings, viewer: Viewer, dismissedUpdate
   const storeUrl = viewer.platform === "ios" ? u.iosUrl ?? u.androidUrl : u.androidUrl ?? u.iosUrl;
   // Web builds are always current, so version prompts are for the store apps only.
   if (viewer.platform === "web") return { kind: "none" };
+  const base = { kind: "update" as const, title: u.title, message: u.message, highlights: u.highlights, ctaLabel: u.ctaLabel, storeUrl };
   if (u.minVersion && compareVersions(viewer.appVersion, u.minVersion) < 0) {
-    return { kind: "update", required: true, title: u.title, message: u.message, storeUrl, version: u.minVersion };
+    return { ...base, required: true, dismissible: false, version: u.minVersion, promptKey: u.minVersion };
   }
-  if (u.latestVersion && compareVersions(viewer.appVersion, u.latestVersion) < 0 && dismissedUpdate !== u.latestVersion) {
-    return { kind: "update", required: false, title: u.title, message: u.message, storeUrl, version: u.latestVersion };
+  const outdated = Boolean(u.latestVersion) && compareVersions(viewer.appVersion, u.latestVersion as string) < 0;
+  const promptKey = updatePromptKey(u);
+  if ((outdated || u.forceShowAll) && dismissedUpdate !== promptKey) {
+    const dismissible = !(outdated && !u.dismissible && storeUrl);
+    return { ...base, required: false, dismissible, version: u.latestVersion, promptKey };
   }
   return { kind: "none" };
 }

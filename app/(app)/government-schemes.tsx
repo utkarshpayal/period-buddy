@@ -28,6 +28,7 @@ import {
   type GovernmentLevel,
   type SchemeCategoryMeta,
 } from "../../lib/api";
+import { fetchQuery, hydrateQuery, peekQuery } from "../../lib/queryCache";
 import { SCHEME_ACTION_LABELS } from "../../lib/schemeHelpers";
 
 // Government Schemes is a whole-screen premium feature — an admin can price
@@ -36,6 +37,17 @@ import { SCHEME_ACTION_LABELS } from "../../lib/schemeHelpers";
 // detail screen already gates the apply action on, so no separate admin
 // pricing entry is needed.
 const SCHEMES_FEATURE_KEY = "government_scheme_applications";
+
+// Only the first page of the unfiltered list (plus categories) is cached and
+// kept on the device, so a revisit or cold start paints at once; later pages
+// and filtered/searched lists stay live. The recommended strip is ranked from
+// the user's profile, so it is cached in memory only and profile edits mark
+// it stale.
+type SchemeListResponse = Awaited<ReturnType<typeof schemesApi.list>>;
+const SCHEMES_CACHE_KEY = "schemes:list:default:p1";
+const SCHEME_CATEGORIES_CACHE_KEY = "schemes:categories";
+const SCHEMES_RECOMMENDED_CACHE_KEY = "schemes:recommended";
+const SCHEMES_STALE_MS = 5 * 60_000;
 
 const LEVEL_FILTERS: { key: "all" | GovernmentLevel; label: string }[] = [
   { key: "all", label: "All" },
@@ -136,10 +148,16 @@ export default function GovernmentSchemes() {
   const [level, setLevel] = useState<"all" | GovernmentLevel>("all");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
-  const [categories, setCategories] = useState<SchemeCategoryMeta[]>([]);
-  const [recommended, setRecommended] = useState<GovernmentBenefit[]>([]);
-  const [schemes, setSchemes] = useState<GovernmentBenefit[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [categories, setCategories] = useState<SchemeCategoryMeta[]>(
+    () => peekQuery<{ categories: SchemeCategoryMeta[] }>(SCHEME_CATEGORIES_CACHE_KEY)?.categories ?? [],
+  );
+  const [recommended, setRecommended] = useState<GovernmentBenefit[]>(
+    () => peekQuery<{ schemes: GovernmentBenefit[] }>(SCHEMES_RECOMMENDED_CACHE_KEY)?.schemes ?? [],
+  );
+  const [schemes, setSchemes] = useState<GovernmentBenefit[]>(
+    () => peekQuery<SchemeListResponse>(SCHEMES_CACHE_KEY)?.schemes ?? [],
+  );
+  const [loading, setLoading] = useState(() => peekQuery(SCHEMES_CACHE_KEY) === undefined);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
@@ -157,7 +175,10 @@ export default function GovernmentSchemes() {
   // Page-based pagination with a "Load More" button (mirrors blogs.tsx).
   const PAGE_SIZE = 10;
   const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(false);
+  const [hasMore, setHasMore] = useState(() => {
+    const cached = peekQuery<SchemeListResponse>(SCHEMES_CACHE_KEY);
+    return cached ? cached.pagination.page < cached.pagination.pages : false;
+  });
   const [loadingMore, setLoadingMore] = useState(false);
 
   // Debounce the search box so we don't fire a request per keystroke.
@@ -181,18 +202,50 @@ export default function GovernmentSchemes() {
 
   const load = useCallback(
     async (isRefresh = false) => {
+      const isDefaultList = !debouncedSearch && !activeCategory && level === "all";
+      let hasCachedList = false;
       try {
+        if (isDefaultList && !isRefresh) {
+          // Paint the cached (or device-saved) first page, then revalidate quietly.
+          const [cachedList, cachedCats, cachedRec] = await Promise.all([
+            hydrateQuery<SchemeListResponse>(SCHEMES_CACHE_KEY),
+            hydrateQuery<{ categories: SchemeCategoryMeta[] }>(SCHEME_CATEGORIES_CACHE_KEY),
+            hydrateQuery<{ schemes: GovernmentBenefit[] }>(SCHEMES_RECOMMENDED_CACHE_KEY),
+          ]);
+          if (cachedList) {
+            hasCachedList = true;
+            setSchemes(cachedList.schemes);
+            setPage(1);
+            setHasMore(cachedList.pagination.page < cachedList.pagination.pages);
+            setLoading(false);
+          }
+          if (cachedCats) setCategories(cachedCats.categories);
+          if (cachedRec) setRecommended(cachedRec.schemes);
+        }
+
         if (isRefresh) setRefreshing(true);
-        else setLoading(true);
+        else if (!hasCachedList) setLoading(true);
         setError(null);
         setOffline(false);
 
         // Categories + recommended only need loading once (no active filters).
-        const shouldLoadMeta = categories.length === 0 || isRefresh;
+        const shouldLoadMeta = categories.length === 0 || isRefresh || hasCachedList;
+        const cacheOptions = { staleMs: SCHEMES_STALE_MS, persist: true, force: isRefresh };
         const [listRes, catRes, recRes] = await Promise.all([
-          schemesApi.list(listParams(1)),
-          shouldLoadMeta ? schemesApi.getCategories() : Promise.resolve(null),
-          shouldLoadMeta ? schemesApi.getRecommended() : Promise.resolve(null),
+          isDefaultList
+            ? fetchQuery(SCHEMES_CACHE_KEY, () => schemesApi.list(listParams(1)), cacheOptions)
+            : schemesApi.list(listParams(1)),
+          shouldLoadMeta
+            ? fetchQuery(SCHEME_CATEGORIES_CACHE_KEY, () => schemesApi.getCategories(), cacheOptions)
+            : Promise.resolve(null),
+          shouldLoadMeta
+            ? fetchQuery(SCHEMES_RECOMMENDED_CACHE_KEY, () => schemesApi.getRecommended(), {
+                ...cacheOptions,
+                // Per-account (ranked from the profile): memory only, never on the device.
+                persist: false,
+                topics: ["profile"],
+              })
+            : Promise.resolve(null),
         ]);
 
         setSchemes(listRes.schemes);
@@ -201,8 +254,11 @@ export default function GovernmentSchemes() {
         if (catRes) setCategories(catRes.categories);
         if (recRes) setRecommended(recRes.schemes);
       } catch (err) {
-        setError(getFriendlyErrorMessage(err));
-        setOffline(isNetworkError(err));
+        // A failed quiet revalidation keeps the cached first page on screen.
+        if (!hasCachedList || isRefresh) {
+          setError(getFriendlyErrorMessage(err));
+          setOffline(isNetworkError(err));
+        }
       } finally {
         setLoading(false);
         setRefreshing(false);

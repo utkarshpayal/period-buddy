@@ -50,6 +50,12 @@ import {
   type CommunityPost,
 } from "../../lib/api";
 import { useRealtimeSocket, type RealtimeMessage } from "../../hooks/useRealtimeSocket";
+import {
+  addCommunityTag,
+  MAX_COMMUNITY_TAG_LENGTH,
+  MAX_COMMUNITY_TAGS,
+  sameCommunityTag,
+} from "../../lib/communityTags";
 
 // --- BACKEND API LAYER SCHEMAS & INTERFACES ---
 type PendingAttachment = {
@@ -76,6 +82,7 @@ interface Post {
   attachment?: CommunityAttachment;
   poll?: CommunityPoll;
   category?: string;
+  tags: string[];
   likes: number;
   commentsCount: number;
   comments: Comment[];
@@ -88,6 +95,8 @@ interface Post {
 const COMMUNITY_CATEGORIES = ["PCOS", "Fitness", "Skin"];
 const POLL_MIN_OPTIONS = 2;
 const POLL_MAX_OPTIONS = 6;
+// Long post bodies are capped at 6 lines past this length, with Read more.
+const LONG_POST_CHAR_THRESHOLD = 240;
 
 function mapCommunityPost(post: CommunityPost): Post {
   // Backend resolveAuthor sets isOwn:true on userId when requester is the author
@@ -101,6 +110,7 @@ function mapCommunityPost(post: CommunityPost): Post {
     attachment: post.attachments?.[0],
     poll: post.poll,
     category: post.category,
+    tags: post.tags ?? [],
     likes: post.likeCount ?? post.likes,
     commentsCount: post.commentCount ?? post.commentsCount ?? post.comments?.length ?? 0,
     time: formatRelativeTime(post.createdAt),
@@ -544,6 +554,375 @@ function PostAudioAttachment({ url }: { url: string }) {
   );
 }
 
+// One feed card. Memoized and fed only primitive per-row flags plus stable
+// callbacks (see the handler ref in CommunityScreen), so a like, vote, search
+// keystroke or sheet toggle re-renders just the row(s) whose props changed.
+type PostRowProps = {
+  post: Post;
+  isFirst: boolean;
+  isLiked: boolean;
+  isSaved: boolean;
+  isReported: boolean;
+  isExpanded: boolean;
+  isVoting: boolean;
+  hasUnreadComments: boolean;
+  // Only passed for posts that have tags, so changing the tag filter doesn't
+  // re-render tagless rows.
+  activeTag: string | null;
+  readOnly: boolean;
+  onOpenOptions: (post: Post) => void;
+  onToggleLike: (post: Post) => void;
+  onOpenComments: (post: Post) => void;
+  onShare: (post: Post) => void;
+  onToggleExpanded: (postId: string) => void;
+  onTagPress: (tag: string | null) => void;
+  onVote: (post: Post, optionIds: string[]) => void;
+};
+
+const PostRow = React.memo(function PostRow({
+  post,
+  isFirst,
+  isLiked,
+  isSaved,
+  isReported,
+  isExpanded,
+  isVoting,
+  hasUnreadComments,
+  activeTag,
+  readOnly,
+  onOpenOptions,
+  onToggleLike,
+  onOpenComments,
+  onShare,
+  onToggleExpanded,
+  onTagPress,
+  onVote,
+}: PostRowProps) {
+  const { colors, isDark, fonts } = useTheme();
+  const handleVote = useCallback(
+    (optionIds: string[]) => onVote(post, optionIds),
+    [onVote, post],
+  );
+
+  return (
+    <View style={{ paddingHorizontal: 24, paddingTop: isFirst ? 24 : 0 }}>
+      <View
+        className="rounded-3xl border p-5 relative"
+        style={{
+          backgroundColor: colors.surface,
+          borderColor: isReported ? colors.danger : colors.border,
+          ...getShadow(colors, isDark),
+        }}
+      >
+        <View className="flex-row items-center justify-between">
+          <View className="flex-row items-center gap-3">
+            <View
+              className="w-10 h-10 rounded-full items-center justify-center border-2"
+              style={{ backgroundColor: colors.primaryLight, borderColor: colors.background }}
+            >
+              <Text
+                className="text-sm font-bold"
+                style={{ color: colors.primary, fontFamily: fonts.body }}
+              >
+                {post.avatar}
+              </Text>
+            </View>
+            <View>
+              <Text
+                className="text-[13px] font-bold"
+                style={{ color: colors.foreground, fontFamily: fonts.body }}
+              >
+                {post.author}
+              </Text>
+              <View className="flex-row items-center gap-1.5 mt-0.5">
+                <Text
+                  className="text-xs font-semibold"
+                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                >
+                  {post.time}
+                </Text>
+                {post.category ? (
+                  <View
+                    className="rounded-full px-2 py-[1px]"
+                    style={{ backgroundColor: colors.primaryLight }}
+                  >
+                    <Text
+                      className="text-[11.5px] font-black uppercase tracking-wide"
+                      style={{ color: colors.primary, fontFamily: fonts.body }}
+                    >
+                      {post.category}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+          </View>
+          <TouchableOpacity
+            onPress={() => onOpenOptions(post)}
+            accessibilityRole="button"
+            accessibilityLabel="Post options"
+            className="p-2 -mr-2 rounded-full"
+          >
+            <Feather name="more-vertical" size={18} color={colors.mutedText} />
+          </TouchableOpacity>
+        </View>
+
+        <Text
+          className="mt-4 text-sm font-medium leading-5"
+          style={{ color: colors.foreground, fontFamily: fonts.body }}
+          numberOfLines={
+            post.content.length > LONG_POST_CHAR_THRESHOLD && !isExpanded ? 6 : undefined
+          }
+        >
+          {post.content}
+        </Text>
+        {post.content.length > LONG_POST_CHAR_THRESHOLD && (
+          <TouchableOpacity
+            onPress={() => onToggleExpanded(post.id)}
+            activeOpacity={0.7}
+            className="mt-1"
+            accessibilityRole="button"
+          >
+            <Text className="text-xs font-bold" style={{ color: colors.primary, fontFamily: fonts.body }}>
+              {isExpanded ? "Show less" : "Read more"}
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        {post.tags.length > 0 && (
+          <View className="mt-2 flex-row flex-wrap gap-1.5">
+            {post.tags.map((tag) => {
+              const isActive = sameCommunityTag(activeTag, tag);
+              return (
+                <TouchableOpacity
+                  key={`${post.id}-${tag}`}
+                  activeOpacity={0.7}
+                  onPress={() => onTagPress(isActive ? null : tag)}
+                  accessibilityRole="button"
+                  accessibilityLabel={isActive ? `Stop filtering by ${tag}` : `Show posts tagged ${tag}`}
+                >
+                  <Text
+                    className="text-xs font-bold"
+                    style={{
+                      color: colors.primary,
+                      fontFamily: fonts.body,
+                      textDecorationLine: isActive ? "underline" : "none",
+                    }}
+                  >
+                    #{tag}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+
+        {post.attachment && <PostAttachmentView attachment={post.attachment} />}
+
+        {post.poll && (
+          <PostPollView
+            poll={post.poll}
+            isVoting={isVoting}
+            onVote={handleVote}
+            readOnly={readOnly}
+          />
+        )}
+
+        {/* Action Bar - all icons left side together */}
+        <View
+          className="mt-5 pt-3 flex-row items-center"
+          style={{ borderTopWidth: 1, borderTopColor: colors.border, gap: 10 }}
+        >
+          {/* Like */}
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel={isLiked ? "Unlike post" : "Like post"}
+            className="flex-row items-center gap-1.5 py-1.5 px-2.5 rounded-full"
+            style={{ backgroundColor: isLiked ? colors.primaryLight : "transparent" }}
+            onPress={() => onToggleLike(post)}
+          >
+            <Ionicons
+              name={isLiked ? "heart" : "heart-outline"}
+              size={19}
+              color={isLiked ? colors.primary : colors.mutedText}
+            />
+            <Text
+              className="text-xs font-bold"
+              style={{ color: isLiked ? colors.primary : colors.mutedText, fontFamily: fonts.mono }}
+            >
+              {post.likes}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Comment */}
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="View comments"
+            className="flex-row items-center gap-1.5 py-1.5 px-2.5 rounded-full relative"
+            onPress={() => onOpenComments(post)}
+          >
+            <View className="relative">
+              <Ionicons name="chatbubble-outline" size={18} color={colors.mutedText} />
+              {hasUnreadComments && (
+                <View
+                  style={{
+                    position: "absolute",
+                    top: -2,
+                    right: -2,
+                    width: 6,
+                    height: 6,
+                    borderRadius: 3,
+                    backgroundColor: colors.danger,
+                  }}
+                />
+              )}
+            </View>
+            <Text
+              className="text-xs font-bold"
+              style={{ color: colors.mutedText, fontFamily: fonts.mono }}
+            >
+              {post.commentsCount}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Share */}
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Share post"
+            className="flex-row items-center gap-1.5 py-1.5 px-2.5 rounded-full"
+            onPress={() => onShare(post)}
+          >
+            <Ionicons name="arrow-redo-outline" size={18} color={colors.mutedText} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Meta badges overlay */}
+        {(isSaved || isReported) && (
+          <View className="mt-4 flex-row gap-1.5">
+            {isSaved && (
+              <View
+                className="flex-row items-center gap-1 rounded-full px-2.5 py-0.5"
+                style={{ backgroundColor: colors.primaryLight }}
+              >
+                <Text
+                  className="text-xs font-bold"
+                  style={{ color: colors.primary, fontFamily: fonts.body }}
+                >
+                  Saved
+                </Text>
+              </View>
+            )}
+            {isReported && (
+              <View
+                className="flex-row items-center gap-1 rounded-full px-2.5 py-0.5"
+                style={{ backgroundColor: colors.dangerLight }}
+              >
+                <Text
+                  className="text-xs font-bold"
+                  style={{ color: colors.danger, fontFamily: fonts.body }}
+                >
+                  Reported
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+      </View>
+    </View>
+  );
+});
+
+// 16px gap between virtualized post cards. Module-level so its component type
+// stays stable across renders (an inline one would remount every separator).
+function PostSeparator() {
+  return <View style={{ height: 16 }} />;
+}
+
+const postKeyExtractor = (item: Post) => item.id;
+
+// One reply in the comments sheet. Memoized so typing in the reply box (which
+// re-renders the whole screen) doesn't re-render every reply.
+const CommentRow = React.memo(function CommentRow({
+  comment,
+  postId,
+  onDelete,
+}: {
+  comment: Comment;
+  // The open post's id; null hides the delete button (no post open).
+  postId: string | null;
+  onDelete: (postId: string, commentId: string) => void;
+}) {
+  const { colors, fonts } = useTheme();
+  return (
+    <View className="flex-row gap-3.5 items-start p-1"
+    >
+      <View
+        className="w-9 h-9 rounded-full items-center justify-center"
+        style={{ backgroundColor: colors.primaryLight }}
+      >
+        <Text
+          className="text-sm font-bold"
+          style={{ color: colors.primary, fontFamily: fonts.body }}
+        >
+          {comment.avatar}
+        </Text>
+      </View>
+      <View
+        className="flex-1 p-3.5 rounded-2xl"
+        style={{
+          backgroundColor: colors.surfaceSoft,
+          borderWidth: 1,
+          borderColor: colors.border,
+        }}
+      >
+        <View className="flex-row justify-between items-center">
+          <Text
+            className="text-xs font-bold"
+            style={{ color: colors.foreground, fontFamily: fonts.body }}
+          >
+            {comment.author}
+          </Text>
+          <View className="flex-row items-center gap-2">
+            <Text
+              className="text-xs font-semibold"
+              style={{ color: colors.mutedText, fontFamily: fonts.body }}
+            >
+              {comment.time}
+            </Text>
+            {comment.isOwner && postId && (
+              <TouchableOpacity
+                onPress={() => onDelete(postId, comment.id)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Feather
+                  name="trash-2"
+                  size={13}
+                  color={colors.danger}
+                />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+        <Text
+          className="text-xs font-medium mt-1.5 leading-4"
+          style={{ color: colors.foreground, fontFamily: fonts.body }}
+        >
+          {comment.content}
+        </Text>
+        {comment.attachment && (
+          <PostAttachmentView attachment={comment.attachment} />
+        )}
+      </View>
+    </View>
+  );
+});
+
+function CommentSeparator() {
+  return <View style={{ height: 16 }} />;
+}
+
+const commentKeyExtractor = (item: Comment) => item.id;
+
 // Shared between the owner dashboard (app/(app)/(dashboard)/community.tsx)
 // and the partner view (app/(app)/(partner-view)/forum.tsx) — both
 // route files just re-export this so the community forum looks and behaves
@@ -667,6 +1046,8 @@ export default function CommunityScreen() {
   const pageRef = useRef(1);
   const POSTS_PAGE_SIZE = 20;
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  // Set by tapping a post's #tag; filters the feed alongside the category.
+  const [activeTag, setActiveTag] = useState<string | null>(null);
   const [searchVisible, setSearchVisible] = useState(false);
   const [searchInput, setSearchInput] = useState("");
   const [submittedSearch, setSubmittedSearch] = useState("");
@@ -683,6 +1064,10 @@ export default function CommunityScreen() {
   const [isCommentsLoading, setIsCommentsLoading] = useState(false);
   const [newPostContent, setNewPostContent] = useState("");
   const [newPostCategory, setNewPostCategory] = useState<string | null>(null);
+  // Custom tags typed into the composer ("+ Add tag"), next to the presets.
+  const [newPostTags, setNewPostTags] = useState<string[]>([]);
+  const [tagInputVisible, setTagInputVisible] = useState(false);
+  const [tagDraft, setTagDraft] = useState("");
   const [newCommentContent, setNewCommentContent] = useState("");
 
   // Compose-modal poll state. `pollOptions === null` means "no poll attached";
@@ -694,14 +1079,16 @@ export default function CommunityScreen() {
   // Long post bodies render uncapped by default, pushing the rest of the
   // card (and feed) way down — cap them and let the reader expand in place.
   const [expandedPostIds, setExpandedPostIds] = useState<Set<string>>(new Set());
-  const LONG_POST_CHAR_THRESHOLD = 240;
-  const toggleExpandedPost = (postId: string) =>
-    setExpandedPostIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(postId)) next.delete(postId);
-      else next.add(postId);
-      return next;
-    });
+  const toggleExpandedPost = useCallback(
+    (postId: string) =>
+      setExpandedPostIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(postId)) next.delete(postId);
+        else next.add(postId);
+        return next;
+      }),
+    [],
+  );
 
   // Compose-modal attachment picking state
   const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null);
@@ -737,6 +1124,7 @@ export default function CommunityScreen() {
           limit: POSTS_PAGE_SIZE,
           page: 1,
           category: activeCategory ?? undefined,
+          tag: activeTag ?? undefined,
           search: submittedSearch.trim() || undefined,
         });
         setPosts(postsResponse.posts.map(mapCommunityPost));
@@ -761,7 +1149,7 @@ export default function CommunityScreen() {
         setIsPostsLoading(false);
       }
     },
-    [activeCategory, submittedSearch],
+    [activeCategory, activeTag, submittedSearch],
   );
 
   // Appends the next page for infinite scroll. Guards against overlapping loads
@@ -775,6 +1163,7 @@ export default function CommunityScreen() {
         limit: POSTS_PAGE_SIZE,
         page: nextPage,
         category: activeCategory ?? undefined,
+        tag: activeTag ?? undefined,
         search: submittedSearch.trim() || undefined,
       });
       const mapped = postsResponse.posts.map(mapCommunityPost);
@@ -801,7 +1190,15 @@ export default function CommunityScreen() {
     } finally {
       setIsLoadingMore(false);
     }
-  }, [activeCategory, submittedSearch, isLoadingMore, isPostsLoading, hasMorePosts, postsError]);
+  }, [
+    activeCategory,
+    activeTag,
+    submittedSearch,
+    isLoadingMore,
+    isPostsLoading,
+    hasMorePosts,
+    postsError,
+  ]);
 
   const refreshPosts = useCallback(async () => {
     setIsRefreshing(true);
@@ -1033,6 +1430,13 @@ export default function CommunityScreen() {
       pollPayload = { allowMultiple: pollAllowMultiple, options: trimmed };
     }
 
+    // A tag typed but not yet confirmed still counts, if it's valid.
+    let tagsPayload = newPostTags;
+    if (tagDraft.trim()) {
+      const added = addCommunityTag(newPostTags, tagDraft);
+      if (added.ok) tagsPayload = added.tags;
+    }
+
     setIsPublishing(true);
     try {
       let attachments: CommunityAttachment[] | undefined;
@@ -1049,6 +1453,7 @@ export default function CommunityScreen() {
         content: newPostContent.trim(),
         isAnonymous: true,
         category: newPostCategory ?? undefined,
+        tags: tagsPayload.length ? tagsPayload : undefined,
         attachments,
         poll: pollPayload,
       });
@@ -1056,6 +1461,7 @@ export default function CommunityScreen() {
       setPosts((current) => [mapCommunityPost(createdPost), ...current]);
       setNewPostContent("");
       setNewPostCategory(null);
+      resetComposeTags();
       setPollOptions(null);
       setPollAllowMultiple(false);
       resetComposeAttachment();
@@ -1078,6 +1484,43 @@ export default function CommunityScreen() {
       setIsPublishing(false);
     }
   }
+
+  // --- Custom tag helpers ---
+  function resetComposeTags() {
+    setNewPostTags([]);
+    setTagDraft("");
+    setTagInputVisible(false);
+  }
+
+  function commitTagDraft() {
+    if (!tagDraft.trim()) {
+      setTagInputVisible(false);
+      return;
+    }
+    const result = addCommunityTag(newPostTags, tagDraft);
+    if (result.ok) {
+      setNewPostTags(result.tags);
+      setTagDraft("");
+      if (result.tags.length >= MAX_COMMUNITY_TAGS) setTagInputVisible(false);
+      return;
+    }
+    if (result.reason === "duplicate") {
+      // Already there: just clear the box.
+      setTagDraft("");
+      return;
+    }
+    alert(
+      "Can't add that tag",
+      result.reason === "limit"
+        ? `A post can have up to ${MAX_COMMUNITY_TAGS} tags.`
+        : result.reason === "too_long"
+          ? `Tags can be up to ${MAX_COMMUNITY_TAG_LENGTH} characters.`
+          : "Use letters, numbers, spaces, - or _.",
+    );
+  }
+
+  const removeComposeTag = (tag: string) =>
+    setNewPostTags((current) => current.filter((existing) => existing !== tag));
 
   // --- Poll composer helpers ---
   const togglePollComposer = () =>
@@ -1285,13 +1728,20 @@ export default function CommunityScreen() {
         await communityApi.deleteComment(postId, commentId);
       } catch {
         alert("Error", "Could not delete comment. Please try again.");
+        // Resync just this post (comments + count) in place, instead of
+        // refetching page 1 of the feed, which would collapse loaded pages
+        // and drop the active filters.
         try {
-          const postsResponse = await communityApi.getPosts({ limit: 20 });
-          const mapped = postsResponse.posts.map(mapCommunityPost);
-          setPosts(mapped);
-          setActivePost((prev) =>
-            prev ? mapped.find((p) => p.id === prev.id) ?? prev : prev,
+          const fresh = mapCommunityPost(await communityApi.getPostById(postId));
+          const resync = <T extends Post>(item: T): T => ({
+            ...item,
+            comments: fresh.comments,
+            commentsCount: fresh.commentsCount,
+          });
+          setPosts((current) =>
+            current.map((p) => (p.id === postId ? resync(p) : p)),
           );
+          setActivePost((prev) => (prev && prev.id === postId ? resync(prev) : prev));
         } catch {
           // Best-effort resync; local state stays as-is until next reload.
         }
@@ -1311,9 +1761,6 @@ export default function CommunityScreen() {
       ],
     );
   }
-
-  // 16px gap between virtualized post cards.
-  const PostSeparator = () => <View style={{ height: 16 }} />;
 
   // Full-width loading / error / empty state shown by the FlatList when there
   // are no post rows to render.
@@ -1383,213 +1830,110 @@ export default function CommunityScreen() {
     </View>
   );
 
-  // One virtualized post card. Horizontal padding lives here (not on the list
-  // container) so the header can keep its own layout; the first row also gets a
-  // top gap below the header.
-  const renderPost = ({ item: post, index }: { item: Post; index: number }) => {
-    const isReported = reportedPosts.has(post.id);
-    const isLiked = likedPostIds.has(post.id);
-    const isSaved = savedPosts.has(post.id);
-
-    return (
-      <View style={{ paddingHorizontal: 24, paddingTop: index === 0 ? 24 : 0 }}>
-        <View
-          className="rounded-3xl border p-5 relative"
-          style={{
-            backgroundColor: colors.surface,
-            borderColor: isReported ? colors.danger : colors.border,
-            ...getShadow(colors, isDark),
-          }}
-        >
-          <View className="flex-row items-center justify-between">
-            <View className="flex-row items-center gap-3">
-              <View
-                className="w-10 h-10 rounded-full items-center justify-center border-2"
-                style={{ backgroundColor: colors.primaryLight, borderColor: colors.background }}
-              >
-                <Text
-                  className="text-sm font-bold"
-                  style={{ color: colors.primary, fontFamily: fonts.body }}
-                >
-                  {post.avatar}
-                </Text>
-              </View>
-              <View>
-                <Text
-                  className="text-[13px] font-bold"
-                  style={{ color: colors.foreground, fontFamily: fonts.body }}
-                >
-                  {post.author}
-                </Text>
-                <View className="flex-row items-center gap-1.5 mt-0.5">
-                  <Text
-                    className="text-xs font-semibold"
-                    style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                  >
-                    {post.time}
-                  </Text>
-                  {post.category ? (
-                    <View
-                      className="rounded-full px-2 py-[1px]"
-                      style={{ backgroundColor: colors.primaryLight }}
-                    >
-                      <Text
-                        className="text-[11.5px] font-black uppercase tracking-wide"
-                        style={{ color: colors.primary, fontFamily: fonts.body }}
-                      >
-                        {post.category}
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-              </View>
-            </View>
-            <TouchableOpacity
-              onPress={() => openOptions(post)}
-              accessibilityRole="button"
-              accessibilityLabel="Post options"
-              className="p-2 -mr-2 rounded-full"
-            >
-              <Feather name="more-vertical" size={18} color={colors.mutedText} />
-            </TouchableOpacity>
-          </View>
-
-          <Text
-            className="mt-4 text-sm font-medium leading-5"
-            style={{ color: colors.foreground, fontFamily: fonts.body }}
-            numberOfLines={
-              post.content.length > LONG_POST_CHAR_THRESHOLD && !expandedPostIds.has(post.id) ? 6 : undefined
-            }
-          >
-            {post.content}
-          </Text>
-          {post.content.length > LONG_POST_CHAR_THRESHOLD && (
-            <TouchableOpacity
-              onPress={() => toggleExpandedPost(post.id)}
-              activeOpacity={0.7}
-              className="mt-1"
-              accessibilityRole="button"
-            >
-              <Text className="text-xs font-bold" style={{ color: colors.primary, fontFamily: fonts.body }}>
-                {expandedPostIds.has(post.id) ? "Show less" : "Read more"}
-              </Text>
-            </TouchableOpacity>
-          )}
-
-          {post.attachment && <PostAttachmentView attachment={post.attachment} />}
-
-          {post.poll && (
-            <PostPollView
-              poll={post.poll}
-              isVoting={votingPollIds.has(post.id)}
-              onVote={(optionIds) => handleVotePoll(post, optionIds)}
-              readOnly={!canPost}
-            />
-          )}
-
-          {/* Action Bar - all icons left side together */}
-          <View
-            className="mt-5 pt-3 flex-row items-center"
-            style={{ borderTopWidth: 1, borderTopColor: colors.border, gap: 10 }}
-          >
-            {/* Like */}
-            <TouchableOpacity
-              accessibilityRole="button"
-              accessibilityLabel={isLiked ? "Unlike post" : "Like post"}
-              className="flex-row items-center gap-1.5 py-1.5 px-2.5 rounded-full"
-              style={{ backgroundColor: isLiked ? colors.primaryLight : "transparent" }}
-              onPress={() => toggleLike(post)}
-            >
-              <Ionicons
-                name={isLiked ? "heart" : "heart-outline"}
-                size={19}
-                color={isLiked ? colors.primary : colors.mutedText}
-              />
-              <Text
-                className="text-xs font-bold"
-                style={{ color: isLiked ? colors.primary : colors.mutedText, fontFamily: fonts.mono }}
-              >
-                {post.likes}
-              </Text>
-            </TouchableOpacity>
-
-            {/* Comment */}
-            <TouchableOpacity
-              accessibilityRole="button"
-              accessibilityLabel="View comments"
-              className="flex-row items-center gap-1.5 py-1.5 px-2.5 rounded-full relative"
-              onPress={() => openCommentsSheet(post)}
-            >
-              <View className="relative">
-                <Ionicons name="chatbubble-outline" size={18} color={colors.mutedText} />
-                {unreadCommentPostIds.has(post.id) && (
-                  <View
-                    style={{
-                      position: "absolute",
-                      top: -2,
-                      right: -2,
-                      width: 6,
-                      height: 6,
-                      borderRadius: 3,
-                      backgroundColor: colors.danger,
-                    }}
-                  />
-                )}
-              </View>
-              <Text
-                className="text-xs font-bold"
-                style={{ color: colors.mutedText, fontFamily: fonts.mono }}
-              >
-                {post.commentsCount}
-              </Text>
-            </TouchableOpacity>
-
-            {/* Share */}
-            <TouchableOpacity
-              accessibilityRole="button"
-              accessibilityLabel="Share post"
-              className="flex-row items-center gap-1.5 py-1.5 px-2.5 rounded-full"
-              onPress={() => shareCommunityPost(post)}
-            >
-              <Ionicons name="arrow-redo-outline" size={18} color={colors.mutedText} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Meta badges overlay */}
-          {(isSaved || isReported) && (
-            <View className="mt-4 flex-row gap-1.5">
-              {isSaved && (
-                <View
-                  className="flex-row items-center gap-1 rounded-full px-2.5 py-0.5"
-                  style={{ backgroundColor: colors.primaryLight }}
-                >
-                  <Text
-                    className="text-xs font-bold"
-                    style={{ color: colors.primary, fontFamily: fonts.body }}
-                  >
-                    Saved
-                  </Text>
-                </View>
-              )}
-              {isReported && (
-                <View
-                  className="flex-row items-center gap-1 rounded-full px-2.5 py-0.5"
-                  style={{ backgroundColor: colors.dangerLight }}
-                >
-                  <Text
-                    className="text-xs font-bold"
-                    style={{ color: colors.danger, fontFamily: fonts.body }}
-                  >
-                    Reported
-                  </Text>
-                </View>
-              )}
-            </View>
-          )}
-        </View>
-      </View>
-    );
+  // The row handlers below are plain functions that close over this render's
+  // state (likedPostIds, votingPollIds, ...). PostRow is memoized, so it gets
+  // identity-stable wrappers that always call the latest version via this ref.
+  const rowHandlersRef = useRef({
+    openOptions,
+    toggleLike,
+    openCommentsSheet,
+    shareCommunityPost,
+    handleVotePoll,
+    handleDeleteComment,
+  });
+  rowHandlersRef.current = {
+    openOptions,
+    toggleLike,
+    openCommentsSheet,
+    shareCommunityPost,
+    handleVotePoll,
+    handleDeleteComment,
   };
+  const stableOpenOptions = useCallback(
+    (post: Post) => rowHandlersRef.current.openOptions(post),
+    [],
+  );
+  const stableToggleLike = useCallback(
+    (post: Post) => {
+      rowHandlersRef.current.toggleLike(post);
+    },
+    [],
+  );
+  const stableOpenComments = useCallback(
+    (post: Post) => {
+      rowHandlersRef.current.openCommentsSheet(post);
+    },
+    [],
+  );
+  const stableShare = useCallback(
+    (post: Post) => {
+      rowHandlersRef.current.shareCommunityPost(post);
+    },
+    [],
+  );
+  const stableVotePoll = useCallback(
+    (post: Post, optionIds: string[]) => {
+      rowHandlersRef.current.handleVotePoll(post, optionIds);
+    },
+    [],
+  );
+
+  const stableDeleteComment = useCallback(
+    (postId: string, commentId: string) => {
+      rowHandlersRef.current.handleDeleteComment(postId, commentId);
+    },
+    [],
+  );
+  const activePostId = activePost?.id ?? null;
+  const renderComment = useCallback(
+    ({ item }: { item: Comment }) => (
+      <CommentRow comment={item} postId={activePostId} onDelete={stableDeleteComment} />
+    ),
+    [activePostId, stableDeleteComment],
+  );
+
+  // One virtualized post card. Horizontal padding lives in PostRow (not on the
+  // list container) so the header can keep its own layout; the first row also
+  // gets a top gap below the header.
+  const renderPost = useCallback(
+    ({ item: post, index }: { item: Post; index: number }) => (
+      <PostRow
+        post={post}
+        isFirst={index === 0}
+        isLiked={likedPostIds.has(post.id)}
+        isSaved={savedPosts.has(post.id)}
+        isReported={reportedPosts.has(post.id)}
+        isExpanded={expandedPostIds.has(post.id)}
+        isVoting={votingPollIds.has(post.id)}
+        hasUnreadComments={unreadCommentPostIds.has(post.id)}
+        activeTag={post.tags.length > 0 ? activeTag : null}
+        readOnly={!canPost}
+        onOpenOptions={stableOpenOptions}
+        onToggleLike={stableToggleLike}
+        onOpenComments={stableOpenComments}
+        onShare={stableShare}
+        onToggleExpanded={toggleExpandedPost}
+        onTagPress={setActiveTag}
+        onVote={stableVotePoll}
+      />
+    ),
+    [
+      likedPostIds,
+      savedPosts,
+      reportedPosts,
+      expandedPostIds,
+      votingPollIds,
+      unreadCommentPostIds,
+      activeTag,
+      canPost,
+      stableOpenOptions,
+      stableToggleLike,
+      stableOpenComments,
+      stableShare,
+      toggleExpandedPost,
+      stableVotePoll,
+    ],
+  );
 
   return (
     <>
@@ -1605,9 +1949,16 @@ export default function CommunityScreen() {
         <View className="flex-1 relative">
           <FlatList
             data={!isPostsLoading && !postsError ? posts : []}
-            keyExtractor={(item) => item.id}
+            keyExtractor={postKeyExtractor}
             renderItem={renderPost}
             ItemSeparatorComponent={PostSeparator}
+            // Post cards are tall (media, polls), so a small first batch and
+            // window keep mount cost and memory down on budget phones.
+            initialNumToRender={5}
+            maxToRenderPerBatch={5}
+            windowSize={7}
+            // Android only: on iOS this can blank rows mid-scroll.
+            removeClippedSubviews={Platform.OS === "android"}
             showsVerticalScrollIndicator={false}
             style={{ flex: 1, backgroundColor: colors.background }}
             contentContainerStyle={{ flexGrow: 1, paddingBottom: 140 }}
@@ -1698,6 +2049,24 @@ export default function CommunityScreen() {
               contentContainerStyle={{ paddingHorizontal: 24, gap: 8 }}
               className="mt-4"
             >
+              {activeTag && (
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => setActiveTag(null)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Clear tag filter ${activeTag}`}
+                  className="rounded-full pl-4 pr-3 py-2 flex-row items-center gap-1"
+                  style={{ backgroundColor: colors.primary }}
+                >
+                  <Text
+                    className="text-xs font-bold"
+                    style={{ color: colors.buttonText, fontFamily: fonts.body }}
+                  >
+                    #{activeTag}
+                  </Text>
+                  <Ionicons name="close" size={14} color={colors.buttonText} />
+                </TouchableOpacity>
+              )}
               {["All", ...COMMUNITY_CATEGORIES].map((chip) => {
                 const isActive =
                   chip === "All" ? activeCategory === null : activeCategory === chip;
@@ -1795,6 +2164,7 @@ export default function CommunityScreen() {
                   setCreatePostVisible(false);
                   resetComposeAttachment();
                   setNewPostCategory(null);
+                  resetComposeTags();
                   setPollOptions(null);
                   setPollAllowMultiple(false);
                 }}
@@ -1879,6 +2249,85 @@ export default function CommunityScreen() {
                   </TouchableOpacity>
                 );
               })}
+
+              {/* Custom tags: typed by the member, shown as removable chips */}
+              {newPostTags.map((tag) => (
+                <TouchableOpacity
+                  key={`tag-${tag}`}
+                  activeOpacity={0.85}
+                  onPress={() => removeComposeTag(tag)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove tag ${tag}`}
+                  className="rounded-full pl-3 pr-2 py-1.5 flex-row items-center gap-1"
+                  style={{ backgroundColor: colors.primaryLight }}
+                >
+                  <Text
+                    className="text-xs font-bold"
+                    style={{ color: colors.primary, fontFamily: fonts.body }}
+                  >
+                    #{tag}
+                  </Text>
+                  <Ionicons name="close" size={13} color={colors.primary} />
+                </TouchableOpacity>
+              ))}
+
+              {tagInputVisible ? (
+                <View
+                  className="rounded-full px-3 flex-row items-center"
+                  style={{
+                    backgroundColor: colors.surfaceSoft,
+                    borderWidth: 1,
+                    borderColor: colors.primary,
+                    minWidth: 130,
+                  }}
+                >
+                  <Text
+                    className="text-xs font-bold"
+                    style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                  >
+                    #
+                  </Text>
+                  <TextInput
+                    autoFocus
+                    value={tagDraft}
+                    onChangeText={setTagDraft}
+                    onSubmitEditing={commitTagDraft}
+                    onBlur={commitTagDraft}
+                    placeholder="your tag"
+                    placeholderTextColor={colors.mutedText}
+                    maxLength={MAX_COMMUNITY_TAG_LENGTH + 1}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    returnKeyType="done"
+                    blurOnSubmit={false}
+                    accessibilityLabel="New tag"
+                    className="text-xs py-1.5 ml-0.5"
+                    style={{ color: colors.foreground, fontFamily: fonts.body, minWidth: 90 }}
+                  />
+                </View>
+              ) : newPostTags.length < MAX_COMMUNITY_TAGS ? (
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => setTagInputVisible(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add a tag"
+                  className="rounded-full px-3 py-1.5 flex-row items-center gap-1"
+                  style={{
+                    backgroundColor: colors.surfaceSoft,
+                    borderWidth: 1,
+                    borderStyle: "dashed",
+                    borderColor: colors.border,
+                  }}
+                >
+                  <Feather name="plus" size={12} color={colors.mutedText} />
+                  <Text
+                    className="text-xs font-bold"
+                    style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                  >
+                    Add tag
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
 
             {pendingAttachment && (
@@ -2059,137 +2508,87 @@ export default function CommunityScreen() {
               <View className="w-5" />
             </View>
 
-            <ScrollView
+            {/* A FlatList (not a ScrollView + map) so a long thread only mounts
+                the replies near the viewport. It's the sheet's only vertical
+                scroller, so nothing nests inside another list. */}
+            <FlatList
+              data={activePost?.comments ?? []}
+              keyExtractor={commentKeyExtractor}
+              renderItem={renderComment}
+              ItemSeparatorComponent={CommentSeparator}
               showsVerticalScrollIndicator={false}
               className="flex-1 px-6 pt-4"
+              contentContainerStyle={{ paddingBottom: 80 }}
               keyboardDismissMode="on-drag"
               keyboardShouldPersistTaps="handled"
-            >
-              {/* Primary Render Target Focused Post Header Context info segment */}
-              {activePost && (
-                <View
-                  className="pb-5"
-                  style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}
-                >
-                  <View className="flex-row items-center gap-3">
+              initialNumToRender={10}
+              windowSize={7}
+              ListHeaderComponent={
+                <View>
+                  {/* Primary Render Target Focused Post Header Context info segment */}
+                  {activePost && (
                     <View
-                      className="w-9 h-9 rounded-full items-center justify-center"
-                      style={{ backgroundColor: colors.primaryLight }}
+                      className="pb-5"
+                      style={{ borderBottomWidth: 1, borderBottomColor: colors.border }}
                     >
-                      <Text
-                        className="text-sm font-bold"
-                        style={{ color: colors.primary, fontFamily: fonts.body }}
-                      >
-                        {activePost.avatar}
-                      </Text>
-                    </View>
-                    <Text
-                      className="text-[13px] font-bold"
-                      style={{ color: colors.foreground, fontFamily: fonts.body }}
-                    >
-                      {activePost.author}
-                    </Text>
-                  </View>
-                  <Text
-                    className="mt-3 text-sm leading-5"
-                    style={{ color: colors.foreground, fontFamily: fonts.body }}
-                  >
-                    {activePost.content}
-                  </Text>
-                </View>
-              )}
-
-              {/* List Array Generation target segment for mapped Comments database blocks */}
-              <View className="mt-5 gap-4 pb-20">
-                <Text
-                  className="text-xs font-bold tracking-widest uppercase mb-1"
-                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                >
-                  Responses
-                </Text>
-                {isCommentsLoading && activePost?.comments.length === 0 && (
-                  <View className="gap-5 py-3">
-                    <SkeletonRow />
-                    <SkeletonRow />
-                    <SkeletonRow />
-                  </View>
-                )}
-                {activePost?.comments.map((comment) => (
-                  <View
-                    key={comment.id}
-                    className="flex-row gap-3.5 items-start p-1"
-                  >
-                    <View
-                      className="w-9 h-9 rounded-full items-center justify-center"
-                      style={{ backgroundColor: colors.primaryLight }}
-                    >
-                      <Text
-                        className="text-sm font-bold"
-                        style={{ color: colors.primary, fontFamily: fonts.body }}
-                      >
-                        {comment.avatar}
-                      </Text>
-                    </View>
-                    <View
-                      className="flex-1 p-3.5 rounded-2xl"
-                      style={{
-                        backgroundColor: colors.surfaceSoft,
-                        borderWidth: 1,
-                        borderColor: colors.border,
-                      }}
-                    >
-                      <View className="flex-row justify-between items-center">
+                      <View className="flex-row items-center gap-3">
+                        <View
+                          className="w-9 h-9 rounded-full items-center justify-center"
+                          style={{ backgroundColor: colors.primaryLight }}
+                        >
+                          <Text
+                            className="text-sm font-bold"
+                            style={{ color: colors.primary, fontFamily: fonts.body }}
+                          >
+                            {activePost.avatar}
+                          </Text>
+                        </View>
                         <Text
-                          className="text-xs font-bold"
+                          className="text-[13px] font-bold"
                           style={{ color: colors.foreground, fontFamily: fonts.body }}
                         >
-                          {comment.author}
+                          {activePost.author}
                         </Text>
-                        <View className="flex-row items-center gap-2">
-                          <Text
-                            className="text-xs font-semibold"
-                            style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                          >
-                            {comment.time}
-                          </Text>
-                          {comment.isOwner && activePost && (
-                            <TouchableOpacity
-                              onPress={() =>
-                                handleDeleteComment(activePost.id, comment.id)
-                              }
-                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                            >
-                              <Feather
-                                name="trash-2"
-                                size={13}
-                                color={colors.danger}
-                              />
-                            </TouchableOpacity>
-                          )}
-                        </View>
                       </View>
                       <Text
-                        className="text-xs font-medium mt-1.5 leading-4"
+                        className="mt-3 text-sm leading-5"
                         style={{ color: colors.foreground, fontFamily: fonts.body }}
                       >
-                        {comment.content}
+                        {activePost.content}
                       </Text>
-                      {comment.attachment && (
-                        <PostAttachmentView attachment={comment.attachment} />
-                      )}
                     </View>
+                  )}
+
+                  {/* Same 16px rhythm the old gap-4 column had: label, then
+                      skeleton/replies/empty note 16px below it. */}
+                  <View className="mt-5 gap-4" style={{ paddingBottom: 16 }}>
+                    <Text
+                      className="text-xs font-bold tracking-widest uppercase mb-1"
+                      style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                    >
+                      Responses
+                    </Text>
+                    {isCommentsLoading && activePost?.comments.length === 0 && (
+                      <View className="gap-5 py-3">
+                        <SkeletonRow />
+                        <SkeletonRow />
+                        <SkeletonRow />
+                      </View>
+                    )}
                   </View>
-                ))}
-                {!isCommentsLoading && activePost?.comments.length === 0 && (
+                </View>
+              }
+              ListEmptyComponent={
+                !isCommentsLoading && activePost ? (
                   <Text
                     className="text-xs text-center italic my-6"
                     style={{ color: colors.mutedText, fontFamily: fonts.body }}
                   >
                     Be the first one to leave a supportive reply!
                   </Text>
-                )}
-              </View>
-            </ScrollView>
+                ) : null
+              }
+            />
 
             {/* Persistent Absolute Standard Footer Input field layout for writing replies
                 (owners only — partners get a read-only note instead, see canPost) */}

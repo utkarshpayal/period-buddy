@@ -5,6 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { SkeletonCard } from "../../components/Skeleton";
+import { SymptomTrendChart } from "../../components/SymptomTrendChart";
 import { useTheme } from "../../components/theme";
 import { getSeverityColor, getShadow, getSoftTints } from "../../components/ui-tokens";
 import { useAsyncLoad } from "../../hooks/useAsyncLoad";
@@ -173,6 +174,14 @@ function SymptomPredictionsContent() {
                     </View>
                   ) : null}
 
+                  <SymptomTrendChart
+                    predictions={predictions}
+                    phases={availablePhases}
+                    phaseLabels={PHASE_LABELS}
+                    selectedPhase={activePhase}
+                    onSelectPhase={setSelectedPhase}
+                  />
+
                   <Text className="text-xs font-semibold leading-5 mb-4" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                     {cyclesAnalyzed
                       ? `Based on your last ${cyclesAnalyzed} cycles, here's what's likely during your ${(PHASE_LABELS[activePhase ?? ""] ?? activePhase ?? "").toLowerCase()} phase.`
@@ -192,7 +201,7 @@ function SymptomPredictionsContent() {
                               {Math.round(item.likelihood)}%
                             </Text>
                           </View>
-                          <View className="h-2.5 rounded-full overflow-hidden" style={{ backgroundColor: colors.border }}>
+                          <View className="h-2.5 rounded-full overflow-hidden" style={{ backgroundColor: colors.track }}>
                             <View
                               style={{
                                 width: `${Math.min(100, Math.max(2, item.likelihood))}%`,

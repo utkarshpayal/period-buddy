@@ -106,7 +106,7 @@ export default function EraScreen() {
         throw err;
       }),
     [],
-    { refreshOn: ["cycle"] },
+    { refreshOn: ["cycle"], cacheKey: "genz:era" },
   );
   const data = result ?? null;
   const needsSetup = !loading && !error && result === null;

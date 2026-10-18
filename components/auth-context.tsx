@@ -1,10 +1,13 @@
 import { clearSession, loadSession, saveSession, saveSessionProfile } from "../lib/sessionStore";
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { AppState } from "react-native";
+import { AppState, InteractionManager } from "react-native";
+import { usePathname } from "expo-router";
 import type { AuthUser } from "../lib/auth";
 import { partnerApi, setSessionToken, setUnauthorizedHandler } from "../lib/api";
 import { alert } from "../lib/alert";
 import { emitDataChange } from "../lib/data-sync";
+import { clearForestCache } from "../lib/forestCache";
+import { clearQueryCache } from "../lib/queryCache";
 import { clearStoredAppState } from "./AppState";
 
 type PartnerRole = AuthUser["partnerRole"];
@@ -29,6 +32,13 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+
+// Screens a signed-in user only passes through on the way into the app
+// (they router.replace() to the dashboard). Push registration waits until
+// the user has left them, so the permission prompt shows over the tracker.
+const PUSH_DEFER_PATHS = new Set(["/", "/login", "/signup", "/oauthredirect"]);
+// Lets the replace() into the dashboard finish animating before the prompt.
+const PUSH_PROMPT_DELAY_MS = 600;
 export { AUTH_SESSION_KEY } from "../lib/sessionStore";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -67,30 +77,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // (their profile stays incomplete), so they register straight away.
   const setupPending =
     session?.user?.isProfileComplete === false && session.user.partnerRole !== "viewer";
+  // The OS permission prompt must open over the screen the person lands on
+  // (tracker / partner overview), never over login, signup or the welcome
+  // screen: on Android the dialog pauses the activity, so a prompt fired the
+  // moment signIn() set the session froze login in the background until it
+  // was answered. Hold off while an entry screen is showing, then wait for
+  // the landing transition to finish before asking.
+  const pathname = usePathname();
+  const onEntryScreen = PUSH_DEFER_PATHS.has(pathname);
   useEffect(() => {
-    if (!session?.token || setupPending) return;
+    if (!session?.token || setupPending || onEntryScreen) return;
     let cancelled = false;
     let removeListener: (() => void) | null = null;
-    import("../lib/notifications")
-      .then(({ registerForPushNotificationsAsync, addPushTokenRefreshListener }) => {
-        if (cancelled) return;
-        registerForPushNotificationsAsync().catch(() => {});
-        removeListener = addPushTokenRefreshListener();
-      })
-      .catch(() => {});
+    let interaction: { cancel: () => void } | null = null;
+    const timer = setTimeout(() => {
+      interaction = InteractionManager.runAfterInteractions(() => {
+        import("../lib/notifications")
+          .then(({ registerForPushNotificationsAsync, addPushTokenRefreshListener }) => {
+            if (cancelled) return;
+            registerForPushNotificationsAsync().catch(() => {});
+            removeListener = addPushTokenRefreshListener();
+          })
+          .catch(() => {});
+      });
+    }, PUSH_PROMPT_DELAY_MS);
     return () => {
       cancelled = true;
+      clearTimeout(timer);
+      interaction?.cancel();
       removeListener?.();
     };
-  }, [session?.token, setupPending]);
+  }, [session?.token, setupPending, onEntryScreen]);
 
   // Per-account data held outside React state must not carry over to the
   // next session: the 60s dashboard/subscription caches (useUserStats,
   // useSubscriptionAccess — both drop their cache on these topics) and the
-  // locally persisted day logs.
+  // locally persisted day logs, the Forest's offline copy + queued waterings,
+  // and every response cached by lib/queryCache.ts (useAsyncLoad's cacheKey).
   const clearAccountData = useCallback(() => {
+    clearQueryCache();
     emitDataChange("dashboard", "subscription");
     clearStoredAppState();
+    clearForestCache();
   }, []);
 
   const signOut = useCallback(async () => {

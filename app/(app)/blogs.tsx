@@ -8,6 +8,7 @@ import { useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  AppState,
   Image,
   Modal,
   Pressable,
@@ -36,9 +37,12 @@ import {
   type LanguageCode,
 } from "../../lib/api";
 import { resolveAudioUri } from "../../lib/audio";
+import { fetchQuery, hydrateQuery, peekQuery } from "../../lib/queryCache";
 import { SUPPORTED_LANGUAGES } from "../../lib/languages";
+import { createReadTimer, formatReadDuration } from "../../lib/readTimer";
 import { shareWithAppLink } from "../../lib/share";
 import { HeaderIconButton, ScreenHeader } from "../../components/ScreenHeader";
+import { MedicalReviewBadge } from "../../components/MedicalReviewBadge";
 
 // --- BACKEND REST API PAYLOAD CONTRACTS ---
 interface ContentItem {
@@ -123,13 +127,26 @@ const fallbackContent: ContentItem[] = [
   },
 ];
 
+/**
+ * Reading time shown on cards and articles: how long readers really spend
+ * (average active time per visit, lib/readTimer.ts) once anyone has read
+ * it, e.g. "1 min 12 s read"; until then the word-count estimate ("3 min
+ * read"). Older servers could send 0 or nothing; never show "0 min".
+ */
+function formatReadTime(minutes?: number | null, averageSeconds?: number | null): string {
+  const real = formatReadDuration(averageSeconds);
+  if (real) return `${real} read`;
+  const value = Math.round(Number(minutes) || 0);
+  return `${Math.max(1, value)} min read`;
+}
+
 function mapFeedItem(item: ContentFeedItem): ContentItem {
   return {
     id: item.sourceId,
     title: item.title,
     author: item.author,
     type: item.type,
-    time: item.time,
+    time: item.type === "blog" ? formatReadTime(item.readTimeMinutes, item.averageReadSeconds) : item.time,
     imageUrl: item.imageUrl,
     verified: item.verified,
     summary: item.summary,
@@ -153,7 +170,7 @@ function mapBlogToContentItem(blog: Blog): ContentItem {
     title: blog.title,
     author: blog.author || "Period Buddy Team",
     type: "blog",
-    time: `${blog.readTimeMinutes || 0} min read`,
+    time: formatReadTime(blog.readTimeMinutes, blog.averageReadSeconds),
     imageUrl: blog.coverImageUrl || "",
     verified: true,
     summary: blog.excerpt || "",
@@ -164,6 +181,13 @@ function mapBlogToContentItem(blog: Blog): ContentItem {
     likeCount: blog.likeCount,
   };
 }
+
+// Only the first page of the unfiltered feed is cached (and kept on the
+// device), so a revisit or cold start paints at once; other filters and
+// later pages stay live. Bookmark writes ("blogs" topic) mark it stale.
+type FeedResponse = Awaited<ReturnType<typeof blogsApi.getFeed>>;
+const DEFAULT_FEED_CACHE_KEY = "blogs:feed:type=all:category=all:p1";
+const FEED_CACHE = { staleMs: 5 * 60_000, persist: true, topics: ["blogs" as const] };
 
 export default function Blogs() {
   const { colors, isDark, fonts } = useTheme();
@@ -179,12 +203,17 @@ export default function Blogs() {
   >("all");
   const [categoryPickerVisible, setCategoryPickerVisible] = useState(false);
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
-  const [content, setContent] = useState<ContentItem[]>([]);
-  const [loadingFeed, setLoadingFeed] = useState(true);
+  const [content, setContent] = useState<ContentItem[]>(
+    () => peekQuery<FeedResponse>(DEFAULT_FEED_CACHE_KEY)?.items.map(mapFeedItem) ?? [],
+  );
+  const [loadingFeed, setLoadingFeed] = useState(() => peekQuery(DEFAULT_FEED_CACHE_KEY) === undefined);
   const [refreshing, setRefreshing] = useState(false);
   const [usingFallback, setUsingFallback] = useState(false);
   const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(false);
+  const [hasMore, setHasMore] = useState(() => {
+    const cached = peekQuery<FeedResponse>(DEFAULT_FEED_CACHE_KEY);
+    return cached ? cached.pagination.page < cached.pagination.pages : false;
+  });
   const [loadingMore, setLoadingMore] = useState(false);
 
   // "See all bookmarks" view
@@ -197,7 +226,52 @@ export default function Blogs() {
   const [previewVisible, setPreviewVisible] = useState(false);
   const [fullBlog, setFullBlog] = useState<Blog | null>(null);
   const [articleLoading, setArticleLoading] = useState(false);
-  const openedAtRef = useRef<number | null>(null);
+  // Active reading time of the open article (lib/readTimer.ts): only while
+  // it's on screen, the app is in front and the reader isn't idle.
+  const readTimerRef = useRef<ReturnType<typeof createReadTimer> | null>(null);
+  const readBlogIdRef = useRef<string | null>(null);
+  const articleHeightRef = useRef(0);
+
+  /** Sends the not-yet-reported part of the current read, if any. */
+  const flushRead = useCallback(() => {
+    const timer = readTimerRef.current;
+    const id = readBlogIdRef.current;
+    if (!timer || !id) return;
+    const report = timer.take();
+    if (report.durationSeconds > 0 || report.completed) blogsApi.trackView(id, report).catch(() => {});
+  }, []);
+
+  // While an article is open, send the reading so far every 15 s (the
+  // first send counts the view), so counts move while people read
+  // instead of only when they close it. Continuations add time, never views.
+  useEffect(() => {
+    if (!previewVisible || selectedItem?.type !== "blog") return;
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = (delay: number) => {
+      timer = setTimeout(() => {
+        if (AppState.currentState === "active") flushRead();
+        tick(15_000);
+      }, delay);
+    };
+    tick(15_000);
+    return () => clearTimeout(timer);
+  }, [previewVisible, selectedItem?.type, selectedItem?.id, flushRead]);
+
+  // Background pauses the clock and sends what we have (the app may never
+  // come back); returning to the front resumes the same read.
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      const timer = readTimerRef.current;
+      if (!timer) return;
+      if (state === "active") {
+        timer.start();
+      } else {
+        timer.pause();
+        flushRead();
+      }
+    });
+    return () => sub.remove();
+  }, [flushRead]);
 
   // Translate + listen (text-to-speech) states
   const [language, setLanguage] = useState<LanguageCode>("en-IN");
@@ -207,22 +281,27 @@ export default function Blogs() {
   const [translated, setTranslated] = useState<{ content: string; title: string } | null>(null);
   const [isSynthesizing, setIsSynthesizing] = useState(false);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+
+  // Listening to the article counts as reading it, without touching the screen.
+  useEffect(() => {
+    if (!isPlayingAudio) return;
+    readTimerRef.current?.activity();
+    const id = setInterval(() => readTimerRef.current?.activity(), 20_000);
+    return () => clearInterval(id);
+  }, [isPlayingAudio]);
   const playerRef = useRef<AudioPlayer | null>(null);
 
   const softTints = getSoftTints(colors);
 
   const PAGE_SIZE = 10;
 
-  const loadFeed = useCallback(async () => {
-    setLoadingFeed(true);
-    try {
-      const response = await blogsApi.getFeed({
-        limit: PAGE_SIZE,
-        page: 1,
-        type: selectedType,
-        category:
-          selectedCategory === "all" ? undefined : selectedCategory,
-      });
+  // Only the latest feed request may update the list, so a slow response
+  // for an old filter can't overwrite a newer one.
+  const feedRequestId = useRef(0);
+  const loadFeed = useCallback(async (force = false) => {
+    const requestId = ++feedRequestId.current;
+    const isDefaultFeed = selectedType === "all" && selectedCategory === "all";
+    const applyFeed = (response: FeedResponse) => {
       if (response.items.length > 0) {
         setContent(response.items.map(mapFeedItem));
         setUsingFallback(false);
@@ -233,12 +312,47 @@ export default function Blogs() {
         setUsingFallback(false);
         setHasMore(false);
       }
+    };
+
+    // Paint the cached (or device-saved) first page, then revalidate quietly.
+    let painted = false;
+    if (isDefaultFeed && !force) {
+      const cached = await hydrateQuery<FeedResponse>(DEFAULT_FEED_CACHE_KEY);
+      if (requestId !== feedRequestId.current) return;
+      if (cached) {
+        applyFeed(cached);
+        setLoadingFeed(false);
+        painted = true;
+      }
+    }
+    if (!painted) setLoadingFeed(true);
+    try {
+      const fetchFeed = () =>
+        blogsApi.getFeed({
+          limit: PAGE_SIZE,
+          page: 1,
+          type: selectedType,
+          category:
+            selectedCategory === "all" ? undefined : selectedCategory,
+        });
+      const response = isDefaultFeed
+        ? await fetchQuery(DEFAULT_FEED_CACHE_KEY, fetchFeed, { ...FEED_CACHE, force })
+        : await fetchFeed();
+      if (requestId !== feedRequestId.current) return;
+      applyFeed(response);
     } catch {
-      setContent(fallbackContent);
-      setUsingFallback(true);
-      setHasMore(false);
+      if (requestId !== feedRequestId.current) return;
+      // A cached first page beats the bundled fallback.
+      const cached = isDefaultFeed ? peekQuery<FeedResponse>(DEFAULT_FEED_CACHE_KEY) : undefined;
+      if (cached) {
+        applyFeed(cached);
+      } else {
+        setContent(fallbackContent);
+        setUsingFallback(true);
+        setHasMore(false);
+      }
     } finally {
-      setLoadingFeed(false);
+      if (requestId === feedRequestId.current) setLoadingFeed(false);
     }
   }, [selectedType, selectedCategory]);
 
@@ -249,7 +363,7 @@ export default function Blogs() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await loadFeed();
+      await loadFeed(true);
     } finally {
       setRefreshing(false);
     }
@@ -381,7 +495,12 @@ export default function Blogs() {
     setTranslated(null);
     setLanguage("en-IN");
     earnTokens(1);
-    openedAtRef.current = Date.now();
+    if (item.type === "blog") {
+      const timer = createReadTimer();
+      timer.start();
+      readTimerRef.current = timer;
+      readBlogIdRef.current = item.id;
+    }
 
     if (item.type !== "blog" || !item.slug) return;
 
@@ -400,13 +519,10 @@ export default function Blogs() {
     playerRef.current?.pause();
     setIsPlayingAudio(false);
 
-    const item = selectedItem;
-    const openedAt = openedAtRef.current;
-    openedAtRef.current = null;
-    if (item?.type === "blog" && openedAt) {
-      const durationSeconds = Math.round((Date.now() - openedAt) / 1000);
-      blogsApi.trackView(item.id, durationSeconds).catch(() => {});
-    }
+    readTimerRef.current?.pause();
+    flushRead();
+    readTimerRef.current = null;
+    readBlogIdRef.current = null;
 
     setPreviewVisible(false);
   }
@@ -853,7 +969,25 @@ export default function Blogs() {
               </View>
 
               {/* Scrollable Clinical Document Framework Canvas section */}
-              <ScrollView showsVerticalScrollIndicator={false}>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                scrollEventThrottle={250}
+                onTouchStart={() => readTimerRef.current?.activity()}
+                onLayout={(e) => {
+                  articleHeightRef.current = e.nativeEvent.layout.height;
+                }}
+                onContentSizeChange={(_w, h) => {
+                  // A short article that fits on screen is read in full.
+                  if (h > 0 && articleHeightRef.current >= h) readTimerRef.current?.setDepth(1);
+                }}
+                onScroll={(e) => {
+                  const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
+                  const timer = readTimerRef.current;
+                  if (!timer) return;
+                  timer.activity();
+                  if (contentSize.height > 0) timer.setDepth((contentOffset.y + layoutMeasurement.height) / contentSize.height);
+                }}
+              >
                 <View className="w-full h-56 bg-neutral-100 dark:bg-neutral-900 relative">
                   <Image
                     source={{ uri: selectedItem.imageUrl }}
@@ -877,12 +1011,16 @@ export default function Blogs() {
                     </Text>
                     <Text className="text-xs text-white/90 font-medium mt-1" style={{ fontFamily: fonts.body }}>
                       By {selectedItem.author}
+                      {selectedItem.type === "blog"
+                        ? ` · ${fullBlog?.readTimeMinutes ? formatReadTime(fullBlog.readTimeMinutes, fullBlog.averageReadSeconds) : selectedItem.time}`
+                        : ""}
                     </Text>
                   </View>
                 </View>
 
                 {/* Main Core Typography reading content area wrapper segments */}
                 <View className="p-6">
+                  {selectedItem.type === "blog" ? <MedicalReviewBadge item={fullBlog} style={{ marginBottom: 12 }} /> : null}
                   {/* Category, tags and engagement stats segregation row */}
                   {(fullBlog || selectedItem.category || selectedItem.tags) && (
                     <View className="flex-row items-center flex-wrap gap-1.5 mb-3">

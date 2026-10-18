@@ -1,4 +1,5 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
+import { invalidateQueries } from "../../../lib/queryCache";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
@@ -35,6 +36,7 @@ import { useUserStats } from "../../../hooks/useUserStats";
 import { useDataRefresh } from "../../../hooks/useDataRefresh";
 import { SectionHeader, TabHeader } from "../../../components/ScreenHeader";
 import { ColumnLabel } from "../../../components/ColumnLabel";
+import { SupportTicketSheet } from "../../../components/SupportTicketSheet";
 
 // Rotated across earned badge cards, like the hub tiles' per-feature colours.
 const BADGE_TINTS = ["primary", "secondary", "accent", "warning", "sky", "success"] as const;
@@ -182,6 +184,7 @@ export default function Profile() {
 
   const onRefresh = React.useCallback(async () => {
     setRefreshing(true);
+    invalidateQueries("auth:dashboard");
     try {
       await loadDashboard();
     } finally {
@@ -537,23 +540,12 @@ export default function Profile() {
         </SafeAreaView>
       </Modal>
 
-      {/* Help & support */}
-      <Modal visible={supportModalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setSupportModalVisible(false)}>
-        <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background, paddingHorizontal: 24, paddingTop: 20 }}>
-          {sheetHeader("Help & support", () => setSupportModalVisible(false))}
-          <Text style={{ color: colors.foreground, fontSize: 14.5, lineHeight: 22, fontFamily: fonts.body, marginBottom: 20 }}>
-            Need help with predictions, account access, cycle logs or partner sharing? Send a support request and we&apos;ll guide you through it.
-          </Text>
-          <TouchableOpacity
-            onPress={() => alert("Request sent", "Your support request has been logged. We'll get back to you soon.")}
-            activeOpacity={0.85}
-            className="items-center justify-center rounded-full"
-            style={{ height: 52, backgroundColor: colors.primary }}
-          >
-            <Text style={{ color: colors.buttonText, fontSize: 15, fontWeight: "800", fontFamily: fonts.body }}>Contact support</Text>
-          </TouchableOpacity>
-        </SafeAreaView>
-      </Modal>
+      {/* Help & support: raises a ticket (components/SupportTicketSheet.tsx) */}
+      <SupportTicketSheet
+        visible={supportModalVisible}
+        onClose={() => setSupportModalVisible(false)}
+        onOpenTickets={() => router.push("/support-tickets")}
+      />
 
     </>
   );

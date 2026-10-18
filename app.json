@@ -8,13 +8,14 @@
     "splash": {
       "image": "./assets/images/brand/logo-full.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#FBF6F8"
     },
     "scheme": [
       "thenura",
       "com.uvin124.thenura"
     ],
     "userInterfaceStyle": "automatic",
+    "backgroundColor": "#FBF6F8",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
@@ -164,10 +165,7 @@
           "image": "./assets/images/brand/logo-full.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
-          "dark": {
-            "backgroundColor": "#000000"
-          }
+          "backgroundColor": "#FBF6F8"
         }
       ],
       [

@@ -210,7 +210,7 @@ export default function Predictions() {
       if (isRefresh) setRefreshing(true);
       else setLoading(true);
       setError(null);
-      const predictions = await cycleApi.getPredictions();
+      const predictions = await cycleApi.getPredictions({ force: isRefresh });
       setData(predictions);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load predictions");

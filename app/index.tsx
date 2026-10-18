@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useIsFocused } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
@@ -13,15 +14,17 @@ import {
   type NativeSyntheticEvent,
 } from "react-native";
 import Pressable from "../components/PressableFeedback";
-import Animated, { useAnimatedStyle, withTiming } from "react-native-reanimated";
+import Animated, { useAnimatedStyle, useReducedMotion, withTiming } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../components/auth-context";
 import { Loader } from "../components/Loader";
 import { ThemeToggle, useTheme, type ThemeColors } from "../components/theme";
 import { getScreenGradient, getShadow } from "../components/ui-tokens";
+import { useContentWidth } from "../lib/layout";
 
 type Slide = {
   key: string;
+  eyebrow: string;
   title: string;
   body: string;
   art: "brand" | "predict" | "care";
@@ -30,39 +33,61 @@ type Slide = {
 const SLIDES: Slide[] = [
   {
     key: "brand",
+    eyebrow: "Private by design",
     title: "Cycle care that\nfeels like you",
     body: "Private, judgment-free tracking, built around how your body works.",
     art: "brand",
   },
   {
     key: "predict",
+    eyebrow: "Smart predictions",
     title: "Know what's\ncoming next",
     body: "Period, fertile window and mood predictions that learn as you log.",
     art: "predict",
   },
   {
     key: "care",
+    eyebrow: "Care, anytime",
     title: "Support whenever\nyou need it",
     body: "Ask Nura AI, talk to doctors and build healthy habits, all in one place.",
     art: "care",
   },
 ];
 
+/** How long each slide stays before the pager moves on by itself. */
+const AUTO_ADVANCE_MS = 4000;
+
 export default function Index() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuth();
   const { colors, fonts, isDark } = useTheme();
-  const { width, height } = useWindowDimensions();
-  // Short phones: shrink the artwork rather than clip the text under it.
+  const { height } = useWindowDimensions();
+  // Short phones: tighter spacing and a smaller title rather than clipped text.
   const compact = height < 720;
-  const artScale = compact ? 0.78 : 1;
   const hasNavigated = useRef(false);
   const [index, setIndex] = useState(0);
   // The pager's real height, so every slide fills it and centres its content
   // (a horizontal list doesn't stretch its items to its height on web).
   const [pagerHeight, setPagerHeight] = useState(0);
-  const contentWidth = Math.min(width, 540);
+  const contentWidth = useContentWidth();
   const screenGradient = getScreenGradient(colors, isDark) as [string, string, string];
+  const listRef = useRef<FlatList<Slide>>(null);
+  // Auto-advance pauses while the person drags, while another screen
+  // (signup/login) sits on top, and never runs with reduced motion on.
+  const [dragging, setDragging] = useState(false);
+  const reduceMotion = useReducedMotion();
+  const isFocused = useIsFocused();
+
+  // A fresh timer per slide: a manual swipe restarts the 4s count, and the
+  // dots stay in sync because they follow the scroll position, not the timer.
+  useEffect(() => {
+    if (reduceMotion || dragging || !isFocused || isAuthenticated) return;
+    const timer = setTimeout(() => {
+      const next = (index + 1) % SLIDES.length;
+      listRef.current?.scrollToOffset({ offset: next * contentWidth, animated: true });
+    }, AUTO_ADVANCE_MS);
+    return () => clearTimeout(timer);
+  }, [index, dragging, reduceMotion, isFocused, isAuthenticated, contentWidth]);
 
   useEffect(() => {
     if (isAuthenticated && !hasNavigated.current) {
@@ -80,7 +105,8 @@ export default function Index() {
 
   // onScroll (not onMomentumScrollEnd) so the dots follow the swipe live.
   function onScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
-    const next = Math.round(event.nativeEvent.contentOffset.x / contentWidth);
+    const raw = Math.round(event.nativeEvent.contentOffset.x / contentWidth);
+    const next = Math.max(0, Math.min(SLIDES.length - 1, raw));
     setIndex((current) => (current === next ? current : next));
   }
 
@@ -113,6 +139,7 @@ export default function Index() {
 
           <View style={{ flex: 1 }} onLayout={(e) => setPagerHeight(e.nativeEvent.layout.height)}>
           <FlatList
+            ref={listRef}
             data={SLIDES}
             keyExtractor={(slide) => slide.key}
             horizontal
@@ -120,26 +147,39 @@ export default function Index() {
             bounces={false}
             showsHorizontalScrollIndicator={false}
             onScroll={onScroll}
+            onScrollBeginDrag={() => setDragging(true)}
+            onScrollEndDrag={() => setDragging(false)}
             scrollEventThrottle={32}
             getItemLayout={(_, i) => ({ index: i, length: contentWidth, offset: contentWidth * i })}
             style={{ height: pagerHeight || undefined }}
             renderItem={({ item }) => (
               <View style={{ width: contentWidth, height: pagerHeight || undefined, paddingHorizontal: 28, alignItems: "center", justifyContent: "center" }}>
-                {/* The art is drawn at 250×230 and scaled on short phones; this box
-                    takes the scaled size so the text sits right under it. */}
-                <View style={{ width: 250 * artScale, height: 230 * artScale, alignItems: "center", justifyContent: "center", marginBottom: compact ? 20 : 32 }}>
-                  <View style={{ transform: [{ scale: artScale }] }}>
-                    <SlideArt art={item.art} colors={colors} isDark={isDark} />
-                  </View>
+                <View style={{ marginBottom: compact ? 22 : 30 }}>
+                  <SlideArt art={item.art} colors={colors} isDark={isDark} />
                 </View>
                 <Text
+                  maxFontSizeMultiplier={1.3}
+                  style={{
+                    color: colors.primary,
+                    fontSize: 12,
+                    fontWeight: "800",
+                    letterSpacing: 1.2,
+                    textTransform: "uppercase",
+                    marginBottom: 10,
+                    fontFamily: fonts.body,
+                  }}
+                >
+                  {item.eyebrow}
+                </Text>
+                <Text
                   accessibilityRole="header"
+                  maxFontSizeMultiplier={1.3}
                   style={{
                     color: colors.foreground,
-                    fontSize: 32,
-                    lineHeight: 39,
+                    fontSize: compact ? 26 : 29,
+                    lineHeight: compact ? 32 : 36,
                     fontWeight: "800",
-                    letterSpacing: -0.6,
+                    letterSpacing: -0.5,
                     textAlign: "center",
                     fontFamily: fonts.heading,
                   }}
@@ -169,7 +209,12 @@ export default function Index() {
           </View>
 
           <View style={{ paddingHorizontal: 24, paddingBottom: 12 }}>
-            <View className="flex-row justify-center" style={{ gap: 6, marginBottom: 26 }}>
+            <View
+              accessible
+              accessibilityLabel={`Slide ${index + 1} of ${SLIDES.length}`}
+              className="flex-row justify-center"
+              style={{ gap: 6, marginBottom: 26 }}
+            >
               {SLIDES.map((slide, i) => (
                 <Dot key={slide.key} active={i === index} colors={colors} />
               ))}
@@ -241,79 +286,52 @@ function Dot({ active, colors }: { active: boolean; colors: ThemeColors }) {
   return <Animated.View style={[{ height: 7, borderRadius: 4 }, style]} />;
 }
 
-/** Illustration for a slide, composed from brand colours and icons. */
+/**
+ * A slide's artwork: one icon (or the logo mark) in a white disc, inside a
+ * soft tinted halo. Deliberately small, so the headline carries the slide.
+ */
 function SlideArt({ art, colors, isDark }: { art: Slide["art"]; colors: ThemeColors; isDark: boolean }) {
-  const tile = {
-    width: 196,
-    height: 196,
-    borderRadius: 60,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
-    backgroundColor: colors.surface,
-    ...getShadow(colors, isDark),
-  };
-
-  const badge = (icon: keyof typeof Ionicons.glyphMap, tint: string, color: string, position: object) => (
-    <View
-      style={{
-        position: "absolute",
-        width: 54,
-        height: 54,
-        borderRadius: 18,
-        alignItems: "center",
-        justifyContent: "center",
-        backgroundColor: colors.surface,
-        ...getShadow(colors, isDark),
-        ...position,
-      }}
-    >
-      <View style={{ width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: tint }}>
-        <Ionicons name={icon} size={19} color={color} />
-      </View>
-    </View>
-  );
-
-  if (art === "brand") {
-    return (
-      <View style={{ width: 250, height: 230, alignItems: "center", justifyContent: "center" }}>
-        <View style={[tile, { overflow: "hidden" }]}>
-          <Image source={require("../assets/images/brand/logo-mark.png")} resizeMode="contain" style={{ width: "100%", height: "100%" }} />
-        </View>
-        {badge("lock-closed", colors.secondaryLight, colors.info, { top: 4, right: 4 })}
-        {badge("heart", colors.primaryLight, colors.primary, { bottom: 6, left: 2 })}
-      </View>
-    );
-  }
-
-  if (art === "predict") {
-    return (
-      <View style={{ width: 250, height: 230, alignItems: "center", justifyContent: "center" }}>
-        <LinearGradient
-          colors={[colors.primary, colors.primaryDark, colors.secondary]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={{ ...tile, backgroundColor: undefined }}
-        >
-          <Ionicons name="calendar" size={72} color="#FFFFFF" />
-          <Text style={{ color: "#FFFFFF", fontSize: 13, fontWeight: "800", marginTop: 6, letterSpacing: 0.6 }}>IN 5 DAYS</Text>
-        </LinearGradient>
-        {badge("water", colors.roseLight, colors.rose, { top: 6, left: 0 })}
-        {badge("notifications", colors.mintLight, colors.accentText, { bottom: 4, right: 0 })}
-      </View>
-    );
-  }
+  const spec =
+    art === "brand"
+      ? { halo: colors.primaryLight, icon: null, fg: colors.primary }
+      : art === "predict"
+        ? { halo: colors.secondaryLight, icon: "calendar-outline" as const, fg: colors.info }
+        : { halo: colors.mintLight, icon: "chatbubbles-outline" as const, fg: colors.accentText };
 
   return (
-    <View style={{ width: 250, height: 230, alignItems: "center", justifyContent: "center" }}>
-      <View style={[tile, { overflow: "hidden", backgroundColor: colors.primaryLight }]}>
-        <Image
-          source={require("../assets/images/illustrations/nura-avatar.png")}
-          resizeMode="cover"
-          style={{ width: "100%", height: "100%" }}
-        />
+    <View
+      importantForAccessibility="no-hide-descendants"
+      accessibilityElementsHidden
+      style={{
+        width: 136,
+        height: 136,
+        borderRadius: 68,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: spec.halo,
+      }}
+    >
+      <View
+        style={{
+          width: 88,
+          height: 88,
+          borderRadius: 44,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: colors.surface,
+          ...getShadow(colors, isDark),
+        }}
+      >
+        {spec.icon ? (
+          <Ionicons name={spec.icon} size={36} color={spec.fg} />
+        ) : (
+          <Image
+            source={require("../assets/images/brand/logo-mark.png")}
+            resizeMode="contain"
+            style={{ width: 54, height: 54 }}
+          />
+        )}
       </View>
-      {badge("chatbubble-ellipses", colors.secondaryLight, colors.info, { top: 8, right: 0 })}
-      {badge("medkit", colors.mintLight, colors.accentText, { bottom: 2, left: 4 })}
     </View>
   );
 }

@@ -1,4 +1,5 @@
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { invalidateQueries } from "../../../lib/queryCache";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -604,15 +605,6 @@ export default function Tracker() {
   }, [predictions, cycleSettings]);
   const todayKey = useTodayKey();
 
-  const calendarMonths = useMemo(
-    () =>
-      Array.from(
-        { length: 12 },
-        (_, index) => new Date(selectedYear, index, 1),
-      ),
-    [selectedYear],
-  );
-
   const { dayEntries, dayNotes, earnTokens, saveDayEntry, removeDayEntry } = useAppState();
   // Prefer the history-derived cycle length so future-month phase coloring
   // matches the backend prediction (median/weighted length), not the raw
@@ -705,24 +697,11 @@ export default function Tracker() {
 
   const loadYearLogs = useCallback(async () => {
     try {
-      const results = await Promise.allSettled(
-        calendarMonths.map((month) =>
-          cycleApi.getMonthLogs(getMonthKey(month)),
-        ),
-      );
-
-      const entries = results.reduce<Record<string, LocalDayEntry>>(
-        (acc, result) => {
-          if (result.status !== "fulfilled") return acc;
-
-          result.value.forEach((log) => {
-            acc[log.dateKey] = mapApiDayEntry(log);
-          });
-
-          return acc;
-        },
-        {},
-      );
+      const logs = await cycleApi.getYearLogs(selectedYear);
+      const entries: Record<string, LocalDayEntry> = {};
+      logs.forEach((log) => {
+        entries[log.dateKey] = mapApiDayEntry(log);
+      });
 
       // Merge, don't replace: neighbouring years (and this week's strip)
       // keep their markers when the pager crosses into another year.
@@ -730,7 +709,7 @@ export default function Tracker() {
     } catch {
       // keep what's already loaded
     }
-  }, [calendarMonths]);
+  }, [selectedYear]);
 
   useEffect(() => {
     loadYearLogs();
@@ -755,6 +734,8 @@ export default function Tracker() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
+    invalidateQueries("cycle:");
+    invalidateQueries("auth:dashboard");
     try {
       await Promise.all([loadDashboard(), loadSettings(), loadYearLogs()]);
     } finally {

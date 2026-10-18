@@ -3,7 +3,7 @@ import { useAppState } from "../components/AppState";
 import type { DayEntry as LocalDayEntry } from "../components/AppState";
 import { cycleApi, type CycleSettings, type Predictions } from "../lib/api";
 import { buildCalendarModel, mapApiDayEntry } from "../lib/cycleCalendar";
-import { getDateKey, getMonthKey } from "../lib/format";
+import { getDateKey } from "../lib/format";
 import { useDataRefresh } from "./useDataRefresh";
 
 /**
@@ -25,13 +25,9 @@ export function useCycleCalendar() {
   }, []);
 
   const fetchYear = useCallback(async (year: number) => {
-    const results = await Promise.allSettled(
-      Array.from({ length: 12 }, (_, m) => cycleApi.getMonthLogs(getMonthKey(new Date(year, m, 1)))),
-    );
+    const logs = await cycleApi.getYearLogs(year);
     const entries: Record<string, LocalDayEntry> = {};
-    results.forEach((r) => {
-      if (r.status === "fulfilled") r.value.forEach((log) => (entries[log.dateKey] = mapApiDayEntry(log)));
-    });
+    logs.forEach((log) => (entries[log.dateKey] = mapApiDayEntry(log)));
     setRemote((current) => ({ ...current, ...entries }));
   }, []);
 

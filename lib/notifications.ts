@@ -1,8 +1,9 @@
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
-import { Platform } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import { authApi, type AppNotification } from './api';
 import { showPermissionModal } from './modal-host';
+import { notificationStoreUrl, storeUrlCandidates } from './storeLink';
 
 // Configure notification behavior for when the app is in the foreground.
 // This module is imported statically by app/_layout.tsx (for
@@ -261,6 +262,37 @@ const VIEWER_ALLOWED_ROUTES = new Set([
 export const NOTIFICATIONS_LIST_ROUTE = '/(app)/notifications';
 
 /**
+ * Open a store link (Play Store / App Store), trying each of
+ * storeUrlCandidates() in turn: on Android `market://` (the Play app) first,
+ * then the https page. Resolves false when nothing could be opened.
+ */
+export async function openStoreLink(url: string): Promise<boolean> {
+  for (const candidate of storeUrlCandidates(url, Platform.OS)) {
+    try {
+      await Linking.openURL(candidate);
+      return true;
+    } catch {
+      // No handler for this one (e.g. market:// without the Play app): try the next.
+    }
+  }
+  return false;
+}
+
+/**
+ * A notification that carries a store link (admin "Update the app" pushes:
+ * `data.storeUrl` / `data.iosStoreUrl`, allowlisted in lib/storeLink.ts)
+ * opens the store instead of a screen. Returns true when it was such a
+ * notification, so the caller skips in-app routing. Not on web.
+ */
+export function openNotificationStoreLink(data: Record<string, unknown> | null | undefined): boolean {
+  if (Platform.OS === 'web') return false;
+  const url = notificationStoreUrl(data, Platform.OS);
+  if (!url) return false;
+  void openStoreLink(url);
+  return true;
+}
+
+/**
  * A consultation push opens that consultation's chat (`?id=`); a ringing
  * call (`kind: 'incoming_call'`) also joins the call (`&call=1`). Without a
  * valid id it opens the consultation screen itself.
@@ -285,6 +317,9 @@ export function resolveNotificationTarget(
   isViewer: boolean,
   { joinCall = true }: { joinCall?: boolean } = {},
 ): string {
+  // A store-link push (data.storeUrl) is opened by openNotificationStoreLink()
+  // before this runs; if it couldn't be, the list is the safe landing.
+  if (!explicitNotificationRoute(data) && notificationStoreUrl(data, Platform.OS)) return NOTIFICATIONS_LIST_ROUTE;
   // An explicit in-app route (admin pushes pick one in the Content Studio)
   // wins; explicitNotificationRoute() rejects anything that isn't an in-app path.
   let route = explicitNotificationRoute(data);

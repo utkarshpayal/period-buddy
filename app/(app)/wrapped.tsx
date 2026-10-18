@@ -438,7 +438,7 @@ export default function WrappedScreen() {
   const { data, loading, error, offline, reload } = useAsyncLoad(
     () => genzApi.getWrapped(period, value),
     [period, value],
-    { refreshOn: ["cycle"] },
+    { refreshOn: ["cycle"], cacheKey: `genz:wrapped:${period}:${value}`, staleMs: 5 * 60_000 },
   );
 
   return (

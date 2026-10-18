@@ -32,31 +32,39 @@ function CountBarList({
   trackColor,
   fonts,
   textColor,
+  mutedColor,
 }: {
   items: ReportCountItem[];
   color: string;
   trackColor: string;
   fonts: { body: string; mono: string };
   textColor: string;
+  mutedColor: string;
 }) {
   if (items.length === 0) return null;
   const max = Math.max(...items.map((item) => item.value), 1);
 
   return (
-    <View style={{ gap: 12 }}>
+    <View style={{ gap: 14 }}>
       {items.slice(0, 8).map((item, idx) => {
         const pct = Math.max((item.value / max) * 100, 6);
         return (
           <View key={`${item.label}-${idx}`}>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 5 }}>
-              <Text style={{ color: textColor, fontSize: 12.5, fontWeight: "700", fontFamily: fonts.body }}>
+            <View style={{ flexDirection: "row", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
+              <Text
+                numberOfLines={1}
+                style={{ flex: 1, color: textColor, fontSize: 14, fontWeight: "700", fontFamily: fonts.body }}
+              >
                 {item.label}
               </Text>
-              <Text style={{ color, fontSize: 12.5, fontWeight: "800", fontFamily: fonts.mono }}>
+              {/* Values wear text ink, not the bar colour, so they stay legible
+                  in both themes; the bar beside them carries the category hue. */}
+              <Text style={{ color: textColor, fontSize: 15, fontWeight: "800", fontFamily: fonts.mono }}>
                 {item.value}
+                <Text style={{ color: mutedColor, fontSize: 12, fontWeight: "600" }}>{item.value === 1 ? " day" : " days"}</Text>
               </Text>
             </View>
-            <View style={{ height: 8, borderRadius: 999, overflow: "hidden", backgroundColor: trackColor }}>
+            <View style={{ height: 10, borderRadius: 999, overflow: "hidden", backgroundColor: trackColor }}>
               <View style={{ width: `${pct}%`, height: "100%", backgroundColor: color, borderRadius: 999 }} />
             </View>
           </View>
@@ -84,19 +92,21 @@ function SectionCard({
     <View
       style={{
         backgroundColor: colors.surface,
-        borderColor: colors.border,
-        borderWidth: 1,
+        borderColor: isDark ? colors.surfaceStrong : colors.border,
+        borderWidth: 1.5,
         borderRadius: 24,
         padding: 20,
         marginBottom: 14,
         ...getShadow(colors, isDark),
+        shadowOpacity: isDark ? 0.4 : 0.1,
+        elevation: 4,
       }}
     >
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14 }}>
-        <View style={{ width: 34, height: 34, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: iconBg }}>
-          <MaterialCommunityIcons name={icon} size={17} color={iconColor} />
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 16 }}>
+        <View style={{ width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: iconBg }}>
+          <MaterialCommunityIcons name={icon} size={19} color={iconColor} />
         </View>
-        <Text style={{ color: colors.foreground, fontSize: 13.5, fontWeight: "900", fontFamily: fonts.heading }}>
+        <Text style={{ color: colors.foreground, fontSize: 16, fontWeight: "800", fontFamily: fonts.heading }}>
           {title}
         </Text>
       </View>
@@ -165,7 +175,7 @@ export default function SymptomReportScreen() {
                   }}
                 >
                   <Feather name="calendar" size={16} color={colors.primary} />
-                  <Text style={{ flex: 1, color: colors.foreground, fontSize: 12, fontWeight: "600", fontFamily: fonts.body }}>
+                  <Text style={{ flex: 1, color: colors.foreground, fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}>
                     Last {RANGE_DAYS} days · {data.daysLogged} day{data.daysLogged === 1 ? "" : "s"} logged ·{" "}
                     {data.periodDays} period day{data.periodDays === 1 ? "" : "s"}
                   </Text>
@@ -184,21 +194,23 @@ export default function SymptomReportScreen() {
                         <CountBarList
                           items={data.symptomCounts}
                           color={colors.warning}
-                          trackColor={softTints.amber}
+                          trackColor={isDark ? colors.track : softTints.amber}
                           fonts={fonts}
                           textColor={colors.foreground}
+                          mutedColor={colors.mutedText}
                         />
                       </SectionCard>
                     ) : null}
 
                     {data.moodCounts.length > 0 ? (
-                      <SectionCard title="Mood patterns" icon="emoticon-outline" iconColor={colors.accent} iconBg={softTints.mint}>
+                      <SectionCard title="Mood patterns" icon="emoticon-outline" iconColor={colors.accentText} iconBg={softTints.mint}>
                         <CountBarList
                           items={data.moodCounts}
-                          color={colors.accent}
-                          trackColor={softTints.mint}
+                          color={colors.accentText}
+                          trackColor={isDark ? colors.track : softTints.mint}
                           fonts={fonts}
                           textColor={colors.foreground}
+                          mutedColor={colors.mutedText}
                         />
                       </SectionCard>
                     ) : null}
@@ -208,26 +220,52 @@ export default function SymptomReportScreen() {
                         <CountBarList
                           items={data.flowCounts}
                           color={colors.rose}
-                          trackColor={softTints.rose}
+                          trackColor={isDark ? colors.track : softTints.rose}
                           fonts={fonts}
                           textColor={colors.foreground}
+                          mutedColor={colors.mutedText}
                         />
                       </SectionCard>
                     ) : null}
 
                     <SectionCard title="Averages" icon="chart-bar" iconColor={colors.sky} iconBg={softTints.sky}>
-                      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 14 }}>
+                      <View style={{ flexDirection: "row", gap: 10 }}>
                         {[
                           { label: "Sleep", value: data.averages.sleepHours, unit: "hrs" },
-                          { label: "Water intake", value: data.averages.waterIntake, unit: "ml" },
-                          { label: "Stress level", value: data.averages.stressLevel, unit: "/10" },
+                          { label: "Water", value: data.averages.waterIntake, unit: "ml" },
+                          { label: "Stress", value: data.averages.stressLevel, unit: "/10" },
                         ].map((stat) => (
-                          <View key={stat.label} style={{ minWidth: 96 }}>
-                            <Text style={{ color: colors.mutedText, fontSize: 12.5, fontWeight: "700", fontFamily: fonts.body }}>
+                          <View
+                            key={stat.label}
+                            style={{
+                              flex: 1,
+                              paddingVertical: 12,
+                              paddingHorizontal: 10,
+                              borderRadius: 16,
+                              backgroundColor: softTints.sky,
+                              borderWidth: 1,
+                              borderColor: `${colors.sky}33`,
+                            }}
+                          >
+                            <Text
+                              numberOfLines={1}
+                              maxFontSizeMultiplier={1.3}
+                              style={{ color: colors.mutedText, fontSize: 11.5, fontWeight: "800", letterSpacing: 0.6, fontFamily: fonts.body }}
+                            >
                               {stat.label.toUpperCase()}
                             </Text>
-                            <Text style={{ color: colors.foreground, fontSize: 17, fontWeight: "900", marginTop: 2, fontFamily: fonts.mono }}>
-                              {stat.value != null ? `${Math.round(stat.value * 10) / 10}${stat.unit}` : "—"}
+                            <Text
+                              numberOfLines={1}
+                              adjustsFontSizeToFit
+                              maxFontSizeMultiplier={1.3}
+                              style={{ color: colors.foreground, marginTop: 4, fontFamily: fonts.mono }}
+                            >
+                              <Text style={{ fontSize: 22, fontWeight: "800" }}>
+                                {stat.value != null ? `${Math.round(stat.value * 10) / 10}` : "—"}
+                              </Text>
+                              {stat.value != null ? (
+                                <Text style={{ fontSize: 12, fontWeight: "700", color: colors.mutedText }}>{` ${stat.unit}`}</Text>
+                              ) : null}
                             </Text>
                           </View>
                         ))}

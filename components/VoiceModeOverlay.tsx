@@ -21,12 +21,13 @@ interface VoiceModeOverlayProps {
   fonts: { body: string; heading: string };
   languageLabel: string;
   level: number;
-  onCancel?: () => void;
   onClose: () => void;
   onMicPress: () => void;
-  onShare?: () => void;
   status: VoiceStatus;
+  /** What the person just said (live caption). */
   transcriptPreview?: string;
+  /** What Nura is answering / just answered (live caption). */
+  replyPreview?: string;
 }
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -43,7 +44,7 @@ const STATUS_COPY: Record<VoiceStatus, string> = {
   listening: "Listening...",
   processing: "Got it, one sec...",
   thinking: "Thinking...",
-  speaking: "Speaking...",
+  speaking: "Speaking… tap to interrupt",
 };
 
 function SweepRing({ color, delay, size }: { color: string; delay: number; size: number }) {
@@ -88,12 +89,11 @@ export function VoiceModeOverlay({
   fonts,
   languageLabel,
   level,
-  onCancel,
   onClose,
   onMicPress,
-  onShare,
   status,
   transcriptPreview,
+  replyPreview,
 }: VoiceModeOverlayProps) {
   const breathe = useSharedValue(0);
 
@@ -123,14 +123,6 @@ export function VoiceModeOverlay({
                 {languageLabel}
               </Text>
             </View>
-            <TouchableOpacity
-              onPress={onClose}
-              activeOpacity={0.7}
-              className="w-9 h-9 rounded-full items-center justify-center border"
-              style={{ borderColor: "rgba(255,255,255,0.18)", backgroundColor: "rgba(255,255,255,0.06)" }}
-            >
-              <Feather name="x" size={18} color="#fff" />
-            </TouchableOpacity>
           </View>
 
           <View className="flex-1 items-center justify-center">
@@ -181,13 +173,23 @@ export function VoiceModeOverlay({
               </View>
             ) : null}
 
+            {/* Live captions: the last thing said each way. */}
             {transcriptPreview ? (
               <Text
-                numberOfLines={3}
-                className="mt-3 px-10 text-center text-[13px] font-medium leading-5"
+                numberOfLines={2}
+                className="mt-4 px-10 text-center text-[13px] font-medium leading-5"
                 style={{ color: TRANSCRIPT_TINT, fontFamily: fonts.body }}
               >
-                {transcriptPreview}
+                “{transcriptPreview}”
+              </Text>
+            ) : null}
+            {replyPreview && (status === "speaking" || status === "idle" || status === "listening") ? (
+              <Text
+                numberOfLines={4}
+                className="mt-3 px-10 text-center text-[14px] font-semibold leading-5"
+                style={{ color: "rgba(255,255,255,0.88)", fontFamily: fonts.body }}
+              >
+                {replyPreview}
               </Text>
             ) : null}
           </View>
@@ -197,36 +199,19 @@ export function VoiceModeOverlay({
               className="text-center text-xs font-semibold leading-4 mb-6"
               style={{ color: "rgba(255,255,255,0.55)", fontFamily: fonts.body }}
             >
-              Speak naturally — I&apos;ll reply out loud and pause for you when you go quiet for a moment.
+              Just talk. I reply out loud, and you can tap the orb to interrupt me.
             </Text>
 
-            <View className="flex-row items-center gap-5">
-              <TouchableOpacity
-                onPress={onCancel}
-                disabled={!onCancel}
-                activeOpacity={0.75}
-                className="w-11 h-11 rounded-full items-center justify-center"
-                style={{ backgroundColor: "rgba(255,255,255,0.1)", opacity: onCancel ? 1 : 0.4 }}
-              >
-                <Feather name="square" size={16} color="#fff" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={onClose}
-                activeOpacity={0.85}
-                className="w-14 h-14 rounded-full items-center justify-center"
-                style={{ backgroundColor: "#fff" }}
-              >
-                <Feather name="x" size={22} color="#150910" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={onShare}
-                activeOpacity={0.75}
-                className="w-11 h-11 rounded-full items-center justify-center"
-                style={{ backgroundColor: "rgba(255,255,255,0.1)" }}
-              >
-                <Feather name="share" size={16} color="#fff" />
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              onPress={onClose}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="End voice mode"
+              className="w-14 h-14 rounded-full items-center justify-center"
+              style={{ backgroundColor: "#fff" }}
+            >
+              <Feather name="x" size={22} color="#150910" />
+            </TouchableOpacity>
           </View>
         </SafeAreaView>
       </LinearGradient>

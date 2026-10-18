@@ -88,6 +88,9 @@ Production doesn't use a `.env` file: its values live in AWS Secrets Manager
   backend's `AI_ML_OVERVIEW.md`).
 - `SARVAM_CHAT_MODEL` / `SARVAM_TTS_MODEL` / `SARVAM_STT_MODEL` — model
   overrides, sensible defaults ship if unset.
+- `SARVAM_TTS_SPEAKER` — the spoken-reply voice; always a female speaker
+  (default `priya` on `bulbul:v3`). The app has no on-device TTS: all voice
+  replies come from the backend's `/api/speech/synthesize`.
 - Outbound check-in calls need a **separate** product/credentials:
   `SARVAM_OUTBOUND_API_KEY`, `SARVAM_ORG_ID`, `SARVAM_WORKSPACE_ID`,
   `SARVAM_APP_ID`, `SARVAM_APP_VERSION`, `SARVAM_CONNECTION_ID`,

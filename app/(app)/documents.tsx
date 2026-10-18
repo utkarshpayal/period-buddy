@@ -1,40 +1,38 @@
-import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import * as DocumentPicker from "expo-document-picker";
-import * as ImagePicker from "expo-image-picker";
+import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  Image,
-  Linking,
-  Modal,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  StatusBar,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
-import Markdown from "react-native-markdown-display";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { WebView } from "react-native-webview";
-import { File, Paths } from "expo-file-system";
-import * as Sharing from "expo-sharing";
-import { CalendarModal } from "../../components/CalendarModal";
-import { LoadMoreButton } from "../../components/LoadMoreButton";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Platform, RefreshControl, ScrollView, StatusBar, Text, TextInput, TouchableOpacity, View } from "react-native";
+import Animated, { FadeIn, FadeInDown, FadeOut, LinearTransition } from "react-native-reanimated";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { ActionSheet, type ActionSheetItem } from "../../components/ActionSheet";
 import { useAuth } from "../../components/auth-context";
-import { useTheme } from "../../components/theme";
-import { SkeletonList, SkeletonRow } from "../../components/Skeleton";
-import { getShadow, getSoftTints } from "../../components/ui-tokens";
-import { alert } from "../../lib/alert";
-import { showPermissionModal } from "../../lib/modal-host";
-import { requestPhotoLibraryAccess } from "../../lib/photoAccess";
-import { useSubscriptionAccess } from "../../hooks/useSubscriptionAccess";
-import { useDataRefresh } from "../../hooks/useDataRefresh";
+import { DocumentCard, DocumentListSkeleton } from "../../components/documents/DocumentCard";
+import { DocumentPreview } from "../../components/documents/DocumentPreview";
+import { ChoiceChips } from "../../components/documents/DocumentSheet";
+import {
+  DOC_TYPE_META,
+  DOC_TYPE_ORDER,
+  docTypeAccent,
+  documentsLayout,
+  formatDateLabel,
+  groupByMonth,
+  lastDaysRange,
+  shareDocumentFile,
+} from "../../components/documents/documentMeta";
+import { DoctorReportSheet, SummarizeSheet } from "../../components/documents/RangeSheets";
+import { UploadSheet, type UploadRequest } from "../../components/documents/UploadSheet";
+import { EmptyState } from "../../components/EmptyState";
+import { ColumnLabel } from "../../components/ColumnLabel";
+import { LoadMoreButton } from "../../components/LoadMoreButton";
+import { ScreenHeader } from "../../components/ScreenHeader";
+import { SkeletonList } from "../../components/Skeleton";
 import { LockedFeatureCard } from "../../components/subscription/LockedFeatureCard";
 import { PaywallModal } from "../../components/subscription/PaywallModal";
+import { useTheme } from "../../components/theme";
+import { getShadow } from "../../components/ui-tokens";
+import { useDataRefresh } from "../../hooks/useDataRefresh";
+import { useSubscriptionAccess } from "../../hooks/useSubscriptionAccess";
+import { alert } from "../../lib/alert";
 import {
   documentApi,
   hasMorePages,
@@ -44,94 +42,31 @@ import {
   type MedicalDocument,
 } from "../../lib/api";
 import { generateAndShareHealthReport } from "../../lib/healthReport";
-import { SUPPORTED_LANGUAGES as LANGUAGE_OPTIONS } from "../../lib/languages";
-import { ScreenHeader } from "../../components/ScreenHeader";
+import { useContentWidth } from "../../lib/layout";
 import { useSecureScreen } from "../../lib/screenPrivacy";
 import { cleanupTempFiles } from "../../lib/tempFiles";
 
-type PickedFile = {
-  mimeType: string;
-  name: string;
-  size?: number;
-  uri: string;
-};
-
-const DOC_TYPE_META: Record<DocType, { icon: keyof typeof Ionicons.glyphMap; label: string }> = {
-  bill: { icon: "receipt-outline", label: "Medical Bill" },
-  lab_report: { icon: "flask-outline", label: "Lab Report" },
-  other: { icon: "document-text-outline", label: "Other" },
-  prescription: { icon: "medkit-outline", label: "Prescription" },
-  scan: { icon: "body-outline", label: "Scan / Imaging" },
-};
-
-const DOC_TYPE_ORDER: DocType[] = ["prescription", "lab_report", "bill", "scan", "other"];
-
-function formatDateLabel(dateString: string) {
-  return new Date(dateString).toLocaleDateString("en-US", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-function toDateKey(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function formatFileSize(bytes?: number) {
-  if (!bytes) return "";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function dateKeyToDate(dateKey: string) {
-  return new Date(`${dateKey}T00:00:00`);
-}
-
-/**
- * Android's WebView can't show a PDF, and handing the link to an online
- * viewer would give someone else the file. Download it to the cache and let
- * the phone's own PDF app open it; the copy is removed afterwards
- * (lib/tempFiles.ts).
- */
-async function openPdfOnDevice(doc: MedicalDocument) {
-  const target = new File(Paths.cache, `document-${doc._id}.pdf`);
-  if (target.exists) target.delete();
-  const file = await File.downloadFileAsync(doc.fileUrl, target);
-  // Not deleted here: the PDF app may still be reading it. cleanupTempFiles
-  // removes it when the preview closes or the screen opens again.
-  await Sharing.shareAsync(file.uri, { mimeType: "application/pdf", UTI: "com.adobe.pdf", dialogTitle: doc.title });
-}
+type Filter = DocType | "all";
 
 export default function DocumentsScreen() {
   useSecureScreen("documents");
 
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { openReport } = useLocalSearchParams<{ openReport?: string }>();
   const { user } = useAuth();
-  const softTints = getSoftTints(colors);
-  // Per-document-type accent — every list card previously used the same pink
-  // icon badge regardless of type, so prescriptions/labs/bills/scans all
-  // blurred together. Distinct colors make type scannable at a glance and
-  // double as the small type chip on each card below.
-  const DOC_TYPE_ACCENTS: Record<DocType, { color: string; bg: string }> = {
-    prescription: { color: colors.primary, bg: colors.primaryLight },
-    lab_report: { color: colors.info, bg: colors.infoLight },
-    bill: { color: colors.warning, bg: colors.warningLight },
-    scan: { color: colors.accent, bg: colors.accentLight },
-    other: { color: colors.secondary, bg: colors.secondaryLight },
-  };
 
   const [documents, setDocuments] = useState<MedicalDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [typeFilter, setTypeFilter] = useState<DocType | null>(null);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [search, setSearch] = useState("");
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [fabCollapsed, setFabCollapsed] = useState(false);
+  const { gutter, columns, gap, cardWidth, compact } = documentsLayout(useContentWidth());
+  const wide = columns === 2;
 
   // Upload/chat gated behind 'document_chat'; "Download doctor report" gated
   // client-side only behind 'health_reports' — GET /api/reports/health-report
@@ -234,23 +169,21 @@ export default function DocumentsScreen() {
     if (docPage === 1) setHasMoreDocs(hasMorePages(result.pagination));
   });
 
+  // Search runs over the pages already loaded (the list API has no text
+  // search); "Show more" below the results pulls in older ones.
+  const query = search.trim().toLowerCase();
+  const visibleDocuments = useMemo(() => {
+    if (!query) return documents;
+    return documents.filter((doc) => {
+      const meta = DOC_TYPE_META[doc.docType] ?? DOC_TYPE_META.other;
+      return [doc.title, doc.originalFileName ?? "", meta.label, formatDateLabel(doc.documentDate)].some((field) =>
+        field.toLowerCase().includes(query),
+      );
+    });
+  }, [documents, query]);
+
   // --- Upload flow ---
   const [uploadVisible, setUploadVisible] = useState(false);
-  const [uploadStep, setUploadStep] = useState<"form" | "source">("source");
-  const [pickedFile, setPickedFile] = useState<PickedFile | null>(null);
-  const [formTitle, setFormTitle] = useState("");
-  const [formDocType, setFormDocType] = useState<DocType>("other");
-  const [formDateKey, setFormDateKey] = useState("");
-  const [formCalendarVisible, setFormCalendarVisible] = useState(false);
-  const [uploading, setUploading] = useState(false);
-
-  function resetUploadState() {
-    setUploadStep("source");
-    setPickedFile(null);
-    setFormTitle("");
-    setFormDocType("other");
-    setFormDateKey("");
-  }
 
   // Checked right at the tap that opens the upload sheet — not after the
   // user has already picked a file and filled out the form — so a locked
@@ -263,120 +196,66 @@ export default function DocumentsScreen() {
     setUploadVisible(true);
   }
 
-  function closeUploadModal() {
+  /** Two native Modals can't present at once: close the sheet, then show the paywall. */
+  function paywallFromUpload() {
     setUploadVisible(false);
-    resetUploadState();
+    setTimeout(() => setPaywallFeature("document_chat"), 350);
   }
 
-  function nameWithoutExtension(name: string) {
-    return name.replace(/\.[^./]+$/, "");
-  }
-
-  async function handlePickCamera() {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) {
-      showPermissionModal({
-        title: "Camera access needed",
-        message: "Allow camera access to photograph a document.",
-        icon: "camera-outline",
-      });
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({ quality: 0.8 });
-    if (result.canceled || !result.assets?.[0]) return;
-    const asset = result.assets[0];
-    const fileName = asset.fileName || `document-${Date.now()}.jpg`;
-    setPickedFile({ mimeType: asset.mimeType || "image/jpeg", name: fileName, size: asset.fileSize, uri: asset.uri });
-    setFormTitle((prev) => prev || nameWithoutExtension(fileName));
-    setUploadStep("form");
-  }
-
-  async function handlePickGallery() {
-    const permission = await requestPhotoLibraryAccess();
-    if (!permission.granted) {
-      showPermissionModal({
-        title: "Photo access needed",
-        message: "Allow photo library access to choose a document image.",
-        icon: "images-outline",
-      });
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8 });
-    if (result.canceled || !result.assets?.[0]) return;
-    const asset = result.assets[0];
-    const fileName = asset.fileName || `document-${Date.now()}.jpg`;
-    setPickedFile({ mimeType: asset.mimeType || "image/jpeg", name: fileName, size: asset.fileSize, uri: asset.uri });
-    setFormTitle((prev) => prev || nameWithoutExtension(fileName));
-    setUploadStep("form");
-  }
-
-  async function handlePickFile() {
-    const result = await DocumentPicker.getDocumentAsync({
-      copyToCacheDirectory: true,
-      type: ["application/pdf", "image/*"],
-    });
-    if (result.canceled || !result.assets?.[0]) return;
-    const asset = result.assets[0];
-    setPickedFile({
-      mimeType: asset.mimeType || "application/pdf",
-      name: asset.name,
-      size: asset.size ?? undefined,
-      uri: asset.uri,
-    });
-    setFormTitle((prev) => prev || nameWithoutExtension(asset.name));
-    setUploadStep("form");
-  }
-
-  async function handleUpload() {
-    if (!pickedFile || !formTitle.trim() || !formDateKey || uploading) return;
+  async function handleUpload(request: UploadRequest): Promise<boolean> {
     if (!hasAccess("document_chat")) {
-      setPaywallFeature("document_chat");
-      return;
+      paywallFromUpload();
+      return false;
     }
-
     try {
-      setUploading(true);
       await documentApi.upload({
-        docType: formDocType,
-        documentDate: formDateKey,
-        fileName: pickedFile.name,
-        localUri: pickedFile.uri,
-        mimeType: pickedFile.mimeType,
-        title: formTitle.trim(),
+        docType: request.docType,
+        documentDate: request.documentDate,
+        fileName: request.file.name,
+        localUri: request.file.uri,
+        mimeType: request.file.mimeType,
+        title: request.title,
       });
-      closeUploadModal();
-      setLoading(true);
+      // Quiet refetch: the new card animates into the list behind the sheet.
       fetchDocuments();
+      return true;
     } catch (error) {
       if (isFeatureLockedError(error)) {
-        setPaywallFeature("document_chat");
+        paywallFromUpload();
       } else {
         alert("Upload failed", error instanceof Error ? error.message : "Please try again.");
       }
-    } finally {
-      setUploading(false);
+      return false;
     }
   }
 
-  // --- Preview / delete ---
+  // --- Preview / actions ---
   const [previewDoc, setPreviewDoc] = useState<MedicalDocument | null>(null);
-  // Removes PDFs handed to the PDF app once the preview closes (and any left
-  // from an earlier visit): by then the PDF app has read its copy.
+  const [previewReady, setPreviewReady] = useState(false);
+  // Removes PDFs handed to the PDF app (and shared copies) once the preview
+  // closes, and any left from an earlier visit: by then the other app has
+  // read its copy.
   useEffect(() => {
     if (!previewDoc) cleanupTempFiles();
   }, [previewDoc]);
   // Links expire after 10 minutes, so each open asks for a fresh one; the
   // list's copy is only a fallback if that request fails.
   const openDocument = useCallback(async (doc: MedicalDocument) => {
+    setPreviewReady(false);
     setPreviewDoc(doc);
     try {
       const { document } = await documentApi.get(doc._id);
       setPreviewDoc((current) => (current?._id === doc._id ? document : current));
     } catch {
       /* keep the list's copy */
+    } finally {
+      setPreviewReady(true);
     }
   }, []);
+
+  const [actionDoc, setActionDoc] = useState<MedicalDocument | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   function handleDelete(doc: MedicalDocument) {
     alert("Delete this document?", `"${doc.title}" will be permanently removed.`, [
@@ -386,8 +265,9 @@ export default function DocumentsScreen() {
           try {
             setDeleting(true);
             await documentApi.remove(doc._id);
-            setPreviewDoc(null);
+            setPreviewDoc((current) => (current?._id === doc._id ? null : current));
             setDocuments((prev) => prev.filter((d) => d._id !== doc._id));
+            setDocTotal((total) => (total == null ? total : Math.max(0, total - 1)));
           } catch (error) {
             alert("Couldn't delete", error instanceof Error ? error.message : "Please try again.");
           } finally {
@@ -400,38 +280,72 @@ export default function DocumentsScreen() {
     ]);
   }
 
+  // Shares the file itself, fetched with a fresh signed link.
+  async function handleShare(doc: MedicalDocument) {
+    if (sharing) return;
+    setSharing(true);
+    try {
+      const fresh = await documentApi.get(doc._id).then((r) => r.document).catch(() => doc);
+      await shareDocumentFile(fresh);
+    } catch (error) {
+      alert("Couldn't share", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setSharing(false);
+    }
+  }
+
+  function askAI(doc?: MedicalDocument) {
+    const go = () => router.push(doc ? { pathname: "/document-chat", params: { docTitle: doc.title } } : "/document-chat");
+    if (previewDoc) {
+      // Let the preview sheet slide away before the chat pushes.
+      setPreviewDoc(null);
+      setTimeout(go, 350);
+    } else {
+      go();
+    }
+  }
+
+  const actionItems: ActionSheetItem[] = actionDoc
+    ? [
+        { key: "view", label: "View", icon: "eye", onPress: () => openDocument(actionDoc) },
+        { key: "ask", label: "Ask AI about it", description: "Chat about this document", icon: "message-circle", onPress: () => askAI(actionDoc) },
+        ...(Platform.OS !== "web"
+          ? [{ key: "share", label: "Share file", description: "Send it to your doctor", icon: "share" as const, onPress: () => handleShare(actionDoc) }]
+          : []),
+        { key: "delete", label: "Delete", icon: "trash-2", destructive: true, onPress: () => handleDelete(actionDoc) },
+      ]
+    : [];
+
   // --- Summarize flow ---
   const [summarizeVisible, setSummarizeVisible] = useState(false);
-  const [summaryStartKey, setSummaryStartKey] = useState("");
-  const [summaryEndKey, setSummaryEndKey] = useState("");
-  const [startCalendarVisible, setStartCalendarVisible] = useState(false);
-  const [endCalendarVisible, setEndCalendarVisible] = useState(false);
+  const [summaryRange, setSummaryRange] = useState({ start: "", end: "" });
   const [summarizing, setSummarizing] = useState(false);
   const [summaryResult, setSummaryResult] = useState<{ documentCount: number; summary: string } | null>(null);
   const [summaryLanguage, setSummaryLanguage] = useState<LanguageCode>("en-IN");
 
+  function openSummarize() {
+    setSummaryRange(lastDaysRange(90));
+    setSummaryResult(null);
+    setSummarizeVisible(true);
+  }
+
   function closeSummarizeModal() {
     setSummarizeVisible(false);
-    setSummaryStartKey("");
-    setSummaryEndKey("");
     setSummaryResult(null);
   }
 
   async function handleGenerateSummary() {
-    if (!summaryStartKey || !summaryEndKey || summarizing) return;
+    if (!summaryRange.start || !summaryRange.end || summarizing) return;
     try {
       setSummarizing(true);
       const result = await documentApi.summarize({
-        endDate: summaryEndKey,
+        endDate: summaryRange.end,
         language: summaryLanguage,
-        startDate: summaryStartKey,
+        startDate: summaryRange.start,
       });
       setSummaryResult({ documentCount: result.documentCount, summary: result.summary });
     } catch (error) {
-      alert(
-        "Couldn't generate summary",
-        error instanceof Error ? error.message : "Please try again.",
-      );
+      alert("Couldn't generate summary", error instanceof Error ? error.message : "Please try again.");
     } finally {
       setSummarizing(false);
     }
@@ -439,51 +353,46 @@ export default function DocumentsScreen() {
 
   // --- Health report flow ---
   const [reportVisible, setReportVisible] = useState(false);
-  const [reportStartKey, setReportStartKey] = useState("");
-  const [reportEndKey, setReportEndKey] = useState("");
-  const [reportStartCalendarVisible, setReportStartCalendarVisible] = useState(false);
-  const [reportEndCalendarVisible, setReportEndCalendarVisible] = useState(false);
+  const [reportRange, setReportRange] = useState({ start: "", end: "" });
   const [generatingReport, setGeneratingReport] = useState(false);
   const [reportLanguage, setReportLanguage] = useState<LanguageCode>("en-IN");
 
-  // "Download doctor report" on the Graphs & Reports screen deep-links here
-  // (?openReport=1) instead of duplicating this whole flow — open the modal
-  // pre-filled to the last 90 days so a first-time visitor isn't stuck
-  // picking dates blind.
-  useEffect(() => {
-    if (openReport !== "1") return;
-    router.setParams({ openReport: undefined });
+  function openReportSheet() {
     if (!hasAccess("health_reports")) {
       setPaywallFeature("health_reports");
       return;
     }
-    const today = new Date();
-    const start = new Date(today);
-    start.setDate(start.getDate() - 90);
-    setReportStartKey(toDateKey(start));
-    setReportEndKey(toDateKey(today));
+    // Pre-filled to the last 90 days so nobody is stuck picking dates blind.
+    setReportRange(lastDaysRange(90));
     setReportVisible(true);
+  }
+
+  // "Download doctor report" on the Graphs & Reports screen deep-links here
+  // (?openReport=1) instead of duplicating this whole flow — open the sheet
+  // pre-filled to the last 90 days.
+  useEffect(() => {
+    if (openReport !== "1") return;
+    router.setParams({ openReport: undefined });
+    openReportSheet();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openReport]);
 
   function closeReportModal() {
     if (generatingReport) return;
     setReportVisible(false);
-    setReportStartKey("");
-    setReportEndKey("");
   }
 
   async function handleGenerateReport() {
-    if (!reportStartKey || !reportEndKey || generatingReport) return;
+    if (!reportRange.start || !reportRange.end || generatingReport) return;
     try {
       setGeneratingReport(true);
       await generateAndShareHealthReport({
-        startDate: reportStartKey,
-        endDate: reportEndKey,
+        startDate: reportRange.start,
+        endDate: reportRange.end,
         language: reportLanguage,
         userName: user?.firstName,
       });
-      closeReportModal();
+      setReportVisible(false);
     } catch (error) {
       alert("Couldn't create report", error instanceof Error ? error.message : "Please try again.");
     } finally {
@@ -491,47 +400,15 @@ export default function DocumentsScreen() {
     }
   }
 
-  const chipRow = (
-    active: string | null,
-    items: { label: string; value: string | null }[],
-    onSelect: (value: string | null) => void,
-  ) => (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 8 }}>
-      {items.map((item) => {
-        const isActive = active === item.value;
-        return (
-          <TouchableOpacity
-            key={item.label}
-            activeOpacity={0.8}
-            onPress={() => onSelect(item.value)}
-            className="rounded-full border px-4 py-2"
-            style={{
-              backgroundColor: isActive ? colors.primary : colors.surface,
-              borderColor: isActive ? colors.primary : colors.border,
-            }}
-          >
-            <Text
-              className="text-xs font-bold"
-              style={{ color: isActive ? colors.buttonText : colors.foreground, fontFamily: fonts.body }}
-            >
-              {item.label}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
-    </ScrollView>
-  );
-
-  const documentsHeader = (
-    <ScreenHeader title="Documents" subtitle="Reports, prescriptions and bills" />
-  );
+  const statusBar = <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />;
+  const header = <ScreenHeader title="Documents" subtitle="Reports, prescriptions and bills" />;
 
   if (subscriptionLoading) {
     return (
       <>
-        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
-        <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
-          {documentsHeader}
+        {statusBar}
+        <SafeAreaView edges={["top"]} className="flex-1" style={{ backgroundColor: colors.background }}>
+          {header}
           <SkeletonList count={5} style={{ paddingTop: 16 }} />
         </SafeAreaView>
       </>
@@ -541,9 +418,9 @@ export default function DocumentsScreen() {
   if (locked) {
     return (
       <>
-        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
-        <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
-          {documentsHeader}
+        {statusBar}
+        <SafeAreaView edges={["top"]} className="flex-1" style={{ backgroundColor: colors.background }}>
+          {header}
           <View className="flex-1 items-center justify-center px-6">
             <LockedFeatureCard
               title="Documents & Health Reports"
@@ -562,739 +439,390 @@ export default function DocumentsScreen() {
     );
   }
 
+  const searching = query.length > 0;
+  const showTools = !searching && typeFilter === null;
+  const filterLabel = typeFilter ? DOC_TYPE_META[typeFilter].label : null;
+  const count = searching ? visibleDocuments.length : docTotal ?? documents.length;
+  const listTitle = searching
+    ? "Results"
+    : typeFilter
+      ? DOC_TYPE_META[typeFilter].plural.charAt(0).toUpperCase() + DOC_TYPE_META[typeFilter].plural.slice(1)
+      : "Your files";
+  const groups = groupByMonth(visibleDocuments);
+
+  const filterOptions: { value: Filter; label: string; icon?: keyof typeof Ionicons.glyphMap; color?: string; bg?: string }[] = [
+    { value: "all", label: "All" },
+    ...DOC_TYPE_ORDER.map((type) => {
+      const accent = docTypeAccent(colors, type);
+      return { value: type as Filter, label: DOC_TYPE_META[type].label, icon: DOC_TYPE_META[type].icon, color: accent.color, bg: accent.bg };
+    }),
+  ];
+
+  const tools: { key: string; label: string; hint: string; icon: keyof typeof Ionicons.glyphMap; color: string; bg: string; locked?: boolean; onPress: () => void }[] = [
+    {
+      key: "report",
+      label: "Doctor report",
+      hint: "PDF of your logs",
+      icon: "document-attach-outline",
+      color: colors.secondary,
+      bg: colors.secondaryLight,
+      locked: !hasAccess("health_reports"),
+      onPress: openReportSheet,
+    },
+    { key: "summary", label: "Summarize", hint: "Plain-language recap", icon: "sparkles-outline", color: colors.accentText, bg: colors.accentLight, onPress: openSummarize },
+    { key: "ask", label: "Ask AI", hint: "Chat about results", icon: "chatbubbles-outline", color: colors.primary, bg: colors.primaryLight, onPress: () => askAI() },
+  ];
+
   return (
     <>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
-      <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
-        {documentsHeader}
+      {statusBar}
+      <SafeAreaView edges={["top"]} className="flex-1" style={{ backgroundColor: colors.background }}>
+        {header}
 
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 40 }}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          stickyHeaderIndices={[0]}
+          onScroll={(e) => setFabCollapsed(e.nativeEvent.contentOffset.y > 140)}
+          scrollEventThrottle={64}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 110 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
         >
-          {/* Quick actions — icon-on-top, label-below tiles instead of a
-              cramped inline icon+label row, so each label gets the tile's
-              full width and always renders on one line instead of squeezing
-              next to the icon. */}
-          <View className="flex-row gap-3 px-6 pt-5">
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => setSummarizeVisible(true)}
-              className="flex-1 items-center rounded-2xl border py-4"
-              style={{ backgroundColor: colors.surface, borderColor: colors.border, ...getShadow(colors, isDark) }}
-            >
+          {/* Search + category filter, pinned while the list scrolls */}
+          <View style={{ backgroundColor: colors.background, paddingTop: 8, paddingBottom: 10 }}>
+            <View style={{ paddingHorizontal: gutter }}>
               <View
-                className="w-9 h-9 rounded-full items-center justify-center mb-2"
-                style={{ backgroundColor: softTints.purple }}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 10,
+                  height: 48,
+                  paddingLeft: 16,
+                  paddingRight: 6,
+                  borderRadius: 16,
+                  backgroundColor: colors.surface,
+                  borderWidth: 1,
+                  borderColor: searchFocused ? colors.primary : colors.border,
+                }}
               >
-                <MaterialCommunityIcons name="text-box-search-outline" size={17} color={colors.accent} />
+                <Ionicons name="search" size={18} color={searchFocused ? colors.primary : colors.mutedText} />
+                <TextInput
+                  value={search}
+                  onChangeText={setSearch}
+                  onFocus={() => setSearchFocused(true)}
+                  onBlur={() => setSearchFocused(false)}
+                  placeholder="Search by name, category or date"
+                  placeholderTextColor={colors.mutedText}
+                  returnKeyType="search"
+                  autoCorrect={false}
+                  maxFontSizeMultiplier={1.3}
+                  accessibilityLabel="Search documents"
+                  className="outline-none"
+                  style={{ flex: 1, fontSize: 15, color: colors.foreground, fontFamily: fonts.body, paddingVertical: 0 }}
+                />
+                {search ? (
+                  <TouchableOpacity
+                    onPress={() => setSearch("")}
+                    accessibilityRole="button"
+                    accessibilityLabel="Clear search"
+                    hitSlop={6}
+                    style={{ width: 36, height: 36, alignItems: "center", justifyContent: "center" }}
+                  >
+                    <Ionicons name="close-circle" size={18} color={colors.mutedText} />
+                  </TouchableOpacity>
+                ) : null}
               </View>
-              <Text
-                className="text-xs font-bold"
-                style={{ color: colors.foreground, fontFamily: fonts.body }}
-                numberOfLines={1}
-              >
-                Summarize
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => router.push("/document-chat")}
-              className="flex-1 items-center rounded-2xl border py-4"
-              style={{ backgroundColor: colors.surface, borderColor: colors.border, ...getShadow(colors, isDark) }}
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={{ marginTop: 10 }}
+              contentContainerStyle={{ paddingHorizontal: gutter }}
             >
-              <View
-                className="w-9 h-9 rounded-full items-center justify-center mb-2"
-                style={{ backgroundColor: softTints.pink }}
-              >
-                <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.primary} />
-              </View>
-              <Text
-                className="text-xs font-bold"
-                style={{ color: colors.foreground, fontFamily: fonts.body }}
-                numberOfLines={1}
-              >
-                Ask AI
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={() => {
-                if (!hasAccess("health_reports")) {
-                  setPaywallFeature("health_reports");
-                  return;
-                }
-                setReportVisible(true);
-              }}
-              className="flex-1 items-center rounded-2xl border py-4"
-              style={{ backgroundColor: colors.surface, borderColor: colors.border, ...getShadow(colors, isDark) }}
-            >
-              <View
-                className="w-9 h-9 rounded-full items-center justify-center mb-2"
-                style={{ backgroundColor: softTints.mint }}
-              >
-                <Feather name="download" size={16} color={colors.secondary} />
-              </View>
-              <Text
-                className="text-xs font-bold"
-                style={{ color: colors.foreground, fontFamily: fonts.body }}
-                numberOfLines={1}
-              >
-                PDF Report
-              </Text>
-            </TouchableOpacity>
+              <ChoiceChips<Filter> value={typeFilter ?? "all"} onChange={(v) => setTypeFilter(v === "all" ? null : v)} options={filterOptions} />
+            </ScrollView>
           </View>
 
-          {/* Filters */}
-          <View className="mt-5 px-6">
-            {chipRow(
-              typeFilter,
-              [
-                { label: "All", value: null },
-                ...DOC_TYPE_ORDER.map((type) => ({ label: DOC_TYPE_META[type].label, value: type })),
-              ],
-              (value) => setTypeFilter(value as DocType | null),
-            )}
-          </View>
+          {/* Tools: doctor report, summary, chat — one row of equal tiles */}
+          {showTools ? (
+            <Animated.View entering={FadeIn.duration(220)} exiting={FadeOut.duration(150)} style={{ paddingHorizontal: gutter, paddingTop: 8 }}>
+              <View style={{ flexDirection: "row", gap: compact ? 8 : 10 }}>
+                {tools.map((tool) => (
+                  <TouchableOpacity
+                    key={tool.key}
+                    activeOpacity={0.8}
+                    onPress={tool.onPress}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${tool.label}. ${tool.hint}${tool.locked ? ". Locked" : ""}`}
+                    style={{
+                      flex: 1,
+                      alignItems: wide ? "flex-start" : "center",
+                      paddingVertical: compact ? 12 : 14,
+                      paddingHorizontal: compact ? 6 : 12,
+                      borderRadius: 20,
+                      backgroundColor: colors.surface,
+                      borderWidth: 1,
+                      borderColor: isDark ? colors.border : "transparent",
+                      ...getShadow(colors, isDark),
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: compact ? 40 : 44,
+                        height: compact ? 40 : 44,
+                        borderRadius: 14,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        backgroundColor: tool.bg,
+                      }}
+                    >
+                      <Ionicons name={tool.icon} size={compact ? 19 : 21} color={tool.color} />
+                      {tool.locked ? (
+                        <View
+                          style={{
+                            position: "absolute",
+                            right: -4,
+                            top: -4,
+                            width: 18,
+                            height: 18,
+                            borderRadius: 9,
+                            alignItems: "center",
+                            justifyContent: "center",
+                            backgroundColor: colors.surface,
+                          }}
+                        >
+                          <Ionicons name="lock-closed" size={10} color={colors.mutedText} />
+                        </View>
+                      ) : null}
+                    </View>
+                    {wide ? (
+                      <>
+                        <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={{ marginTop: 10, fontSize: 15, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>
+                          {tool.label}
+                        </Text>
+                        <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={{ marginTop: 1, fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}>
+                          {tool.hint}
+                        </Text>
+                      </>
+                    ) : (
+                      <ColumnLabel style={{ marginTop: 8, fontSize: 13, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>
+                        {tool.label}
+                      </ColumnLabel>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </Animated.View>
+          ) : null}
 
-          {/* Count + sort toggle */}
-          <View className="mt-4 px-6 flex-row items-center justify-between">
-            <Text className="text-xs font-semibold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-              <Text style={{ color: colors.foreground, fontFamily: fonts.heading, fontWeight: "800" }}>
-                {docTotal ?? documents.length}
+          {/* List heading */}
+          <Animated.View
+            layout={LinearTransition.duration(220)}
+            style={{ paddingHorizontal: gutter, paddingTop: 22, paddingBottom: 4, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
+          >
+            <View className="flex-row items-baseline" style={{ gap: 8, flexShrink: 1 }}>
+              <Text accessibilityRole="header" numberOfLines={1} maxFontSizeMultiplier={1.4} style={{ flexShrink: 1, fontSize: 17, fontWeight: "700", color: colors.foreground, fontFamily: fonts.heading }}>
+                {listTitle}
               </Text>
-              {" "}document{(docTotal ?? documents.length) === 1 ? "" : "s"}
-            </Text>
+              {!loading ? (
+                <Text style={{ fontSize: 13, fontWeight: "600", color: colors.mutedText, fontFamily: fonts.body }}>{count}</Text>
+              ) : null}
+            </View>
             <TouchableOpacity
               activeOpacity={0.7}
               onPress={() => setSortOrder((prev) => (prev === "desc" ? "asc" : "desc"))}
-              className="flex-row items-center gap-1.5"
+              accessibilityRole="button"
+              accessibilityLabel={sortOrder === "desc" ? "Sorted newest first. Tap for oldest first." : "Sorted oldest first. Tap for newest first."}
+              hitSlop={8}
+              className="flex-row items-center"
+              style={{ gap: 4, paddingHorizontal: 10, height: 32, borderRadius: 16, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}
             >
-              <Feather name={sortOrder === "desc" ? "arrow-down" : "arrow-up"} size={12} color={colors.primary} />
-              <Text className="text-xs font-bold" style={{ color: colors.primary, fontFamily: fonts.body }}>
-                {sortOrder === "desc" ? "Newest first" : "Oldest first"}
+              <Ionicons name="swap-vertical" size={14} color={colors.primaryDark} />
+              <Text maxFontSizeMultiplier={1.3} style={{ fontSize: 13, fontWeight: "700", color: colors.primaryDark, fontFamily: fonts.body }}>
+                {sortOrder === "desc" ? "Newest" : "Oldest"}
               </Text>
             </TouchableOpacity>
-          </View>
+          </Animated.View>
 
-          {/* List */}
-          <View className="mt-4 px-6 gap-3">
+          {/* List, grouped by month */}
+          <View style={{ paddingHorizontal: gutter }}>
             {loading ? (
-              <View className="gap-3">
-                <SkeletonRow />
-                <SkeletonRow />
-                <SkeletonRow />
-                <SkeletonRow />
-                <SkeletonRow />
+              <View style={{ paddingTop: 10 }}>
+                <DocumentListSkeleton count={columns === 2 ? 6 : 5} width={columns === 2 ? cardWidth : undefined} />
               </View>
-            ) : documents.length === 0 ? (
-              <View
-                className="items-center rounded-2xl border p-8 mt-4"
-                style={{ backgroundColor: colors.surface, borderColor: colors.border, ...getShadow(colors, isDark) }}
+            ) : visibleDocuments.length === 0 ? (
+              <Animated.View
+                entering={FadeInDown.duration(240)}
+                style={{ marginTop: 10, borderRadius: 22, backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
               >
-                <View
-                  className="w-16 h-16 rounded-full items-center justify-center mb-4"
-                  style={{ backgroundColor: softTints.pink }}
-                >
-                  <Ionicons name="folder-open-outline" size={28} color={colors.primary} />
-                </View>
-                <Text className="text-sm font-black" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-                  No documents yet
-                </Text>
-                <Text
-                  className="text-xs text-center mt-1.5 leading-4"
-                  style={{ color: colors.mutedText, fontFamily: fonts.body, maxWidth: 240 }}
-                >
-                  Upload prescriptions, lab reports, and bills to keep them all in one place.
-                </Text>
-                <TouchableOpacity
-                  activeOpacity={0.85}
-                  onPress={openUpload}
-                  className="mt-5 flex-row items-center gap-2 rounded-full px-5 py-3"
-                  style={{ backgroundColor: colors.primary }}
-                >
-                  <Feather name="plus" size={14} color={colors.buttonText} />
-                  <Text className="text-xs font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-                    Upload a document
-                  </Text>
-                </TouchableOpacity>
-              </View>
+                {searching ? (
+                  <EmptyState
+                    compact
+                    icon="file-search-outline"
+                    title="No matches"
+                    message={hasMoreDocs ? `Nothing loaded matches "${search.trim()}". Show more to search older files.` : `Nothing matches "${search.trim()}".`}
+                    actionLabel="Clear search"
+                    onAction={() => setSearch("")}
+                  />
+                ) : filterLabel ? (
+                  <EmptyState
+                    compact
+                    icon="folder-outline"
+                    title={`No ${DOC_TYPE_META[typeFilter!].plural} yet`}
+                    message="Add one and it will show up here."
+                    actionLabel="Upload a document"
+                    onAction={openUpload}
+                  />
+                ) : (
+                  <EmptyState
+                    compact
+                    icon="folder-open-outline"
+                    title="Keep your health papers in one place"
+                    message="Upload prescriptions, lab reports and bills. Only you can see them."
+                    actionLabel="Upload your first document"
+                    onAction={openUpload}
+                  />
+                )}
+              </Animated.View>
             ) : (
-              documents.map((doc) => {
-                const meta = DOC_TYPE_META[doc.docType];
-                const accent = DOC_TYPE_ACCENTS[doc.docType];
-                const isPdf = doc.mimeType === "application/pdf";
-                const hasIssue = doc.extractionStatus === "limited" || doc.extractionStatus === "failed" || doc.extractionStatus === "skipped";
-                return (
-                  <TouchableOpacity
-                    key={doc._id}
-                    activeOpacity={0.8}
-                    onPress={() => openDocument(doc)}
-                    className="flex-row items-center rounded-2xl border p-4"
-                    style={{ backgroundColor: colors.surface, borderColor: colors.border, ...getShadow(colors, isDark) }}
+              groups.map((group, groupIndex) => (
+                <Animated.View key={group.label} layout={LinearTransition.duration(220)}>
+                  <Text
+                    accessibilityRole="header"
+                    maxFontSizeMultiplier={1.3}
+                    style={{
+                      marginTop: groupIndex === 0 ? 10 : 20,
+                      marginBottom: 10,
+                      fontSize: 12,
+                      fontWeight: "800",
+                      letterSpacing: 0.6,
+                      textTransform: "uppercase",
+                      color: colors.mutedText,
+                      fontFamily: fonts.body,
+                    }}
                   >
-                    <View className="p-3 rounded-xl mr-3.5" style={{ backgroundColor: accent.bg }}>
-                      <Ionicons name={meta.icon} size={18} color={accent.color} />
-                    </View>
-                    <View className="flex-1" style={{ minWidth: 0 }}>
-                      <Text numberOfLines={1} className="text-sm font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
-                        {doc.title}
-                      </Text>
-                      <View className="flex-row items-center flex-wrap mt-1.5" style={{ gap: 6 }}>
-                        <View className="px-2 py-0.5 rounded-full" style={{ backgroundColor: accent.bg }}>
-                          <Text className="text-xs font-bold" style={{ color: accent.color, fontFamily: fonts.body }}>
-                            {meta.label}
-                          </Text>
-                        </View>
-                        <Text className="text-xs font-semibold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                          {formatDateLabel(doc.documentDate)} · {isPdf ? "PDF" : "Image"}
-                        </Text>
-                      </View>
-                      {hasIssue ? (
-                        <Text className="text-xs font-bold mt-1.5" style={{ color: colors.warning, fontFamily: fonts.body }}>
-                          {doc.extractionStatus === "failed"
-                            ? "Couldn't read this file"
-                            : doc.extractionStatus === "skipped"
-                              ? "Not read: AI features are off"
-                              : "Limited text found in this file"}
-                        </Text>
-                      ) : null}
-                    </View>
-                    <Feather name="chevron-right" size={16} color={colors.mutedText} />
-                  </TouchableOpacity>
-                );
-              })
+                    {group.label}
+                  </Text>
+                  <View style={{ flexDirection: columns === 2 ? "row" : "column", flexWrap: "wrap", gap }}>
+                    {group.docs.map((doc) => (
+                      <DocumentCard
+                        key={doc._id}
+                        doc={doc}
+                        index={visibleDocuments.indexOf(doc)}
+                        onOpen={openDocument}
+                        onMore={setActionDoc}
+                        width={columns === 2 ? cardWidth : undefined}
+                      />
+                    ))}
+                  </View>
+                </Animated.View>
+              ))
             )}
-            {documents.length > 0 ? (
-              <LoadMoreButton hasMore={hasMoreDocs} loading={loadingMoreDocs} onPress={loadMoreDocuments} />
+            {!loading && documents.length > 0 ? (
+              <View style={{ paddingTop: 12 }}>
+                <LoadMoreButton hasMore={hasMoreDocs} loading={loadingMoreDocs} onPress={loadMoreDocuments} />
+              </View>
+            ) : null}
+            {!loading && documents.length > 0 && !hasMoreDocs ? (
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingTop: 20 }}>
+                <Ionicons name="lock-closed-outline" size={13} color={colors.mutedText} />
+                <Text maxFontSizeMultiplier={1.3} style={{ fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}>
+                  Private to you · opened with expiring links
+                </Text>
+              </View>
             ) : null}
           </View>
         </ScrollView>
 
-        {/* Floating add button */}
-        <TouchableOpacity
-          onPress={openUpload}
-          activeOpacity={0.85}
-          className="absolute right-6 bottom-8 w-14 h-14 rounded-full items-center justify-center"
-          style={{ backgroundColor: colors.primary, ...getShadow(colors, isDark) }}
+        {/* Upload button: extended at the top, shrinks to an icon while scrolling down */}
+        <Animated.View
+          layout={LinearTransition.duration(200)}
+          style={{
+            position: "absolute",
+            right: gutter,
+            bottom: insets.bottom + 20,
+            borderRadius: 27,
+            ...getShadow(colors, isDark),
+            shadowOpacity: isDark ? 0.4 : 0.18,
+          }}
         >
-          <Feather name="plus" size={22} color={colors.buttonText} />
-        </TouchableOpacity>
+          <TouchableOpacity
+            onPress={openUpload}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Upload a document"
+            style={{
+              height: 56,
+              minWidth: 56,
+              paddingHorizontal: fabCollapsed ? 0 : 20,
+              borderRadius: 28,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              backgroundColor: colors.primary,
+            }}
+          >
+            <Ionicons name={fabCollapsed ? "add" : "cloud-upload-outline"} size={fabCollapsed ? 26 : 20} color={colors.buttonText} />
+            {!fabCollapsed ? (
+              <Animated.Text
+                entering={FadeIn.duration(160)}
+                exiting={FadeOut.duration(100)}
+                maxFontSizeMultiplier={1.3}
+                style={{ fontSize: 15, fontWeight: "800", color: colors.buttonText, fontFamily: fonts.body }}
+              >
+                Upload
+              </Animated.Text>
+            ) : null}
+          </TouchableOpacity>
+        </Animated.View>
       </SafeAreaView>
 
-      {/* Upload modal */}
-      <Modal visible={uploadVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeUploadModal}>
-        <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
-          <View className="flex-row items-center justify-between px-6 pt-6 pb-4">
-            <Text className="text-xl font-black" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-              {uploadStep === "source" ? "Add a Document" : "Document Details"}
-            </Text>
-            <TouchableOpacity onPress={closeUploadModal} className="p-1 rounded-full" style={{ backgroundColor: colors.border }}>
-              <Feather name="x" size={18} color={colors.foreground} />
-            </TouchableOpacity>
-          </View>
+      <UploadSheet visible={uploadVisible} onClose={() => setUploadVisible(false)} onUpload={handleUpload} />
 
-          <ScrollView
-            className="flex-1 px-6"
-            showsVerticalScrollIndicator={false}
-            automaticallyAdjustKeyboardInsets
-            keyboardShouldPersistTaps="handled"
-          >
-            {uploadStep === "source" ? (
-              <View className="gap-3 mt-2">
-                {[
-                  { action: handlePickCamera, icon: "camera-outline" as const, label: "Take a Photo" },
-                  { action: handlePickGallery, icon: "images-outline" as const, label: "Choose from Gallery" },
-                  { action: handlePickFile, icon: "document-attach-outline" as const, label: "Choose PDF or File" },
-                ].map((option) => (
-                  <TouchableOpacity
-                    key={option.label}
-                    activeOpacity={0.8}
-                    onPress={option.action}
-                    className="flex-row items-center rounded-2xl border p-4"
-                    style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-                  >
-                    <View className="p-2.5 rounded-xl mr-4" style={{ backgroundColor: softTints.pink }}>
-                      <Ionicons name={option.icon} size={18} color={colors.primary} />
-                    </View>
-                    <Text className="flex-1 text-sm font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
-                      {option.label}
-                    </Text>
-                    <Feather name="chevron-right" size={16} color={colors.mutedText} />
-                  </TouchableOpacity>
-                ))}
-              </View>
-            ) : (
-              <View className="gap-5 mt-2 pb-10">
-                {pickedFile ? (
-                  <View className="rounded-2xl border overflow-hidden" style={{ borderColor: colors.border }}>
-                    {pickedFile.mimeType.startsWith("image/") ? (
-                      <Image source={{ uri: pickedFile.uri }} style={{ height: 160, width: "100%" }} resizeMode="cover" />
-                    ) : (
-                      <View className="h-24 items-center justify-center" style={{ backgroundColor: softTints.pink }}>
-                        <Ionicons name="document-text-outline" size={28} color={colors.primary} />
-                        <Text className="text-xs font-bold mt-1" style={{ color: colors.primary, fontFamily: fonts.body }}>
-                          {pickedFile.name}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                ) : null}
+      <DocumentPreview
+        doc={previewDoc}
+        ready={previewReady}
+        onClose={() => setPreviewDoc(null)}
+        onAskAI={askAI}
+        onShare={handleShare}
+        onDelete={handleDelete}
+        sharing={sharing}
+        deleting={deleting}
+      />
 
-                <View>
-                  <Text className="text-xs font-bold mb-2" style={{ color: colors.foreground, fontFamily: fonts.body }}>
-                    Title
-                  </Text>
-                  <TextInput
-                    value={formTitle}
-                    onChangeText={setFormTitle}
-                    placeholder="e.g. Blood Test — Jan 2026"
-                    placeholderTextColor={colors.mutedText}
-                    maxLength={150}
-                    className="px-4 py-3 rounded-xl text-sm"
-                    style={{ backgroundColor: colors.input, color: colors.foreground, fontFamily: fonts.body }}
-                  />
-                </View>
+      <ActionSheet
+        visible={actionDoc !== null}
+        title={actionDoc?.title}
+        subtitle={actionDoc ? `${DOC_TYPE_META[actionDoc.docType]?.label ?? "Document"} · ${formatDateLabel(actionDoc.documentDate)}` : undefined}
+        items={actionItems}
+        onClose={() => setActionDoc(null)}
+      />
 
-                <View>
-                  <Text className="text-xs font-bold mb-2" style={{ color: colors.foreground, fontFamily: fonts.body }}>
-                    Document Type
-                  </Text>
-                  {chipRow(
-                    formDocType,
-                    DOC_TYPE_ORDER.map((type) => ({ label: DOC_TYPE_META[type].label, value: type })),
-                    (value) => setFormDocType(value as DocType),
-                  )}
-                </View>
+      <SummarizeSheet
+        visible={summarizeVisible}
+        onClose={closeSummarizeModal}
+        range={summaryRange}
+        setRange={setSummaryRange}
+        language={summaryLanguage}
+        setLanguage={setSummaryLanguage}
+        summarizing={summarizing}
+        result={summaryResult}
+        onGenerate={handleGenerateSummary}
+        onReset={() => setSummaryResult(null)}
+      />
 
-                <View>
-                  <Text className="text-xs font-bold mb-2" style={{ color: colors.foreground, fontFamily: fonts.body }}>
-                    Document Date
-                  </Text>
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    onPress={() => setFormCalendarVisible(true)}
-                    className="flex-row items-center justify-between px-4 py-3 rounded-xl"
-                    style={{ backgroundColor: colors.input }}
-                  >
-                    <Text
-                      className="text-sm font-semibold"
-                      style={{ color: formDateKey ? colors.foreground : colors.mutedText, fontFamily: fonts.body }}
-                    >
-                      {formDateKey ? formatDateLabel(formDateKey) : "Select the date on this document"}
-                    </Text>
-                    <Feather name="calendar" size={16} color={colors.mutedText} />
-                  </TouchableOpacity>
-                </View>
-
-                <TouchableOpacity
-                  disabled={!pickedFile || !formTitle.trim() || !formDateKey || uploading}
-                  onPress={handleUpload}
-                  activeOpacity={0.85}
-                  className="rounded-2xl py-4 items-center justify-center flex-row gap-2"
-                  style={{
-                    backgroundColor:
-                      !pickedFile || !formTitle.trim() || !formDateKey || uploading ? colors.border : colors.primary,
-                  }}
-                >
-                  {uploading ? (
-                    <ActivityIndicator color={colors.buttonText} />
-                  ) : (
-                    <Text className="text-sm font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-                      Upload Document
-                    </Text>
-                  )}
-                </TouchableOpacity>
-
-                <TouchableOpacity onPress={() => setUploadStep("source")} activeOpacity={0.7} className="items-center py-1">
-                  <Text className="text-xs font-bold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                    Choose a different file
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </ScrollView>
-        </SafeAreaView>
-
-        <CalendarModal
-          initialDateKey={formDateKey || undefined}
-          maximumDate={new Date()}
-          onClose={() => setFormCalendarVisible(false)}
-          onSelect={(dateKey) => {
-            setFormDateKey(dateKey);
-            setFormCalendarVisible(false);
-          }}
-          visible={formCalendarVisible}
-        />
-      </Modal>
-
-      {/* Preview modal */}
-      <Modal
-        visible={!!previewDoc}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setPreviewDoc(null)}
-      >
-        {previewDoc ? (
-          <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
-            <View className="flex-row items-center justify-between px-6 pt-6 pb-4">
-              <Text numberOfLines={1} className="flex-1 text-lg font-black mr-3" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-                {previewDoc.title}
-              </Text>
-              <TouchableOpacity
-                onPress={() => handleDelete(previewDoc)}
-                disabled={deleting}
-                accessibilityRole="button"
-                accessibilityLabel="Delete document"
-                className="p-2 rounded-full mr-2"
-                style={{ backgroundColor: colors.dangerLight }}
-              >
-                {deleting ? <ActivityIndicator size="small" color={colors.danger} /> : <Feather name="trash-2" size={16} color={colors.danger} />}
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => setPreviewDoc(null)}
-                accessibilityRole="button"
-                accessibilityLabel="Close preview"
-                className="p-1 rounded-full"
-                style={{ backgroundColor: colors.border }}
-              >
-                <Feather name="x" size={18} color={colors.foreground} />
-              </TouchableOpacity>
-            </View>
-
-            <Text className="px-6 pb-3 text-xs font-semibold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-              {formatDateLabel(previewDoc.documentDate)} · {DOC_TYPE_META[previewDoc.docType].label}
-              {previewDoc.fileSize ? ` · ${formatFileSize(previewDoc.fileSize)}` : ""}
-            </Text>
-
-            <View className="flex-1 mx-6 mb-6 rounded-2xl overflow-hidden border" style={{ borderColor: colors.border }}>
-              {previewDoc.mimeType.startsWith("image/") ? (
-                <Image source={{ uri: previewDoc.fileUrl }} style={{ flex: 1 }} resizeMode="contain" />
-              ) : Platform.OS === "web" ? (
-                <View
-                  className="flex-1 items-center justify-center gap-4 px-8"
-                  style={{ backgroundColor: colors.surfaceSoft }}
-                >
-                  <Feather name="external-link" size={28} color={colors.mutedText} />
-                  <Text
-                    className="text-center text-xs font-semibold"
-                    style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                  >
-                    In-page preview isn&apos;t supported in the browser yet — open the document in a new tab instead.
-                  </Text>
-                  <TouchableOpacity
-                    onPress={() => Linking.openURL(previewDoc.fileUrl)}
-                    activeOpacity={0.85}
-                    accessibilityRole="button"
-                    accessibilityLabel="View document in browser"
-                    className="rounded-full px-5 py-3"
-                    style={{ backgroundColor: colors.primary }}
-                  >
-                    <Text className="text-xs font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-                      View in Browser
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              ) : Platform.OS === "ios" ? (
-                // iOS shows PDFs itself: the file goes nowhere else.
-                <WebView source={{ uri: previewDoc.fileUrl }} style={{ flex: 1 }} />
-              ) : (
-                <View className="flex-1 items-center justify-center gap-4 px-8" style={{ backgroundColor: colors.surfaceSoft }}>
-                  <Feather name="file-text" size={28} color={colors.mutedText} />
-                  <Text className="text-center text-xs font-semibold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                    Opens in your phone&apos;s PDF app. The file stays on your phone.
-                  </Text>
-                  <TouchableOpacity
-                    onPress={() =>
-                      openPdfOnDevice(previewDoc).catch(() => alert("Couldn't open the PDF", "Please try again."))
-                    }
-                    activeOpacity={0.85}
-                    accessibilityRole="button"
-                    accessibilityLabel="Open PDF"
-                    className="rounded-full px-5 py-3"
-                    style={{ backgroundColor: colors.primary }}
-                  >
-                    <Text className="text-xs font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-                      Open PDF
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-          </SafeAreaView>
-        ) : null}
-      </Modal>
-
-      {/* Summarize modal */}
-      <Modal visible={summarizeVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeSummarizeModal}>
-        <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
-          <View className="flex-row items-center justify-between px-6 pt-6 pb-4">
-            <Text className="text-xl font-black" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-              Summarize Reports
-            </Text>
-            <TouchableOpacity onPress={closeSummarizeModal} className="p-1 rounded-full" style={{ backgroundColor: colors.border }}>
-              <Feather name="x" size={18} color={colors.foreground} />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView className="flex-1 px-6" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
-            {!summaryResult ? (
-              <View className="gap-5 mt-2">
-                <Text className="text-xs leading-5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                  Pick a date range to get a summary of those reports.
-                </Text>
-
-                <View>
-                  <Text className="text-xs font-bold mb-2" style={{ color: colors.foreground, fontFamily: fonts.body }}>
-                    Start Date
-                  </Text>
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    onPress={() => setStartCalendarVisible(true)}
-                    className="flex-row items-center justify-between px-4 py-3 rounded-xl"
-                    style={{ backgroundColor: colors.input }}
-                  >
-                    <Text
-                      className="text-sm font-semibold"
-                      style={{ color: summaryStartKey ? colors.foreground : colors.mutedText, fontFamily: fonts.body }}
-                    >
-                      {summaryStartKey ? formatDateLabel(summaryStartKey) : "Select start date"}
-                    </Text>
-                    <Feather name="calendar" size={16} color={colors.mutedText} />
-                  </TouchableOpacity>
-                </View>
-
-                <View>
-                  <Text className="text-xs font-bold mb-2" style={{ color: colors.foreground, fontFamily: fonts.body }}>
-                    End Date
-                  </Text>
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    onPress={() => setEndCalendarVisible(true)}
-                    className="flex-row items-center justify-between px-4 py-3 rounded-xl"
-                    style={{ backgroundColor: colors.input }}
-                  >
-                    <Text
-                      className="text-sm font-semibold"
-                      style={{ color: summaryEndKey ? colors.foreground : colors.mutedText, fontFamily: fonts.body }}
-                    >
-                      {summaryEndKey ? formatDateLabel(summaryEndKey) : "Select end date"}
-                    </Text>
-                    <Feather name="calendar" size={16} color={colors.mutedText} />
-                  </TouchableOpacity>
-                </View>
-
-                <View>
-                  <Text className="text-xs font-bold mb-2" style={{ color: colors.foreground, fontFamily: fonts.body }}>
-                    Summary Language
-                  </Text>
-                  {chipRow(
-                    summaryLanguage,
-                    LANGUAGE_OPTIONS.map((l) => ({ label: l.label, value: l.code })),
-                    (value) => setSummaryLanguage((value as LanguageCode) || "en-IN"),
-                  )}
-                </View>
-
-                <TouchableOpacity
-                  disabled={!summaryStartKey || !summaryEndKey || summarizing}
-                  onPress={handleGenerateSummary}
-                  activeOpacity={0.85}
-                  className="rounded-2xl py-4 items-center justify-center flex-row gap-2"
-                  style={{
-                    backgroundColor: !summaryStartKey || !summaryEndKey || summarizing ? colors.border : colors.primary,
-                  }}
-                >
-                  {summarizing ? (
-                    <ActivityIndicator color={colors.buttonText} />
-                  ) : (
-                    <Text className="text-sm font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-                      Generate Summary
-                    </Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View className="gap-4 mt-2">
-                <View className="rounded-2xl border p-4" style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
-                  <Text className="text-xs font-bold mb-3" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                    Based on {summaryResult.documentCount} document{summaryResult.documentCount === 1 ? "" : "s"} from{" "}
-                    {formatDateLabel(summaryStartKey)} to {formatDateLabel(summaryEndKey)}
-                  </Text>
-                  <Markdown
-                    style={{
-                      body: { color: colors.foreground, fontFamily: fonts.body, fontSize: 13, lineHeight: 20 },
-                      heading1: { color: colors.foreground, fontFamily: fonts.heading, fontSize: 17, marginBottom: 6 },
-                      heading2: { color: colors.foreground, fontFamily: fonts.heading, fontSize: 15, marginTop: 12, marginBottom: 4 },
-                      heading3: { color: colors.foreground, fontFamily: fonts.heading, fontSize: 13, marginTop: 10, marginBottom: 4 },
-                      strong: { fontFamily: fonts.heading },
-                      bullet_list: { marginBottom: 6 },
-                      list_item: { marginBottom: 3 },
-                      paragraph: { marginTop: 0, marginBottom: 8 },
-                    }}
-                  >
-                    {summaryResult.summary}
-                  </Markdown>
-                </View>
-
-                <TouchableOpacity
-                  onPress={() => setSummaryResult(null)}
-                  activeOpacity={0.8}
-                  className="rounded-2xl border py-3.5 items-center"
-                  style={{ borderColor: colors.primary }}
-                >
-                  <Text className="text-xs font-bold" style={{ color: colors.primary, fontFamily: fonts.body }}>
-                    Choose a Different Range
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </ScrollView>
-        </SafeAreaView>
-
-        <CalendarModal
-          initialDateKey={summaryStartKey || undefined}
-          maximumDate={summaryEndKey ? dateKeyToDate(summaryEndKey) : new Date()}
-          onClose={() => setStartCalendarVisible(false)}
-          onSelect={(dateKey) => {
-            setSummaryStartKey(dateKey);
-            setStartCalendarVisible(false);
-          }}
-          visible={startCalendarVisible}
-        />
-        <CalendarModal
-          initialDateKey={summaryEndKey || undefined}
-          maximumDate={new Date()}
-          minimumDate={summaryStartKey ? dateKeyToDate(summaryStartKey) : undefined}
-          onClose={() => setEndCalendarVisible(false)}
-          onSelect={(dateKey) => {
-            setSummaryEndKey(dateKey);
-            setEndCalendarVisible(false);
-          }}
-          visible={endCalendarVisible}
-        />
-      </Modal>
-
-      {/* Health report modal */}
-      <Modal visible={reportVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeReportModal}>
-        <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
-          <View className="flex-row items-center justify-between px-6 pt-6 pb-4">
-            <Text className="text-xl font-black" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-              Download Health Report
-            </Text>
-            <TouchableOpacity
-              onPress={closeReportModal}
-              disabled={generatingReport}
-              className="p-1 rounded-full"
-              style={{ backgroundColor: colors.border }}
-            >
-              <Feather name="x" size={18} color={colors.foreground} />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView className="flex-1 px-6" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
-            <View className="gap-5 mt-2">
-              <Text className="text-xs leading-5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                Pick a date range to create a PDF you can save or share.
-              </Text>
-
-              <View>
-                <Text className="text-xs font-bold mb-2" style={{ color: colors.foreground, fontFamily: fonts.body }}>
-                  Start Date
-                </Text>
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  onPress={() => setReportStartCalendarVisible(true)}
-                  className="flex-row items-center justify-between px-4 py-3 rounded-xl"
-                  style={{ backgroundColor: colors.input }}
-                >
-                  <Text
-                    className="text-sm font-semibold"
-                    style={{ color: reportStartKey ? colors.foreground : colors.mutedText, fontFamily: fonts.body }}
-                  >
-                    {reportStartKey ? formatDateLabel(reportStartKey) : "Select start date"}
-                  </Text>
-                  <Feather name="calendar" size={16} color={colors.mutedText} />
-                </TouchableOpacity>
-              </View>
-
-              <View>
-                <Text className="text-xs font-bold mb-2" style={{ color: colors.foreground, fontFamily: fonts.body }}>
-                  End Date
-                </Text>
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  onPress={() => setReportEndCalendarVisible(true)}
-                  className="flex-row items-center justify-between px-4 py-3 rounded-xl"
-                  style={{ backgroundColor: colors.input }}
-                >
-                  <Text
-                    className="text-sm font-semibold"
-                    style={{ color: reportEndKey ? colors.foreground : colors.mutedText, fontFamily: fonts.body }}
-                  >
-                    {reportEndKey ? formatDateLabel(reportEndKey) : "Select end date"}
-                  </Text>
-                  <Feather name="calendar" size={16} color={colors.mutedText} />
-                </TouchableOpacity>
-              </View>
-
-              <View>
-                <Text className="text-xs font-bold mb-2" style={{ color: colors.foreground, fontFamily: fonts.body }}>
-                  Report Language
-                </Text>
-                {chipRow(
-                  reportLanguage,
-                  LANGUAGE_OPTIONS.map((l) => ({ label: l.label, value: l.code })),
-                  (value) => setReportLanguage((value as LanguageCode) || "en-IN"),
-                )}
-              </View>
-
-              <TouchableOpacity
-                disabled={!reportStartKey || !reportEndKey || generatingReport}
-                onPress={handleGenerateReport}
-                activeOpacity={0.85}
-                className="rounded-2xl py-4 items-center justify-center flex-row gap-2"
-                style={{
-                  backgroundColor: !reportStartKey || !reportEndKey || generatingReport ? colors.border : colors.primary,
-                }}
-              >
-                {generatingReport ? (
-                  <ActivityIndicator color={colors.buttonText} />
-                ) : (
-                  <>
-                    <Feather name="download" size={16} color={colors.buttonText} />
-                    <Text className="text-sm font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-                      Generate & Download
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
-        </SafeAreaView>
-
-        <CalendarModal
-          initialDateKey={reportStartKey || undefined}
-          maximumDate={reportEndKey ? dateKeyToDate(reportEndKey) : new Date()}
-          onClose={() => setReportStartCalendarVisible(false)}
-          onSelect={(dateKey) => {
-            setReportStartKey(dateKey);
-            setReportStartCalendarVisible(false);
-          }}
-          visible={reportStartCalendarVisible}
-        />
-        <CalendarModal
-          initialDateKey={reportEndKey || undefined}
-          maximumDate={new Date()}
-          minimumDate={reportStartKey ? dateKeyToDate(reportStartKey) : undefined}
-          onClose={() => setReportEndCalendarVisible(false)}
-          onSelect={(dateKey) => {
-            setReportEndKey(dateKey);
-            setReportEndCalendarVisible(false);
-          }}
-          visible={reportEndCalendarVisible}
-        />
-      </Modal>
+      <DoctorReportSheet
+        visible={reportVisible}
+        onClose={closeReportModal}
+        range={reportRange}
+        setRange={setReportRange}
+        language={reportLanguage}
+        setLanguage={setReportLanguage}
+        generating={generatingReport}
+        onGenerate={handleGenerateReport}
+      />
 
       <PaywallModal
         visible={paywallFeature !== null}

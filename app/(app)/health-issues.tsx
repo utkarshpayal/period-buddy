@@ -1,10 +1,8 @@
-import { Feather, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useCallback, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   Image,
   Modal,
-  Pressable,
   RefreshControl,
   ScrollView,
   StatusBar,
@@ -16,13 +14,30 @@ import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
-import { useTheme, type ThemeColors } from "../../components/theme";
+import { useTheme } from "../../components/theme";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
-import { SkeletonCard } from "../../components/Skeleton";
-import { getShadow, getSoftTints, HEALTH_ISSUE_COLORS } from "../../components/ui-tokens";
+import { SkeletonBlock } from "../../components/Skeleton";
+import { HEALTH_ISSUE_COLORS } from "../../components/ui-tokens";
 import { useAsyncLoad } from "../../hooks/useAsyncLoad";
-import { healthIssuesApi, type HealthIssue as ApiHealthIssue } from "../../lib/api";
-import { ScreenHeader } from "../../components/ScreenHeader";
+import { healthIssuesApi, type HealthIssue as ApiHealthIssue, type MedicalReview } from "../../lib/api";
+import { ScreenHeader, SectionHeader } from "../../components/ScreenHeader";
+import {
+  ArticleListSkeleton,
+  ArticleRow,
+  BulletList,
+  ConsultNudge,
+  DetailSection,
+  DetailSheetHeader,
+  getWellbeingTones,
+  KeyPointList,
+  PrivacyNote,
+  WellbeingCard,
+  WellbeingEmpty,
+  WellbeingIntro,
+  type WellbeingToneKey,
+} from "../../components/wellbeing/WellbeingUI";
+import { MedicalReviewBadge } from "../../components/MedicalReviewBadge";
+import { pickMedicalReview } from "../../lib/medicalReview";
 
 // --- BACKEND API LAYER SCHEMAS & CONTRACTS ---
 interface HealthIssue {
@@ -39,6 +54,7 @@ interface HealthIssue {
   treatment?: string;
   prevention?: string;
   whenToSeeDoctor?: string;
+  review?: MedicalReview;
 }
 
 const fallbackIssues: HealthIssue[] = [
@@ -46,7 +62,7 @@ const fallbackIssues: HealthIssue[] = [
     id: "hi_1",
     title: "PCOS / PCOD",
     category: "Hormonal Equilibrium",
-    icon: "alert-circle-outline",
+    icon: "female-outline",
     color: "#ef4444",
     summary:
       "PCOS/PCOD can affect periods, skin, hair growth, insulin response, and energy. Tracking patterns makes it easier to discuss changes with a doctor.",
@@ -59,7 +75,7 @@ const fallbackIssues: HealthIssue[] = [
     id: "hi_2",
     title: "Endometriosis",
     category: "Uterine & Pelvic Wellness",
-    icon: "pulse",
+    icon: "pulse-outline",
     color: "#f97316",
     summary:
       "Endometriosis can cause severe pelvic pain, painful periods, fatigue, and pain outside menstruation. Persistent pain deserves medical attention.",
@@ -72,7 +88,7 @@ const fallbackIssues: HealthIssue[] = [
     id: "hi_3",
     title: "Fibroids Tracker",
     category: "Structural Health",
-    icon: "apps-outline",
+    icon: "circle-multiple-outline",
     color: "#fbbf24",
     summary:
       "Fibroids are usually non-cancerous growths that can cause heavy bleeding, pelvic pressure, frequent urination, or fatigue.",
@@ -85,7 +101,7 @@ const fallbackIssues: HealthIssue[] = [
     id: "hi_4",
     title: "Pregnancy Wellness",
     category: "Maternal Milestone Care",
-    icon: "heart-outline",
+    icon: "human-pregnant",
     color: "#ec4899",
     summary:
       "Pregnancy support helps track early symptoms, missed periods, nausea, food changes, and care milestones.",
@@ -98,7 +114,7 @@ const fallbackIssues: HealthIssue[] = [
     id: "hi_5",
     title: "Irregular Cycle Maps",
     category: "Rhythm Diagnostics",
-    icon: "shuffle-outline",
+    icon: "calendar-outline",
     color: "#8b5cf6",
     summary:
       "Irregular cycles can be influenced by stress, sleep, travel, weight changes, hormones, or underlying conditions.",
@@ -111,7 +127,7 @@ const fallbackIssues: HealthIssue[] = [
     id: "hi_6",
     title: "Menopause Support",
     category: "Transition & Longevity",
-    icon: "water-outline",
+    icon: "thermometer-outline",
     color: "#06b6d4",
     summary:
       "Menopause and perimenopause can bring hot flashes, sleep changes, mood shifts, vaginal dryness, and bone health changes.",
@@ -122,24 +138,30 @@ const fallbackIssues: HealthIssue[] = [
   },
 ];
 
-function getIssueAccentColor(
-  issue: Pick<HealthIssue, "color">,
-  colors: ThemeColors,
-) {
+// Maps an issue's content hex tag to one of the shared wellbeing tones.
+function issueToneKey(issue: Pick<HealthIssue, "color">): WellbeingToneKey {
   switch (issue.color) {
     case HEALTH_ISSUE_COLORS.red:
-      return colors.primary;
+      return "rose";
     case HEALTH_ISSUE_COLORS.orange:
-      return colors.warning;
+      return "amber";
     case HEALTH_ISSUE_COLORS.amber:
-      return colors.accent;
+      return "gold";
     case HEALTH_ISSUE_COLORS.pink:
-      return colors.rose;
+      return "rose";
     case HEALTH_ISSUE_COLORS.purple:
-      return colors.lavender;
+      return "lavender";
     default:
-      return colors.mint;
+      return "mint";
   }
+}
+
+/** "1. Track…\n2. Note…" → ["Track…", "Note…"]; plain prose stays one item. */
+function guideSteps(guide: string): string[] {
+  return guide
+    .split(/\n+/)
+    .map((line) => line.replace(/^\s*(\d+[.)]|[-•*])\s*/, "").trim())
+    .filter(Boolean);
 }
 
 function mapHealthIssue(issue: ApiHealthIssue): HealthIssue {
@@ -159,6 +181,7 @@ function mapHealthIssue(issue: ApiHealthIssue): HealthIssue {
     treatment: issue.treatment,
     prevention: issue.prevention,
     whenToSeeDoctor: issue.whenToSeeDoctor,
+    review: pickMedicalReview(issue),
   };
 }
 
@@ -166,31 +189,39 @@ export default function HealthIssues() {
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const tones = getWellbeingTones(colors);
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
-  const [categoryPickerVisible, setCategoryPickerVisible] = useState(false);
 
-  const fetchIssues = useCallback(async () => {
-    const response = await healthIssuesApi.getIssues();
-    return response.length > 0 ? response.map(mapHealthIssue) : fallbackIssues;
-  }, []);
-
+  // Public CMS content: cached (and kept on the device) as the raw response so a
+  // revisit or cold start paints at once while it revalidates.
   const {
-    data: loadedIssues,
+    data: issueResponse,
     loading: loadingIssues,
     refreshing,
     error,
     offline,
     reload,
-  } = useAsyncLoad<HealthIssue[]>(fetchIssues, [fetchIssues]);
+  } = useAsyncLoad<ApiHealthIssue[]>(() => healthIssuesApi.getIssues(), [], {
+    cacheKey: "healthIssues:list",
+    staleMs: 5 * 60_000,
+    persist: true,
+  });
 
-  const issues = loadedIssues ?? [];
-  const softTints = getSoftTints(colors);
+  const issues = useMemo(
+    () =>
+      !issueResponse
+        ? []
+        : issueResponse.length > 0
+          ? issueResponse.map(mapHealthIssue)
+          : fallbackIssues,
+    [issueResponse],
+  );
 
   const categoryOptions = [
     "all",
-    ...Array.from(new Set(issues.map((issue) => issue.category))),
+    ...Array.from(new Set(issues.map((issue) => issue.category).filter(Boolean))),
   ];
   const filteredIssues =
     selectedCategory === "all"
@@ -200,11 +231,18 @@ export default function HealthIssues() {
   const selectedIssueData = issues.find(
     (issue) => issue.id === selectedIssueId,
   );
+  const selectedTone = selectedIssueData ? tones[issueToneKey(selectedIssueData)] : tones.mint;
 
   function handleTriggerDetails(id: string) {
     setSelectedIssueId(id);
     setDetailModalVisible(true);
   }
+
+  const metaFor = (issue: HealthIssue) =>
+    [
+      (issue.symptoms?.length ?? 0) > 0 ? { icon: "pulse-outline", label: `${issue.symptoms!.length} symptoms` } : null,
+      { icon: "list-outline", label: `${guideSteps(issue.guide).length} care steps` },
+    ].filter((m): m is { icon: string; label: string } => m !== null);
 
   return (
     <>
@@ -217,7 +255,7 @@ export default function HealthIssues() {
         className="flex-1"
         style={{ backgroundColor: colors.background }}
       >
-        <ScreenHeader title="Health Concerns" />
+        <ScreenHeader title="Health Concerns" subtitle="Understand symptoms, know when to get help" />
 
         <LoadingErrorState
           loading={loadingIssues}
@@ -227,203 +265,115 @@ export default function HealthIssues() {
           loadingLabel="Loading health concerns…"
           errorTitle="Couldn't load health concerns"
           skeleton={
-            <View className="gap-3.5 px-6 pt-6">
-              <SkeletonCard />
-              <SkeletonCard />
-              <SkeletonCard />
-              <SkeletonCard />
+            <View style={{ paddingHorizontal: 24, paddingTop: 12, gap: 16 }}>
+              <SkeletonBlock width="100%" height={92} radius={24} />
+              <View className="flex-row" style={{ gap: 8 }}>
+                <SkeletonBlock width={56} height={34} radius={17} />
+                <SkeletonBlock width={110} height={34} radius={17} />
+                <SkeletonBlock width={96} height={34} radius={17} />
+              </View>
+              <ArticleListSkeleton rows={5} />
             </View>
           }
         >
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 100 }}
+          contentContainerStyle={{ paddingTop: 12, paddingBottom: insets.bottom + 48 }}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={() => reload(true)} tintColor={colors.primary} />
           }
         >
-          <View className="mx-6 mt-6">
-            <Text
-              className="mb-4 text-xs font-semibold"
-              style={{ color: colors.mutedText, fontFamily: fonts.body }}
-            >
-              Select an encyclopedia entry to explore insights and medical
-              guidance.
-            </Text>
-
-            {/* Category Filter Dropdown Trigger */}
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => setCategoryPickerVisible(true)}
-              className="self-start flex-row items-center gap-1.5 px-4 py-2 mb-5 rounded-full border"
-              style={{
-                backgroundColor:
-                  selectedCategory === "all" ? colors.surface : softTints.pink,
-                borderColor:
-                  selectedCategory === "all" ? colors.border : colors.primary,
-              }}
-            >
-              <Text
-                className="text-xs font-bold"
-                style={{
-                  color:
-                    selectedCategory === "all"
-                      ? colors.foreground
-                      : colors.primary,
-                  fontFamily: fonts.body,
-                }}
-              >
-                {selectedCategory === "all" ? "All Categories" : selectedCategory}
-              </Text>
-              <Feather
-                name="chevron-down"
-                size={13}
-                color={selectedCategory === "all" ? colors.mutedText : colors.primary}
-              />
-            </TouchableOpacity>
-
-            {/* HIGH-FIDELITY ASYMMETRIC CLEAN LIST CARD ROWS */}
-            <View className="gap-3.5">
-              {filteredIssues.map((issue, index) => {
-                // Compute matching index tints dynamically for uniform distribution
-                const tintColors = [
-                  softTints.pink,
-                  softTints.amber,
-                  softTints.lavender,
-                  softTints.blue,
-                  softTints.emerald,
-                  softTints.mint,
-                ];
-                const activeTint = tintColors[index % tintColors.length];
-                const accentColor = getIssueAccentColor(issue, colors);
-
-                return (
-                  <TouchableOpacity
-                    key={issue.id}
-                    onPress={() => handleTriggerDetails(issue.id)}
-                    activeOpacity={0.75}
-                    className="flex-row items-center justify-between p-4 rounded-[18px]"
-                    style={{
-                      backgroundColor: colors.surface,
-                      ...getShadow(colors, isDark),
-                    }}
-                  >
-                    <View className="flex-row items-center flex-1 pr-3">
-                      <View
-                        className="p-2.5 rounded-xl mr-3.5"
-                        style={{ backgroundColor: activeTint }}
-                      >
-                        <Ionicons
-                          name={issue.icon as any}
-                          size={18}
-                          color={accentColor}
-                        />
-                      </View>
-                      <View className="flex-1">
-                        <Text
-                          className="text-sm font-extrabold tracking-tight"
-                          style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                        >
-                          {issue.title}
-                        </Text>
-                        <Text
-                          className="text-xs font-semibold mt-0.5"
-                          style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                        >
-                          {issue.category}
-                        </Text>
-                      </View>
-                    </View>
-                    <View
-                      className="rounded-xl px-3 py-1.5"
-                      style={{ backgroundColor: `${accentColor}1F` }}
-                    >
-                      <Text
-                        className="text-xs font-black"
-                        style={{ color: accentColor, fontFamily: fonts.body }}
-                      >
-                        View
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-
-              {filteredIssues.length === 0 && (
-                <View className="items-center py-10">
-                  <Text
-                    className="text-sm font-medium"
-                    style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                  >
-                    No entries found for this category yet.
-                  </Text>
-                </View>
-              )}
-            </View>
+          <View style={{ paddingHorizontal: 24 }}>
+            <WellbeingIntro
+              icon="medkit-outline"
+              tone={tones.amber}
+              title="Know your body"
+              body="Plain-language guides to common conditions, and when to see a doctor."
+            />
           </View>
-        </ScrollView>
-        </LoadingErrorState>
 
-        {/* --- CATEGORY FILTER DROPDOWN SELECT MODAL --- */}
-        <Modal
-          visible={categoryPickerVisible}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setCategoryPickerVisible(false)}
-        >
-          <Pressable
-            className="flex-1 justify-center items-center px-8"
-            style={{ backgroundColor: colors.overlay }}
-            onPress={() => setCategoryPickerVisible(false)}
-          >
-            <View
-              className="w-full max-w-[300px] p-4 rounded-3xl border"
-              style={{
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-                ...getShadow(colors, isDark),
-              }}
+          {/* Category filter */}
+          {categoryOptions.length > 2 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: 24, gap: 8 }}
+              style={{ marginTop: 20, flexGrow: 0 }}
             >
-              <Text
-                className="text-center font-extrabold mb-3 text-base"
-                style={{ color: colors.foreground, fontFamily: fonts.heading }}
-              >
-                Filter by Category
-              </Text>
               {categoryOptions.map((cat) => {
                 const isSelected = selectedCategory === cat;
                 return (
                   <TouchableOpacity
                     key={cat}
-                    onPress={() => {
-                      setSelectedCategory(cat);
-                      setCategoryPickerVisible(false);
-                    }}
-                    className="py-3 px-4 rounded-xl flex-row items-center justify-between"
+                    onPress={() => setSelectedCategory(cat)}
+                    activeOpacity={0.8}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isSelected }}
                     style={{
-                      backgroundColor: isSelected ? softTints.pink : "transparent",
+                      height: 36,
+                      paddingHorizontal: 14,
+                      borderRadius: 18,
+                      justifyContent: "center",
+                      backgroundColor: isSelected ? colors.primary : colors.surface,
+                      borderWidth: 1,
+                      borderColor: isSelected ? colors.primary : colors.border,
                     }}
                   >
                     <Text
-                      className="font-bold text-sm"
-                      style={{
-                        color: isSelected ? colors.primary : colors.foreground,
-                        fontFamily: fonts.body,
-                      }}
+                      numberOfLines={1}
+                      maxFontSizeMultiplier={1.3}
+                      style={{ color: isSelected ? colors.buttonText : colors.foreground, fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}
                     >
-                      {cat === "all" ? "All Categories" : cat}
+                      {cat === "all" ? "All" : cat}
                     </Text>
-                    {isSelected && (
-                      <Feather name="check" size={16} color={colors.primary} />
-                    )}
                   </TouchableOpacity>
                 );
               })}
-            </View>
-          </Pressable>
-        </Modal>
+            </ScrollView>
+          ) : null}
 
-        {/* --- DYNAMIC FULL PAGE INTERACTIVE DETAIL PRESENTATION MODAL --- */}
+          <View style={{ paddingHorizontal: 24, marginTop: 24 }}>
+            <SectionHeader
+              title={selectedCategory === "all" ? "All topics" : selectedCategory}
+              actionLabel={selectedCategory === "all" ? undefined : "Show all"}
+              onAction={selectedCategory === "all" ? undefined : () => setSelectedCategory("all")}
+            />
+            {filteredIssues.length === 0 ? (
+              <WellbeingEmpty
+                icon="search-outline"
+                title={issues.length === 0 ? "No guides yet" : "Nothing in this category yet"}
+                message={issues.length === 0 ? "Pull down to refresh." : "Try another category."}
+                actionLabel={selectedCategory === "all" ? undefined : "Show all topics"}
+                onAction={selectedCategory === "all" ? undefined : () => setSelectedCategory("all")}
+              />
+            ) : (
+              <WellbeingCard>
+                {filteredIssues.map((issue, index) => (
+                  <ArticleRow
+                    key={issue.id}
+                    first={index === 0}
+                    icon={issue.icon}
+                    fallbackIcon="medkit-outline"
+                    tone={tones[issueToneKey(issue)]}
+                    eyebrow={issue.category}
+                    title={issue.title}
+                    summary={issue.summary}
+                    meta={metaFor(issue)}
+                    onPress={() => handleTriggerDetails(issue.id)}
+                  />
+                ))}
+              </WellbeingCard>
+            )}
+
+            <PrivacyNote
+              style={{ marginTop: 22 }}
+              text="General information, not a diagnosis. If something worries you, talk to a doctor."
+            />
+          </View>
+        </ScrollView>
+        </LoadingErrorState>
+
+        {/* Issue detail */}
         <Modal
           visible={detailModalVisible}
           animationType="slide"
@@ -431,238 +381,84 @@ export default function HealthIssues() {
           onRequestClose={() => setDetailModalVisible(false)}
         >
           {selectedIssueData && (
-            <View
-              className="flex-1"
-              style={{ backgroundColor: colors.background }}
-            >
-              {/* Sheet Control Sticky Upper Header Action Row */}
-              <View
-                className="px-6 pb-4 border-b flex-row justify-between items-center"
-                style={{
-                  backgroundColor: colors.surface,
-                  borderBottomColor: colors.border,
-                  paddingTop: insets.top + 16,
-                }}
-              >
-                <View>
-                  <Text
-                    className="text-[11.5px] font-black uppercase tracking-widest pt-4"
-                    style={{
-                      color: getIssueAccentColor(selectedIssueData, colors),
-                      fontFamily: fonts.body,
-                    }}
-                  >
-                    {selectedIssueData.category}
-                  </Text>
-                  <Text
-                    className="text-base font-black tracking-tight mt-0.5"
-                    style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                  >
-                    {selectedIssueData.title}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  onPress={() => setDetailModalVisible(false)}
-                  className="p-1.5 rounded-full"
-                  style={{ backgroundColor: colors.surfaceSoft }}
-                >
-                  <Feather name="x" size={16} color={colors.foreground} />
-                </TouchableOpacity>
-              </View>
+            // Android ignores pageSheet and renders fullscreen, so SafeAreaView keeps the header clear.
+            <SafeAreaView edges={["top"]} className="flex-1" style={{ backgroundColor: colors.background }}>
+              <DetailSheetHeader
+                icon={selectedIssueData.icon}
+                tone={selectedTone}
+                eyebrow={selectedIssueData.category}
+                title={selectedIssueData.title}
+                onClose={() => setDetailModalVisible(false)}
+              />
 
-              {/* Scrollable Clinical Core Body Context Area */}
               <ScrollView
                 showsVerticalScrollIndicator={false}
-                contentContainerStyle={{ paddingBottom: insets.bottom + 60 }}
+                contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 4, paddingBottom: insets.bottom + 40 }}
               >
-                {/* HIGH RESOLUTION HERO MEDICAL ILLUSTRATION BANNER */}
-                <View
-                  className="w-full h-52 relative"
-                  style={{ backgroundColor: colors.surfaceSoft }}
-                >
-                  <Image
-                    source={{ uri: selectedIssueData.imageUrl }}
-                    className="w-full h-full"
-                    resizeMode="cover"
-                  />
-                  <View
-                    className="absolute inset-0"
-                    style={{ backgroundColor: "rgba(0,0,0,0.12)" }}
-                  />
-                </View>
-
-                {/* CONTENT AREA WRAPPER */}
-                <View className="px-6 pt-6">
-                  {/* Part A: Clinical Interpretation Framework */}
-                  <Text
-                    className="text-xs font-bold tracking-widest uppercase mb-2.5"
-                    style={{ color: colors.primary, fontFamily: fonts.heading }}
-                  >
-                    Clinical Understanding
-                  </Text>
-                  <Text
-                    className="text-sm font-medium leading-6 mb-6"
-                    style={{ color: colors.foreground, fontFamily: fonts.body }}
-                  >
-                    {selectedIssueData.summary}
-                  </Text>
-
-                  {/* Horizontal Border Break Separator Line */}
-                  <View
-                    className="h-[1px] w-full mb-6"
-                    style={{ backgroundColor: colors.border }}
-                  />
-
-                  {/* Part B: Specialized Active Interactive Symptom Guidance Roadmap */}
-                  <Text
-                    className="text-xs font-bold tracking-widest uppercase mb-3"
-                    style={{ color: colors.success, fontFamily: fonts.heading }}
-                  >
-                    Care Guidance
-                  </Text>
-                  <View
-                    className="p-5 rounded-2xl border"
-                    style={{
-                      backgroundColor: colors.surfaceSoft,
-                      borderColor: colors.border,
-                    }}
-                  >
-                    <Text
-                      className="text-xs font-semibold leading-6"
-                      style={{ color: colors.foreground, fontFamily: fonts.body }}
-                    >
-                      {selectedIssueData.guide}
-                    </Text>
+                {selectedIssueData.imageUrl ? (
+                  <View style={{ height: 180, borderRadius: 22, overflow: "hidden", backgroundColor: selectedTone.bg }}>
+                    <Image
+                      source={{ uri: selectedIssueData.imageUrl }}
+                      style={{ width: "100%", height: "100%" }}
+                      resizeMode="cover"
+                      accessibilityIgnoresInvertColors
+                    />
                   </View>
+                ) : null}
 
-                  {/* Symptoms & Causes Segregation Grid */}
-                  {((selectedIssueData.symptoms?.length ?? 0) > 0 ||
-                    (selectedIssueData.causes?.length ?? 0) > 0) && (
-                    <View className="flex-row gap-3 mt-6">
-                      {(selectedIssueData.symptoms?.length ?? 0) > 0 && (
-                        <View className="flex-1">
-                          <Text
-                            className="text-xs font-bold tracking-widest uppercase mb-2"
-                            style={{ color: colors.warning, fontFamily: fonts.heading }}
-                          >
-                            Symptoms
-                          </Text>
-                          <View className="gap-1.5">
-                            {selectedIssueData.symptoms!.map((symptom, idx) => (
-                              <View key={idx} className="flex-row items-start gap-1.5">
-                                <Text
-                                  className="text-xs"
-                                  style={{ color: colors.mutedText }}
-                                >
-                                  •
-                                </Text>
-                                <Text
-                                  className="flex-1 text-xs font-medium leading-5"
-                                  style={{ color: colors.foreground, fontFamily: fonts.body }}
-                                >
-                                  {symptom}
-                                </Text>
-                              </View>
-                            ))}
-                          </View>
-                        </View>
-                      )}
-                      {(selectedIssueData.causes?.length ?? 0) > 0 && (
-                        <View className="flex-1">
-                          <Text
-                            className="text-xs font-bold tracking-widest uppercase mb-2"
-                            style={{ color: colors.lavender, fontFamily: fonts.heading }}
-                          >
-                            Causes
-                          </Text>
-                          <View className="gap-1.5">
-                            {selectedIssueData.causes!.map((cause, idx) => (
-                              <View key={idx} className="flex-row items-start gap-1.5">
-                                <Text
-                                  className="text-xs"
-                                  style={{ color: colors.mutedText }}
-                                >
-                                  •
-                                </Text>
-                                <Text
-                                  className="flex-1 text-xs font-medium leading-5"
-                                  style={{ color: colors.foreground, fontFamily: fonts.body }}
-                                >
-                                  {cause}
-                                </Text>
-                              </View>
-                            ))}
-                          </View>
-                        </View>
-                      )}
-                    </View>
-                  )}
+                <MedicalReviewBadge item={selectedIssueData.review} style={{ marginTop: selectedIssueData.imageUrl ? 14 : 0 }} />
 
-                  {/* Treatment / Prevention / When To See Doctor Detail Blocks */}
-                  {[
-                    { label: "Treatment", value: selectedIssueData.treatment },
-                    { label: "Prevention", value: selectedIssueData.prevention },
-                    { label: "When to See a Doctor", value: selectedIssueData.whenToSeeDoctor },
-                  ]
-                    .filter((section) => !!section.value)
-                    .map((section) => (
-                      <View key={section.label} className="mt-6">
-                        <Text
-                          className="text-xs font-bold tracking-widest uppercase mb-2"
-                          style={{ color: colors.primary, fontFamily: fonts.heading }}
-                        >
-                          {section.label}
-                        </Text>
-                        <Text
-                          className="text-xs font-medium leading-6"
-                          style={{ color: colors.foreground, fontFamily: fonts.body }}
-                        >
-                          {section.value}
-                        </Text>
-                      </View>
-                    ))}
+                <Text style={{ color: colors.foreground, fontSize: 16, lineHeight: 25, fontFamily: fonts.body, marginTop: 18 }}>
+                  {selectedIssueData.summary}
+                </Text>
 
-                  {/* Operational Telehealth Action Redirection Banner Badge */}
-                  <View
-                    className="mt-6 p-4 rounded-xl flex-row items-center justify-between border border-dashed"
-                    style={{
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                    }}
-                  >
-                    <View className="flex-1 pr-4">
-                      <Text
-                        className="text-xs font-bold"
-                        style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                      >
-                        Persistent Symptoms?
-                      </Text>
-                      <Text
-                        className="text-xs mt-0.5"
-                        style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                      >
-                        Connect privately with specialized OBGYNs instantly.
-                      </Text>
-                    </View>
-                    <TouchableOpacity
-                      onPress={() => {
-                        setDetailModalVisible(false);
-                        router.push("/(app)/consultation" as any);
-                      }}
-                      className="px-3.5 py-2 rounded-xl"
-                      style={{ backgroundColor: colors.primary }}
-                    >
-                      <Text
-                        className="text-xs font-black"
-                        style={{ color: colors.buttonText, fontFamily: fonts.body }}
-                      >
-                        Consult
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
+                {(selectedIssueData.symptoms?.length ?? 0) > 0 ? (
+                  <DetailSection icon="pulse-outline" tone={tones.amber} title="Common symptoms">
+                    <WellbeingCard style={{ padding: 16 }}>
+                      <BulletList items={selectedIssueData.symptoms!} color={tones.amber.fg} />
+                    </WellbeingCard>
+                  </DetailSection>
+                ) : null}
+
+                {(selectedIssueData.causes?.length ?? 0) > 0 ? (
+                  <DetailSection icon="git-branch-outline" tone={tones.lavender} title="Possible causes">
+                    <WellbeingCard style={{ padding: 16 }}>
+                      <BulletList items={selectedIssueData.causes!} color={tones.lavender.fg} />
+                    </WellbeingCard>
+                  </DetailSection>
+                ) : null}
+
+                {guideSteps(selectedIssueData.guide).length > 0 ? (
+                  <DetailSection icon="checkmark-done-outline" tone={tones.green} title="Care guidance">
+                    <KeyPointList points={guideSteps(selectedIssueData.guide)} />
+                  </DetailSection>
+                ) : null}
+
+                {[
+                  { label: "Treatment", icon: "medical-outline", tone: tones.sky, value: selectedIssueData.treatment },
+                  { label: "Prevention", icon: "shield-checkmark-outline", tone: tones.mint, value: selectedIssueData.prevention },
+                  { label: "When to see a doctor", icon: "alert-circle-outline", tone: tones.red, value: selectedIssueData.whenToSeeDoctor },
+                ]
+                  .filter((section) => !!section.value)
+                  .map((section) => (
+                    <DetailSection key={section.label} icon={section.icon} tone={section.tone} title={section.label}>
+                      <WellbeingCard style={{ padding: 16 }}>
+                        <Text style={{ color: colors.foreground, fontSize: 14.5, lineHeight: 22, fontFamily: fonts.body }}>{section.value}</Text>
+                      </WellbeingCard>
+                    </DetailSection>
+                  ))}
+
+                <ConsultNudge
+                  style={{ marginTop: 28 }}
+                  title="Persistent symptoms?"
+                  body="Connect privately with a gynecologist who can help."
+                  onPress={() => {
+                    setDetailModalVisible(false);
+                    router.push("/(app)/consultation" as any);
+                  }}
+                />
               </ScrollView>
-            </View>
+            </SafeAreaView>
           )}
         </Modal>
       </SafeAreaView>

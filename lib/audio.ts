@@ -21,7 +21,19 @@ export async function resolveAudioUri(base64: string, codec: string): Promise<st
   if (Platform.OS === "web") {
     return `data:${AUDIO_MIME_TYPES[codec] || "audio/mpeg"};base64,${base64}`;
   }
-  const file = new File(Paths.cache, `tts-${Date.now()}.${codec}`);
+  // Random suffix: voice mode makes several of these within the same millisecond.
+  const file = new File(Paths.cache, `tts-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${codec}`);
   file.write(base64, { encoding: "base64" });
   return file.uri;
+}
+
+/** Deletes a cache file made by resolveAudioUri once it has played (no-op for data: URIs). */
+export function releaseAudioUri(uri: string) {
+  if (Platform.OS === "web" || !uri.startsWith("file:")) return;
+  try {
+    const file = new File(uri);
+    if (file.exists) file.delete();
+  } catch {
+    // Cache files are cleaned by the OS eventually anyway.
+  }
 }

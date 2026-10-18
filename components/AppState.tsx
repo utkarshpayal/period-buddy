@@ -157,25 +157,43 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     });
   }, [reportedPosts, savedPosts, tokens]);
 
+  const value = useMemo<AppStateType>(
+    () => ({
+      tokens,
+      earnTokens,
+      savedPosts,
+      savePost,
+      toggleSavedPost,
+      reportedPosts,
+      reportPost,
+      sharePost,
+      dayNotes,
+      addDayNote,
+      dayEntries,
+      saveDayEntry,
+      removeDayEntry,
+      trackedDays,
+    }),
+    [
+      tokens,
+      earnTokens,
+      savedPosts,
+      savePost,
+      toggleSavedPost,
+      reportedPosts,
+      reportPost,
+      sharePost,
+      dayNotes,
+      addDayNote,
+      dayEntries,
+      saveDayEntry,
+      removeDayEntry,
+      trackedDays,
+    ],
+  );
+
   return (
-    <AppStateContext.Provider
-      value={{
-        tokens,
-        earnTokens,
-        savedPosts,
-        savePost,
-        toggleSavedPost,
-        reportedPosts,
-        reportPost,
-        sharePost,
-        dayNotes,
-        addDayNote,
-        dayEntries,
-        saveDayEntry,
-        removeDayEntry,
-        trackedDays,
-      }}
-    >
+    <AppStateContext.Provider value={value}>
       {children}
     </AppStateContext.Provider>
   );

@@ -11,7 +11,7 @@ import { usePaginatedList } from "../../hooks/usePaginatedList";
 import { LoadMoreButton } from "../../components/LoadMoreButton";
 import { partnerApi, type AppNotification } from "../../lib/api";
 import { guardRoute } from "../../lib/launchGuard";
-import { NOTIFICATIONS_LIST_ROUTE, resolveNotificationTarget } from "../../lib/notifications";
+import { NOTIFICATIONS_LIST_ROUTE, openNotificationStoreLink, resolveNotificationTarget } from "../../lib/notifications";
 import { notificationIcon, notificationImage } from "../../lib/notificationIcons";
 import { useAuth } from "../../components/auth-context";
 
@@ -121,6 +121,8 @@ export default function NotificationsScreen() {
   // destination is this list just get marked read.
   const handlePress = (notif: AppNotification) => {
     if (!notif.isRead) markAsRead(notif._id);
+    // An "Update the app" notification opens the Play Store / App Store.
+    if (openNotificationStoreLink(notif.data)) return;
     const target = resolveNotificationTarget(
       { ...(notif.data ?? {}), type: notif.type },
       user?.partnerRole === "viewer",
