@@ -20,11 +20,13 @@ import {
   subscribePendingDeepLink,
 } from "../lib/deeplink";
 import { guardRoute } from "../lib/launchGuard";
-import { resolveNotificationTarget } from "../lib/notifications";
+import { openNotificationStoreLink, resolveNotificationTarget } from "../lib/notifications";
 import { emitDataChange } from "../lib/data-sync";
+import "../lib/queryCachePersist";
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFonts } from "expo-font";
 import * as SplashScreen from "expo-splash-screen";
+import * as SystemUI from "expo-system-ui";
 import "../global.css";
 import { LinearGradient } from "expo-linear-gradient";
 import { cssInterop } from "nativewind";
@@ -61,6 +63,10 @@ cssInterop(LinearGradient, { className: "style" });
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync().catch(() => {});
+// Cross-fade from the splash into the first screen instead of cutting to it.
+// The splash colours (app.json: blush #FBF6F8, dark #221A20) are the theme's
+// own `background` tokens, so the fade never passes through black or white.
+SplashScreen.setOptions({ fade: true, duration: 350 });
 
 // The app standardizes on exactly two typefaces (see ThemeFonts in
 // components/theme.tsx): Manrope for all headings/body copy, and IBM Plex
@@ -147,7 +153,11 @@ function AppShell() {
       // Otherwise getLastNotificationResponseAsync() keeps returning this
       // same tap on every later launch.
       Notifications.clearLastNotificationResponse();
-      setPendingNotification(notificationData(response));
+      const data = notificationData(response);
+      // An "Update the app" push opens the Play Store / App Store straight
+      // away: it needs no navigator or sign-in.
+      if (openNotificationStoreLink(data)) return;
+      setPendingNotification(data);
     }
 
     Notifications.getLastNotificationResponseAsync().then((response) => {
@@ -196,6 +206,14 @@ function AppShell() {
       SplashScreen.hideAsync().catch(() => {});
     }
   }, [hasHydrated]);
+
+  // Keep the native root/window background on the theme's background, so
+  // screen transitions, the keyboard gap and rotations never flash the
+  // system's default white/black behind the app (expo-system-ui).
+  useEffect(() => {
+    if (!hasHydrated) return;
+    SystemUI.setBackgroundColorAsync(colors.background).catch(() => {});
+  }, [hasHydrated, colors.background]);
 
   if (!hasHydrated) {
     return null;

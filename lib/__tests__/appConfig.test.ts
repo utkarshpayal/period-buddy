@@ -222,6 +222,76 @@ test("gateState: maintenance, required and optional updates", () => {
   assert.deepEqual(gateState(upd, viewer({ appVersion: "1.0.0", platform: "web" }), null), { kind: "none" });
 });
 
+test("update prompt: parsing of the new fields", () => {
+  const d = parseAppConfig({}).settings.update;
+  assert.deepEqual(
+    { highlights: d.highlights, ctaLabel: d.ctaLabel, dismissible: d.dismissible, forceShowAll: d.forceShowAll, promptId: d.promptId },
+    { highlights: [], ctaLabel: "Update now", dismissible: true, forceShowAll: false, promptId: null },
+  );
+  const u = parseAppConfig({
+    settings: {
+      update: {
+        highlights: [" Faster tracker ", "", 4, "a", "b", "c", "d", "e"],
+        ctaLabel: "Get it",
+        dismissible: false,
+        forceShowAll: true,
+        promptId: "diwali-2026",
+      },
+    },
+  }).settings.update;
+  assert.deepEqual(u.highlights, ["Faster tracker", "a", "b", "c", "d"]);
+  assert.equal(u.ctaLabel, "Get it");
+  assert.equal(u.dismissible, false);
+  assert.equal(u.forceShowAll, true);
+  assert.equal(u.promptId, "diwali-2026");
+  assert.equal(parseAppConfig({ settings: { update: { promptId: "bad id!" } } }).settings.update.promptId, null);
+  assert.deepEqual(parseAppConfig({ settings: { update: { highlights: "nope" } } }).settings.update.highlights, []);
+});
+
+test("gateState: forceShowAll, promptId and dismissible", () => {
+  const play = "https://play.google.com/x";
+  const forced = parseAppConfig({ settings: { update: { forceShowAll: true, androidUrl: play, promptId: "p1" } } }).settings;
+  // Everyone sees it, whatever their version, once per promptId.
+  const shown = gateState(forced, viewer({ appVersion: "9.9.9" }), null);
+  assert.equal(shown.kind, "update");
+  if (shown.kind === "update") {
+    assert.equal(shown.required, false);
+    assert.equal(shown.dismissible, true);
+    assert.equal(shown.promptKey, "p1");
+    assert.equal(shown.storeUrl, play);
+    assert.equal(shown.ctaLabel, "Update now");
+  }
+  assert.deepEqual(gateState(forced, viewer(), "p1"), { kind: "none" });
+  assert.equal(gateState(forced, viewer(), "p0").kind, "update"); // a new id shows again
+  assert.deepEqual(gateState(forced, viewer({ platform: "web" }), null), { kind: "none" });
+
+  // Without a promptId the key is latestVersion (what older builds stored), else "all".
+  const keyed = parseAppConfig({ settings: { update: { latestVersion: "1.3.0", androidUrl: play } } }).settings;
+  const p = gateState(keyed, viewer({ appVersion: "1.2.0" }), null);
+  assert.equal(p.kind === "update" && p.promptKey, "1.3.0");
+  const all = parseAppConfig({ settings: { update: { forceShowAll: true, androidUrl: play } } }).settings;
+  const a = gateState(all, viewer(), null);
+  assert.equal(a.kind === "update" && a.promptKey, "all");
+
+  // Not dismissible only binds people who are actually out of date.
+  const strict = parseAppConfig({
+    settings: { update: { latestVersion: "2.0.0", dismissible: false, forceShowAll: true, androidUrl: play } },
+  }).settings;
+  const old = gateState(strict, viewer({ appVersion: "1.0.0" }), null);
+  assert.equal(old.kind === "update" && old.dismissible, false);
+  const current = gateState(strict, viewer({ appVersion: "2.0.0" }), null);
+  assert.equal(current.kind === "update" && current.dismissible, true);
+  // …and never without a store link to go to.
+  const noLink = parseAppConfig({ settings: { update: { latestVersion: "2.0.0", dismissible: false } } }).settings;
+  const n = gateState(noLink, viewer({ appVersion: "1.0.0" }), null);
+  assert.equal(n.kind === "update" && n.dismissible, true);
+
+  // minVersion still wins and is never dismissible.
+  const hard = parseAppConfig({ settings: { update: { minVersion: "1.5.0", forceShowAll: true, androidUrl: play } } }).settings;
+  const h = gateState(hard, viewer({ appVersion: "1.0.0" }), "all");
+  assert.equal(h.kind === "update" && h.required && !h.dismissible, true);
+});
+
 
 const sheet = { headline: "Coming this month", message: "Chat any time", notifyMe: true, onList: false, alternative: { type: "none" } };
 

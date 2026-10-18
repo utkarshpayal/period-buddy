@@ -1,8 +1,7 @@
-  import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+  import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
-  Linking,
   RefreshControl,
   ScrollView,
   StatusBar,
@@ -12,9 +11,35 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../../components/theme";
-import { getSoftTints } from "../../components/ui-tokens";
-import { wellbeingApi, type WellbeingResource } from "../../lib/api";
-import { ScreenHeader } from "../../components/ScreenHeader";
+import { getShadow } from "../../components/ui-tokens";
+import { useAsyncLoad } from "../../hooks/useAsyncLoad";
+import { SkeletonBlock } from "../../components/Skeleton";
+import { wellbeingApi, type MedicalReview, type WellbeingResource } from "../../lib/api";
+import { ScreenHeader, SectionHeader } from "../../components/ScreenHeader";
+import {
+  ArticleListSkeleton,
+  ConsultNudge,
+  DetailSection,
+  getWellbeingTones,
+  IconCircle,
+  KeyPointList,
+  MediaButtons,
+  MetaPill,
+  PrivacyNote,
+  WellbeingEmpty,
+  WellbeingIntro,
+  type WellbeingToneKey,
+} from "../../components/wellbeing/WellbeingUI";
+import { MedicalReviewBadge } from "../../components/MedicalReviewBadge";
+import { pickMedicalReview } from "../../lib/medicalReview";
+
+// Each topic's label, default icon and colour (an API resource's own icon wins when it has one).
+const TOPICS: Record<HygieneItem["category"], { label: string; icon: string; tone: WellbeingToneKey }> = {
+  products: { label: "Products", icon: "water-outline", tone: "rose" },
+  daily: { label: "Daily care", icon: "flower-outline", tone: "mint" },
+  activities: { label: "Activities", icon: "swim", tone: "sky" },
+  prevention: { label: "Prevention", icon: "shield-checkmark-outline", tone: "lavender" },
+};
 
 // --- BACKEND RESPONSE MODEL SCHEMAS ---
 interface HygieneItem {
@@ -28,6 +53,7 @@ interface HygieneItem {
   estimatedReadTime?: number;
   videoUrl?: string;
   audioUrl?: string;
+  review?: MedicalReview;
 }
 
 function mapHygieneResource(resource: WellbeingResource, index: number): HygieneItem {
@@ -45,6 +71,7 @@ function mapHygieneResource(resource: WellbeingResource, index: number): Hygiene
     estimatedReadTime: resource.estimatedReadTime,
     videoUrl: resource.videoUrl,
     audioUrl: resource.audioUrl,
+    review: pickMedicalReview(resource),
   };
 }
 
@@ -109,7 +136,7 @@ export default function Hygiene() {
     {
       id: "h2",
       title: "Daily Biological Hygiene",
-      icon: "leaf-outline",
+      icon: "flower-outline",
       iconType: "ionicons",
       description:
         "Simple daily care during periods without disrupting your natural balance.",
@@ -123,8 +150,8 @@ export default function Hygiene() {
     {
       id: "h3",
       title: "Bathing & Aquatic Activities",
-      icon: "droplet",
-      iconType: "feather",
+      icon: "swim",
+      iconType: "material",
       description:
         "Clean, comfortable guidance for swimming, bathing, and movement.",
       category: "activities",
@@ -149,40 +176,31 @@ export default function Hygiene() {
       ],
     },
   ];
-  const [apiHygieneTips, setApiHygieneTips] = useState<HygieneItem[]>([]);
-  const [refreshing, setRefreshing] = useState(false);
-  // Fetch failures fall back to the bundled static tips below rather than
-  // blocking the screen (the content is still useful, just not the latest) —
-  // this only tracks that so a low-key notice can say so, not to error out.
-  const [usingOfflineTips, setUsingOfflineTips] = useState(false);
+  // Public CMS content: cached (and kept on the device) so a revisit or cold
+  // start paints at once; `loading` is only true with nothing cached yet, and
+  // the topic grid waits for it so the bundled tips don't flash and then swap.
+  const {
+    data: hygieneResources,
+    loading,
+    refreshing,
+    error,
+    reload,
+  } = useAsyncLoad<WellbeingResource[]>(() => wellbeingApi.getResources("hygiene"), [], {
+    cacheKey: "wellbeing:resources:hygiene",
+    staleMs: 5 * 60_000,
+    persist: true,
+  });
+  const apiHygieneTips = useMemo(
+    () => (hygieneResources ?? []).map(mapHygieneResource),
+    [hygieneResources],
+  );
+  // Fetch failures fall back to the bundled static tips below (or the last
+  // copy loaded) rather than blocking the screen — the content is still
+  // useful, just not the latest — so this only drives a low-key notice.
+  const usingOfflineTips = error !== null;
+  const onRefresh = () => reload(true);
 
-  const loadHygieneResources = useCallback(async () => {
-    try {
-      const resources = await wellbeingApi.getResources("hygiene");
-      if (resources.length > 0) {
-        setApiHygieneTips(resources.map(mapHygieneResource));
-      }
-      setUsingOfflineTips(false);
-    } catch {
-      setApiHygieneTips([]);
-      setUsingOfflineTips(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadHygieneResources();
-  }, [loadHygieneResources]);
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      await loadHygieneResources();
-    } finally {
-      setRefreshing(false);
-    }
-  }, [loadHygieneResources]);
-
-  const softTints = getSoftTints(colors);
+  const tones = getWellbeingTones(colors);
 
   // Merge per category rather than swapping the whole list: the live API can
   // return fewer resources than there are tabs, and a wholesale swap would
@@ -217,26 +235,14 @@ export default function Hygiene() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentActiveData?.id]);
 
-  // Helper renderer engine for conditional multi-package icons support
-  const renderItemIcon = (item: HygieneItem) => {
-    if (item.iconType === "material") {
-      return (
-        <MaterialCommunityIcons
-          name={item.icon as any}
-          size={20}
-          color={colors.primary}
-        />
-      );
-    }
-    if (item.iconType === "feather") {
-      return (
-        <Feather name={item.icon as any} size={18} color={colors.primary} />
-      );
-    }
-    return (
-      <Ionicons name={item.icon as any} size={20} color={colors.primary} />
-    );
-  };
+  const topicOrder = ["products", "daily", "activities", "prevention"] as const;
+  const topicRows = [topicOrder.slice(0, 2), topicOrder.slice(2, 4)];
+  const activeMeta = currentActiveData
+    ? [
+        currentActiveData.estimatedReadTime ? { icon: "time-outline", label: `${currentActiveData.estimatedReadTime} min read` } : null,
+        { icon: "list-outline", label: `${currentActiveData.tips.length} ${currentActiveData.tips.length === 1 ? "tip" : "tips"}` },
+      ].filter((m): m is { icon: string; label: string } => m !== null)
+    : [];
 
   return (
     <>
@@ -249,202 +255,147 @@ export default function Hygiene() {
         className="flex-1"
         style={{ backgroundColor: colors.background }}
       >
-        <ScreenHeader title="Hygiene & Wellbeing" />
-
-        {usingOfflineTips && (
-          <Text
-            className="px-6 pb-1.5 text-xs font-semibold"
-            style={{ color: colors.mutedText }}
-          >
-            Showing offline tips — couldn&apos;t reach the latest guidance right now.
-          </Text>
-        )}
+        <ScreenHeader title="Hygiene & Care" subtitle="Gentle, practical period care" />
 
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 100 }}
+          contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 12, paddingBottom: 48 }}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
           }
         >
-          <View className="mt-5">
-            {/* 2x2 TOPIC CARD GRID — tap a card to switch the active topic */}
-            <View className="flex-row flex-wrap px-6" style={{ gap: 12 }}>
-              {(
-                [
-                  { id: "products", tint: softTints.pink, bg: colors.primaryLight },
-                  { id: "daily", tint: softTints.mint, bg: colors.accentLight },
-                  { id: "activities", tint: softTints.lavender, bg: colors.secondaryLight },
-                  { id: "prevention", tint: softTints.pink, bg: colors.primaryLight },
-                ] as const
-              ).map(({ id, bg }) => {
-                const item = activeResources.find((r) => r.category === id);
-                if (!item) return null;
-                const isSelected = activeTab === id;
-                return (
-                  <TouchableOpacity
-                    key={id}
-                    onPress={() => setActiveTab(id)}
-                    activeOpacity={0.85}
-                    className="rounded-[18px] p-4 shadow-2xs"
-                    style={{
-                      width: "47%",
-                      backgroundColor: colors.surface,
-                      borderWidth: isSelected ? 1.5 : 1,
-                      borderColor: isSelected ? colors.primary : colors.border,
-                    }}
-                  >
-                    <View
-                      className="w-6 h-6 rounded-lg items-center justify-center"
-                      style={{ backgroundColor: bg }}
-                    >
-                      {renderItemIcon(item)}
-                    </View>
-                    <Text
-                      className="text-[13px] font-bold mt-2"
-                      style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                      numberOfLines={2}
-                    >
-                      {item.title}
-                    </Text>
-                    <Text
-                      className="text-xs font-medium mt-0.5 leading-4"
-                      style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                      numberOfLines={2}
-                    >
-                      {item.description}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {/* CONTEXTUAL ACTIVE INTERACTIVE CARD SYSTEM */}
-            {currentActiveData && (
-              <View className="mx-6 gap-5 mt-6">
-                {/* Video / Audio Companion Media Row */}
-                {(currentActiveData.videoUrl || currentActiveData.audioUrl) && (
-                  <View className="flex-row gap-3">
-                    {!!currentActiveData.videoUrl && (
-                      <TouchableOpacity
-                        activeOpacity={0.8}
-                        onPress={() => Linking.openURL(currentActiveData.videoUrl!)}
-                        className="flex-1 flex-row items-center justify-center gap-2 py-3 rounded-xl border"
-                        style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-                      >
-                        <Ionicons name="play-circle-outline" size={16} color={colors.primary} />
-                        <Text
-                          className="text-xs font-bold"
-                          style={{ color: colors.primary, fontFamily: fonts.body }}
-                        >
-                          Watch Video
-                        </Text>
-                      </TouchableOpacity>
-                    )}
-                    {!!currentActiveData.audioUrl && (
-                      <TouchableOpacity
-                        activeOpacity={0.8}
-                        onPress={() => Linking.openURL(currentActiveData.audioUrl!)}
-                        className="flex-1 flex-row items-center justify-center gap-2 py-3 rounded-xl border"
-                        style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-                      >
-                        <Ionicons name="headset-outline" size={16} color={colors.primary} />
-                        <Text
-                          className="text-xs font-bold"
-                          style={{ color: colors.primary, fontFamily: fonts.body }}
-                        >
-                          Listen
-                        </Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                )}
-
-                {/* Sub-Section Title Container */}
-                <Text
-                  className="text-xs font-bold tracking-widest uppercase mt-2 px-1"
-                  style={{ color: colors.primary, fontFamily: fonts.heading }}
-                >
-                  Recommended Care Checklists
-                </Text>
-
-                {/* Checklist Rows Grid Loop Layout */}
-                <View className="gap-3.5">
-                  {currentActiveData.tips.map((tip, idx) => (
-                    <View
-                      key={idx}
-                      className="flex-row items-start p-4 rounded-2xl border"
-                      style={{
-                        backgroundColor: colors.surfaceSoft,
-                        borderColor: colors.border,
-                      }}
-                    >
-                      <View
-                        className="mt-0.5 mr-3.5 p-1 rounded-full"
-                        style={{ backgroundColor: colors.successLight }}
-                      >
-                        <Ionicons
-                          name="checkmark-circle"
-                          size={16}
-                          color={colors.success}
-                        />
-                      </View>
-                      <Text
-                        className="flex-1 text-xs font-medium leading-5"
-                        style={{ color: colors.foreground, fontFamily: fonts.body }}
-                      >
-                        {tip}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
-
-            {/* Support Telehealth quick redirection help block banner panel */}
+          {usingOfflineTips && (
             <View
-              className="mx-6 mt-8 p-5 rounded-2xl border flex-row items-center justify-between"
-              style={{
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-              }}
+              className="flex-row items-center"
+              style={{ gap: 8, marginBottom: 14, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 14, backgroundColor: colors.surfaceSoft }}
             >
-              <View className="flex-1 pr-4">
-                <Text
-                  className="text-xs font-bold"
-                  style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                >
-                  Experiencing rash or itching irritation?
-                </Text>
-                <Text
-                  className="text-xs font-semibold mt-0.5"
-                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                >
-                  Talk privately with an OBGYN if symptoms persist or worsen.
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => router.push("/(app)/consultation" as any)}
-                className="px-4 py-2 rounded-xl"
-                style={{ backgroundColor: colors.primary }}
-              >
-                <Text
-                  className="text-xs font-black"
-                  style={{ color: colors.buttonText, fontFamily: fonts.body }}
-                >
-                  Consult
-                </Text>
-              </TouchableOpacity>
+              <Ionicons name="cloud-offline-outline" size={16} color={colors.mutedText} />
+              <Text style={{ flex: 1, color: colors.mutedText, fontSize: 13, lineHeight: 18, fontFamily: fonts.body }}>
+                Showing saved tips. Pull down to get the latest.
+              </Text>
             </View>
+          )}
 
-            {/* Footer trust / privacy note */}
-            <Text
-              className="text-[13px] font-bold text-center mx-6 mt-1.5 px-1 py-2"
-              style={{ color: colors.mutedText, fontFamily: fonts.body }}
-            >
-              Gentle reminders, zero judgment. All chats here are private.
-            </Text>
-          </View>
+          <WellbeingIntro
+            icon="water-outline"
+            tone={tones.sky}
+            title="Care that fits your flow"
+            body="Pick a topic for simple, doctor-reviewed hygiene tips."
+          />
+
+          {/* 2x2 topic grid: tap a card to switch the active topic */}
+          <SectionHeader title="Topics" style={{ marginTop: 28 }} />
+          {loading ? (
+            <View style={{ gap: 12 }}>
+              {[0, 1].map((row) => (
+                <View key={row} className="flex-row" style={{ gap: 12 }}>
+                  <SkeletonBlock width="48%" height={138} radius={22} />
+                  <SkeletonBlock width="48%" height={138} radius={22} />
+                </View>
+              ))}
+            </View>
+          ) : (
+            <View style={{ gap: 12 }}>
+              {topicRows.map((row, rowIndex) => (
+                <View key={rowIndex} className="flex-row" style={{ gap: 12 }}>
+                  {row.map((id) => {
+                    const item = activeResources.find((r) => r.category === id);
+                    if (!item) return <View key={id} style={{ flex: 1 }} />;
+                    const topic = TOPICS[id];
+                    const tone = tones[topic.tone];
+                    const isSelected = activeTab === id;
+                    return (
+                      <TouchableOpacity
+                        key={id}
+                        onPress={() => setActiveTab(id)}
+                        activeOpacity={0.85}
+                        accessibilityRole="tab"
+                        accessibilityState={{ selected: isSelected }}
+                        accessibilityLabel={`${topic.label}: ${item.title}`}
+                        style={{
+                          flex: 1,
+                          borderRadius: 22,
+                          padding: 16,
+                          backgroundColor: isSelected ? tone.bg : colors.surface,
+                          borderWidth: 1.5,
+                          borderColor: isSelected ? tone.fg : colors.border,
+                          ...(isSelected ? null : getShadow(colors, isDark)),
+                        }}
+                      >
+                        <View className="flex-row items-start justify-between">
+                          <IconCircle icon={item.icon} fallback={topic.icon} tone={tone} size={42} solid={isSelected} />
+                          {isSelected ? <Ionicons name="checkmark-circle" size={20} color={tone.fg} /> : null}
+                        </View>
+                        <Text
+                          numberOfLines={1}
+                          maxFontSizeMultiplier={1.3}
+                          style={{ color: tone.fg, fontSize: 11.5, fontWeight: "800", letterSpacing: 0.6, textTransform: "uppercase", fontFamily: fonts.body, marginTop: 12 }}
+                        >
+                          {topic.label}
+                        </Text>
+                        <Text
+                          numberOfLines={2}
+                          maxFontSizeMultiplier={1.3}
+                          style={{ flexShrink: 1, color: colors.foreground, fontSize: 14.5, lineHeight: 20, fontWeight: "700", fontFamily: fonts.heading, marginTop: 2 }}
+                        >
+                          {item.title}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* The active topic, as a readable article */}
+          {loading ? (
+            <View style={{ marginTop: 28 }}>
+              <ArticleListSkeleton rows={3} />
+            </View>
+          ) : currentActiveData ? (
+            <View style={{ marginTop: 28 }}>
+              <Text
+                accessibilityRole="header"
+                numberOfLines={2}
+                style={{ color: colors.foreground, fontSize: 19, lineHeight: 25, fontWeight: "800", letterSpacing: -0.2, fontFamily: fonts.heading }}
+              >
+                {currentActiveData.title}
+              </Text>
+              <View className="flex-row flex-wrap" style={{ gap: 6, marginTop: 8 }}>
+                {activeMeta.map((m) => (
+                  <MetaPill key={m.label} icon={m.icon} label={m.label} />
+                ))}
+              </View>
+              <MedicalReviewBadge item={currentActiveData.review} style={{ marginTop: 10 }} />
+              <Text style={{ color: colors.foreground, opacity: 0.85, fontSize: 15, lineHeight: 23, fontFamily: fonts.body, marginTop: 12 }}>
+                {currentActiveData.description}
+              </Text>
+
+              <MediaButtons videoUrl={currentActiveData.videoUrl} audioUrl={currentActiveData.audioUrl} style={{ marginTop: 16 }} />
+
+              <DetailSection icon="checkmark-done-outline" tone={tones.green} title="Care checklist">
+                {currentActiveData.tips.length > 0 ? (
+                  <KeyPointList points={currentActiveData.tips} />
+                ) : (
+                  <WellbeingEmpty icon="list-outline" title="No tips here yet" message="Check back soon, or pick another topic." />
+                )}
+              </DetailSection>
+            </View>
+          ) : (
+            <View style={{ marginTop: 28 }}>
+              <WellbeingEmpty icon="water-outline" title="No hygiene guides yet" message="Pull down to refresh." />
+            </View>
+          )}
+
+          <ConsultNudge
+            style={{ marginTop: 28 }}
+            title="Rash, itching or unusual odour?"
+            body="Talk privately with a gynecologist if it lasts or gets worse."
+            onPress={() => router.push("/(app)/consultation" as any)}
+          />
+
+          <PrivacyNote style={{ marginTop: 22 }} text="Gentle reminders, zero judgement. General guidance, not a diagnosis." />
         </ScrollView>
       </SafeAreaView>
     </>

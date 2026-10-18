@@ -98,6 +98,7 @@ export default function GovernmentSchemeDetail() {
   const { data, loading, error, offline, reload } = useAsyncLoad(
     () => schemesApi.getById(String(id)),
     [id],
+    { cacheKey: `schemes:detail:${id}`, staleMs: 5 * 60_000 },
   );
   const scheme: GovernmentBenefit | undefined = data?.scheme;
 

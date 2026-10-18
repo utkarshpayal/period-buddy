@@ -1,7 +1,7 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "expo-router";
+import React, { useCallback, useRef, useState } from "react";
 import {
-  Linking,
   Modal,
   RefreshControl,
   ScrollView,
@@ -14,9 +14,28 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useAppState } from "../../components/AppState";
 import { useTheme } from "../../components/theme";
 import { SkeletonBlock } from "../../components/Skeleton";
-import { getShadow, getSoftTints } from "../../components/ui-tokens";
-import { wellbeingApi, type WellbeingResource } from "../../lib/api";
-import { HeaderIconButton, ScreenHeader, SectionHeader } from "../../components/ScreenHeader";
+import { useAsyncLoad } from "../../hooks/useAsyncLoad";
+import { wellbeingApi, type MedicalReview, type WellbeingGameDeck, type WellbeingResource } from "../../lib/api";
+import { ScreenHeader, SectionHeader } from "../../components/ScreenHeader";
+import {
+  ArticleListSkeleton,
+  ArticleRow,
+  ConsultNudge,
+  DetailSection,
+  DetailSheetHeader,
+  getWellbeingTones,
+  IconCircle,
+  KeyPointList,
+  MediaButtons,
+  MetaPill,
+  PrivacyNote,
+  TONE_ROTATION,
+  WellbeingCard,
+  WellbeingEmpty,
+  WellbeingIntro,
+} from "../../components/wellbeing/WellbeingUI";
+import { MedicalReviewBadge } from "../../components/MedicalReviewBadge";
+import { pickMedicalReview } from "../../lib/medicalReview";
 
 interface ResourceCategory {
   id: string;
@@ -29,6 +48,7 @@ interface ResourceCategory {
   estimatedReadTime?: number;
   videoUrl?: string;
   audioUrl?: string;
+  review?: MedicalReview;
 }
 
 type PositionCard = {
@@ -115,6 +135,8 @@ export default function SexualWellbeing() {
   const { colors, isDark, fonts } = useTheme();
   const { earnTokens } = useAppState();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const tones = getWellbeingTones(colors);
 
   // Which card deck is open inline, if any.
   const [activeGameMode, setActiveGameMode] = useState<"none" | "spark" | "positions">("none");
@@ -129,7 +151,7 @@ export default function SexualWellbeing() {
     {
       id: "sw_1",
       title: "Intimacy & Periods",
-      icon: "heart-outline",
+      icon: "heart-circle-outline",
       color: colors.primary,
       items: 8,
       summary: "Guidance on comfort, consent, and clear boundaries during periods.",
@@ -155,8 +177,8 @@ export default function SexualWellbeing() {
     {
       id: "sw_3",
       title: "Contraception Matrix",
-      icon: "apps-outline",
-      color: colors.accent,
+      icon: "pill",
+      color: colors.accentText,
       items: 15,
       summary: "Compare hormonal options, barriers, emergency contraception, and what to discuss with an OBGYN.",
       extendedGuide: [
@@ -168,7 +190,7 @@ export default function SexualWellbeing() {
     {
       id: "sw_4",
       title: "Consent & Safety",
-      icon: "checkmark-circle-outline",
+      icon: "hand-left-outline",
       color: colors.warning,
       items: 6,
       summary: "Boundaries, communication, privacy, and enthusiastic consent.",
@@ -179,59 +201,49 @@ export default function SexualWellbeing() {
       ],
     },
   ];
-  const [apiCategories, setApiCategories] = useState<ResourceCategory[]>([]);
-  const [sparkCards, setSparkCards] = useState<typeof fallbackSparkCards>([]);
-  const [positionCards, setPositionCards] = useState<typeof fallbackPositionCards>([]);
-  const [loadingWellbeing, setLoadingWellbeing] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-
-  const softTints = getSoftTints(colors);
-  const categoryTints = [softTints.pink, softTints.emerald, softTints.lavender, softTints.amber];
-  const visibleCategories = apiCategories.length > 0 ? apiCategories : categories;
-
-  const loadWellbeing = useCallback(async () => {
-    try {
+  // Public CMS content: cached (and kept on the device) as the raw responses
+  // so a revisit or cold start paints at once while it revalidates.
+  const {
+    data: wellbeingData,
+    loading: loadingWellbeing,
+    refreshing,
+    reload,
+  } = useAsyncLoad<{ resources: WellbeingResource[]; sparkDeck: WellbeingGameDeck; positionsDeck: WellbeingGameDeck }>(
+    async () => {
       const [resources, sparkDeck, positionsDeck] = await Promise.all([
         wellbeingApi.getResources("sexual_wellbeing"),
         wellbeingApi.getGameDecks("spark"),
         wellbeingApi.getGameDecks("positions"),
       ]);
+      return { resources, sparkDeck, positionsDeck };
+    },
+    [],
+    { cacheKey: "wellbeing:sexual", staleMs: 5 * 60_000, persist: true },
+  );
 
-      if (resources.length > 0) {
-        setApiCategories(resources.map(mapWellbeingResource));
-      }
-      // An empty deck from the server falls back to the built-in cards, so the decks are never dead buttons.
-      setSparkCards(
-        sparkDeck.cards.length > 0
-          ? sparkDeck.cards.map((card, index) =>
-              normalizeTextCard(card, fallbackSparkCards[index % fallbackSparkCards.length]),
-            )
-          : fallbackSparkCards,
-      );
-      setPositionCards(
-        positionsDeck.cards.length > 0 ? positionsDeck.cards.map(normalizePositionCard) : fallbackPositionCards,
-      );
-    } catch {
-      setApiCategories([]);
-      setSparkCards(fallbackSparkCards);
-      setPositionCards(fallbackPositionCards);
-    } finally {
-      setLoadingWellbeing(false);
-    }
-  }, []);
+  const toneFor = (index: number) => tones[TONE_ROTATION[Math.max(0, index) % TONE_ROTATION.length]];
+  const apiCategories = wellbeingData ? wellbeingData.resources.map(mapWellbeingResource) : [];
+  const visibleCategories = apiCategories.length > 0 ? apiCategories : categories;
+  // An empty deck from the server (or a failed load) falls back to the built-in
+  // cards, so the decks are never dead buttons. Empty only while first loading.
+  const sparkCards: typeof fallbackSparkCards = wellbeingData
+    ? wellbeingData.sparkDeck.cards.length > 0
+      ? wellbeingData.sparkDeck.cards.map((card, index) =>
+          normalizeTextCard(card, fallbackSparkCards[index % fallbackSparkCards.length]),
+        )
+      : fallbackSparkCards
+    : loadingWellbeing
+      ? []
+      : fallbackSparkCards;
+  const positionCards: typeof fallbackPositionCards = wellbeingData
+    ? wellbeingData.positionsDeck.cards.length > 0
+      ? wellbeingData.positionsDeck.cards.map(normalizePositionCard)
+      : fallbackPositionCards
+    : loadingWellbeing
+      ? []
+      : fallbackPositionCards;
 
-  useEffect(() => {
-    loadWellbeing();
-  }, [loadWellbeing]);
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      await loadWellbeing();
-    } finally {
-      setRefreshing(false);
-    }
-  }, [loadWellbeing]);
+  const onRefresh = useCallback(() => reload(true), [reload]);
 
   function mapWellbeingResource(resource: WellbeingResource): ResourceCategory {
     return {
@@ -245,6 +257,7 @@ export default function SexualWellbeing() {
       estimatedReadTime: resource.estimatedReadTime,
       videoUrl: resource.videoUrl,
       audioUrl: resource.audioUrl,
+      review: pickMedicalReview(resource),
     };
   }
 
@@ -292,44 +305,37 @@ export default function SexualWellbeing() {
     setModalVisible(false);
   }
 
-  // White card with a tinted icon square, like the app's list rows.
-  const tileStyle = {
-    width: "48%" as const,
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 20,
-    padding: 16,
-    ...getShadow(colors, isDark),
-  };
-
-  const iconSquare = (icon: string, color: string, bg: string) => (
-    <View style={{ width: 40, height: 40, borderRadius: 13, backgroundColor: bg, alignItems: "center", justifyContent: "center" }}>
-      <Ionicons name={icon as any} size={18} color={color} />
-    </View>
-  );
-
   const decks = [
     {
       mode: "spark" as const,
       title: "Conversation cards",
       description: "Questions to feel closer",
       icon: "chatbubbles-outline",
-      color: colors.primary,
-      bg: colors.primaryLight,
+      tone: tones.rose,
       count: sparkCards.length,
     },
     {
       mode: "positions" as const,
       title: "Comfort cards",
       description: "Gentle ideas for tired days",
-      icon: "leaf-outline",
-      color: colors.accent,
-      bg: colors.accentLight,
+      icon: "bed-outline",
+      tone: tones.lavender,
       count: positionCards.length,
     },
   ];
   const openDeck = decks.find((d) => d.mode === activeGameMode);
+  const selectedIndex = selectedCategory ? visibleCategories.findIndex((c) => c.id === selectedCategory.id) : 0;
+
+  const metaFor = (category: ResourceCategory) =>
+    [
+      category.estimatedReadTime ? { icon: "time-outline", label: `${category.estimatedReadTime} min read` } : null,
+      {
+        icon: "list-outline",
+        label: `${category.extendedGuide.length} key ${category.extendedGuide.length === 1 ? "point" : "points"}`,
+      },
+      category.videoUrl ? { icon: "play-circle-outline", label: "Video" } : null,
+      category.audioUrl ? { icon: "headset-outline", label: "Audio" } : null,
+    ].filter((m): m is { icon: string; label: string } => m !== null);
 
   return (
     <>
@@ -340,22 +346,33 @@ export default function SexualWellbeing() {
 
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 12, paddingBottom: 120 }}
+          contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 12, paddingBottom: insets.bottom + 48 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
         >
+          <WellbeingIntro
+            icon="heart-circle-outline"
+            tone={tones.rose}
+            title="Intimacy, on your terms"
+            body="Consent, protection and comfort, explained without judgement."
+            chips={[
+              { icon: "lock-closed-outline", label: "Private" },
+              { icon: "shield-checkmark-outline", label: "Evidence-based" },
+            ]}
+          />
+
           {/* Partner card decks */}
-          <SectionHeader title="Together" />
+          <SectionHeader title="Together" style={{ marginTop: 28 }} />
           {loadingWellbeing ? (
-            <View className="flex-row" style={{ gap: 10 }}>
-              <SkeletonBlock width="48%" height={124} radius={20} />
-              <SkeletonBlock width="48%" height={124} radius={20} />
+            <View className="flex-row" style={{ gap: 12 }}>
+              <SkeletonBlock width="48%" height={150} radius={22} />
+              <SkeletonBlock width="48%" height={150} radius={22} />
             </View>
           ) : openDeck ? (
-            <View style={{ ...tileStyle, width: "100%", padding: 18 }}>
+            <WellbeingCard style={{ padding: 18 }}>
               <View className="flex-row items-center" style={{ gap: 12 }}>
-                {iconSquare(openDeck.icon, openDeck.color, openDeck.bg)}
+                <IconCircle icon={openDeck.icon} tone={openDeck.tone} size={42} />
                 <View className="flex-1">
-                  <Text style={{ color: colors.foreground, fontSize: 14.5, fontWeight: "800", fontFamily: fonts.heading }}>{openDeck.title}</Text>
+                  <Text numberOfLines={1} style={{ color: colors.foreground, fontSize: 15, fontWeight: "800", fontFamily: fonts.heading }}>{openDeck.title}</Text>
                   <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.mono, marginTop: 1 }}>
                     {`${(openDeck.mode === "spark" ? sparkIndex : positionIndex) + 1} of ${openDeck.count}`}
                   </Text>
@@ -365,15 +382,21 @@ export default function SexualWellbeing() {
                   hitSlop={8}
                   accessibilityRole="button"
                   accessibilityLabel="Close cards"
-                  style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.surfaceSoft, alignItems: "center", justifyContent: "center" }}
+                  style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surfaceSoft, alignItems: "center", justifyContent: "center" }}
                 >
                   <Feather name="x" size={16} color={colors.foreground} />
                 </TouchableOpacity>
               </View>
 
               <View
-                style={{ marginTop: 16, minHeight: 150, borderRadius: 18, backgroundColor: openDeck.bg, paddingHorizontal: 20, paddingVertical: 22, justifyContent: "center" }}
+                style={{ marginTop: 16, minHeight: 168, borderRadius: 20, backgroundColor: openDeck.tone.bg, paddingHorizontal: 22, paddingVertical: 24, justifyContent: "center" }}
               >
+                <Ionicons
+                  name={openDeck.mode === "spark" ? "chatbubble-ellipses-outline" : "sparkles-outline"}
+                  size={20}
+                  color={openDeck.tone.fg}
+                  style={{ alignSelf: "center", marginBottom: 12, opacity: 0.8 }}
+                />
                 {openDeck.mode === "spark" ? (
                   <Text style={{ color: colors.foreground, fontSize: 17, lineHeight: 25, fontWeight: "700", fontFamily: fonts.heading, textAlign: "center" }}>
                     {sparkCards[sparkIndex]}
@@ -383,10 +406,10 @@ export default function SexualWellbeing() {
                     <Text style={{ color: colors.foreground, fontSize: 17, fontWeight: "800", fontFamily: fonts.heading, textAlign: "center" }}>
                       {currentPosition.name}
                     </Text>
-                    <Text style={{ color: colors.mutedText, fontSize: 13, fontWeight: "700", fontFamily: fonts.body, textAlign: "center", marginTop: 4 }}>
+                    <Text style={{ color: openDeck.tone.fg, fontSize: 13, fontWeight: "700", fontFamily: fonts.body, textAlign: "center", marginTop: 4 }}>
                       {currentPosition.focus}
                     </Text>
-                    <Text style={{ color: colors.foreground, fontSize: 14, lineHeight: 21, fontFamily: fonts.body, textAlign: "center", marginTop: 12 }}>
+                    <Text style={{ color: colors.foreground, fontSize: 14.5, lineHeight: 22, fontFamily: fonts.body, textAlign: "center", marginTop: 12 }}>
                       {currentPosition.tip}
                     </Text>
                   </View>
@@ -403,9 +426,9 @@ export default function SexualWellbeing() {
                 <Text style={{ color: colors.buttonText, fontSize: 14.5, fontWeight: "800", fontFamily: fonts.body }}>Next card</Text>
                 <Feather name="arrow-right" size={16} color={colors.buttonText} />
               </TouchableOpacity>
-            </View>
+            </WellbeingCard>
           ) : (
-            <View className="flex-row" style={{ gap: 10 }}>
+            <View className="flex-row" style={{ gap: 12 }}>
               {decks.map((deck) => (
                 <TouchableOpacity
                   key={deck.mode}
@@ -414,79 +437,67 @@ export default function SexualWellbeing() {
                   onPress={() => setActiveGameMode(deck.mode)}
                   accessibilityRole="button"
                   accessibilityLabel={`${deck.title}, ${deck.description}`}
-                  style={{ ...tileStyle, flex: 1, opacity: deck.count === 0 ? 0.5 : 1 }}
+                  style={{ flex: 1, opacity: deck.count === 0 ? 0.5 : 1 }}
                 >
-                  <View style={{ marginBottom: 12 }}>{iconSquare(deck.icon, deck.color, deck.bg)}</View>
-                  <Text style={{ color: colors.foreground, fontSize: 13.5, fontWeight: "800", fontFamily: fonts.body }}>{deck.title}</Text>
-                  <Text style={{ color: colors.mutedText, fontSize: 12.5, marginTop: 3, fontFamily: fonts.body }} numberOfLines={2}>
-                    {deck.description}
-                  </Text>
+                  <WellbeingCard style={{ padding: 16, flex: 1 }}>
+                    <IconCircle icon={deck.icon} tone={deck.tone} size={44} />
+                    <Text
+                      numberOfLines={2}
+                      maxFontSizeMultiplier={1.3}
+                      style={{ color: colors.foreground, fontSize: 15, lineHeight: 20, fontWeight: "700", fontFamily: fonts.heading, marginTop: 14 }}
+                    >
+                      {deck.title}
+                    </Text>
+                    <Text numberOfLines={2} maxFontSizeMultiplier={1.3} style={{ color: colors.mutedText, fontSize: 13, lineHeight: 18, marginTop: 3, fontFamily: fonts.body }}>
+                      {deck.description}
+                    </Text>
+                    <View className="flex-row items-center" style={{ gap: 4, marginTop: 12 }}>
+                      <Text style={{ color: deck.tone.fg, fontSize: 13, fontWeight: "800", fontFamily: fonts.body }}>
+                        {deck.count > 0 ? `${deck.count} cards` : "No cards yet"}
+                      </Text>
+                      {deck.count > 0 ? <Ionicons name="arrow-forward" size={14} color={deck.tone.fg} /> : null}
+                    </View>
+                  </WellbeingCard>
                 </TouchableOpacity>
               ))}
             </View>
           )}
 
-          {/* Guides, as a reading list: they're short articles with no cover art, so rows read better than tiles. */}
-          <SectionHeader title="Read" style={{ marginTop: 26 }} />
-          <View style={{ ...tileStyle, width: "100%", padding: 0 }}>
-            {visibleCategories.map((category, index) => {
-              const meta = [
-                category.estimatedReadTime ? `${category.estimatedReadTime} min read` : null,
-                `${category.extendedGuide.length} key ${category.extendedGuide.length === 1 ? "point" : "points"}`,
-              ].filter(Boolean).join("  ·  ");
-              return (
-                <TouchableOpacity
+          {/* Guides, as a reading list: short articles with no cover art, so rows read better than tiles. */}
+          <SectionHeader title="Guides" style={{ marginTop: 28 }} />
+          {loadingWellbeing ? (
+            <ArticleListSkeleton rows={4} />
+          ) : visibleCategories.length === 0 ? (
+            <WellbeingEmpty icon="book-outline" title="No guides yet" message="New guides are on the way. Pull down to refresh." />
+          ) : (
+            <WellbeingCard>
+              {visibleCategories.map((category, index) => (
+                <ArticleRow
                   key={category.id}
-                  activeOpacity={0.7}
+                  first={index === 0}
+                  icon={category.icon}
+                  fallbackIcon="book-outline"
+                  tone={toneFor(index)}
+                  title={category.title}
+                  summary={category.summary}
+                  meta={metaFor(category)}
                   onPress={() => handleOpenArticleModal(category)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${category.title}. ${category.summary}. ${meta}`}
-                  className="flex-row"
-                  style={{
-                    gap: 14,
-                    paddingHorizontal: 16,
-                    paddingVertical: 16,
-                    borderTopWidth: index === 0 ? 0 : 1,
-                    borderTopColor: colors.border,
-                  }}
-                >
-                  <View
-                    style={{
-                      width: 56,
-                      height: 56,
-                      borderRadius: 16,
-                      backgroundColor: categoryTints[index % categoryTints.length],
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <Ionicons name={category.icon as any} size={24} color={category.color} />
-                  </View>
-                  <View className="flex-1">
-                    <Text style={{ color: colors.foreground, fontSize: 15, lineHeight: 20, fontWeight: "800", letterSpacing: -0.2, fontFamily: fonts.heading }} numberOfLines={2}>
-                      {category.title}
-                    </Text>
-                    <Text style={{ color: colors.mutedText, fontSize: 13, lineHeight: 18, marginTop: 3, fontFamily: fonts.body }} numberOfLines={2}>
-                      {category.summary}
-                    </Text>
-                    <View className="flex-row items-center" style={{ gap: 8, marginTop: 8 }}>
-                      <Text style={{ color: colors.mutedText, fontSize: 12, fontFamily: fonts.mono }}>{meta}</Text>
-                      {category.videoUrl ? <Ionicons name="play-circle" size={14} color={colors.mutedText} accessibilityLabel="Has video" /> : null}
-                      {category.audioUrl ? <Ionicons name="headset" size={13} color={colors.mutedText} accessibilityLabel="Has audio" /> : null}
-                    </View>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+                />
+              ))}
+            </WellbeingCard>
+          )}
 
-          {/* Honest scope note */}
-          <View className="flex-row items-start" style={{ gap: 10, marginTop: 22, paddingHorizontal: 4 }}>
-            <Ionicons name="lock-closed-outline" size={15} color={colors.mutedText} style={{ marginTop: 2 }} />
-            <Text style={{ flex: 1, color: colors.mutedText, fontSize: 13, lineHeight: 19, fontFamily: fonts.body }}>
-              Private to you. General guidance, not a diagnosis: for anything specific or worrying, talk to a doctor.
-            </Text>
-          </View>
+          <ConsultNudge
+            style={{ marginTop: 28 }}
+            title="Something doesn't feel right?"
+            body="Pain, unusual discharge or a missed period: talk privately with a gynecologist."
+            onPress={() => router.push("/(app)/consultation" as any)}
+          />
+
+          <PrivacyNote
+            style={{ marginTop: 22 }}
+            text="Private to you. General guidance, not a diagnosis: for anything specific or worrying, talk to a doctor."
+          />
         </ScrollView>
 
         {/* Guide detail */}
@@ -494,76 +505,30 @@ export default function SexualWellbeing() {
           {selectedCategory && (
             // Android ignores pageSheet and renders fullscreen, so SafeAreaView keeps the header clear.
             <SafeAreaView edges={["top"]} className="flex-1" style={{ backgroundColor: colors.background }}>
-              <View className="flex-row items-center" style={{ paddingHorizontal: 24, paddingTop: 16, paddingBottom: 12, gap: 12 }}>
-                {iconSquare(
-                  selectedCategory.icon,
-                  selectedCategory.color,
-                  categoryTints[Math.max(0, visibleCategories.findIndex((c) => c.id === selectedCategory.id)) % categoryTints.length],
-                )}
-                <Text
-                  accessibilityRole="header"
-                  numberOfLines={2}
-                  style={{ flex: 1, color: colors.foreground, fontSize: 20, fontWeight: "800", letterSpacing: -0.3, fontFamily: fonts.heading }}
-                >
-                  {selectedCategory.title}
-                </Text>
-                <HeaderIconButton icon="close" onPress={handleCloseArticleModal} accessibilityLabel="Close" />
-              </View>
+              <DetailSheetHeader
+                icon={selectedCategory.icon}
+                tone={toneFor(selectedIndex)}
+                eyebrow="Guide"
+                title={selectedCategory.title}
+                onClose={handleCloseArticleModal}
+              />
 
-              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: insets.bottom + 32 }}>
-                <Text style={{ color: colors.foreground, fontSize: 15, lineHeight: 23, fontFamily: fonts.body }}>{selectedCategory.summary}</Text>
-                {!!selectedCategory.estimatedReadTime && (
-                  <View className="flex-row items-center" style={{ gap: 5, marginTop: 8 }}>
-                    <Feather name="clock" size={12} color={colors.mutedText} />
-                    <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body }}>{`${selectedCategory.estimatedReadTime} min read`}</Text>
-                  </View>
-                )}
-
-                {(selectedCategory.videoUrl || selectedCategory.audioUrl) && (
-                  <View className="flex-row" style={{ gap: 10, marginTop: 18 }}>
-                    {!!selectedCategory.videoUrl && (
-                      <TouchableOpacity
-                        activeOpacity={0.8}
-                        onPress={() => Linking.openURL(selectedCategory.videoUrl!)}
-                        className="flex-1 flex-row items-center justify-center"
-                        style={{ height: 46, borderRadius: 23, gap: 8, backgroundColor: colors.primaryLight }}
-                      >
-                        <Ionicons name="play-circle-outline" size={18} color={colors.primary} />
-                        <Text style={{ color: colors.primary, fontSize: 14, fontWeight: "800", fontFamily: fonts.body }}>Watch</Text>
-                      </TouchableOpacity>
-                    )}
-                    {!!selectedCategory.audioUrl && (
-                      <TouchableOpacity
-                        activeOpacity={0.8}
-                        onPress={() => Linking.openURL(selectedCategory.audioUrl!)}
-                        className="flex-1 flex-row items-center justify-center"
-                        style={{ height: 46, borderRadius: 23, gap: 8, backgroundColor: colors.primaryLight }}
-                      >
-                        <Ionicons name="headset-outline" size={18} color={colors.primary} />
-                        <Text style={{ color: colors.primary, fontSize: 14, fontWeight: "800", fontFamily: fonts.body }}>Listen</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                )}
-
-                <SectionHeader title="What to know" style={{ marginTop: 26 }} />
-                <View style={{ ...tileStyle, width: "100%", paddingVertical: 4 }}>
-                  {selectedCategory.extendedGuide.map((line, idx) => (
-                    <View
-                      key={idx}
-                      className="flex-row items-start"
-                      style={{
-                        gap: 12,
-                        paddingVertical: 14,
-                        borderTopWidth: idx === 0 ? 0 : 1,
-                        borderTopColor: colors.border,
-                      }}
-                    >
-                      <Ionicons name="checkmark-circle" size={18} color={colors.success} style={{ marginTop: 1 }} />
-                      <Text style={{ flex: 1, color: colors.foreground, fontSize: 14, lineHeight: 21, fontFamily: fonts.body }}>{line}</Text>
-                    </View>
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 4, paddingBottom: insets.bottom + 32 }}>
+                <View className="flex-row flex-wrap" style={{ gap: 6 }}>
+                  {metaFor(selectedCategory).map((m) => (
+                    <MetaPill key={m.label} icon={m.icon} label={m.label} />
                   ))}
                 </View>
+                <MedicalReviewBadge item={selectedCategory.review} style={{ marginTop: 10 }} />
+                <Text style={{ color: colors.foreground, fontSize: 16, lineHeight: 25, fontFamily: fonts.body, marginTop: 14 }}>{selectedCategory.summary}</Text>
+
+                <MediaButtons videoUrl={selectedCategory.videoUrl} audioUrl={selectedCategory.audioUrl} style={{ marginTop: 18 }} />
+
+                <DetailSection icon="bulb-outline" tone={tones.amber} title="What to know">
+                  <KeyPointList points={selectedCategory.extendedGuide} />
+                </DetailSection>
+
+                <PrivacyNote style={{ marginTop: 22 }} text="General guidance, not a diagnosis. A doctor can advise on your situation." />
               </ScrollView>
             </SafeAreaView>
           )}

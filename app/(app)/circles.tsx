@@ -188,7 +188,10 @@ function ActionRow({ icon, label, hint, onPress, last }: { icon: React.Component
 function CircleList({ initialCode }: { initialCode?: string }) {
   const router = useRouter();
   const { colors, fonts } = useTheme();
-  const { data, loading, refreshing, error, offline, reload } = useAsyncLoad(() => circlesApi.list(), [], { refreshOn: ["circles"] });
+  const { data, loading, refreshing, error, offline, reload } = useAsyncLoad(() => circlesApi.list(), [], {
+    refreshOn: ["circles"],
+    cacheKey: "circles:list",
+  });
 
   const [createOpen, setCreateOpen] = useState(false);
   const [joinOpen, setJoinOpen] = useState(Boolean(initialCode));
@@ -518,7 +521,10 @@ function VibeRow({
 function CircleView({ id }: { id: string }) {
   const router = useRouter();
   const { colors, fonts } = useTheme();
-  const { data, loading, refreshing, error, offline, reload } = useAsyncLoad(() => circlesApi.get(id), [id], { refreshOn: ["circles"] });
+  const { data, loading, refreshing, error, offline, reload } = useAsyncLoad(() => circlesApi.get(id), [id], {
+    refreshOn: ["circles"],
+    cacheKey: `circles:detail:${id}`,
+  });
   const [circle, setCircle] = useState<CircleDetail | null>(null);
   const [emoji, setEmoji] = useState(VIBE_EMOJIS[0]);
   const [text, setText] = useState("");

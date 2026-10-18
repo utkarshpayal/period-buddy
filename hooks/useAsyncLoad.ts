@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getFriendlyErrorMessage, isNetworkError } from "../lib/api";
 import type { DataTopic } from "../lib/data-sync";
+import { fetchQuery, hydrateQuery, isQueryFresh, peekQuery, subscribeQuery, DEFAULT_STALE_MS } from "../lib/queryCache";
 import { useDataRefresh } from "./useDataRefresh";
 
 export function useAsyncLoad<T>(
@@ -8,54 +9,133 @@ export function useAsyncLoad<T>(
   deps: any[] = [],
   options: {
     /** Silently refetch when any of these change elsewhere in the app —
-     * see hooks/useDataRefresh.ts. */
+     * see hooks/useDataRefresh.ts. With `cacheKey`, they also mark the
+     * cached copy stale. */
     refreshOn?: DataTopic[];
+    /**
+     * Shares the result through lib/queryCache.ts: a later mount (or another
+     * screen using the same key) paints the cached copy at once and only
+     * refetches once it is older than `staleMs`. Must include anything the
+     * fetcher depends on (ids, filters). Omit for data that must always be live.
+     */
+    cacheKey?: string;
+    /** Default 60 s. */
+    staleMs?: number;
+    /** Also keep the copy on the device (public content only, never account data). */
+    persist?: boolean;
   } = {},
 ) {
-  const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { cacheKey, staleMs = DEFAULT_STALE_MS, persist, refreshOn } = options;
+  const cached = cacheKey ? peekQuery<T>(cacheKey) : undefined;
+  const [data, setData] = useState<T | null>(cached ?? null);
+  const [loading, setLoading] = useState(cached === undefined);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Lets screens show an "offline" affordance distinct from a generic failure.
   const [offline, setOffline] = useState(false);
+  const hasDataRef = useRef(cached !== undefined);
+  hasDataRef.current = data !== null;
 
-  const reload = useCallback(async (isRefresh = false) => {
-    try {
-      if (isRefresh) setRefreshing(true);
-      else setLoading(true);
+  const fetcherRef = useRef(fetcher);
+  fetcherRef.current = fetcher;
+  const cacheOptions = { staleMs, topics: refreshOn, persist };
+  const cacheOptionsRef = useRef(cacheOptions);
+  cacheOptionsRef.current = cacheOptions;
+
+  const run = useCallback(
+    (force: boolean) =>
+      cacheKey
+        ? fetchQuery(cacheKey, () => fetcherRef.current(), { ...cacheOptionsRef.current, force })
+        : fetcherRef.current(),
+    [cacheKey],
+  );
+
+  // Another screen (or a background refetch) updated the same key.
+  useEffect(() => {
+    if (!cacheKey) return;
+    return subscribeQuery(cacheKey, (value) => {
+      setData(value as T);
+      setLoading(false);
       setError(null);
       setOffline(false);
-      const result = await fetcher();
-      setData(result);
-    } catch (err) {
-      setError(getFriendlyErrorMessage(err));
-      setOffline(isNetworkError(err));
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+    });
+  }, [cacheKey]);
+
+  const reload = useCallback(
+    async (isRefresh = false) => {
+      try {
+        if (isRefresh) setRefreshing(true);
+        // A cached copy stays on screen while it revalidates.
+        else if (!hasDataRef.current) setLoading(true);
+        setError(null);
+        setOffline(false);
+        const result = await run(true);
+        setData(result);
+      } catch (err) {
+        // Keep showing cached data if we have it; the error only matters with nothing to show.
+        if (!hasDataRef.current || isRefresh) {
+          setError(getFriendlyErrorMessage(err));
+          setOffline(isNetworkError(err));
+        }
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
+    [run, ...deps],
+  );
 
   useEffect(() => {
-    reload();
+    let cancelled = false;
+    if (!cacheKey) {
+      void reload();
+      return;
+    }
+    const current = peekQuery<T>(cacheKey);
+    if (current !== undefined) {
+      setData(current);
+      setLoading(false);
+      if (isQueryFresh(cacheKey, staleMs)) return;
+      void reload();
+      return;
+    }
+    hasDataRef.current = false;
+    setData(null);
+    if (!persist) {
+      void reload();
+      return;
+    }
+    // Paint the device copy first (if any), then revalidate.
+    void hydrateQuery<T>(cacheKey).then((stored) => {
+      if (cancelled) return;
+      if (stored !== undefined) {
+        hasDataRef.current = true;
+        setData(stored);
+        setLoading(false);
+      }
+      void reload();
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reload]);
 
   // Background refetch: no loader or spinner, and a failure keeps whatever
   // is already on screen instead of swapping it for an error state.
   const silentReload = useCallback(async () => {
     try {
-      const result = await fetcher();
+      const result = await run(true);
       setData(result);
       setError(null);
       setOffline(false);
     } catch {
       // keep existing data
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
+  }, [run]);
 
-  useDataRefresh(options.refreshOn ?? [], silentReload);
+  useDataRefresh(refreshOn ?? [], silentReload);
 
   return { data, loading, refreshing, error, offline, reload };
 }

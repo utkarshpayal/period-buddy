@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { invalidateQueries } from "../../../lib/queryCache";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -172,6 +173,8 @@ export default function Home() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
+    invalidateQueries("cycle:predictions");
+    invalidateQueries("auth:dashboard");
     try {
       // Also re-pulls the App CMS layout, so a just-published change can be
       // checked without restarting the app.

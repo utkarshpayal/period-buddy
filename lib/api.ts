@@ -3,6 +3,7 @@ import { Platform } from "react-native";
 import type { CyclePhase } from "./cycle";
 import { emitDataChange, emitMutation } from "./data-sync";
 import { getDeviceId } from "./deviceId";
+import { fetchQuery } from "./queryCache";
 import { loadSessionToken } from "./sessionStore";
 import { analyticsAllowed } from "./analyticsConsent";
 
@@ -798,7 +799,17 @@ export type CommunityPost = {
 export type BlogCategory = "general" | "health" | "lifestyle" | "beauty";
 export type BlogStatus = "draft" | "published" | "archived";
 
-export type Blog = {
+/** Medical-review stamp the backend sets when a Content Super Admin reviews
+ * an item. Only published items are served, so these never describe a draft. */
+export type MedicalReview = {
+  medicallyReviewed?: boolean;
+  /** Reviewer's display name. */
+  reviewedBy?: string | null;
+  /** ISO date of the review. */
+  reviewedAt?: string | null;
+};
+
+export type Blog = MedicalReview & {
   _id: string;
   author?: string;
   authorId?: string;
@@ -812,7 +823,14 @@ export type Blog = {
   likesCount: number;
   likeCount?: number;
   publishedAt?: string;
+  /** Minutes to read, from the article's word count (server-computed). */
   readTimeMinutes?: number;
+  /** Average active reading time per read (on screen, not idle); null until anyone has read it. */
+  averageReadMinutes?: number | null;
+  averageReadSeconds?: number | null;
+  /** Share of reads that reached the end (0–1). */
+  completionRate?: number | null;
+  readSessionCount?: number;
   seoDescription?: string;
   seoTitle?: string;
   slug: string;
@@ -832,6 +850,8 @@ export type ContentFeedItem = {
   likeCount?: number;
   publishedAt?: string;
   readTimeMinutes?: number;
+  /** Real average active reading time per visit (seconds); null until anyone has read it. */
+  averageReadSeconds?: number | null;
   slug?: string;
   sourceId: string;
   summary: string;
@@ -849,7 +869,7 @@ export type ReelPollOption = {
   votes: number;
 };
 
-export type Reel = {
+export type Reel = MedicalReview & {
   _id?: string;
   category: string;
   commentCount?: number;
@@ -858,26 +878,45 @@ export type Reel = {
   creatorId: string;
   /** @deprecated */
   creatorName: string;
+  /** Caption (admin "summary"); the app falls back to `title`. */
+  description?: string;
   directMp4Url: string;
   duration: string;
   followedByMe?: boolean;
   id: string;
+  /** The signed-in person liked / saved it (GET /api/reels, /:id, /saved). */
+  isLiked?: boolean;
+  isSaved?: boolean;
   likeCount?: number;
   pollOptions: ReelPollOption[];
   pollQuestion?: string;
   saveCount?: number;
   shareCount?: number;
+  tags?: string[];
   thumbnailUrl: string;
   title: string;
   verified: boolean;
-  /** @deprecated use likeCount */
+  /** @deprecated use viewCount */
   views: number;
   viewCount?: number;
   votedOptionId?: string | null;
   watchTime?: number;
 };
 
-export type HealthIssue = {
+/** One reel comment (GET/POST /api/reels/:id/comments). The author's account id is never sent. */
+export type ReelComment = {
+  id: string;
+  reelId: string;
+  text: string;
+  createdAt: string;
+  author: { name: string; avatar: string | null };
+  isOwn: boolean;
+  canDelete: boolean;
+  /** Client-only: optimistic row still being sent. */
+  pending?: boolean;
+};
+
+export type HealthIssue = MedicalReview & {
   _id?: string;
   category: string;
   causes?: string[];
@@ -895,7 +934,7 @@ export type HealthIssue = {
   whenToSeeDoctor?: string;
 };
 
-export type WellbeingResource = {
+export type WellbeingResource = MedicalReview & {
   _id?: string;
   audioUrl?: string;
   color: string;
@@ -916,15 +955,13 @@ export type WellbeingGameDeck = {
   deck: "positions" | "spark" | string;
 };
 
-export type QuestionAnswer = {
+export type QuestionAnswer = MedicalReview & {
   _id: string;
   answer: string;
   category?: string;
   keywords?: string[];
   likeCount?: number;
-  medicallyReviewed?: boolean;
   question: string;
-  reviewedBy?: string;
   shortAnswer?: string;
   slug?: string;
   tags?: string[];
@@ -1423,7 +1460,13 @@ export const authApi = {
       method: "POST",
     }),
 
-  getProfile: () => apiRequest<AuthUser>("/api/auth/profile"),
+  /** Shared through lib/queryCache.ts (15 s, stale on `profile` writes); `force` for pull-to-refresh. */
+  getProfile: (opts: { force?: boolean } = {}) =>
+    fetchQuery("auth:profile", () => apiRequest<AuthUser>("/api/auth/profile"), {
+      staleMs: 15_000,
+      topics: ["profile"],
+      force: opts.force,
+    }),
 
   updateFcmToken: (token: string) =>
     apiEnvelopeRequest<{ notificationToken: string }>("/api/auth/fcm-token", {
@@ -1500,7 +1543,13 @@ export const authApi = {
       method: "DELETE",
     }),
 
-  getDashboard: () => apiRequest<DashboardSummary>("/api/auth/dashboard"),
+  /** Shared through lib/queryCache.ts (15 s, stale on `dashboard` writes); `force` for pull-to-refresh. */
+  getDashboard: (opts: { force?: boolean } = {}) =>
+    fetchQuery("auth:dashboard", () => apiRequest<DashboardSummary>("/api/auth/dashboard"), {
+      staleMs: 15_000,
+      topics: ["dashboard"],
+      force: opts.force,
+    }),
 };
 
 export const cycleApi = {
@@ -1510,9 +1559,25 @@ export const cycleApi = {
       method: "POST",
     }),
 
-  getSettings: () => apiRequest<CycleSettings | null>("/api/cycle/settings"),
+  /** Shared through lib/queryCache.ts (30 s, stale on `cycle` writes); `force` for pull-to-refresh. */
+  getSettings: (opts: { force?: boolean } = {}) =>
+    fetchQuery("cycle:settings", () => apiRequest<CycleSettings | null>("/api/cycle/settings"), {
+      staleMs: 30_000,
+      topics: ["cycle"],
+      force: opts.force,
+    }),
 
-  getPredictions: () => apiRequest<Predictions>("/api/cycle/predictions"),
+  /**
+   * Home, Tracker, the calendar, Predictions and Graphs all read this; the
+   * cache makes them share one request (30 s, stale on `cycle` writes and at
+   * midnight via TodayWatcher). `force` for pull-to-refresh.
+   */
+  getPredictions: (opts: { force?: boolean } = {}) =>
+    fetchQuery("cycle:predictions", () => apiRequest<Predictions>("/api/cycle/predictions"), {
+      staleMs: 30_000,
+      topics: ["cycle"],
+      force: opts.force,
+    }),
 
   getSymptomPredictions: () =>
     apiRequest<SymptomPredictionsResponse>("/api/cycle/symptom-predictions"),
@@ -1537,6 +1602,23 @@ export const cycleApi = {
 
   getMonthLogs: (month?: string) =>
     apiRequest<DayEntry[]>(`/api/cycle/logs${toQuery({ month })}`),
+
+  /**
+   * A whole year's day logs in one request (`?year=`), instead of twelve
+   * month calls. A backend that predates `year` ignores it and returns every
+   * log, so the result is filtered here too. Shared through lib/queryCache.ts
+   * (30 s, stale on `cycle` writes); memory only, never persisted.
+   */
+  getYearLogs: (year: number, opts: { force?: boolean } = {}) =>
+    fetchQuery(
+      `cycle:year:${year}`,
+      async () => {
+        const prefix = `${year}-`;
+        const logs = await apiRequest<DayEntry[]>(`/api/cycle/logs${toQuery({ year: String(year) })}`);
+        return logs.filter((log) => log.dateKey?.startsWith(prefix));
+      },
+      { staleMs: 30_000, topics: ["cycle"], force: opts.force },
+    ),
 
   getDayLog: (dateKey: string) =>
     apiRequest<DayEntry | null>(`/api/cycle/log/${dateKey}`),
@@ -1579,19 +1661,24 @@ export const habitsApi = {
 
 export const forestApi = {
   /** `today` is the device's local YYYY-MM-DD, so "today's tasks" match the day logs are saved under. */
-  getStatus: (today?: string) => apiRequest<ForestStatus>(`/api/forest/status${toQuery({ today })}`),
+  getStatus: (today?: string, options?: { timeoutMs?: number }) =>
+    apiRequest<ForestStatus>(`/api/forest/status${toQuery({ today })}`, options),
 
-  logCare: (payload: {
-    careType?: ForestLog["careType"];
-    dateKey: string;
-    note?: string;
-    today?: string;
-  }) =>
+  logCare: (
+    payload: {
+      careType?: ForestLog["careType"];
+      dateKey: string;
+      note?: string;
+      today?: string;
+    },
+    options?: { timeoutMs?: number },
+  ) =>
     apiRequest<{
       log: ForestLog;
       status: ForestStatus;
       tokensEarned: number;
     }>("/api/forest/care", {
+      ...options,
       body: JSON.stringify(payload),
       method: "POST",
     }),
@@ -1947,6 +2034,8 @@ export const communityApi = {
     limit?: number;
     page?: number;
     search?: string;
+    /** Exact tag match, ignoring case and a leading '#'. */
+    tag?: string;
   }) =>
     apiRequest<{ pagination: Pagination; posts: CommunityPost[] }>(
       `/api/community${toQuery(params)}`,
@@ -2060,14 +2149,14 @@ export const blogsApi = {
   getBookmarks: () => apiRequest<{ blogs: Blog[] }>("/api/blogs/bookmarks"),
 
   /**
-   * Reports how long the reader actually had the article open, so the
-   * backend can count a genuine view (and refine its read-time average)
-   * instead of incrementing on every fetch regardless of dwell time.
+   * Reports active reading time (lib/readTimer.ts) so the backend counts a
+   * genuine view and a real average. `continued` adds to a read already
+   * counted; `completed` marks that the reader reached the end.
    */
-  trackView: (id: string, durationSeconds: number) =>
+  trackView: (id: string, report: { durationSeconds: number; continued?: boolean; completed?: boolean }) =>
     apiRequest<{ counted: boolean; readTimeMinutes?: number; viewCount?: number }>(
       `/api/blogs/${id}/track-view`,
-      { body: JSON.stringify({ durationSeconds }), method: "POST" },
+      { body: JSON.stringify(report), method: "POST" },
     ),
 
   createBlog: (payload: Partial<Blog>) =>
@@ -2099,8 +2188,48 @@ export const reelsApi = {
 
   getReelById: (id: string) => apiRequest<Reel>(`/api/reels/${id}`),
 
+  /** The signed-in person's saved reels, newest save first. */
+  getSaved: (params?: { limit?: number; page?: number }) =>
+    apiRequest<{ pagination: Pagination; reels: Reel[] }>(`/api/reels/saved${toQuery(params)}`),
+
+  /** Sets (never toggles) the like, so retries and double taps are safe. */
+  setLike: (id: string, liked: boolean) =>
+    apiRequest<{ liked: boolean; likeCount: number }>(`/api/reels/${id}/like`, {
+      body: JSON.stringify({ liked }),
+      method: "POST",
+    }),
+
+  /** Sets (never toggles) the bookmark. */
+  setSaved: (id: string, saved: boolean) =>
+    apiRequest<{ saved: boolean; saveCount: number }>(`/api/reels/${id}/save`, {
+      body: JSON.stringify({ saved }),
+      method: "POST",
+    }),
+
+  /** Newest first; pass the previous page's `nextCursor` for the next one. */
+  getComments: (id: string, params?: { cursor?: string | null; limit?: number }) =>
+    apiRequest<{ comments: ReelComment[]; nextCursor: string | null; commentCount: number }>(
+      `/api/reels/${id}/comments${toQuery({ cursor: params?.cursor ?? undefined, limit: params?.limit })}`,
+    ),
+
+  addComment: (id: string, text: string) =>
+    apiRequest<{ comment: ReelComment; commentCount: number }>(`/api/reels/${id}/comments`, {
+      body: JSON.stringify({ text }),
+      method: "POST",
+    }),
+
+  deleteComment: (id: string, commentId: string) =>
+    apiRequest<{ commentCount: number }>(`/api/reels/${id}/comments/${commentId}`, {
+      method: "DELETE",
+    }),
+
+  reportComment: (id: string, commentId: string) =>
+    apiRequest<{ reported: boolean }>(`/api/reels/${id}/comments/${commentId}/report`, {
+      method: "POST",
+    }),
+
   recordView: (id: string) =>
-    apiRequest<{ views: number }>(`/api/reels/${id}/view`, {
+    apiRequest<{ views: number; viewCount?: number }>(`/api/reels/${id}/view`, {
       method: "PATCH",
     }),
 
@@ -2347,9 +2476,11 @@ export const voiceAgentApi = {
     language?: LanguageCode,
     pendingAction?: VoiceAgentPendingAction,
     confirmed?: boolean,
+    /** The last few turns, so follow-ups ("why?", "and tomorrow?") make sense. Older backends ignore it. */
+    history?: { role: "user" | "assistant"; text: string }[],
   ) =>
     apiRequest<VoiceAgentReply>("/api/voice-agent/converse", {
-      body: JSON.stringify({ transcript, language, pendingAction, confirmed }),
+      body: JSON.stringify({ transcript, language, pendingAction, confirmed, history }),
       method: "POST",
     }),
 
@@ -2592,7 +2723,11 @@ export const speechApi = {
 
     if (Platform.OS === "web") {
       const blob = await (await fetch(localUri)).blob();
-      formData.append("file", blob, fileName);
+      // A blob: URL has no file name; name it after what the browser recorded
+      // (usually audio/webm) so speech-to-text reads the right format.
+      const type = blob.type.split(";")[0] || "audio/webm";
+      const ext = type.includes("mp4") ? "m4a" : type.split("/")[1] || "webm";
+      formData.append("file", blob, `recording.${ext}`);
     } else {
       formData.append("file", {
         uri: localUri,
@@ -3124,4 +3259,65 @@ export const schemeApplicationsApi = {
       `/api/scheme-applications/admin/${id}`,
       { body: JSON.stringify(input), method: "PATCH" },
     ),
+};
+
+// ── Help & support tickets (`/api/support/*`) ─────────────────────────────
+export type SupportCategoryId = "account" | "period_tracking" | "payments" | "consultation" | "bug" | "other";
+export type SupportTicketStatus = "open" | "in_progress" | "resolved" | "closed";
+
+/** Device/app info sent only when the person switches on "Attach app info". */
+export type SupportTicketMeta = {
+  platform?: string;
+  osVersion?: string;
+  appVersion?: string;
+  deviceModel?: string;
+  buildNumber?: string;
+  locale?: string;
+  timezoneOffset?: number;
+};
+
+export type SupportTicketSummary = {
+  _id: string;
+  ticketNumber: string;
+  category: SupportCategoryId;
+  categoryLabel: string;
+  subject: string;
+  status: SupportTicketStatus;
+  lastReplyFrom: "user" | "admin";
+  lastActivityAt: string;
+  /** Support replied and the person hasn't opened it yet. */
+  unread: boolean;
+  replyCount: number;
+  preview?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SupportTicketReply = { _id: string; from: "user" | "admin"; message: string; at: string };
+
+export type SupportTicket = SupportTicketSummary & {
+  message: string;
+  meta: SupportTicketMeta | null;
+  canReply: boolean;
+  replies: SupportTicketReply[];
+};
+
+export const supportApi = {
+  createTicket: (input: {
+    category: SupportCategoryId;
+    subject: string;
+    message: string;
+    attachAppInfo?: boolean;
+    meta?: SupportTicketMeta;
+  }) => apiRequest<{ ticket: SupportTicket }>("/api/support/tickets", { method: "POST", body: JSON.stringify(input) }),
+  listTickets: (params?: { status?: SupportTicketStatus | "active"; page?: number; limit?: number }) =>
+    apiRequest<{ tickets: SupportTicketSummary[]; unreadCount: number; pagination: Pagination }>(
+      `/api/support/tickets${toQuery(params as Record<string, QueryValue>)}`,
+    ),
+  getTicket: (id: string) => apiRequest<{ ticket: SupportTicket }>(`/api/support/tickets/${id}`),
+  reply: (id: string, message: string) =>
+    apiRequest<{ ticket: SupportTicket }>(`/api/support/tickets/${id}/reply`, {
+      method: "POST",
+      body: JSON.stringify({ message }),
+    }),
 };

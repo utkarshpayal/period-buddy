@@ -1,5 +1,5 @@
 import { LinearGradient } from "expo-linear-gradient";
-import React, { memo, useEffect, useMemo, useRef, useState } from "react";
+import React, { createContext, memo, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { PanResponder, Pressable, StyleSheet, View, type LayoutChangeEvent } from "react-native";
 import Animated, {
   Easing,
@@ -37,7 +37,9 @@ import { LivingTree, TREE_ASPECT } from "./LivingTree";
  *   dusty haze when dry.
  * - Watering (`waterKey`): a small rain cloud, rain, a wet patch, ripples
  *   and, by day, a rainbow. `celebrateKey` replays the stage-up glow.
- * Every loop stops when the device asks for reduced motion.
+ * Every loop stops when the device asks for reduced motion or while the
+ * scene is off screen (`active`). Every part is memoized, so a growth tween
+ * frame only redraws the tree; `lowDetail` thins the particles for low-end phones.
  */
 
 export type DayPart = "dawn" | "day" | "dusk" | "night";
@@ -136,6 +138,17 @@ function noise(i: number) {
   return x - Math.floor(x);
 }
 
+/**
+ * Loops stop when the device asks for reduced motion, and while the scene is
+ * off screen (`active={false}`, e.g. another screen pushed over the Forest).
+ */
+const ActiveContext = createContext(true);
+function useCalm() {
+  const reduced = useReducedMotion();
+  const active = useContext(ActiveContext);
+  return reduced || !active;
+}
+
 function useLoop(duration: number, delay = 0, enabled = true) {
   const v = useSharedValue(0);
   useEffect(() => {
@@ -163,8 +176,8 @@ function Layer({ cam, depth, width, children }: { cam: SharedValue<number>; dept
 
 /* ---------------------------------- Sky ----------------------------------- */
 
-function SunMoon({ night, x, y, sky }: { night: boolean; x: number; y: number; sky: string }) {
-  const reduced = useReducedMotion();
+const SunMoon = memo(function SunMoon({ night, x, y, sky }: { night: boolean; x: number; y: number; sky: string }) {
+  const reduced = useCalm();
   const pulse = useLoop(3200, 0, !reduced);
   const glow = useAnimatedStyle(() => ({ transform: [{ scale: 1 + pulse.value * 0.1 }], opacity: 0.5 + pulse.value * 0.2 }));
   const size = 120;
@@ -201,11 +214,11 @@ function SunMoon({ night, x, y, sky }: { night: boolean; x: number; y: number; s
       </Svg>
     </View>
   );
-}
+});
 
 /** Soft light shafts from a low or high sun, slowly turning. */
-function SunRays({ x, y, length, strength }: { x: number; y: number; length: number; strength: number }) {
-  const reduced = useReducedMotion();
+const SunRays = memo(function SunRays({ x, y, length, strength }: { x: number; y: number; length: number; strength: number }) {
+  const reduced = useCalm();
   const turn = useLoop(11000, 0, !reduced);
   const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${(turn.value - 0.5) * 10}deg` }] }));
   const rays = [200, 222, 246, 268, 292, 318, 340];
@@ -233,18 +246,18 @@ function SunRays({ x, y, length, strength }: { x: number; y: number; length: num
       </Svg>
     </Animated.View>
   );
-}
+});
 
-function Star({ x, y, r, delay }: { x: number; y: number; r: number; delay: number }) {
-  const reduced = useReducedMotion();
+const Star = memo(function Star({ x, y, r, delay }: { x: number; y: number; r: number; delay: number }) {
+  const reduced = useCalm();
   const t = useLoop(1800 + delay, delay, !reduced);
   const style = useAnimatedStyle(() => ({ opacity: 0.3 + t.value * 0.7 }));
   return <Animated.View pointerEvents="none" style={[{ position: "absolute", left: x, top: y, width: r * 2, height: r * 2, borderRadius: r, backgroundColor: "#FFFFFF" }, style]} />;
-}
+});
 
 /** Now and then a meteor streaks across the night sky. */
-function ShootingStar({ width, height }: { width: number; height: number }) {
-  const reduced = useReducedMotion();
+const ShootingStar = memo(function ShootingStar({ width, height }: { width: number; height: number }) {
+  const reduced = useCalm();
   const t = useSharedValue(0);
   useEffect(() => {
     if (reduced) return;
@@ -260,11 +273,11 @@ function ShootingStar({ width, height }: { width: number; height: number }) {
       <LinearGradient colors={["rgba(255,255,255,0)", "#FFFFFF"]} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={{ width: 70, height: 2, borderRadius: 1 }} />
     </Animated.View>
   );
-}
+});
 
 /** A volumetric cloud: lit from above, shaded underneath. */
-function Cloud({ top, width, scale, duration, offset, tone }: { top: number; width: number; scale: number; duration: number; offset: number; tone: "light" | "night" | "grey" }) {
-  const reduced = useReducedMotion();
+const Cloud = memo(function Cloud({ top, width, scale, duration, offset, tone }: { top: number; width: number; scale: number; duration: number; offset: number; tone: "light" | "night" | "grey" }) {
+  const reduced = useCalm();
   const x = useSharedValue(offset);
   useEffect(() => {
     if (reduced) return;
@@ -302,11 +315,11 @@ function Cloud({ top, width, scale, duration, offset, tone }: { top: number; wid
       </Svg>
     </Animated.View>
   );
-}
+});
 
 /** A small bird crossing the sky, wings flapping. */
-function Bird({ width, y, delay, duration, scale }: { width: number; y: number; delay: number; duration: number; scale: number }) {
-  const reduced = useReducedMotion();
+const Bird = memo(function Bird({ width, y, delay, duration, scale }: { width: number; y: number; delay: number; duration: number; scale: number }) {
+  const reduced = useCalm();
   const t = useSharedValue(0);
   const flap = useSharedValue(1);
   useEffect(() => {
@@ -332,7 +345,7 @@ function Bird({ width, y, delay, duration, scale }: { width: number; y: number; 
       </Animated.View>
     </Animated.View>
   );
-}
+});
 
 /* ------------------------------- Landscape -------------------------------- */
 
@@ -393,12 +406,12 @@ const Distance = memo(function Distance({ width, height, pal }: { width: number;
 });
 
 /** The hill where every tree you've grown now stands, with soft shadows. */
-const FarHill = memo(function FarHill({ width, height, pal, grownSeeds, shadowDir, shadowLen }: { width: number; height: number; pal: Palette; grownSeeds: number[]; shadowDir: number; shadowLen: number }) {
+const FarHill = memo(function FarHill({ width, height, pal, grownSeeds, shadowDir, shadowLen, maxTrees }: { width: number; height: number; pal: Palette; grownSeeds: number[]; shadowDir: number; shadowLen: number; maxTrees: number }) {
   const W = width * (1 + 2 * PAD);
   const off = width * PAD;
   const farY = height * 0.64;
   const slots = useMemo(() => {
-    const n = Math.min(grownSeeds.length, 9);
+    const n = Math.min(grownSeeds.length, maxTrees);
     return grownSeeds.slice(-n).map((seed, i) => {
       const side = i % 2 === 0 ? -1 : 1;
       const rank = Math.floor(i / 2);
@@ -406,7 +419,7 @@ const FarHill = memo(function FarHill({ width, height, pal, grownSeeds, shadowDi
       const s = 46 - rank * 3 + ((seed * 13) % 7);
       return { seed, x: x + off, size: s, y: farY + 4 + (rank % 2) * 5 };
     });
-  }, [grownSeeds, width, farY, off]);
+  }, [grownSeeds, width, farY, off, maxTrees]);
   return (
     <>
       <Svg width={W} height={height} style={StyleSheet.absoluteFill} pointerEvents="none">
@@ -508,8 +521,8 @@ const Meadow = memo(function Meadow({ width, height, pal, night }: { width: numb
 });
 
 /** Grass blades in the very front, swaying with the wind (the nearest depth). */
-function ForegroundGrass({ x, height, color, wind, delay, flip }: { x: number; height: number; color: string; wind: SharedValue<number>; delay: number; flip: boolean }) {
-  const reduced = useReducedMotion();
+const ForegroundGrass = memo(function ForegroundGrass({ x, height, color, wind, delay, flip }: { x: number; height: number; color: string; wind: SharedValue<number>; delay: number; flip: boolean }) {
+  const reduced = useCalm();
   const sway = useLoop(2200 + delay, delay, !reduced);
   const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${(sway.value - 0.5) * (5 + wind.value * 9) + wind.value * 4}deg` }] }));
   const w = height * 0.8;
@@ -523,12 +536,12 @@ function ForegroundGrass({ x, height, color, wind, delay, flip }: { x: number; h
       </Svg>
     </Animated.View>
   );
-}
+});
 
 /* ---------------------------------- Life ---------------------------------- */
 
-function Butterfly({ area, color, delay }: { area: { x: number; y: number; w: number; h: number }; color: string; delay: number }) {
-  const reduced = useReducedMotion();
+const Butterfly = memo(function Butterfly({ ax, ay, aw, ah, color, delay }: { ax: number; ay: number; aw: number; ah: number; color: string; delay: number }) {
+  const reduced = useCalm();
   const path = useLoop(5200 + delay, delay, !reduced);
   const bob = useLoop(1300, delay / 2, !reduced);
   const flap = useSharedValue(1);
@@ -538,7 +551,7 @@ function Butterfly({ area, color, delay }: { area: { x: number; y: number; w: nu
     return () => cancelAnimation(flap);
   }, [flap, reduced]);
   const body = useAnimatedStyle(() => ({
-    transform: [{ translateX: area.x + path.value * area.w }, { translateY: area.y + bob.value * area.h + Math.sin(path.value * Math.PI * 2) * 10 }],
+    transform: [{ translateX: ax + path.value * aw }, { translateY: ay + bob.value * ah + Math.sin(path.value * Math.PI * 2) * 10 }],
   }));
   const wings = useAnimatedStyle(() => ({ transform: [{ scaleX: flap.value }] }));
   return (
@@ -554,10 +567,10 @@ function Butterfly({ area, color, delay }: { area: { x: number; y: number; w: nu
       </Animated.View>
     </Animated.View>
   );
-}
+});
 
-function Firefly({ x, y, delay }: { x: number; y: number; delay: number }) {
-  const reduced = useReducedMotion();
+const Firefly = memo(function Firefly({ x, y, delay }: { x: number; y: number; delay: number }) {
+  const reduced = useCalm();
   const t = useLoop(2400 + delay, delay, !reduced);
   const style = useAnimatedStyle(() => ({
     opacity: 0.15 + t.value * 0.85,
@@ -569,11 +582,11 @@ function Firefly({ x, y, delay }: { x: number; y: number; delay: number }) {
       <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: "#FFF59D" }} />
     </Animated.View>
   );
-}
+});
 
 /** A leaf or petal drifting down; `once` plays it a single time per `trigger`. */
-function Drifter({ x, top, fall, delay, color, drift, petal, trigger, once }: { x: number; top: number; fall: number; delay: number; color: string; drift: number; petal?: boolean; trigger?: number; once?: boolean }) {
-  const reduced = useReducedMotion();
+const Drifter = memo(function Drifter({ x, top, fall, delay, color, drift, petal, trigger, once }: { x: number; top: number; fall: number; delay: number; color: string; drift: number; petal?: boolean; trigger?: number; once?: boolean }) {
+  const reduced = useCalm();
   const t = useSharedValue(0);
   useEffect(() => {
     if (reduced) return;
@@ -601,12 +614,12 @@ function Drifter({ x, top, fall, delay, color, drift, petal, trigger, once }: { 
       style={[styles.abs, { width: petal ? 6 : 8, height: petal ? 5 : 5, borderTopLeftRadius: 6, borderBottomRightRadius: 6, borderTopRightRadius: petal ? 6 : 1, backgroundColor: color }, style]}
     />
   );
-}
+});
 
 /* -------------------------------- Weather --------------------------------- */
 
 /** Watering: a small cloud gathers over the tree, rains, and drifts away. */
-function RainCloud({ x, y, width, trigger }: { x: number; y: number; width: number; trigger: number }) {
+const RainCloud = memo(function RainCloud({ x, y, width, trigger }: { x: number; y: number; width: number; trigger: number }) {
   const t = useSharedValue(0);
   useEffect(() => {
     if (!trigger) return;
@@ -632,10 +645,10 @@ function RainCloud({ x, y, width, trigger }: { x: number; y: number; width: numb
       </Svg>
     </Animated.View>
   );
-}
+});
 
 /** One raindrop streak, falling a few times with the wind's slant. */
-function RainStreak({ x, fromY, toY, delay, trigger }: { x: number; fromY: number; toY: number; delay: number; trigger: number }) {
+const RainStreak = memo(function RainStreak({ x, fromY, toY, delay, trigger }: { x: number; fromY: number; toY: number; delay: number; trigger: number }) {
   const t = useSharedValue(0);
   const ripple = useSharedValue(0);
   useEffect(() => {
@@ -659,10 +672,10 @@ function RainStreak({ x, fromY, toY, delay, trigger }: { x: number; fromY: numbe
       <Animated.View pointerEvents="none" style={[styles.abs, { width: 16, height: 5, borderRadius: 8, borderWidth: 1.2, borderColor: "rgba(255,255,255,0.85)" }, ring]} />
     </>
   );
-}
+});
 
 /** The soil darkens where it rained, then dries. */
-function WetPatch({ cx, cy, rx, trigger }: { cx: number; cy: number; rx: number; trigger: number }) {
+const WetPatch = memo(function WetPatch({ cx, cy, rx, trigger }: { cx: number; cy: number; rx: number; trigger: number }) {
   const t = useSharedValue(0);
   useEffect(() => {
     if (!trigger) return;
@@ -672,10 +685,10 @@ function WetPatch({ cx, cy, rx, trigger }: { cx: number; cy: number; rx: number;
   return (
     <Animated.View pointerEvents="none" style={[{ position: "absolute", left: cx - rx, top: cy - rx * 0.12, width: rx * 2, height: rx * 0.24, borderRadius: rx, backgroundColor: "#173C1B" }, style]} />
   );
-}
+});
 
 /** After rain in daylight: a short-lived rainbow behind the tree. */
-function Rainbow({ cx, baseY, radius, trigger }: { cx: number; baseY: number; radius: number; trigger: number }) {
+const Rainbow = memo(function Rainbow({ cx, baseY, radius, trigger }: { cx: number; baseY: number; radius: number; trigger: number }) {
   const t = useSharedValue(0);
   useEffect(() => {
     if (!trigger) return;
@@ -695,9 +708,9 @@ function Rainbow({ cx, baseY, radius, trigger }: { cx: number; baseY: number; ra
       </Svg>
     </Animated.View>
   );
-}
+});
 
-function Sparkle({ cx, cy, angle, distance, delay, trigger, color }: { cx: number; cy: number; angle: number; distance: number; delay: number; trigger: number; color: string }) {
+const Sparkle = memo(function Sparkle({ cx, cy, angle, distance, delay, trigger, color }: { cx: number; cy: number; angle: number; distance: number; delay: number; trigger: number; color: string }) {
   const t = useSharedValue(0);
   useEffect(() => {
     if (!trigger) return;
@@ -721,9 +734,9 @@ function Sparkle({ cx, cy, angle, distance, delay, trigger, color }: { cx: numbe
       </View>
     </Animated.View>
   );
-}
+});
 
-function GlowBurst({ cx, cy, size, trigger }: { cx: number; cy: number; size: number; trigger: number }) {
+const GlowBurst = memo(function GlowBurst({ cx, cy, size, trigger }: { cx: number; cy: number; size: number; trigger: number }) {
   const t = useSharedValue(0);
   useEffect(() => {
     if (!trigger) return;
@@ -735,12 +748,12 @@ function GlowBurst({ cx, cy, size, trigger }: { cx: number; cy: number; size: nu
     transform: [{ translateX: cx - size / 2 }, { translateY: cy - size / 2 }, { scale: 0.3 + t.value * 1.2 }],
   }));
   return <Animated.View pointerEvents="none" style={[styles.abs, { width: size, height: size, borderRadius: size / 2, backgroundColor: "rgba(255,244,190,0.9)" }, style]} />;
-}
+});
 
 /* ---------------------------------- Tree ---------------------------------- */
 
 /** Your tree, swaying from its base in the gusting wind; a tap makes it rustle. */
-function SwayingTree({
+const SwayingTree = memo(function SwayingTree({
   growth,
   vitality,
   seed,
@@ -750,6 +763,7 @@ function SwayingTree({
   calm,
   wind,
   rustle,
+  lowDetail,
 }: {
   growth: number;
   vitality: ForestVitality;
@@ -760,8 +774,9 @@ function SwayingTree({
   calm: boolean;
   wind: SharedValue<number>;
   rustle: SharedValue<number>;
+  lowDetail: boolean;
 }) {
-  const reduced = useReducedMotion();
+  const reduced = useCalm();
   const sway = useLoop(3400, 0, !reduced && !calm);
   const amp = 0.5 + 1.3 * Math.min(1, growth * 1.6); // bigger crowns catch more wind
   const style = useAnimatedStyle(() => ({
@@ -769,10 +784,10 @@ function SwayingTree({
   }));
   return (
     <Animated.View pointerEvents="none" style={[{ position: "absolute", left, bottom, width: size, height: size * TREE_ASPECT, transformOrigin: "50% 91%" }, style]}>
-      <LivingTree growth={growth} vitality={vitality} seed={seed} size={size} groundShadow={false} />
+      <LivingTree growth={growth} vitality={vitality} seed={seed} size={size} groundShadow={false} lowDetail={lowDetail} />
     </Animated.View>
   );
-}
+});
 
 /* --------------------------------- Scene ---------------------------------- */
 
@@ -788,10 +803,29 @@ export type ForestHabitatProps = {
   dayPart?: DayPart;
   /** The person dragged the scene or tapped the tree (e.g. to hide a hint). */
   onInteract?: () => void;
+  /** Low-end phones: fewer particles, fewer trees on the hill, the simpler tree. */
+  lowDetail?: boolean;
+  /** False while the scene is off screen: every loop stops until it's back. */
+  active?: boolean;
 };
 
-export function ForestHabitat({ height, growth, vitality, treeSeed, grownSeeds, waterKey, celebrateKey, dayPart, onInteract }: ForestHabitatProps) {
-  const reduced = useReducedMotion();
+/** Particle counts, lighter on low-end phones. */
+const DETAIL = {
+  full: { stars: 16, rain: 12, sparkles: 10, grass: 9, fireflies: 6, hillTrees: 9 },
+  low: { stars: 8, rain: 7, sparkles: 6, grass: 5, fireflies: 3, hillTrees: 5 },
+};
+
+export const ForestHabitat = memo(function ForestHabitat({ active = true, ...props }: ForestHabitatProps) {
+  return (
+    <ActiveContext.Provider value={active}>
+      <Scene {...props} />
+    </ActiveContext.Provider>
+  );
+});
+
+function Scene({ height, growth, vitality, treeSeed, grownSeeds, waterKey, celebrateKey, dayPart, onInteract, lowDetail = false }: Omit<ForestHabitatProps, "active">) {
+  const reduced = useCalm();
+  const detail = lowDetail ? DETAIL.low : DETAIL.full;
   const [width, setWidth] = useState(0);
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -894,12 +928,19 @@ export function ForestHabitat({ height, growth, vitality, treeSeed, grownSeeds, 
   const crownW = treeSize * (0.15 + 0.55 * Math.min(1, growth * 1.4));
 
   const stars = useMemo(
-    () => Array.from({ length: 22 }, (_, i) => ({ x: noise(i + 300), y: noise(i + 400) * 0.48, r: i % 5 === 0 ? 1.4 : 0.85, delay: (i * 230) % 1700 })),
-    [],
+    () => Array.from({ length: detail.stars }, (_, i) => ({ x: noise(i + 300), y: noise(i + 400) * 0.48, r: i % 5 === 0 ? 1.4 : 0.85, delay: (i * 230) % 1700 })),
+    [detail.stars],
   );
-  const rain = useMemo(() => Array.from({ length: 16 }, (_, i) => ({ dx: noise(i + 500) - 0.5, delay: Math.round(noise(i + 600) * 520) })), []);
-  const sparkles = useMemo(() => Array.from({ length: 14 }, (_, i) => ({ angle: (i / 14) * Math.PI * 2, distance: 50 + ((i * 23) % 30), delay: (i * 40) % 200 })), []);
-  const grassTufts = useMemo(() => Array.from({ length: 9 }, (_, i) => ({ x: noise(i + 700), h: 30 + noise(i + 800) * 22, delay: Math.round(noise(i + 900) * 900) })), []);
+  const rain = useMemo(() => Array.from({ length: detail.rain }, (_, i) => ({ dx: noise(i + 500) - 0.5, delay: Math.round(noise(i + 600) * 520) })), [detail.rain]);
+  const sparkles = useMemo(
+    () => Array.from({ length: detail.sparkles }, (_, i) => ({ angle: (i / detail.sparkles) * Math.PI * 2, distance: 50 + ((i * 23) % 30), delay: (i * 40) % 200 })),
+    [detail.sparkles],
+  );
+  const grassTufts = useMemo(
+    () => Array.from({ length: detail.grass }, (_, i) => ({ x: noise(i + 700), h: 30 + noise(i + 800) * 22, delay: Math.round(noise(i + 900) * 900) })),
+    [detail.grass],
+  );
+  const fireflies = [0.16, 0.3, 0.68, 0.84, 0.58, 0.42].slice(0, detail.fireflies);
   const leafColor = vitality === "dry" ? "#B98552" : vitality === "wilting" ? "#B7B24A" : "#5E9E45";
 
   return (
@@ -920,15 +961,15 @@ export function ForestHabitat({ height, growth, vitality, treeSeed, grownSeeds, 
           </Svg>
 
           {night ? stars.map((s, i) => <Star key={i} x={s.x * width} y={s.y * height} r={s.r} delay={s.delay} />) : null}
-          {night ? <ShootingStar width={width} height={height} /> : null}
+          {night && !lowDetail ? <ShootingStar width={width} height={height} /> : null}
           {!overcast ? <SunMoon night={night} x={light.x} y={light.y} sky={pal.sky[1]} /> : null}
-          {!night && !overcast ? <SunRays x={light.x} y={light.y} length={width * 0.75} strength={part === "day" ? 0.7 : 1} /> : null}
+          {!night && !overcast && !lowDetail ? <SunRays x={light.x} y={light.y} length={width * 0.75} strength={part === "day" ? 0.7 : 1} /> : null}
 
           <Cloud top={height * 0.08} width={width} scale={0.9} duration={52000} offset={0.15} tone={overcast ? "grey" : night ? "night" : "light"} />
           <Cloud top={height * 0.24} width={width} scale={0.55} duration={70000} offset={0.62} tone={overcast ? "grey" : night ? "night" : "light"} />
           {overcast ? <Cloud top={height * 0.15} width={width} scale={1.2} duration={60000} offset={0.4} tone="grey" /> : null}
 
-          {lively && !night && !overcast ? (
+          {lively && !night && !overcast && !lowDetail ? (
             <>
               <Bird width={width} y={height * 0.2} delay={1200} duration={13000} scale={1} />
               <Bird width={width} y={height * 0.24} delay={1700} duration={13600} scale={0.75} />
@@ -940,7 +981,7 @@ export function ForestHabitat({ height, growth, vitality, treeSeed, grownSeeds, 
             <Distance width={width} height={height} pal={pal} />
           </Layer>
           <Layer cam={cam} depth={0.4} width={width}>
-            <FarHill width={width} height={height} pal={pal} grownSeeds={grownSeeds} shadowDir={shadowDir} shadowLen={shadowLen} />
+            <FarHill width={width} height={height} pal={pal} grownSeeds={grownSeeds} shadowDir={shadowDir} shadowLen={shadowLen} maxTrees={detail.hillTrees} />
           </Layer>
           <Layer cam={cam} depth={0.6} width={width}>
             <NearHill width={width} height={height} pal={pal} />
@@ -982,6 +1023,7 @@ export function ForestHabitat({ height, growth, vitality, treeSeed, grownSeeds, 
               calm={growth < 0.04}
               wind={wind}
               rustle={rustle}
+              lowDetail={lowDetail}
             />
             {/* Tap target over the tree. */}
             <Pressable
@@ -995,11 +1037,11 @@ export function ForestHabitat({ height, growth, vitality, treeSeed, grownSeeds, 
           {/* Life */}
           {lively && !night && growth > 0.2 ? (
             <>
-              <Butterfly area={{ x: width * 0.1, y: height * 0.42, w: width * 0.3, h: 24 }} color="#F48FB1" delay={0} />
-              {growth > 0.6 ? <Butterfly area={{ x: width * 0.56, y: height * 0.5, w: width * 0.3, h: 18 }} color="#FFCA28" delay={900} /> : null}
+              <Butterfly ax={width * 0.1} ay={height * 0.42} aw={width * 0.3} ah={24} color="#F48FB1" delay={0} />
+              {growth > 0.6 && !lowDetail ? <Butterfly ax={width * 0.56} ay={height * 0.5} aw={width * 0.3} ah={18} color="#FFCA28" delay={900} /> : null}
             </>
           ) : null}
-          {night && lively ? [0.16, 0.3, 0.68, 0.84, 0.58, 0.42].map((fx, i) => <Firefly key={i} x={width * fx} y={height * (0.62 + (i % 3) * 0.07)} delay={i * 380} />) : null}
+          {night && lively ? fireflies.map((fx, i) => <Firefly key={i} x={width * fx} y={height * (0.62 + (i % 3) * 0.07)} delay={i * 380} />) : null}
           {(vitality === "wilting" || vitality === "dry") && growth > 0.3
             ? [0, 1, 2].map((i) => (
                 <Drifter key={`w${i}`} x={width / 2 + (i - 1) * crownW * 0.4} top={crownY} fall={groundY - crownY} delay={i * 1500} color={leafColor} drift={18} />

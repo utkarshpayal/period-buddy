@@ -26,7 +26,8 @@ export type DataTopic =
   | "qaSessions"
   | "consultations"
   | "blogs"
-  | "circles"; // Bestie Circles (list, detail, vibes)
+  | "circles" // Bestie Circles (list, detail, vibes)
+  | "support"; // Help & support tickets
 
 type Listener = (topics: ReadonlySet<DataTopic>) => void;
 
@@ -74,6 +75,12 @@ const MUTATION_TOPICS: [RegExp, DataTopic[] | null][] = [
   [/^\/api\/documents/, ["documents"]],
   [/^\/api\/scheme-applications/, ["schemeApplications"]],
   [/^\/api\/circles/, ["circles"]],
+  [/^\/api\/support\//, ["support"]],
+  // Following a creator / voting on a reel's poll earns wallet points.
+  [/^\/api\/reels\/[^/]+\/(follow|vote)$/, ["dashboard"]],
+  // Likes, saves, comments and views only show on the reels screen itself,
+  // which updates them in place.
+  [/^\/api\/reels\//, null],
 ];
 
 export function topicsForMutation(method: string, path: string): DataTopic[] {

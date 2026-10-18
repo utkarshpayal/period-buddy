@@ -52,6 +52,7 @@ import {
   shortZoneName,
 } from "../../lib/consultationFormat";
 import { setOpenVideoCall } from "../../lib/consultationPresence";
+import { fetchQuery, peekQuery } from "../../lib/queryCache";
 import { isJoinWindowOpen } from "../../lib/jitsiCall";
 import { JitsiCall } from "../../components/JitsiCall";
 import { ScreenHeader, SectionHeader } from "../../components/ScreenHeader";
@@ -84,6 +85,11 @@ function slotPeriod(start: string): (typeof SLOT_PERIODS)[number]["key"] {
   const hour = new Date(start).getHours();
   return hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening";
 }
+
+// Only the unfiltered doctor list is cached (in memory, never on the device),
+// so a revisit paints it at once; searches, bookings and slots stay live.
+const DOCTORS_CACHE_KEY = "consultation:doctors";
+const DOCTORS_CACHE = { staleMs: 2 * 60_000, topics: ["consultations" as const] };
 
 function getDoctorDisplayName(doctor: Doctor) {
   const legacyName = (doctor as Doctor & { name?: string }).name;
@@ -166,10 +172,10 @@ export default function ConsultationScreen() {
   }, []);
 
   // Lists
-  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [doctors, setDoctors] = useState<Doctor[]>(() => peekQuery<Doctor[]>(DOCTORS_CACHE_KEY) ?? []);
   const [myConsultations, setMyConsultations] = useState<Consultation[]>([]);
   const [consultationsLoaded, setConsultationsLoaded] = useState(false);
-  const [loadingDoctors, setLoadingDoctors] = useState(true);
+  const [loadingDoctors, setLoadingDoctors] = useState(() => peekQuery(DOCTORS_CACHE_KEY) === undefined);
   const [searching, setSearching] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<{ message: string; offline: boolean } | null>(null);
@@ -270,17 +276,31 @@ export default function ConsultationScreen() {
   const doctorRequestId = useRef(0);
   const loadDoctors = useCallback(async (query: string, mode: "initial" | "search" | "silent") => {
     const requestId = ++doctorRequestId.current;
-    if (mode === "initial") setLoadingDoctors(true);
+    // A cached unfiltered list stays on screen (no skeleton) while it revalidates.
+    if (mode === "initial" && (query || peekQuery(DOCTORS_CACHE_KEY) === undefined)) setLoadingDoctors(true);
     if (mode === "search") setSearching(true);
     try {
-      const list = await consultationApi.getDoctors(query || undefined);
+      const list = query
+        ? await consultationApi.getDoctors(query)
+        : await fetchQuery(DOCTORS_CACHE_KEY, () => consultationApi.getDoctors(), {
+            ...DOCTORS_CACHE,
+            // Pull-to-refresh / after rating: always ask the server.
+            force: mode === "silent",
+          });
       if (requestId !== doctorRequestId.current) return;
       setDoctors(list);
       setLoadError(null);
     } catch (err) {
       if (requestId !== doctorRequestId.current) return;
-      // A background refresh keeps what's on screen.
-      if (mode !== "silent") setLoadError({ message: getFriendlyErrorMessage(err), offline: isNetworkError(err) });
+      const cached = query ? undefined : peekQuery<Doctor[]>(DOCTORS_CACHE_KEY);
+      if (cached) {
+        // A failed revalidation of the unfiltered list keeps the cached copy.
+        setDoctors(cached);
+        setLoadError(null);
+      } else if (mode !== "silent") {
+        // A background refresh keeps what's on screen.
+        setLoadError({ message: getFriendlyErrorMessage(err), offline: isNetworkError(err) });
+      }
     } finally {
       if (requestId === doctorRequestId.current) {
         setLoadingDoctors(false);

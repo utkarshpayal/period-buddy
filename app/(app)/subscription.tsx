@@ -1,13 +1,15 @@
-import { Feather, Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useEffect, useState } from "react";
-import { RefreshControl, ScrollView, StatusBar, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, RefreshControl, ScrollView, StatusBar, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ScreenHeader } from "../../components/ScreenHeader";
+import { ScreenHeader, SectionHeader } from "../../components/ScreenHeader";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
-import { SkeletonBlock, SkeletonCard } from "../../components/Skeleton";
+import { SkeletonBlock } from "../../components/Skeleton";
 import { EmptyState } from "../../components/EmptyState";
 import { useTheme } from "../../components/theme";
-import { getShadow, getSoftTints } from "../../components/ui-tokens";
+import { getHeroGradient, getShadow } from "../../components/ui-tokens";
+import { IconCircle } from "../../components/wellbeing/WellbeingUI";
 import { CashfreeCheckoutModal } from "../../components/CashfreeCheckoutModal";
 import { PaymentSheet } from "../../components/PaymentSheet";
 import { PaymentTrustFooter } from "../../components/subscription/PaymentTrustFooter";
@@ -33,6 +35,12 @@ const CYCLE_SUFFIX: Record<BillingCycle, string> = {
   one_time: " once",
 };
 
+const PERIOD_LABEL: Record<BillingCycle, string> = {
+  monthly: "per month",
+  yearly: "per year",
+  one_time: "one-time",
+};
+
 type ConfirmTarget = {
   key: string;
   payload: { source: "plan"; planId: string } | { source: "feature"; featureKey: string };
@@ -51,7 +59,6 @@ type ConfirmTarget = {
  */
 export default function SubscriptionScreen() {
   const { colors, isDark, fonts } = useTheme();
-  const softTints = getSoftTints(colors);
 
   const [me, setMe] = useState<MySubscription | null>(null);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
@@ -62,6 +69,8 @@ export default function SubscriptionScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const [couponCode, setCouponCode] = useState("");
+  // The plan the sticky CTA buys; null = the recommended one.
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [confirmTarget, setConfirmTarget] = useState<ConfirmTarget | null>(null);
   const [couponPreview, setCouponPreview] = useState<CouponPreview | null>(null);
   const [couponPreviewError, setCouponPreviewError] = useState<string | null>(null);
@@ -176,6 +185,85 @@ export default function SubscriptionScreen() {
   };
 
   const activeEntitlements = (me?.entitlements ?? []).filter((e) => e.status === "active");
+  const activePlanEntitlement = activeEntitlements.find((e) => e.source === "plan");
+  const premiumFeatures = features.filter((f) => f.isPremium);
+  const pricingOff = me !== null && !me.subscriptionEnabled;
+
+  const featureName = (key: string) => features.find((f) => f.key === key)?.name ?? key;
+  const planUnlocked = (plan: SubscriptionPlan) => plan.features.every(isUnlocked) && plan.features.length > 0;
+
+  // What a plan is compared with for its "Save N%" badge: the same features
+  // on a monthly plan (for a yearly one), else buying them one by one.
+  const savingsFor = (plan: SubscriptionPlan): number | null => {
+    if (plan.billingCycle === "one_time" || plan.price <= 0) return null;
+    const sameSet = (p: SubscriptionPlan) =>
+      p.features.length === plan.features.length && p.features.every((k) => plan.features.includes(k));
+    let reference: number | null = null;
+    if (plan.billingCycle === "yearly") {
+      const monthly = plans.find((p) => p._id !== plan._id && p.billingCycle === "monthly" && sameSet(p));
+      if (monthly) reference = monthly.price * 12;
+    }
+    if (reference === null && plan.features.length > 1) {
+      let total = 0;
+      for (const key of plan.features) {
+        const f = features.find((x) => x.key === key);
+        if (!f || !f.isPremium) return null;
+        if (f.billingCycle === plan.billingCycle) total += f.price;
+        else if (f.billingCycle === "monthly" && plan.billingCycle === "yearly") total += f.price * 12;
+        else return null;
+      }
+      reference = total;
+    }
+    if (!reference || reference <= plan.price) return null;
+    const pct = Math.round(((reference - plan.price) / reference) * 100);
+    return pct >= 5 ? pct : null;
+  };
+
+  const buyablePlans = plans.filter((p) => !planUnlocked(p));
+  const recommendedPlan =
+    plans.find((p) => !!p.badge) ??
+    [...plans].sort((a, b) => (savingsFor(b) ?? 0) - (savingsFor(a) ?? 0) || b.features.length - a.features.length)[0];
+  const selectedPlan =
+    buyablePlans.find((p) => p._id === selectedPlanId) ??
+    (recommendedPlan && !planUnlocked(recommendedPlan) ? recommendedPlan : buyablePlans[0]);
+
+  const confirmPlan = (plan: SubscriptionPlan) =>
+    openConfirm({
+      key: plan._id,
+      payload: { source: "plan", planId: plan._id },
+      label: plan.name,
+      description: plan.description,
+      price: plan.price,
+      cycleSuffix: CYCLE_SUFFIX[plan.billingCycle],
+    });
+
+  const heroTitle = pricingOff
+    ? "Everything is free right now"
+    : activePlanEntitlement
+      ? entitlementLabel(activePlanEntitlement)
+      : activeEntitlements.length > 0
+        ? `${activeEntitlements.length} ${activeEntitlements.length === 1 ? "feature" : "features"} unlocked`
+        : "Free plan";
+  const heroBody = pricingOff
+    ? "Premium pricing isn't active, so every feature is open to you."
+    : activePlanEntitlement
+      ? activePlanEntitlement.expiresAt
+        ? `Renews or expires ${formatShortDate(activePlanEntitlement.expiresAt)}`
+        : "Active, never expires"
+      : activeEntitlements.length > 0
+        ? "Bundle more into a plan and save."
+        : "Unlock premium care with a plan, or one feature at a time.";
+  const heroGradient = getHeroGradient(colors, isDark) as [string, string, string];
+
+  const historyStatus: Record<Entitlement["status"], { icon: string; tone: { fg: string; bg: string }; label: string }> = {
+    active: { icon: "checkmark-circle-outline", tone: { fg: colors.success, bg: colors.successLight }, label: "Active" },
+    pending: { icon: "time-outline", tone: { fg: colors.warning, bg: colors.warningLight }, label: "Pending" },
+    failed: { icon: "close-circle-outline", tone: { fg: colors.danger, bg: colors.dangerLight }, label: "Failed" },
+    expired: { icon: "hourglass-outline", tone: { fg: colors.mutedText, bg: colors.surfaceSoft }, label: "Expired" },
+    cancelled: { icon: "remove-circle-outline", tone: { fg: colors.mutedText, bg: colors.surfaceSoft }, label: "Cancelled" },
+  };
+
+  const sectionGap = 32;
 
   return (
     <>
@@ -189,13 +277,12 @@ export default function SubscriptionScreen() {
           onRetry={load}
           loadingLabel="Loading your subscription…"
           skeleton={
-            <View className="gap-4 px-6 pt-6">
-              <SkeletonBlock width={60} height={12} />
-              <SkeletonBlock width="100%" height={64} radius={16} />
-              <SkeletonBlock width={90} height={12} style={{ marginTop: 8 }} />
-              <SkeletonCard />
-              <SkeletonCard />
-              <SkeletonCard />
+            <View style={{ paddingHorizontal: 24, paddingTop: 12, gap: 14 }}>
+              <SkeletonBlock width="100%" height={150} radius={26} />
+              <SkeletonBlock width={140} height={18} style={{ marginTop: 18 }} />
+              <SkeletonBlock width="100%" height={190} radius={24} />
+              <SkeletonBlock width="100%" height={150} radius={24} />
+              <SkeletonBlock width="100%" height={52} radius={18} />
             </View>
           }
         >
@@ -207,162 +294,262 @@ export default function SubscriptionScreen() {
               onRecheckPending={recheckPending}
             />
           ) : (
+          <View className="flex-1">
           <ScrollView
             showsVerticalScrollIndicator={false}
             automaticallyAdjustKeyboardInsets
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ paddingBottom: 48 }}
+            contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 12, paddingBottom: selectedPlan ? 140 : 48 }}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
           >
-            {me && !me.subscriptionEnabled ? (
-              <View
-                className="mx-6 mt-4 rounded-2xl px-4 py-3 flex-row items-center"
-                style={{ backgroundColor: softTints.emerald }}
-              >
-                <Ionicons name="checkmark-circle-outline" size={18} color={colors.success} />
-                <Text
-                  className="ml-2 flex-1 text-xs font-semibold"
-                  style={{ color: colors.foreground, fontFamily: fonts.body }}
-                >
-                  Everything is free right now — premium pricing isn&apos;t active.
-                </Text>
-              </View>
-            ) : null}
-
-            <Text
-              className="mx-6 mt-6 mb-2 text-xs font-bold uppercase"
-              style={{ color: colors.mutedText, fontFamily: fonts.body, letterSpacing: 0.5 }}
+            {/* Hero: current plan status */}
+            <LinearGradient
+              colors={heroGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={{ borderRadius: 26, padding: 20, overflow: "hidden" }}
             >
-              Active
-            </Text>
-            {activeEntitlements.length === 0 ? (
-              <View className="mx-6">
-                <EmptyState
-                  icon="star-outline"
-                  title="Nothing active yet"
-                  message="Unlock a feature below, or bundle several into a plan."
-                  compact
-                />
+              <View className="flex-row items-center" style={{ gap: 14 }}>
+                <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: "rgba(255,255,255,0.22)", alignItems: "center", justifyContent: "center" }}>
+                  <MaterialCommunityIcons name={pricingOff ? "gift-outline" : activeEntitlements.length > 0 ? "crown-outline" : "star-four-points-outline"} size={24} color="#FFFFFF" />
+                </View>
+                <View className="flex-1">
+                  <Text style={{ color: "rgba(255,255,255,0.85)", fontSize: 11.5, fontWeight: "800", letterSpacing: 0.8, textTransform: "uppercase", fontFamily: fonts.body }}>
+                    Your plan
+                  </Text>
+                  <Text numberOfLines={2} maxFontSizeMultiplier={1.3} style={{ color: "#FFFFFF", fontSize: 21, lineHeight: 27, fontWeight: "800", letterSpacing: -0.3, fontFamily: fonts.heading }}>
+                    {heroTitle}
+                  </Text>
+                </View>
               </View>
-            ) : (
-              <View className="mx-6" style={{ gap: 10 }}>
-                {activeEntitlements.map((e) => (
-                  <View
-                    key={e._id}
-                    className="rounded-2xl px-4 py-3 flex-row items-center justify-between"
-                    style={{ backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}
-                  >
-                    <View className="flex-1 pr-3">
-                      <Text className="text-sm font-bold" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
+              <Text style={{ color: "rgba(255,255,255,0.92)", fontSize: 13.5, lineHeight: 19, marginTop: 12, fontFamily: fonts.body }}>{heroBody}</Text>
+
+              {activeEntitlements.length > 0 && !pricingOff ? (
+                <View style={{ marginTop: 14, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.16)", paddingHorizontal: 14, paddingVertical: 4 }}>
+                  {activeEntitlements.map((e, i) => (
+                    <View
+                      key={e._id}
+                      className="flex-row items-center"
+                      style={{ gap: 10, paddingVertical: 10, borderTopWidth: i === 0 ? 0 : 1, borderTopColor: "rgba(255,255,255,0.18)" }}
+                    >
+                      <Ionicons name="checkmark-circle" size={17} color="#FFFFFF" />
+                      <Text numberOfLines={1} style={{ flex: 1, color: "#FFFFFF", fontSize: 14, fontWeight: "700", fontFamily: fonts.body }}>
                         {entitlementLabel(e)}
                       </Text>
-                      <Text className="text-xs mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                        {e.expiresAt ? `Renews/expires ${formatShortDate(e.expiresAt)}` : "Never expires"}
+                      <Text style={{ color: "rgba(255,255,255,0.85)", fontSize: 12.5, fontFamily: fonts.body }}>
+                        {e.expiresAt ? `Until ${formatShortDate(e.expiresAt)}` : "Lifetime"}
                       </Text>
                     </View>
-                    <View className="rounded-full px-2.5 py-1" style={{ backgroundColor: softTints.emerald }}>
-                      <Text className="text-xs font-bold" style={{ color: colors.success, fontFamily: fonts.body }}>
-                        Active
-                      </Text>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            )}
+                  ))}
+                </View>
+              ) : null}
+            </LinearGradient>
 
-            <Text
-              className="mx-6 mt-8 mb-2 text-xs font-bold uppercase"
-              style={{ color: colors.mutedText, fontFamily: fonts.body, letterSpacing: 0.5 }}
-            >
-              Coupon
-            </Text>
-            <View
-              className="mx-6 flex-row items-center rounded-2xl px-3.5"
-              style={{ backgroundColor: colors.input }}
-            >
-              <Feather name="tag" size={15} color={colors.mutedText} />
-              <TextInput
-                value={couponCode}
-                onChangeText={(v) => setCouponCode(v.toUpperCase())}
-                placeholder="Have a coupon code?"
-                placeholderTextColor={colors.mutedText}
-                autoCapitalize="characters"
-                autoCorrect={false}
-                className="flex-1 ml-2 py-3 text-sm"
-                style={{ color: colors.foreground, fontFamily: fonts.body }}
-              />
-            </View>
-            {couponCode.trim() ? (
-              <Text className="mx-6 mt-1.5 text-xs font-semibold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                We&apos;ll check this against whichever plan or feature you choose below.
-              </Text>
-            ) : null}
-
+            {/* Plans */}
             {plans.length > 0 ? (
               <>
-                <Text
-                  className="mx-6 mt-8 mb-2 text-xs font-bold uppercase"
-                  style={{ color: colors.mutedText, fontFamily: fonts.body, letterSpacing: 0.5 }}
-                >
-                  Plans
-                </Text>
-                <View className="mx-6" style={{ gap: 10 }}>
+                <SectionHeader title="Choose a plan" style={{ marginTop: sectionGap }} />
+                <View style={{ gap: 14 }}>
                   {plans.map((plan) => {
-                    const unlocked = plan.features.every(isUnlocked) && plan.features.length > 0;
+                    const unlocked = planUnlocked(plan);
+                    const isSelected = selectedPlan?._id === plan._id;
+                    const isRecommended = recommendedPlan?._id === plan._id && !unlocked;
+                    const savings = savingsFor(plan);
+                    const shown = plan.features.slice(0, 4);
+                    const more = plan.features.length - shown.length;
                     return (
-                      <View
+                      <TouchableOpacity
                         key={plan._id}
-                        className="rounded-2xl px-5 py-4 flex-row items-center justify-between"
-                        style={{ backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
+                        activeOpacity={0.85}
+                        disabled={unlocked}
+                        onPress={() => setSelectedPlanId(plan._id)}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected: isSelected, disabled: unlocked }}
+                        accessibilityLabel={`${plan.name}, ₹${plan.price} ${PERIOD_LABEL[plan.billingCycle]}${savings ? `, save ${savings}%` : ""}${unlocked ? ", current plan" : ""}`}
+                        style={{
+                          borderRadius: 24,
+                          padding: 18,
+                          paddingTop: isRecommended ? 26 : 18,
+                          backgroundColor: isSelected ? colors.primaryLight : colors.surface,
+                          borderWidth: isSelected ? 2 : 1,
+                          borderColor: isSelected ? colors.primary : colors.border,
+                          ...getShadow(colors, isDark),
+                        }}
                       >
-                        <View className="flex-1 pr-3">
-                          <View className="flex-row items-center" style={{ gap: 8 }}>
-                            <Text className="text-sm font-bold" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-                              {plan.name}
+                        {isRecommended ? (
+                          <View
+                            className="flex-row items-center"
+                            style={{ position: "absolute", top: -11, left: 18, gap: 4, paddingHorizontal: 10, height: 22, borderRadius: 11, backgroundColor: colors.primary }}
+                          >
+                            <Ionicons name="star" size={11} color={colors.buttonText} />
+                            <Text numberOfLines={1} style={{ color: colors.buttonText, fontSize: 11.5, fontWeight: "800", letterSpacing: 0.4, textTransform: "uppercase", fontFamily: fonts.body }}>
+                              {plan.badge || "Recommended"}
                             </Text>
-                            {plan.badge ? (
-                              <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: colors.primaryLight }}>
-                                <Text className="text-xs font-bold" style={{ color: colors.primaryDark, fontFamily: fonts.body }}>
-                                  {plan.badge}
-                                </Text>
-                              </View>
+                          </View>
+                        ) : null}
+
+                        <View className="flex-row items-start" style={{ gap: 12 }}>
+                          <View className="flex-1">
+                            <View className="flex-row items-center flex-wrap" style={{ gap: 8 }}>
+                              <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={{ flexShrink: 1, color: colors.foreground, fontSize: 17, fontWeight: "800", fontFamily: fonts.heading }}>
+                                {plan.name}
+                              </Text>
+                              {plan.badge && !isRecommended ? (
+                                <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: colors.primaryLight }}>
+                                  <Text style={{ color: colors.primaryDark, fontSize: 12, fontWeight: "800", fontFamily: fonts.body }}>{plan.badge}</Text>
+                                </View>
+                              ) : null}
+                            </View>
+                            {plan.description ? (
+                              <Text numberOfLines={2} style={{ color: colors.mutedText, fontSize: 13, lineHeight: 18, marginTop: 3, fontFamily: fonts.body }}>
+                                {plan.description}
+                              </Text>
                             ) : null}
                           </View>
-                          {plan.description ? (
-                            <Text className="text-xs mt-1" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                              {plan.description}
+                          {unlocked ? (
+                            <View className="flex-row items-center" style={{ gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: colors.successLight }}>
+                              <Ionicons name="checkmark-circle" size={14} color={colors.success} />
+                              <Text style={{ color: colors.success, fontSize: 12.5, fontWeight: "800", fontFamily: fonts.body }}>Current</Text>
+                            </View>
+                          ) : (
+                            <Ionicons name={isSelected ? "radio-button-on" : "radio-button-off"} size={24} color={isSelected ? colors.primary : colors.mutedText} />
+                          )}
+                        </View>
+
+                        <View className="flex-row items-end flex-wrap" style={{ marginTop: 14, gap: 8 }}>
+                          <Text style={{ color: colors.foreground, fontSize: 30, lineHeight: 34, fontFamily: fonts.monoSemiBold }}>₹{plan.price}</Text>
+                          <Text style={{ color: colors.mutedText, fontSize: 13.5, marginBottom: 4, fontFamily: fonts.body }}>{PERIOD_LABEL[plan.billingCycle]}</Text>
+                          {savings ? (
+                            <View style={{ marginBottom: 5, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: colors.successLight }}>
+                              <Text style={{ color: colors.success, fontSize: 12, fontWeight: "800", fontFamily: fonts.body }}>Save {savings}%</Text>
+                            </View>
+                          ) : null}
+                        </View>
+                        {plan.billingCycle === "yearly" && plan.price > 0 ? (
+                          <Text style={{ color: colors.mutedText, fontSize: 13, marginTop: 2, fontFamily: fonts.body }}>
+                            {`That's about ₹${Math.round(plan.price / 12)} a month`}
+                          </Text>
+                        ) : null}
+
+                        {shown.length > 0 ? (
+                          <View style={{ marginTop: 14, gap: 8, paddingTop: 14, borderTopWidth: 1, borderTopColor: colors.border }}>
+                            {shown.map((key) => (
+                              <View key={key} className="flex-row items-center" style={{ gap: 10 }}>
+                                <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: colors.successLight, alignItems: "center", justifyContent: "center" }}>
+                                  <Ionicons name="checkmark" size={13} color={colors.success} />
+                                </View>
+                                <Text numberOfLines={1} style={{ flex: 1, color: colors.foreground, fontSize: 14, fontFamily: fonts.body }}>
+                                  {featureName(key)}
+                                </Text>
+                              </View>
+                            ))}
+                            {more > 0 ? (
+                              <Text style={{ color: colors.mutedText, fontSize: 13, marginLeft: 30, fontFamily: fonts.body }}>{`+ ${more} more`}</Text>
+                            ) : null}
+                          </View>
+                        ) : null}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </>
+            ) : null}
+
+            {/* Coupon */}
+            {!pricingOff && (plans.length > 0 || premiumFeatures.length > 0) ? (
+              <>
+                <SectionHeader title="Coupon" style={{ marginTop: sectionGap }} />
+                <View
+                  className="flex-row items-center"
+                  style={{
+                    gap: 10,
+                    paddingHorizontal: 14,
+                    borderRadius: 18,
+                    backgroundColor: colors.surface,
+                    borderWidth: 1,
+                    borderColor: couponCode.trim() ? colors.primary : colors.border,
+                  }}
+                >
+                  <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.goldLight, alignItems: "center", justifyContent: "center" }}>
+                    <Ionicons name="pricetag-outline" size={16} color={colors.gold} />
+                  </View>
+                  <TextInput
+                    value={couponCode}
+                    onChangeText={(v) => setCouponCode(v.toUpperCase())}
+                    placeholder="Have a coupon code?"
+                    placeholderTextColor={colors.mutedText}
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                    accessibilityLabel="Coupon code"
+                    style={{ flex: 1, paddingVertical: 14, fontSize: 15, letterSpacing: couponCode ? 1 : 0, color: colors.foreground, fontFamily: couponCode ? fonts.mono : fonts.body }}
+                  />
+                  {couponCode ? (
+                    <TouchableOpacity onPress={() => setCouponCode("")} hitSlop={8} accessibilityRole="button" accessibilityLabel="Clear coupon">
+                      <Ionicons name="close-circle" size={18} color={colors.mutedText} />
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+                <Text style={{ marginTop: 6, color: colors.mutedText, fontSize: 13, lineHeight: 18, fontFamily: fonts.body }}>
+                  {couponCode.trim()
+                    ? "We'll check it against whatever you choose, before you pay."
+                    : "Applied at checkout on any plan or feature."}
+                </Text>
+              </>
+            ) : null}
+
+            {/* Individual features */}
+            {premiumFeatures.length > 0 ? (
+              <>
+                <SectionHeader title="Or unlock one feature" style={{ marginTop: sectionGap }} />
+                <View style={{ backgroundColor: colors.surface, borderRadius: 22, paddingVertical: 4, ...getShadow(colors, isDark) }}>
+                  {premiumFeatures.map((feature, index) => {
+                    const unlocked = isUnlocked(feature.key);
+                    return (
+                      <View
+                        key={feature.key}
+                        className="flex-row items-center"
+                        style={{ gap: 12, paddingHorizontal: 16, paddingVertical: 14 }}
+                      >
+                        {index > 0 ? <View style={{ position: "absolute", top: 0, left: 70, right: 0, height: 1, backgroundColor: colors.track }} /> : null}
+                        <IconCircle icon={feature.icon} fallback="star-outline" tone={{ fg: colors.gold, bg: colors.goldLight }} size={42} />
+                        <View className="flex-1" style={{ minWidth: 0 }}>
+                          <Text numberOfLines={1} maxFontSizeMultiplier={1.4} style={{ color: colors.foreground, fontSize: 15, fontWeight: "700", fontFamily: fonts.heading }}>
+                            {feature.name}
+                          </Text>
+                          {feature.description ? (
+                            <Text numberOfLines={1} maxFontSizeMultiplier={1.4} style={{ color: colors.mutedText, fontSize: 13, lineHeight: 18, marginTop: 1, fontFamily: fonts.body }}>
+                              {feature.description}
                             </Text>
                           ) : null}
-                          <Text className="text-xs mt-1 font-bold" style={{ color: colors.primary, fontFamily: fonts.body }}>
-                            ₹{plan.price}
-                            {CYCLE_SUFFIX[plan.billingCycle]}
+                          <Text style={{ color: colors.foreground, fontSize: 13.5, marginTop: 4, fontFamily: fonts.monoSemiBold }}>
+                            ₹{feature.price}
+                            <Text style={{ color: colors.mutedText, fontFamily: fonts.body, fontSize: 12.5 }}>{` ${PERIOD_LABEL[feature.billingCycle]}`}</Text>
                           </Text>
                         </View>
                         {unlocked ? (
-                          <View className="rounded-full px-3 py-2" style={{ backgroundColor: softTints.emerald }}>
-                            <Text className="text-xs font-bold" style={{ color: colors.success, fontFamily: fonts.body }}>
-                              Active
-                            </Text>
+                          <View className="flex-row items-center" style={{ gap: 4 }}>
+                            <Ionicons name="checkmark-circle" size={16} color={colors.success} />
+                            <Text style={{ color: colors.success, fontSize: 13, fontWeight: "800", fontFamily: fonts.body }}>Unlocked</Text>
                           </View>
                         ) : (
                           <TouchableOpacity
                             onPress={() =>
                               openConfirm({
-                                key: plan._id,
-                                payload: { source: "plan", planId: plan._id },
-                                label: plan.name,
-                                description: plan.description,
-                                price: plan.price,
-                                cycleSuffix: CYCLE_SUFFIX[plan.billingCycle],
+                                key: feature.key,
+                                payload: { source: "feature", featureKey: feature.key },
+                                label: feature.name,
+                                description: feature.description,
+                                price: feature.price,
+                                cycleSuffix: CYCLE_SUFFIX[feature.billingCycle],
                               })
                             }
+                            disabled={purchasingKey !== null}
                             activeOpacity={0.85}
-                            className="rounded-full px-4 py-2.5"
-                            style={{ backgroundColor: colors.primary }}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Unlock ${feature.name} for ₹${feature.price}`}
+                            style={{ height: 36, paddingHorizontal: 16, borderRadius: 18, justifyContent: "center", backgroundColor: colors.primaryLight }}
                           >
-                            <Text className="text-xs font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-                              Choose
-                            </Text>
+                            <Text style={{ color: colors.primaryDark, fontSize: 13.5, fontWeight: "800", fontFamily: fonts.body }}>Unlock</Text>
                           </TouchableOpacity>
                         )}
                       </View>
@@ -372,109 +559,87 @@ export default function SubscriptionScreen() {
               </>
             ) : null}
 
-            {features.filter((f) => f.isPremium).length > 0 ? (
-              <>
-                <Text
-                  className="mx-6 mt-8 mb-2 text-xs font-bold uppercase"
-                  style={{ color: colors.mutedText, fontFamily: fonts.body, letterSpacing: 0.5 }}
-                >
-                  Individual features
-                </Text>
-                <View className="mx-6" style={{ gap: 10 }}>
-                  {features
-                    .filter((f) => f.isPremium)
-                    .map((feature) => {
-                      const unlocked = isUnlocked(feature.key);
-                      return (
-                        <View
-                          key={feature.key}
-                          className="rounded-2xl px-5 py-4 flex-row items-center justify-between"
-                          style={{ backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}
-                        >
-                          <View className="flex-1 pr-3">
-                            <Text className="text-sm font-bold" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-                              {feature.name}
-                            </Text>
-                            {feature.description ? (
-                              <Text className="text-xs mt-1" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                                {feature.description}
-                              </Text>
-                            ) : null}
-                            <Text className="text-xs mt-1 font-bold" style={{ color: colors.gold, fontFamily: fonts.body }}>
-                              ₹{feature.price}
-                              {CYCLE_SUFFIX[feature.billingCycle]}
-                            </Text>
-                          </View>
-                          {unlocked ? (
-                            <View className="rounded-full px-3 py-2" style={{ backgroundColor: softTints.emerald }}>
-                              <Text className="text-xs font-bold" style={{ color: colors.success, fontFamily: fonts.body }}>
-                                Unlocked
-                              </Text>
-                            </View>
-                          ) : (
-                            <TouchableOpacity
-                              onPress={() =>
-                                openConfirm({
-                                  key: feature.key,
-                                  payload: { source: "feature", featureKey: feature.key },
-                                  label: feature.name,
-                                  description: feature.description,
-                                  price: feature.price,
-                                  cycleSuffix: CYCLE_SUFFIX[feature.billingCycle],
-                                })
-                              }
-                              activeOpacity={0.85}
-                              className="rounded-full px-4 py-2.5"
-                              style={{ backgroundColor: colors.gold ?? colors.primary }}
-                            >
-                              <Text className="text-xs font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-                                Unlock
-                              </Text>
-                            </TouchableOpacity>
-                          )}
-                        </View>
-                      );
-                    })}
-                </View>
-              </>
+            {plans.length === 0 && premiumFeatures.length === 0 && !pricingOff ? (
+              <View style={{ marginTop: sectionGap }}>
+                <EmptyState icon="tag-outline" title="No plans available" message="Pricing will show here once it's set up. Pull down to refresh." compact />
+              </View>
             ) : null}
 
-            {history.length > 0 ? (
-              <>
-                <Text
-                  className="mx-6 mt-8 mb-2 text-xs font-bold uppercase"
-                  style={{ color: colors.mutedText, fontFamily: fonts.body, letterSpacing: 0.5 }}
-                >
-                  Purchase history
-                </Text>
-                <View className="mx-6" style={{ gap: 8 }}>
-                  {history.map((e) => (
-                    <View key={e._id} className="flex-row items-center justify-between py-2 border-b" style={{ borderColor: colors.border }}>
-                      <Text className="text-xs" style={{ color: colors.foreground, fontFamily: fonts.body }}>
-                        {entitlementLabel(e)} · {formatShortDate(e.createdAt)}
-                      </Text>
-                      <Text
-                        className="text-xs font-bold capitalize"
-                        style={{
-                          color:
-                            e.status === "active"
-                              ? colors.success
-                              : e.status === "failed"
-                                ? colors.danger
-                                : colors.mutedText,
-                          fontFamily: fonts.body,
-                        }}
-                      >
-                        {e.status}
+            {/* Purchase history */}
+            <SectionHeader title="Purchase history" style={{ marginTop: sectionGap }} />
+            {history.length === 0 ? (
+              <View style={{ backgroundColor: colors.surface, borderRadius: 22, ...getShadow(colors, isDark) }}>
+                <EmptyState icon="receipt" title="No purchases yet" message="Your receipts will show up here." compact />
+              </View>
+            ) : (
+              <View style={{ backgroundColor: colors.surface, borderRadius: 22, paddingVertical: 4, ...getShadow(colors, isDark) }}>
+                {history.map((e, index) => {
+                  const status = historyStatus[e.status] ?? historyStatus.pending;
+                  return (
+                    <View key={e._id} className="flex-row items-center" style={{ gap: 12, paddingHorizontal: 16, paddingVertical: 13 }}>
+                      {index > 0 ? <View style={{ position: "absolute", top: 0, left: 66, right: 0, height: 1, backgroundColor: colors.track }} /> : null}
+                      <IconCircle icon={status.icon} tone={status.tone} size={38} />
+                      <View className="flex-1" style={{ minWidth: 0 }}>
+                        <Text numberOfLines={1} style={{ color: colors.foreground, fontSize: 14.5, fontWeight: "700", fontFamily: fonts.body }}>
+                          {entitlementLabel(e)}
+                        </Text>
+                        <Text numberOfLines={1} style={{ color: colors.mutedText, fontSize: 13, marginTop: 1, fontFamily: fonts.body }}>
+                          {`${formatShortDate(e.createdAt)} · ${status.label}`}
+                        </Text>
+                      </View>
+                      <Text style={{ color: e.status === "failed" ? colors.mutedText : colors.foreground, fontSize: 14, fontFamily: fonts.monoSemiBold, textDecorationLine: e.status === "failed" ? "line-through" : "none" }}>
+                        {`₹${e.amount}`}
                       </Text>
                     </View>
-                  ))}
-                </View>
-              </>
-            ) : null}
+                  );
+                })}
+              </View>
+            )}
 
             <PaymentTrustFooter />
           </ScrollView>
+
+          {/* Sticky CTA for the selected plan */}
+          {selectedPlan ? (
+            <View
+              style={{
+                position: "absolute",
+                left: 0,
+                right: 0,
+                bottom: 0,
+                paddingHorizontal: 24,
+                paddingTop: 12,
+                paddingBottom: 12,
+                backgroundColor: colors.background,
+                borderTopWidth: 1,
+                borderTopColor: colors.border,
+              }}
+            >
+              <TouchableOpacity
+                onPress={() => confirmPlan(selectedPlan)}
+                disabled={purchasingKey !== null}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel={`Continue with ${selectedPlan.name}, ₹${selectedPlan.price} ${PERIOD_LABEL[selectedPlan.billingCycle]}`}
+                className="flex-row items-center justify-center"
+                style={{ height: 54, borderRadius: 27, gap: 8, backgroundColor: colors.primary, opacity: purchasingKey !== null ? 0.6 : 1 }}
+              >
+                {purchasingKey === selectedPlan._id ? (
+                  <ActivityIndicator color={colors.buttonText} />
+                ) : (
+                  <>
+                    <Text numberOfLines={1} style={{ flexShrink: 1, color: colors.buttonText, fontSize: 15.5, fontWeight: "800", fontFamily: fonts.body }}>
+                      {`Continue with ${selectedPlan.name}`}
+                    </Text>
+                    <Text style={{ color: colors.buttonText, fontSize: 15, fontFamily: fonts.monoSemiBold }}>
+                      {`· ₹${selectedPlan.price}${CYCLE_SUFFIX[selectedPlan.billingCycle]}`}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          ) : null}
+          </View>
           )}
         </LoadingErrorState>
       </SafeAreaView>

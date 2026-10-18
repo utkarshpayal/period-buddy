@@ -182,11 +182,18 @@ into `ApiError.kind === "featureLocked"` with a `.lock` payload — see
 
 | Method | Endpoint | Purpose |
 |---|---|---|
-| GET | `/api/reels` | List |
-| GET | `/api/reels/:id` | One reel |
-| POST | `/api/reels/:id/view` | View tracking |
-| PATCH | `/api/reels/:id/follow` | Follow the creator |
-| PATCH | `/api/reels/:id/vote` | Vote (if it's a poll-style reel) |
+| GET | `/api/reels` | List, with `isLiked`/`isSaved`/`likeCount`/`commentCount`/`saveCount`/`viewCount` (`getReels`) |
+| GET | `/api/reels/saved` | My saved reels (`getSaved`) |
+| GET | `/api/reels/:id` | One reel, for deep links (no longer counts a view) (`getReelById`) |
+| PATCH | `/api/reels/:id/view` | Count a view after ~2 s of playback (`recordView`) |
+| PATCH | `/api/reels/:id/follow` | Toggle following the creator (`toggleFollowCreator`) |
+| POST | `/api/reels/:id/vote` | Vote on the reel's poll (`votePoll`) |
+| POST | `/api/reels/:id/like` | Set like `{ liked }`, idempotent (`setLike`) |
+| POST | `/api/reels/:id/save` | Set save `{ saved }`, idempotent (`setSaved`) |
+| GET | `/api/reels/:id/comments?cursor=&limit=` | Comments, newest first (`getComments`) |
+| POST | `/api/reels/:id/comments` | Add a comment `{ text }`, ≤ 500 chars (`addComment`) |
+| DELETE | `/api/reels/:id/comments/:commentId` | Delete my comment (`deleteComment`) |
+| POST | `/api/reels/:id/comments/:commentId/report` | Report a comment (`reportComment`) |
 
 ## `healthIssuesApi`, `wellbeingApi`
 
@@ -195,6 +202,12 @@ Wellbeing (`GET` list + `GET :id` + `POST track-view`), following the same
 shape as blogs — admin-authored content, read-only from the app.
 `wellbeingApi` additionally has `GET /api/wellbeing/games?deck=` and
 `POST /api/wellbeing/games/:deck/draw` for the wellness card-draw game.
+
+Blogs, reels, Q&As, health issues and wellbeing resources carry the
+medical-review stamp (`MedicalReview` in `lib/api.ts`): `medicallyReviewed`,
+`reviewedBy` (reviewer's name) and `reviewedAt`, set by the backend when a
+Content Super Admin reviews the item. The blog article and the wellbeing /
+health-issue detail views show it with `components/MedicalReviewBadge.tsx`.
 
 ## `questionAnswerApi` — Nura AI
 
@@ -291,6 +304,17 @@ match → AI → fallback) documented in the backend's `AI_ML_OVERVIEW.md`.
 | DELETE | `/api/circles/:id/vibes/:vibeId` | Delete a vibe |
 | POST | `/api/circles/:id/vibes/:vibeId/react` | React to a vibe |
 | POST | `/api/circles/:id/hype/:userId` | Hype a member |
+
+## `supportApi` — Help & support tickets
+
+Profile → Help & support (`components/SupportTicketSheet.tsx`) and My tickets (`app/(app)/support-tickets.tsx`, `support-ticket.tsx`).
+
+| Method | Path | Used for |
+|---|---|---|
+| POST | `/api/support/tickets` | Raise a ticket (category, subject, message, optional app info); returns its `NURA-000123` number |
+| GET | `/api/support/tickets` | My tickets (paged, `?status=`) with `unreadCount` |
+| GET | `/api/support/tickets/:id` | One ticket and its reply thread (marks support's replies read) |
+| POST | `/api/support/tickets/:id/reply` | Reply (re-opens a resolved ticket; closed tickets refuse) |
 
 ## `healthApi`
 

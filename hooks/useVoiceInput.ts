@@ -2,24 +2,38 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   RecordingPresets,
   requestRecordingPermissionsAsync,
+  setAudioModeAsync,
   useAudioRecorder,
   useAudioRecorderState,
 } from "expo-audio";
+import { Platform } from "react-native";
 import { alert } from "../lib/alert";
+import { startWebMicLevel } from "../lib/webMicLevel";
 import { showPermissionModal } from "../lib/modal-host";
 import { speechApi, type LanguageCode } from "../lib/api";
 
 const SILENCE_DB_THRESHOLD = -45;
-const SILENCE_TIMEOUT_MS = 3000;
+// Voice mode sends after this much quiet. Long enough for a breath between
+// phrases, short enough that a turn doesn't feel laggy.
+const SILENCE_TIMEOUT_MS = 1500;
 const START_GRACE_MS = 1200;
 const METERING_POLL_MS = 100;
-const MAX_RECORDING_MS = 15000;
+const MAX_RECORDING_MS = 20000;
+// After this many voice-mode recordings in a row with no speech in them,
+// stop re-arming the mic until the person taps it (no endless listening).
+const SILENT_ROUNDS_BEFORE_PAUSE = 2;
 // How long a voice-mode failure stays visible inline before the "always
 // listening" loop resumes on its own — long enough to read a short line.
 const VOICE_ERROR_DISPLAY_MS = 3500;
 
+// Speech, not music: mono 16 kHz AAC is what speech-to-text works at anyway,
+// and the file is ~8x smaller than HIGH_QUALITY, so it uploads much faster.
 const RECORDER_OPTIONS = {
   ...RecordingPresets.HIGH_QUALITY,
+  sampleRate: 16000,
+  numberOfChannels: 1,
+  bitRate: 32000,
+  web: { mimeType: "audio/webm", bitsPerSecond: 32000 },
   isMeteringEnabled: true,
 };
 
@@ -59,6 +73,23 @@ export function useVoiceInput({ language, voiceMode, onTranscript }: UseVoiceInp
   const voiceErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const peakLevelRef = useRef(0);
   const stoppingRef = useRef(false);
+  // Whether this recording ever crossed the speech threshold (voice mode).
+  const heardSpeechRef = useRef(false);
+  // Whether this recording reported any mic level at all. Without one we
+  // can't tell speech from silence, so the recording is always sent.
+  const meteringSeenRef = useRef(false);
+  // Web: expo-audio reports no metering there, so we measure it ourselves.
+  const webMeterRef = useRef<Awaited<ReturnType<typeof startWebMicLevel>>>(null);
+  const webMeterTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [webLevel, setWebLevel] = useState<number | undefined>(undefined);
+  const silentRoundsRef = useRef(0);
+  const [listeningPaused, setListeningPaused] = useState(false);
+
+  // Entering (or leaving) voice mode starts the silence count over.
+  useEffect(() => {
+    silentRoundsRef.current = 0;
+    setListeningPaused(false);
+  }, [voiceMode]);
 
   const clearVoiceError = useCallback(() => {
     if (voiceErrorTimerRef.current) {
@@ -75,6 +106,14 @@ export function useVoiceInput({ language, voiceMode, onTranscript }: UseVoiceInp
       voiceErrorTimerRef.current = null;
       setVoiceError(null);
     }, VOICE_ERROR_DISPLAY_MS);
+  }, []);
+
+  const stopWebMeter = useCallback(() => {
+    if (webMeterTimerRef.current) clearInterval(webMeterTimerRef.current);
+    webMeterTimerRef.current = null;
+    webMeterRef.current?.stop();
+    webMeterRef.current = null;
+    setWebLevel(undefined);
   }, []);
 
   const clearSilenceTimer = useCallback(() => {
@@ -98,10 +137,20 @@ export function useVoiceInput({ language, voiceMode, onTranscript }: UseVoiceInp
     clearMaxDurationTimer();
     peakLevelRef.current = 0;
 
+    stopWebMeter();
     await recorder.stop();
     const uri = recorder.uri;
     stoppingRef.current = false;
     if (!uri) return;
+
+    // Nothing was said: don't upload silence. After a couple of rounds,
+    // stop re-arming until the person taps the mic.
+    if (voiceMode && meteringSeenRef.current && !heardSpeechRef.current) {
+      silentRoundsRef.current += 1;
+      if (silentRoundsRef.current >= SILENT_ROUNDS_BEFORE_PAUSE) setListeningPaused(true);
+      return;
+    }
+    silentRoundsRef.current = 0;
 
     setIsTranscribing(true);
     try {
@@ -124,9 +173,9 @@ export function useVoiceInput({ language, voiceMode, onTranscript }: UseVoiceInp
     } finally {
       setIsTranscribing(false);
     }
-  }, [clearSilenceTimer, clearMaxDurationTimer, language, onTranscript, recorder, reportVoiceError, voiceMode]);
+  }, [clearSilenceTimer, clearMaxDurationTimer, language, onTranscript, recorder, reportVoiceError, stopWebMeter, voiceMode]);
 
-  // Live amplitude tracking + auto-submit after 3s of silence (voice mode only).
+  // Live amplitude tracking + auto-submit after SILENCE_TIMEOUT_MS of quiet (voice mode only).
   // The countdown always runs and only resets while actual speech is detected, so
   // it can never get stuck waiting for a "first word" that a flaky mic never reports.
   useEffect(() => {
@@ -136,7 +185,9 @@ export function useVoiceInput({ language, voiceMode, onTranscript }: UseVoiceInp
       return;
     }
 
-    const normalized = normalizeLevel(recorderState.metering);
+    const metering = Platform.OS === "web" ? webLevel : recorderState.metering;
+    if (metering !== undefined && Number.isFinite(metering)) meteringSeenRef.current = true;
+    const normalized = normalizeLevel(metering);
     setLevel(normalized);
     if (normalized > peakLevelRef.current) peakLevelRef.current = normalized;
 
@@ -149,6 +200,7 @@ export function useVoiceInput({ language, voiceMode, onTranscript }: UseVoiceInp
     const isSpeaking = normalized > Math.max(absoluteFloor, relativeFloor);
 
     if (isSpeaking) {
+      if (recorderState.durationMillis >= 300) heardSpeechRef.current = true;
       clearSilenceTimer();
       return;
     }
@@ -163,6 +215,7 @@ export function useVoiceInput({ language, voiceMode, onTranscript }: UseVoiceInp
   }, [
     recorderState.isRecording,
     recorderState.metering,
+    webLevel,
     recorderState.durationMillis,
     voiceMode,
     clearSilenceTimer,
@@ -173,8 +226,9 @@ export function useVoiceInput({ language, voiceMode, onTranscript }: UseVoiceInp
     return () => {
       clearSilenceTimer();
       clearMaxDurationTimer();
+      stopWebMeter();
     };
-  }, [clearSilenceTimer, clearMaxDurationTimer]);
+  }, [clearSilenceTimer, clearMaxDurationTimer, stopWebMeter]);
 
   const handleMicPress = useCallback(async () => {
     if (recorderState.isRecording) {
@@ -200,8 +254,22 @@ export function useVoiceInput({ language, voiceMode, onTranscript }: UseVoiceInp
       return;
     }
     peakLevelRef.current = 0;
+    heardSpeechRef.current = false;
+    meteringSeenRef.current = false;
+    setListeningPaused(false);
+    // iOS needs a recording-capable session; replies switch it back
+    // (hooks/useSpokenReply.ts) so they play on the loudspeaker.
+    await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true }).catch(() => {});
     await recorder.prepareToRecordAsync();
     recorder.record();
+
+    if (Platform.OS === "web" && voiceMode) {
+      stopWebMeter();
+      webMeterRef.current = await startWebMicLevel();
+      if (webMeterRef.current) {
+        webMeterTimerRef.current = setInterval(() => setWebLevel(webMeterRef.current?.read()), METERING_POLL_MS);
+      }
+    }
 
     if (voiceMode) {
       clearMaxDurationTimer();
@@ -210,7 +278,7 @@ export function useVoiceInput({ language, voiceMode, onTranscript }: UseVoiceInp
         stopAndTranscribe();
       }, MAX_RECORDING_MS);
     }
-  }, [clearMaxDurationTimer, clearVoiceError, isTranscribing, recorder, recorderState.isRecording, stopAndTranscribe, voiceMode]);
+  }, [clearMaxDurationTimer, clearVoiceError, isTranscribing, recorder, recorderState.isRecording, stopAndTranscribe, stopWebMeter, voiceMode]);
 
   useEffect(() => {
     return () => {
@@ -221,6 +289,8 @@ export function useVoiceInput({ language, voiceMode, onTranscript }: UseVoiceInp
   return {
     clearVoiceError,
     handleMicPress,
+    /** Voice mode stopped auto-listening after silent rounds; a mic tap resumes it. */
+    listeningPaused,
     isRecording: recorderState.isRecording,
     isTranscribing,
     level,

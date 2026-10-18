@@ -1,1474 +1,668 @@
-import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useEvent } from "expo";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useVideoPlayer, VideoView } from "expo-video";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Feather } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Image,
-  Modal,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
+  AppState,
+  FlatList,
   Platform,
-  Pressable,
-  ScrollView,
+  RefreshControl,
   StatusBar,
   Text,
   TouchableOpacity,
-  useWindowDimensions,
   View,
+  type ListRenderItem,
+  type ViewToken,
 } from "react-native";
-import {
-  SafeAreaView,
-  useSafeAreaInsets,
-} from "react-native-safe-area-context";
-import { WebView, type WebViewMessageEvent } from "react-native-webview";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppState } from "../../components/AppState";
-import { alert } from "../../lib/alert";
-import { shareWithAppLink } from "../../lib/share";
+import { EmptyState } from "../../components/EmptyState";
+import { CommentsSheet } from "../../components/reels/CommentsSheet";
+import { ReelPage, type ReelPageActions } from "../../components/reels/ReelPage";
+import { CreatorSheet, FeedPicker, PollSheet } from "../../components/reels/ReelSheets";
 import { SkeletonBlock } from "../../components/Skeleton";
 import { useTheme } from "../../components/theme";
-import { ColumnLabel } from "../../components/ColumnLabel";
-import { getShadow } from "../../components/ui-tokens";
-import { reelsApi, type Reel as ApiReel } from "../../lib/api";
-import { LinearGradient } from "expo-linear-gradient";
+import { alert } from "../../lib/alert";
+import { getFriendlyErrorMessage, isNetworkError, reelsApi, type Reel as ApiReel } from "../../lib/api";
 import { useContentWidth } from "../../lib/layout";
+import {
+  appendUnique,
+  applyLiked,
+  applySaved,
+  mapApiReel,
+  REELS_PAGE_SIZE,
+  shouldPrefetch,
+  updateReel,
+  withPinnedFirst,
+  type ReelItem,
+} from "../../lib/reels";
+import { shareWithAppLink } from "../../lib/share";
 
-// --- STRUCTURAL CLINICAL ENDPOINT CONTRACTS ---
-interface HealthReel {
-  id: string;
-  title: string;
-  creatorId: string;
-  creatorName: string;
-  creatorAvatar: string;
-  duration: string;
-  views: number;
-  category: string;
-  verified: boolean;
-  thumbnailUrl: string;
-  directMp4Url: string; // Fixed: Raw MP4 Stream parameters
-  pollQuestion: string;
-  pollOptions: { id: string; topic: string; votes: number }[];
-  votedOptionId: string | null;
+const MUTE_KEY = "period-buddy.reels.muted";
+const SKELETON_TINT = { backgroundColor: "rgba(255,255,255,0.14)" };
+const VIEWABILITY = { itemVisiblePercentThreshold: 60 };
+
+type LoadError = { message: string; offline: boolean };
+
+function hasMore(pagination: { page: number; pages: number }) {
+  return pagination.page < pagination.pages;
 }
 
-const REEL_SKELETON_TINT = { backgroundColor: "rgba(255,255,255,0.14)" };
-
-const fallbackReels: HealthReel[] = [
-  {
-    id: "r_1",
-    title: "A Simple Overview of Hormonal Cycle Phases",
-    creatorId: "doc_sarah",
-    creatorName: "Dr. Sarah Chen (OBGYN & Cycle Expert)",
-    creatorAvatar:
-      "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?q=80&w=150&auto=format&fit=crop",
-    duration: "0:15",
-    views: 3420,
-    category: "Wellness",
-    verified: true,
-    thumbnailUrl:
-      "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?q=80&w=600&auto=format&fit=crop",
-    directMp4Url:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-    pollQuestion: "Vote for the next video topic:",
-    votedOptionId: null,
-    pollOptions: [
-      {
-        id: "o1",
-        topic: "Stress, cortisol, and cycle changes",
-        votes: 142,
-      },
-      {
-        id: "o2",
-        topic: "Menstrual cup cleaning and storage",
-        votes: 98,
-      },
-    ],
-  },
-  {
-    id: "r_2",
-    title: "Gentle Yoga Movements for Period Pain Relief",
-    creatorId: "doc_thara",
-    creatorName: "Dr. Thara (Clinical Physiologist)",
-    creatorAvatar:
-      "https://images.unsplash.com/photo-1594824813573-246434e33963?q=80&w=150&auto=format&fit=crop",
-    duration: "0:12",
-    views: 2890,
-    category: "Self-Care",
-    verified: true,
-    thumbnailUrl:
-      "https://images.unsplash.com/photo-1506126613408-eca07ce68773?q=80&w=600&auto=format&fit=crop",
-    directMp4Url:
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
-    pollQuestion: "What should the next quick video cover?",
-    votedOptionId: null,
-    pollOptions: [
-      {
-        id: "o3",
-        topic: "Understanding Period Poops & Bowel Triggers",
-        votes: 215,
-      },
-      { id: "o4", topic: "PCOS-friendly food and routine basics", votes: 310 },
-    ],
-  },
-];
-
-function mapApiReel(reel: ApiReel): HealthReel {
-  return {
-    id: reel.id ?? reel._id ?? reel.creatorId,
-    title: reel.title ?? "Untitled Reel",
-    creatorId: reel.creatorId,
-    creatorName: reel.creatorName ?? "Anonymous Creator",
-    creatorAvatar:
-      reel.creatorAvatar ||
-      "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?q=80&w=150&auto=format&fit=crop",
-    duration: reel.duration || "0:30",
-    views: reel.viewCount ?? reel.views ?? 0,
-    category: reel.category ?? "Wellness",
-    verified: reel.verified ?? false,
-    thumbnailUrl: reel.thumbnailUrl || "https://placehold.co/640x360?text=Period+Buddy",
-    directMp4Url: reel.directMp4Url,
-    pollQuestion: reel.pollQuestion || "Vote for the next topic:",
-    votedOptionId: reel.votedOptionId ?? null,
-    pollOptions: (reel.pollOptions || []).map((option) => ({
-      id: option.optionId,
-      topic: option.topic,
-      votes: option.votes ?? 0,
-    })),
-  };
-}
-
-// Shared reel chrome — the center play glyph (shown while paused) and the
-// mute toggle — so a direct-MP4 reel and a YouTube reel feel identical to
-// the user, regardless of where the video actually lives.
-function ReelPlayerChrome({
-  isMuted,
-  isPlaying,
-  onToggleMuted,
-}: {
-  isMuted: boolean;
-  isPlaying: boolean;
-  onToggleMuted: () => void;
-}) {
-  return (
-    <>
-      {!isPlaying && (
-        <View
-          pointerEvents="none"
-          className="absolute inset-0 items-center justify-center"
-        >
-          <View className="h-16 w-16 items-center justify-center rounded-full border border-white/50 bg-black/35">
-            <Ionicons name="play" size={30} color="white" />
-          </View>
-        </View>
-      )}
-
-      <TouchableOpacity
-        activeOpacity={0.78}
-        onPress={(event) => {
-          event.stopPropagation();
-          onToggleMuted();
-        }}
-        className="absolute right-4 top-16 h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-black/35"
-      >
-        <Ionicons
-          name={isMuted ? "volume-mute" : "volume-high"}
-          size={16}
-          color="white"
-        />
-      </TouchableOpacity>
-    </>
-  );
-}
-
-// Plays a direct MP4 source (e.g. your own S3/server upload) with real
-// audio and tap-to-pause. Mounted only for the currently active reel, so it
-// starts fresh (and stops) as the user scrolls — no cross-fade of two
-// videos playing at once.
-function DirectVideoPlayer({
-  isMuted,
-  onToggleMuted,
-  uri,
-}: {
-  isMuted: boolean;
-  onToggleMuted: () => void;
-  uri: string;
-}) {
-  const player = useVideoPlayer(uri, (instance) => {
-    instance.loop = true;
-    instance.muted = isMuted;
-    instance.play();
-  });
-
-  useEffect(() => {
-    player.muted = isMuted;
-  }, [player, isMuted]);
-
-  const { isPlaying } = useEvent(player, "playingChange", {
-    isPlaying: player.playing,
-  });
-
-  return (
-    <Pressable
-      onPress={() => (isPlaying ? player.pause() : player.play())}
-      style={{ bottom: 0, left: 0, position: "absolute", right: 0, top: 0 }}
-    >
-      <VideoView
-        player={player}
-        style={{ height: "100%", width: "100%" }}
-        contentFit="cover"
-        nativeControls={false}
-        pointerEvents="none"
-      />
-
-      <ReelPlayerChrome
-        isMuted={isMuted}
-        isPlaying={isPlaying}
-        onToggleMuted={onToggleMuted}
-      />
-    </Pressable>
-  );
-}
-
-declare global {
-  interface Window {
-    YT?: {
-      Player: new (elementId: string, options: Record<string, unknown>) => YouTubeIframeApiPlayer;
-    };
-    onYouTubeIframeAPIReady?: () => void;
-  }
-}
-
-type YouTubeIframeApiPlayer = {
-  destroy: () => void;
-  mute: () => void;
-  pauseVideo: () => void;
-  playVideo: () => void;
-  unMute: () => void;
-};
-
-let youtubeApiLoadPromise: Promise<void> | null = null;
-
-// Loads the YouTube IFrame API script exactly once per web session and
-// resolves once `window.YT.Player` is ready to use.
-function loadYouTubeIframeApi(): Promise<void> {
-  if (youtubeApiLoadPromise) return youtubeApiLoadPromise;
-
-  youtubeApiLoadPromise = new Promise((resolve) => {
-    if (window.YT?.Player) {
-      resolve();
-      return;
-    }
-
-    const previousCallback = window.onYouTubeIframeAPIReady;
-    window.onYouTubeIframeAPIReady = () => {
-      previousCallback?.();
-      resolve();
-    };
-
-    if (!document.getElementById("youtube-iframe-api")) {
-      const tag = document.createElement("script");
-      tag.id = "youtube-iframe-api";
-      tag.src = "https://www.youtube.com/iframe_api";
-      document.body.appendChild(tag);
-    }
-  });
-
-  return youtubeApiLoadPromise;
-}
-
-// HTML for the native (WebView) YouTube player. Uses the real IFrame Player
-// API — not a static `?mute=1` src — so play/pause and mute/unmute are
-// instant `postMessage`-free JS calls instead of reloading the embed.
-function generateYouTubePlayerHTML(videoId: string, initialMuted: boolean) {
-  return `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-        <style>
-          body, html { margin: 0; padding: 0; width: 100%; height: 100%; background-color: #000000; overflow: hidden; }
-          #player { width: 100%; height: 100%; }
-          iframe { width: 100% !important; height: 100% !important; }
-        </style>
-      </head>
-      <body>
-        <div id="player"></div>
-        <script src="https://www.youtube.com/iframe_api"></script>
-        <script>
-          var player;
-          function onYouTubeIframeAPIReady() {
-            player = new YT.Player('player', {
-              videoId: '${videoId}',
-              playerVars: {
-                autoplay: 1,
-                controls: 0,
-                loop: 1,
-                playlist: '${videoId}',
-                playsinline: 1,
-                modestbranding: 1,
-                rel: 0,
-                mute: ${initialMuted ? 1 : 0}
-              },
-              events: {
-                onReady: function (event) { event.target.playVideo(); },
-                onStateChange: function (event) {
-                  window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'stateChange', state: event.data }));
-                }
-              }
-            });
-            window.__ytPlayer = player;
-          }
-        </script>
-      </body>
-    </html>
-  `;
-}
-
-// Plays a YouTube-hosted reel (a creator can paste a YouTube link into the
-// same field used for direct uploads) with the same tap-to-pause and real
-// mute control as DirectVideoPlayer, via the official IFrame Player API —
-// on native through a WebView + postMessage bridge, on web by attaching
-// YT.Player straight to a DOM node.
-function YouTubePlayer({
-  isMuted,
-  onToggleMuted,
-  videoId,
-}: {
-  isMuted: boolean;
-  onToggleMuted: () => void;
-  videoId: string;
-}) {
-  const [isPlaying, setIsPlaying] = useState(true);
-  const webViewRef = useRef<WebView>(null);
-  const webPlayerRef = useRef<YouTubeIframeApiPlayer | null>(null);
-  const elementId = useMemo(
-    () => `yt-reel-${videoId}-${Math.random().toString(36).slice(2)}`,
-    [videoId],
-  );
-
-  useEffect(() => {
-    if (Platform.OS !== "web") return;
-    let cancelled = false;
-
-    loadYouTubeIframeApi().then(() => {
-      if (cancelled || !window.YT) return;
-      webPlayerRef.current = new window.YT.Player(elementId, {
-        videoId,
-        playerVars: {
-          autoplay: 1,
-          controls: 0,
-          loop: 1,
-          playlist: videoId,
-          playsinline: 1,
-          modestbranding: 1,
-          rel: 0,
-          mute: isMuted ? 1 : 0,
-        },
-        events: {
-          onReady: (event: { target: YouTubeIframeApiPlayer }) => event.target.playVideo(),
-          onStateChange: (event: { data: number }) => setIsPlaying(event.data === 1),
-        },
-      });
-    });
-
-    return () => {
-      cancelled = true;
-      webPlayerRef.current?.destroy?.();
-      webPlayerRef.current = null;
-    };
-    // Only (re)create the player when the video itself changes — mute is
-    // handled by the effect below so toggling it doesn't restart playback.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [elementId, videoId]);
-
-  useEffect(() => {
-    if (Platform.OS !== "web") return;
-    if (isMuted) webPlayerRef.current?.mute();
-    else webPlayerRef.current?.unMute();
-  }, [isMuted]);
-
-  useEffect(() => {
-    if (Platform.OS === "web") return;
-    const script = isMuted
-      ? "window.__ytPlayer && window.__ytPlayer.mute(); true;"
-      : "window.__ytPlayer && window.__ytPlayer.unMute(); true;";
-    webViewRef.current?.injectJavaScript(script);
-  }, [isMuted]);
-
-  function togglePlay() {
-    if (Platform.OS === "web") {
-      const player = webPlayerRef.current;
-      if (!player) return;
-      if (isPlaying) player.pauseVideo();
-      else player.playVideo();
-      setIsPlaying((current) => !current);
-      return;
-    }
-
-    const script = isPlaying
-      ? "window.__ytPlayer && window.__ytPlayer.pauseVideo(); true;"
-      : "window.__ytPlayer && window.__ytPlayer.playVideo(); true;";
-    webViewRef.current?.injectJavaScript(script);
-    setIsPlaying((current) => !current);
-  }
-
-  function handleWebViewMessage(event: WebViewMessageEvent) {
-    try {
-      const data = JSON.parse(event.nativeEvent.data);
-      if (data.type === "stateChange") setIsPlaying(data.state === 1);
-    } catch {
-      // Ignore malformed bridge messages.
-    }
-  }
-
-  return (
-    <Pressable
-      onPress={togglePlay}
-      style={{ bottom: 0, left: 0, position: "absolute", right: 0, top: 0 }}
-    >
-      {Platform.OS === "web" ? (
-        <div id={elementId} style={{ width: "100%", height: "100%", pointerEvents: "none" }} />
-      ) : (
-        <WebView
-          ref={webViewRef}
-          allowsInlineMediaPlayback
-          domStorageEnabled
-          javaScriptEnabled
-          mediaPlaybackRequiresUserAction={false}
-          originWhitelist={["*"]}
-          allowsFullscreenVideo
-          androidLayerType="hardware"
-          onMessage={handleWebViewMessage}
-          source={{ html: generateYouTubePlayerHTML(videoId, isMuted) }}
-          style={{
-            backgroundColor: "black",
-            bottom: 0,
-            left: 0,
-            position: "absolute",
-            right: 0,
-            top: 0,
-          }}
-          pointerEvents="none"
-        />
-      )}
-
-      <ReelPlayerChrome
-        isMuted={isMuted}
-        isPlaying={isPlaying}
-        onToggleMuted={onToggleMuted}
-      />
-    </Pressable>
-  );
-}
-
+/**
+ * Reels: a full-screen vertical pager (Instagram-style). Only the reel on
+ * screen plays; the ones before and after it get paused players so swiping
+ * either way is instant, and every other reel is just its thumbnail. A reel
+ * that ends moves on to the next one (the last one, or one with comments or
+ * the poll sheet open, loops). Playback pauses when
+ * the screen loses focus, the app goes to the background or the creator
+ * sheet covers it. Components live in components/reels/, pure logic in
+ * lib/reels.ts.
+ */
 export default function Reels() {
-  const { colors, fonts, isDark } = useTheme();
+  const { colors, fonts } = useTheme();
   const router = useRouter();
-  // "reels?reelId=..." deep link (shared from handleShareReel below or from
-  // a reel card in blogs.tsx) — that reel is fetched and pinned first.
-  // `openedAt` is stamped by the deep-link handler in app/_layout.tsx so the
-  // same link tapped again counts as a new link.
+  const insets = useSafeAreaInsets();
+  const width = useContentWidth();
+  const { earnTokens } = useAppState();
+  // "reels?reelId=..." deep link (Share on a reel, or a reel card in blogs.tsx):
+  // that reel is fetched and pinned first. `openedAt` (app/_layout.tsx) makes
+  // the same link tapped twice count as new.
   const { reelId: deepLinkedReelId, openedAt: deepLinkOpenedAt } = useLocalSearchParams<{
     reelId?: string;
     openedAt?: string;
   }>();
-  // Key of the deep link already pinned, so switching back to "all" doesn't
-  // re-fetch/re-pin it (or re-show the "Couldn't open" alert).
   const handledDeepLinkKeyRef = useRef<string | null>(null);
-  const { earnTokens } = useAppState();
-  const { height } = useWindowDimensions();
-  const width = useContentWidth();
-  const insets = useSafeAreaInsets();
-  const reelHeight = useMemo(
-    () => Math.max(560, height - insets.top - insets.bottom),
-    [height, insets.bottom, insets.top],
-  );
 
-  const [activePlayId, setActivePlayId] = useState<string | null>(null);
-  const [isMuted, setIsMuted] = useState(false);
-  const [followingCreatorIds, setFollowingCreatorIds] = useState<Set<string>>(
-    new Set(),
-  );
-  const [selectedCreator, setSelectedCreator] = useState<HealthReel | null>(
-    null,
-  );
-  const [pollReelId, setPollReelId] = useState<string | null>(null);
-
-  const [reels, setReels] = useState<HealthReel[]>([]);
-  const [loadingReels, setLoadingReels] = useState(true);
-  const [usingFallback, setUsingFallback] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<string>("all");
-  const [categoryPickerVisible, setCategoryPickerVisible] = useState(false);
-  const [availableCategories, setAvailableCategories] = useState<string[]>([]);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(false);
+  const [pageHeight, setPageHeight] = useState(0);
+  const [reels, setReels] = useState<ReelItem[]>([]);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [loadError, setLoadError] = useState<LoadError | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreFailed, setLoadMoreFailed] = useState(false);
+  const [feed, setFeed] = useState("all");
+  const [categories, setCategories] = useState<string[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  // Browsers block autoplay with sound, so web always starts muted.
+  const [muted, setMuted] = useState(Platform.OS === "web");
+  const [soundHint, setSoundHint] = useState(Platform.OS === "web");
+  const [focused, setFocused] = useState(true);
+  const [appActive, setAppActive] = useState(AppState.currentState === "active");
+  const [followingCreatorIds, setFollowingCreatorIds] = useState<Set<string>>(new Set());
+  const [creator, setCreator] = useState<ReelItem | null>(null);
+  const [pollReelId, setPollReelId] = useState<string | null>(null);
+  const [commentsReelId, setCommentsReelId] = useState<string | null>(null);
 
-  const REELS_PAGE_SIZE = 10;
+  const listRef = useRef<FlatList<ReelItem>>(null);
+  const activeIndexRef = useRef(activeIndex);
+  activeIndexRef.current = activeIndex;
+  const reelsRef = useRef(reels);
+  reelsRef.current = reels;
+  const pageRef = useRef(1);
+  const hasMoreRef = useRef(false);
+  const loadingMoreRef = useRef(false);
+  const requestRef = useRef(0);
+  const likeSeqRef = useRef(new Map<string, number>());
+  const saveSeqRef = useRef(new Map<string, number>());
+  const viewedRef = useRef(new Set<string>());
+
+  // --- playback gates -------------------------------------------------------
+  useFocusEffect(
+    useCallback(() => {
+      setFocused(true);
+      return () => setFocused(false);
+    }, []),
+  );
 
   useEffect(() => {
-    let isMounted = true;
+    const subscription = AppState.addEventListener("change", (state) => setAppActive(state === "active"));
+    return () => subscription.remove();
+  }, []);
 
-    async function loadReels() {
-      setLoadingReels(true);
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    AsyncStorage.getItem(MUTE_KEY)
+      .then((value) => {
+        if (value !== null) setMuted(value === "1");
+      })
+      .catch(() => {});
+  }, []);
+
+  const playbackAllowed = focused && appActive && !creator;
+
+  // --- loading ---------------------------------------------------------------
+  const fetchPage = useCallback(
+    (page: number) =>
+      feed === "saved"
+        ? reelsApi.getSaved({ page, limit: REELS_PAGE_SIZE })
+        : reelsApi.getReels({ page, limit: REELS_PAGE_SIZE, category: feed === "all" ? undefined : feed }),
+    [feed],
+  );
+
+  const rememberFollows = useCallback((apiReels: ApiReel[]) => {
+    setFollowingCreatorIds((current) => {
+      const next = new Set(current);
+      let changed = false;
+      for (const reel of apiReels) {
+        if (reel.followedByMe === undefined) continue;
+        const had = next.has(reel.creatorId);
+        if (reel.followedByMe && !had) {
+          next.add(reel.creatorId);
+          changed = true;
+        } else if (!reel.followedByMe && had) {
+          next.delete(reel.creatorId);
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, []);
+
+  const loadFirst = useCallback(
+    async (mode: "initial" | "refresh") => {
+      const request = ++requestRef.current;
+      if (mode === "refresh") setRefreshing(true);
+      else setInitialLoading(true);
+      setLoadMoreFailed(false);
+
+      const deepLinkKey = deepLinkedReelId ? `${deepLinkedReelId}|${deepLinkOpenedAt ?? ""}` : null;
+      const wantsLinkedReel = Boolean(deepLinkKey) && feed === "all" && handledDeepLinkKeyRef.current !== deepLinkKey;
+
       try {
-        const deepLinkKey = deepLinkedReelId
-          ? `${deepLinkedReelId}|${deepLinkOpenedAt ?? ""}`
-          : null;
-        const wantsLinkedReel =
-          Boolean(deepLinkKey) &&
-          selectedCategory === "all" &&
-          handledDeepLinkKeyRef.current !== deepLinkKey;
-        const [response, linkedReel] = await Promise.all([
-          reelsApi.getReels({
-            limit: REELS_PAGE_SIZE,
-            page: 1,
-            category: selectedCategory === "all" ? undefined : selectedCategory,
-          }),
-          wantsLinkedReel
-            ? reelsApi.getReelById(String(deepLinkedReelId)).catch(() => null)
-            : Promise.resolve(null),
+        const [response, linked] = await Promise.all([
+          fetchPage(1),
+          wantsLinkedReel ? reelsApi.getReelById(String(deepLinkedReelId)).catch(() => null) : Promise.resolve(null),
         ]);
-        if (!isMounted) return;
-        if (wantsLinkedReel) handledDeepLinkKeyRef.current = deepLinkKey;
-        if (wantsLinkedReel && !linkedReel) {
-          alert("Couldn't open that video", "It may have been removed.");
+        if (request !== requestRef.current) return;
+        if (wantsLinkedReel) {
+          handledDeepLinkKeyRef.current = deepLinkKey;
+          if (!linked) alert("Couldn't open that video", "It may have been removed.");
         }
 
-        // A deep-linked reel goes first (so it's the one playing) and is
-        // de-duplicated out of the regular first page.
-        const linkedMapped = linkedReel ? mapApiReel(linkedReel) : null;
-        const apiReels = linkedReel ? [linkedReel, ...response.reels] : response.reels;
-
-        if (apiReels.length > 0) {
-          const pageReels = response.reels.map(mapApiReel);
-          const mappedReels = linkedMapped
-            ? [linkedMapped, ...pageReels.filter((reel) => reel.id !== linkedMapped.id)]
-            : pageReels;
-          setReels(mappedReels);
-          setUsingFallback(false);
-          setPage(1);
-          setHasMore(response.pagination.page < response.pagination.pages);
-          // Goes through handlePlay (not a plain setActivePlayId) so the
-          // very first reel's view actually gets recorded, same as every
-          // reel reached by scrolling.
-          if (mappedReels[0]) void handlePlay(mappedReels[0].id);
-          setFollowingCreatorIds(
-            new Set(
-              apiReels
-                .filter((reel) => reel.followedByMe)
-                .map((reel) => reel.creatorId),
-            ),
-          );
-          if (selectedCategory === "all") {
-            setAvailableCategories(
-              Array.from(new Set(apiReels.map((reel) => reel.category))),
-            );
-          }
+        const items = withPinnedFirst(response.reels.map(mapApiReel), linked ? mapApiReel(linked) : null);
+        rememberFollows(linked ? [linked, ...response.reels] : response.reels);
+        if (feed === "all") {
+          setCategories(Array.from(new Set(response.reels.map((reel) => reel.category).filter(Boolean))));
+        }
+        pageRef.current = 1;
+        hasMoreRef.current = hasMore(response.pagination);
+        viewedRef.current.clear();
+        setReels(items);
+        setLoadError(null);
+        setActiveIndex(0);
+        listRef.current?.scrollToOffset({ offset: 0, animated: false });
+      } catch (err) {
+        if (request !== requestRef.current) return;
+        if (mode === "refresh" && reelsRef.current.length > 0) {
+          alert("Couldn't refresh", getFriendlyErrorMessage(err));
         } else {
           setReels([]);
-          setUsingFallback(false);
-          setHasMore(false);
-        }
-      } catch {
-        if (isMounted) {
-          setReels(fallbackReels);
-          setUsingFallback(true);
-          setHasMore(false);
-          setActivePlayId((current) => current ?? fallbackReels[0]?.id ?? null);
+          setLoadError({ message: getFriendlyErrorMessage(err), offline: isNetworkError(err) });
         }
       } finally {
-        if (isMounted) setLoadingReels(false);
+        if (request === requestRef.current) {
+          setInitialLoading(false);
+          setRefreshing(false);
+        }
       }
-    }
+    },
+    [deepLinkOpenedAt, deepLinkedReelId, feed, fetchPage, rememberFollows],
+  );
 
-    loadReels();
+  useEffect(() => {
+    void loadFirst("initial");
+  }, [loadFirst]);
 
-    return () => {
-      isMounted = false;
-    };
-    // handlePlay isn't memoized; including it would rerun this load effect
-    // on every render instead of only when selectedCategory changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCategory, deepLinkedReelId, deepLinkOpenedAt]);
-
-  async function handleShareReel(reel: HealthReel) {
+  const loadMore = useCallback(async () => {
+    if (loadingMoreRef.current || !hasMoreRef.current) return;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    const request = requestRef.current;
     try {
-      await shareWithAppLink(
-        `Watch "${reel.title}" by ${reel.creatorName} on Nura.`,
-        // Fallback reels are local placeholders with no backend id.
-        usingFallback ? "reels" : `reels?reelId=${encodeURIComponent(reel.id)}`,
+      const nextPage = pageRef.current + 1;
+      const response = await fetchPage(nextPage);
+      if (request !== requestRef.current) return;
+      pageRef.current = nextPage;
+      hasMoreRef.current = hasMore(response.pagination);
+      rememberFollows(response.reels);
+      setReels((current) => appendUnique(current, response.reels.map(mapApiReel)));
+      setLoadMoreFailed(false);
+    } catch {
+      if (request === requestRef.current) setLoadMoreFailed(true);
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  }, [fetchPage, rememberFollows]);
+
+  // Prefetch a few reels before the end (onEndReached also covers fast flings).
+  useEffect(() => {
+    if (!loadMoreFailed && shouldPrefetch(activeIndex, reels.length)) void loadMore();
+  }, [activeIndex, loadMore, loadMoreFailed, reels.length]);
+
+  // --- pager -------------------------------------------------------------------
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    const first = viewableItems.find((token) => token.isViewable && token.index != null);
+    if (first?.index != null) setActiveIndex(first.index);
+  }).current;
+
+  const scrollToReel = useCallback((id: string) => {
+    const index = reelsRef.current.findIndex((reel) => reel.id === id);
+    if (index < 0) return;
+    listRef.current?.scrollToIndex({ index, animated: false });
+    setActiveIndex(index);
+  }, []);
+
+  // --- actions (stable, read the latest state through refs) -------------------
+  const setLike = useCallback(async (id: string, liked: boolean) => {
+    const current = reelsRef.current.find((reel) => reel.id === id);
+    if (!current || current.isLiked === liked) return;
+    const before = { isLiked: current.isLiked, likeCount: current.likeCount };
+    const seq = (likeSeqRef.current.get(id) ?? 0) + 1;
+    likeSeqRef.current.set(id, seq);
+    setReels((list) => updateReel(list, id, (reel) => applyLiked(reel, liked)));
+    try {
+      const result = await reelsApi.setLike(id, liked);
+      if (likeSeqRef.current.get(id) !== seq) return;
+      setReels((list) =>
+        updateReel(list, id, (reel) =>
+          reel.isLiked === result.liked && reel.likeCount === result.likeCount
+            ? reel
+            : { ...reel, isLiked: result.liked, likeCount: result.likeCount },
+        ),
       );
+    } catch {
+      // Roll back only if no newer tap superseded this one.
+      if (likeSeqRef.current.get(id) !== seq) return;
+      setReels((list) => updateReel(list, id, (reel) => ({ ...reel, ...before })));
+    }
+  }, []);
+
+  const setSaved = useCallback(async (id: string, saved: boolean) => {
+    const current = reelsRef.current.find((reel) => reel.id === id);
+    if (!current || current.isSaved === saved) return;
+    const before = { isSaved: current.isSaved, saveCount: current.saveCount };
+    const seq = (saveSeqRef.current.get(id) ?? 0) + 1;
+    saveSeqRef.current.set(id, seq);
+    setReels((list) => updateReel(list, id, (reel) => applySaved(reel, saved)));
+    try {
+      const result = await reelsApi.setSaved(id, saved);
+      if (saveSeqRef.current.get(id) !== seq) return;
+      setReels((list) =>
+        updateReel(list, id, (reel) =>
+          reel.isSaved === result.saved && reel.saveCount === result.saveCount
+            ? reel
+            : { ...reel, isSaved: result.saved, saveCount: result.saveCount },
+        ),
+      );
+    } catch (err) {
+      if (saveSeqRef.current.get(id) !== seq) return;
+      setReels((list) => updateReel(list, id, (reel) => ({ ...reel, ...before })));
+      alert(saved ? "Couldn't save" : "Couldn't remove from saved", getFriendlyErrorMessage(err));
+    }
+  }, []);
+
+  const toggleFollow = useCallback(
+    async (id: string, creatorId: string) => {
+      const wasFollowing = followingCreatorIds.has(creatorId);
+      setFollowingCreatorIds((prev) => {
+        const next = new Set(prev);
+        if (wasFollowing) next.delete(creatorId);
+        else next.add(creatorId);
+        return next;
+      });
+      if (!wasFollowing) earnTokens(2);
+      try {
+        const result = await reelsApi.toggleFollowCreator(id);
+        if (result.tokensAwarded) earnTokens(result.tokensAwarded);
+        setFollowingCreatorIds((prev) => {
+          if (prev.has(creatorId) === result.followedByMe) return prev;
+          const next = new Set(prev);
+          if (result.followedByMe) next.add(creatorId);
+          else next.delete(creatorId);
+          return next;
+        });
+      } catch {
+        // The optimistic state stays while offline, as before.
+      }
+    },
+    [earnTokens, followingCreatorIds],
+  );
+  const toggleFollowRef = useRef(toggleFollow);
+  toggleFollowRef.current = toggleFollow;
+
+  const share = useCallback(async (reel: ReelItem) => {
+    try {
+      await shareWithAppLink(`Watch "${reel.title}" by ${reel.creatorName} on Nura.`, `reels?reelId=${encodeURIComponent(reel.id)}`);
     } catch {
       alert("Error", "Unable to open the share sheet right now.");
     }
-  }
+  }, []);
 
-  async function handleLoadMoreReels() {
-    if (loadingMore || !hasMore) return;
-    setLoadingMore(true);
+  const recordView = useCallback(async (id: string) => {
+    if (viewedRef.current.has(id)) return;
+    viewedRef.current.add(id);
     try {
-      const nextPage = page + 1;
-      const response = await reelsApi.getReels({
-        limit: REELS_PAGE_SIZE,
-        page: nextPage,
-        category: selectedCategory === "all" ? undefined : selectedCategory,
-      });
-      // A deep-linked reel pinned first can reappear on a later page.
-      setReels((prev) => {
-        const seen = new Set(prev.map((reel) => reel.id));
-        return [
-          ...prev,
-          ...response.reels.map(mapApiReel).filter((reel) => !seen.has(reel.id)),
-        ];
-      });
-      setPage(nextPage);
-      setHasMore(response.pagination.page < response.pagination.pages);
-    } catch {
-      setHasMore(false);
-    } finally {
-      setLoadingMore(false);
-    }
-  }
-
-  useEffect(() => {
-    if (!activePlayId && reels[0]) {
-      setActivePlayId(reels[0].id);
-    }
-  }, [activePlayId, reels]);
-
-  // --- INTERACTION CONTROLLER DRIVERS ---
-  async function handleToggleFollow(reelId: string, creatorId: string) {
-    setFollowingCreatorIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(creatorId)) next.delete(creatorId);
-      else {
-        next.add(creatorId);
-        earnTokens(2);
+      const result = await reelsApi.recordView(id);
+      const viewCount = result.viewCount ?? result.views;
+      if (typeof viewCount === "number") {
+        setReels((list) => updateReel(list, id, (reel) => (reel.viewCount === viewCount ? reel : { ...reel, viewCount })));
       }
-      return next;
-    });
-
-    try {
-      const result = await reelsApi.toggleFollowCreator(reelId);
-      if (result.tokensAwarded) earnTokens(result.tokensAwarded);
-      setFollowingCreatorIds((prev) => {
-        const next = new Set(prev);
-        if (result.followedByMe) next.add(creatorId);
-        else next.delete(creatorId);
-        return next;
-      });
     } catch {
-      // Optimistic follow state remains local while offline.
+      // Playback doesn't depend on view tracking; allow a retry next time.
+      viewedRef.current.delete(id);
     }
-  }
+  }, []);
 
-  async function handleTriggerVote(reelId: string, optionId: string) {
-    setReels((currentList) =>
-      currentList.map((reel) => {
-        if (reel.id !== reelId || reel.votedOptionId) return reel;
-
-        const updatedOptions = reel.pollOptions.map((opt) =>
-          opt.id === optionId ? { ...opt, votes: opt.votes + 1 } : opt,
-        );
-
-        earnTokens(5);
-        alert(
-          "Vote counted",
-          "Your topic preference has been saved.",
-        );
-
-        return {
+  const vote = useCallback(
+    async (reelId: string, optionId: string) => {
+      const current = reelsRef.current.find((reel) => reel.id === reelId);
+      if (!current || current.votedOptionId) return;
+      setReels((list) =>
+        updateReel(list, reelId, (reel) => ({
           ...reel,
           votedOptionId: optionId,
-          pollOptions: updatedOptions,
-        };
-      }),
-    );
-
-    try {
-      const result = await reelsApi.votePoll(reelId, optionId);
-      earnTokens(result.tokensAwarded);
-      setReels((currentList) =>
-        currentList.map((reel) =>
-          reel.id === reelId
-            ? {
-                ...reel,
-                votedOptionId: optionId,
-                pollOptions: result.pollOptions.map((option) => ({
-                  id: option.optionId,
-                  topic: option.topic,
-                  votes: option.votes,
-                })),
-              }
-            : reel,
-        ),
+          pollOptions: reel.pollOptions.map((option) => (option.id === optionId ? { ...option, votes: option.votes + 1 } : option)),
+        })),
       );
-    } catch {
-      // Optimistic vote remains visible while offline.
-    }
-  }
+      earnTokens(5);
+      try {
+        const result = await reelsApi.votePoll(reelId, optionId);
+        earnTokens(result.tokensAwarded);
+        setReels((list) =>
+          updateReel(list, reelId, (reel) => ({
+            ...reel,
+            votedOptionId: optionId,
+            pollOptions: result.pollOptions.map((option) => ({ id: option.optionId, topic: option.topic, votes: option.votes })),
+          })),
+        );
+      } catch {
+        // The optimistic vote stays visible while offline, as before.
+      }
+    },
+    [earnTokens],
+  );
 
-  async function handlePlay(reelId: string) {
-    // Already the active reel — skip, so a drag-then-momentum scroll (which
-    // can fire both onScrollEndDrag and onMomentumScrollEnd for the same
-    // settle) doesn't record the view twice or restart the video.
-    if (reelId === activePlayId) return;
+  // A reel that played to the end moves on to the next one.
+  const advanceFrom = useCallback((id: string) => {
+    const index = reelsRef.current.findIndex((reel) => reel.id === id);
+    if (index < 0 || index !== activeIndexRef.current || index >= reelsRef.current.length - 1) return;
+    listRef.current?.scrollToIndex({ index: index + 1, animated: true });
+    setActiveIndex(index + 1);
+  }, []);
 
-    setActivePlayId(reelId);
-    try {
-      const result = await reelsApi.recordView(reelId);
-      setReels((currentList) =>
-        currentList.map((reel) =>
-          reel.id === reelId ? { ...reel, views: result.views } : reel,
-        ),
-      );
-    } catch {
-      // Video can still play when view tracking is unavailable.
-    }
-  }
+  const toggleMute = useCallback(() => {
+    setSoundHint(false);
+    setMuted((value) => {
+      const next = !value;
+      AsyncStorage.setItem(MUTE_KEY, next ? "1" : "0").catch(() => {});
+      return next;
+    });
+  }, []);
 
-  // Fires on both onScrollEndDrag and onMomentumScrollEnd — a short/slow
-  // flick on a pagingEnabled ScrollView can settle on the next page without
-  // ever producing momentum, in which case onMomentumScrollEnd never fires
-  // and the previous reel would otherwise keep playing (with audio) behind
-  // the new one.
-  function handleReelScrollSettle(
-    event: NativeSyntheticEvent<NativeScrollEvent>,
-  ) {
-    const nextIndex = Math.round(
-      event.nativeEvent.contentOffset.y / reelHeight,
+  const actions = useMemo<ReelPageActions>(
+    () => ({
+      onToggleMute: toggleMute,
+      onSetLike: (id, liked) => void setLike(id, liked),
+      onSetSaved: (id, saved) => void setSaved(id, saved),
+      onShare: (reel) => void share(reel),
+      onOpenComments: setCommentsReelId,
+      onFollow: (id, creatorId) => void toggleFollowRef.current(id, creatorId),
+      onOpenCreator: setCreator,
+      onOpenPoll: setPollReelId,
+      onVote: (id, optionId) => void vote(id, optionId),
+      onViewed: (id) => void recordView(id),
+      onEnded: advanceFrom,
+    }),
+    [advanceFrom, recordView, setLike, setSaved, share, toggleMute, vote],
+  );
+
+  const handleCommentCount = useCallback((id: string, count: number) => {
+    setReels((list) => updateReel(list, id, (reel) => (reel.commentCount === count ? reel : { ...reel, commentCount: count })));
+  }, []);
+
+  // Loop instead of advancing while comments or the poll sheet is open.
+  const autoAdvance = !commentsReelId && !pollReelId;
+
+  const renderItem = useCallback<ListRenderItem<ReelItem>>(
+    ({ item, index }) => (
+      <ReelPage
+        reel={item}
+        width={width}
+        height={pageHeight}
+        isActive={index === activeIndex}
+        isPreload={index === activeIndex + 1 || index === activeIndex - 1}
+        playbackAllowed={playbackAllowed}
+        autoAdvance={autoAdvance && index < reels.length - 1}
+        muted={muted}
+        following={followingCreatorIds.has(item.creatorId)}
+        topInset={insets.top}
+        bottomInset={insets.bottom}
+        actions={actions}
+      />
+    ),
+    [
+      actions,
+      activeIndex,
+      autoAdvance,
+      followingCreatorIds,
+      insets.bottom,
+      insets.top,
+      muted,
+      pageHeight,
+      playbackAllowed,
+      reels.length,
+      width,
+    ],
+  );
+
+  const getItemLayout = useCallback(
+    (_: ArrayLike<ReelItem> | null | undefined, index: number) => ({ length: pageHeight, offset: pageHeight * index, index }),
+    [pageHeight],
+  );
+
+  const pollReel = pollReelId ? (reels.find((reel) => reel.id === pollReelId) ?? null) : null;
+  const commentsReel = commentsReelId ? reels.find((reel) => reel.id === commentsReelId) : undefined;
+  const feedLabel = feed === "all" ? "For You" : feed === "saved" ? "Saved" : feed;
+
+  // --- render ------------------------------------------------------------------
+  let body: React.ReactNode;
+  if (initialLoading && reels.length === 0) {
+    // Reel-shaped skeleton (caption bottom-left, action rail right) for the dark player.
+    body = (
+      <View className="flex-1 flex-row items-end px-5" style={{ paddingBottom: insets.bottom + 28 }}>
+        <View className="flex-1 pr-6" style={{ gap: 12 }}>
+          <View className="flex-row items-center" style={{ gap: 12 }}>
+            <SkeletonBlock width={40} height={40} radius={20} style={SKELETON_TINT} />
+            <SkeletonBlock width={120} height={14} style={SKELETON_TINT} />
+          </View>
+          <SkeletonBlock width="90%" height={16} style={SKELETON_TINT} />
+          <SkeletonBlock width="65%" height={12} style={SKELETON_TINT} />
+        </View>
+        <View className="items-center" style={{ gap: 20 }}>
+          {[0, 1, 2, 3].map((key) => (
+            <SkeletonBlock key={key} width={40} height={40} radius={20} style={SKELETON_TINT} />
+          ))}
+        </View>
+      </View>
     );
-    const nextReel = reels[nextIndex];
-
-    if (nextReel) {
-      void handlePlay(nextReel.id);
-    }
-
-    if (!usingFallback && hasMore && nextIndex >= reels.length - 2) {
-      void handleLoadMoreReels();
-    }
+  } else if (reels.length === 0) {
+    body = (
+      <View className="flex-1 justify-center px-6">
+        <View className="rounded-3xl" style={{ backgroundColor: colors.surface }}>
+          {loadError ? (
+            <EmptyState
+              compact
+              icon={loadError.offline ? "wifi-off" : "alert-circle-outline"}
+              title={loadError.offline ? "You're offline" : "Couldn't load reels"}
+              message={loadError.message}
+              actionLabel="Try again"
+              onAction={() => void loadFirst("initial")}
+            />
+          ) : feed === "saved" ? (
+            <EmptyState
+              compact
+              icon="bookmark-outline"
+              title="No saved reels yet"
+              message="Tap the bookmark on any reel to keep it here."
+              actionLabel="Browse reels"
+              onAction={() => setFeed("all")}
+            />
+          ) : (
+            <EmptyState
+              compact
+              icon="movie-open-outline"
+              title="No reels here yet"
+              message="New videos from our experts will show up here."
+              actionLabel={feed === "all" ? "Refresh" : "Show all reels"}
+              onAction={() => (feed === "all" ? void loadFirst("initial") : setFeed("all"))}
+            />
+          )}
+        </View>
+      </View>
+    );
+  } else if (pageHeight > 0) {
+    body = (
+      <FlatList
+        ref={listRef}
+        data={reels}
+        keyExtractor={(item) => item.id}
+        renderItem={renderItem}
+        getItemLayout={getItemLayout}
+        pagingEnabled
+        snapToInterval={pageHeight}
+        snapToAlignment="start"
+        decelerationRate="fast"
+        disableIntervalMomentum
+        showsVerticalScrollIndicator={false}
+        initialNumToRender={1}
+        maxToRenderPerBatch={2}
+        windowSize={3}
+        // Android only: on iOS clipping can blank a video surface mid-swipe.
+        removeClippedSubviews={Platform.OS === "android"}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={VIEWABILITY}
+        onEndReached={() => {
+          if (!loadMoreFailed) void loadMore();
+        }}
+        onEndReachedThreshold={2}
+        onScrollToIndexFailed={({ index }) => listRef.current?.scrollToOffset({ offset: index * pageHeight, animated: false })}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void loadFirst("refresh")}
+            tintColor="white"
+            colors={[colors.primary]}
+            progressViewOffset={insets.top + 48}
+          />
+        }
+      />
+    );
   }
-
-  function getCreatorStats(creatorId: string) {
-    const creatorReels = reels.filter((reel) => reel.creatorId === creatorId);
-    return {
-      reelsCount: creatorReels.length,
-      totalViews: creatorReels.reduce((sum, reel) => sum + reel.views, 0),
-      categories: Array.from(new Set(creatorReels.map((reel) => reel.category))),
-    };
-  }
-
-  // Extract YouTube ID if present
-  function getYouTubeId(url: string): string | null {
-    if (!url) return null;
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=|shorts\/)([^#\&\?]*).*/;
-    const match = url.match(regExp);
-    return (match && match[2].length === 11) ? match[2] : null;
-  }
-
-  const pollReel = reels.find((reel) => reel.id === pollReelId) ?? null;
-  const pollTotalVotes = pollReel
-    ? pollReel.pollOptions.reduce((sum, option) => sum + option.votes, 0)
-    : 0;
 
   return (
-    <>
-      <StatusBar
-        barStyle="light-content"
-        backgroundColor="#050505"
+    <View style={{ flex: 1, backgroundColor: "#050505" }} onLayout={(event) => setPageHeight(Math.round(event.nativeEvent.layout.height))}>
+      <StatusBar barStyle="light-content" backgroundColor="#050505" />
+      {body}
+
+      {/* Top bar, drawn once over the pager. */}
+      <View
+        pointerEvents="box-none"
+        className="absolute left-0 right-0 flex-row items-center px-4"
+        style={{ top: insets.top + 6, gap: 12 }}
+      >
+        <TouchableOpacity
+          activeOpacity={0.78}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          className="h-10 w-10 items-center justify-center rounded-full bg-black/30"
+          onPress={() => router.back()}
+        >
+          <Feather name="arrow-left" size={20} color="white" />
+        </TouchableOpacity>
+        <Text className="flex-1 text-xl font-extrabold text-white" style={{ fontFamily: fonts.heading }}>
+          Reels
+        </Text>
+        <TouchableOpacity
+          activeOpacity={0.78}
+          accessibilityRole="button"
+          accessibilityLabel={`Showing ${feedLabel}. Change what's shown`}
+          onPress={() => setPickerOpen(true)}
+          className="flex-row items-center rounded-full bg-black/30 px-3 py-1.5"
+          style={{ gap: 4, maxWidth: 170 }}
+        >
+          <Text numberOfLines={1} className="text-[13px] font-bold text-white" style={{ flexShrink: 1, fontFamily: fonts.body }}>
+            {feedLabel}
+          </Text>
+          <Feather name="chevron-down" size={14} color="white" />
+        </TouchableOpacity>
+      </View>
+
+      {soundHint && muted && reels.length > 0 ? (
+        <View
+          pointerEvents="none"
+          className="absolute self-center flex-row items-center rounded-full bg-black/55 px-4 py-2"
+          style={{ top: insets.top + 60, gap: 6 }}
+        >
+          <Feather name="volume-x" size={14} color="white" />
+          <Text className="text-[13px] font-bold text-white" style={{ fontFamily: fonts.body }}>
+            Tap for sound
+          </Text>
+        </View>
+      ) : null}
+
+      {loadingMore ? (
+        <View pointerEvents="none" className="absolute self-center rounded-full bg-black/50 px-4 py-2" style={{ bottom: insets.bottom + 90 }}>
+          <ActivityIndicator color="white" />
+        </View>
+      ) : loadMoreFailed && activeIndex >= reels.length - 1 && reels.length > 0 ? (
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Couldn't load more reels. Try again"
+          onPress={() => {
+            setLoadMoreFailed(false);
+            void loadMore();
+          }}
+          className="absolute self-center flex-row items-center rounded-full bg-black/60 px-4 py-2"
+          style={{ top: insets.top + 60, gap: 6 }}
+        >
+          <Feather name="refresh-cw" size={14} color="white" />
+          <Text className="text-[13px] font-bold text-white" style={{ fontFamily: fonts.body }}>
+            Couldn&apos;t load more · Try again
+          </Text>
+        </TouchableOpacity>
+      ) : null}
+
+      <CommentsSheet
+        reelId={commentsReelId}
+        initialCount={commentsReel?.commentCount ?? 0}
+        onClose={() => setCommentsReelId(null)}
+        onCountChange={handleCommentCount}
       />
-
-      <SafeAreaView
-        className="flex-1"
-        style={{ backgroundColor: "#050505" }}
-      >
-        {loadingReels && reels.length === 0 ? (
-          // Reel-shaped skeleton (caption lines bottom-left, action rail on
-          // the right) tinted for the always-dark player background.
-          <View className="flex-1 flex-row items-end px-5 pb-10">
-            <View className="flex-1 gap-3 pr-6">
-              <View className="flex-row items-center gap-3">
-                <SkeletonBlock width={40} height={40} radius={20} style={REEL_SKELETON_TINT} />
-                <SkeletonBlock width={120} height={14} style={REEL_SKELETON_TINT} />
-              </View>
-              <SkeletonBlock width="90%" height={16} style={REEL_SKELETON_TINT} />
-              <SkeletonBlock width="65%" height={12} style={REEL_SKELETON_TINT} />
-            </View>
-            <View className="items-center gap-5">
-              <SkeletonBlock width={44} height={44} radius={22} style={REEL_SKELETON_TINT} />
-              <SkeletonBlock width={44} height={44} radius={22} style={REEL_SKELETON_TINT} />
-              <SkeletonBlock width={44} height={44} radius={22} style={REEL_SKELETON_TINT} />
-            </View>
-          </View>
-        ) : (
-        <ScrollView
-          decelerationRate="fast"
-          disableIntervalMomentum
-          onMomentumScrollEnd={handleReelScrollSettle}
-          onScrollEndDrag={handleReelScrollSettle}
-          pagingEnabled
-          showsVerticalScrollIndicator={false}
-          snapToAlignment="start"
-          snapToInterval={reelHeight}
-        >
-          {reels.map((item, index) => {
-            const isPlaying = activePlayId === item.id;
-            const isFollowing = followingCreatorIds.has(item.creatorId);
-
-            return (
-              <View
-                key={item.id}
-                style={{
-                  backgroundColor: "#050505",
-                  height: reelHeight,
-                  overflow: "hidden",
-                  width,
-                }}
-              >
-                {isPlaying ? (
-                  (() => {
-                    const ytId = getYouTubeId(item.directMp4Url);
-                    return ytId ? (
-                      <YouTubePlayer
-                        videoId={ytId}
-                        isMuted={isMuted}
-                        onToggleMuted={() => setIsMuted((current) => !current)}
-                      />
-                    ) : (
-                      <DirectVideoPlayer
-                        uri={item.directMp4Url}
-                        isMuted={isMuted}
-                        onToggleMuted={() => setIsMuted((current) => !current)}
-                      />
-                    );
-                  })()
-                ) : (
-                  <TouchableOpacity
-                    activeOpacity={0.92}
-                    onPress={() => handlePlay(item.id)}
-                    style={{
-                      bottom: 0,
-                      left: 0,
-                      position: "absolute",
-                      right: 0,
-                      top: 0,
-                    }}
-                  >
-                    <Image
-                      source={{ uri: item.thumbnailUrl }}
-                      resizeMode="cover"
-                      style={{ height: "100%", width: "100%" }}
-                    />
-                    <View className="absolute inset-0 items-center justify-center">
-                      <View className="h-16 w-16 items-center justify-center rounded-full border border-white/50 bg-black/35">
-                        <Ionicons name="play" size={30} color="white" />
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                )}
-
-                <LinearGradient
-                  colors={[
-                    "rgba(0,0,0,0.58)",
-                    "rgba(0,0,0,0.08)",
-                    "rgba(0,0,0,0.9)",
-                  ]}
-                  locations={[0, 0.42, 1]}
-                  pointerEvents="none"
-                  style={{
-                    bottom: 0,
-                    left: 0,
-                    position: "absolute",
-                    right: 0,
-                    top: 0,
-                  }}
-                />
-
-                <View className="absolute left-5 right-5 top-4 flex-row items-center gap-3">
-                  <TouchableOpacity
-                    activeOpacity={0.78}
-                    accessibilityRole="button"
-                    accessibilityLabel="Go back"
-                    className="h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/35"
-                    onPress={() => router.back()}
-                  >
-                    <Feather name="arrow-left" size={18} color="white" />
-                  </TouchableOpacity>
-                  <View className="flex-1">
-                    <Text className="text-lg font-black text-white" style={{ fontFamily: fonts.heading }}>
-                      Reels
-                    </Text>
-                    <Text className="text-[11.5px] font-bold uppercase text-white/65" style={{ fontFamily: fonts.body }}>
-                      {index + 1} of {reels.length}
-                    </Text>
-                  </View>
-                  <TouchableOpacity
-                    activeOpacity={0.78}
-                    accessibilityRole="button"
-                    accessibilityLabel="Filter by category"
-                    onPress={() => setCategoryPickerVisible(true)}
-                    className="flex-row items-center gap-1 rounded-full bg-white/15 px-3 py-1.5"
-                  >
-                    <Text className="text-[11.5px] font-black uppercase text-white" style={{ fontFamily: fonts.body }}>
-                      {selectedCategory === "all" ? "For You" : selectedCategory}
-                    </Text>
-                    <Feather name="chevron-down" size={11} color="white" />
-                  </TouchableOpacity>
-                </View>
-
-                <View className="absolute bottom-28 right-4 items-center gap-4">
-                  <TouchableOpacity
-                    activeOpacity={0.85}
-                    className="items-center"
-                    onPress={() => setSelectedCreator(item)}
-                  >
-                    <Image
-                      source={{ uri: item.creatorAvatar }}
-                      className="h-12 w-12 rounded-full border-2 border-white bg-neutral-200"
-                    />
-                    {item.verified ? (
-                      <View
-                        className="-mt-3 rounded-full p-0.5"
-                        style={{ backgroundColor: colors.success }}
-                      >
-                        <MaterialCommunityIcons
-                          name="check"
-                          size={12}
-                          color="white"
-                        />
-                      </View>
-                    ) : null}
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    activeOpacity={0.82}
-                    accessibilityRole="button"
-                    accessibilityLabel={isFollowing ? "Unfollow creator" : "Follow creator"}
-                    className="items-center"
-                    onPress={() => handleToggleFollow(item.id, item.creatorId)}
-                  >
-                    <View className="h-11 w-11 items-center justify-center rounded-full bg-white/18">
-                      <Ionicons
-                        name={isFollowing ? "checkmark" : "add"}
-                        size={24}
-                        color="white"
-                      />
-                    </View>
-                    <Text className="mt-1 text-xs font-black text-white" style={{ fontFamily: fonts.body }}>
-                      {isFollowing ? "Following" : "Follow"}
-                    </Text>
-                  </TouchableOpacity>
-
-                  <View className="items-center">
-                    <View className="h-11 w-11 items-center justify-center rounded-full bg-white/18">
-                      <Feather name="eye" size={20} color="white" />
-                    </View>
-                    <Text className="mt-1 text-xs font-black text-white" style={{ fontFamily: fonts.mono }}>
-                      {item.views.toLocaleString()}
-                    </Text>
-                  </View>
-
-                  <TouchableOpacity
-                    activeOpacity={0.82}
-                    accessibilityRole="button"
-                    accessibilityLabel="View poll"
-                    className="items-center"
-                    onPress={() => setPollReelId(item.id)}
-                  >
-                    <View className="h-11 w-11 items-center justify-center rounded-full bg-white/18">
-                      <MaterialCommunityIcons
-                        name="vote-outline"
-                        size={20}
-                        color="white"
-                      />
-                      {item.votedOptionId ? (
-                        <View
-                          className="absolute -right-0.5 -top-0.5 h-3.5 w-3.5 items-center justify-center rounded-full"
-                          style={{ backgroundColor: colors.success }}
-                        >
-                          <MaterialCommunityIcons name="check" size={9} color="white" />
-                        </View>
-                      ) : null}
-                    </View>
-                    <Text className="mt-1 text-xs font-black text-white" style={{ fontFamily: fonts.body }}>
-                      Poll
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    activeOpacity={0.82}
-                    accessibilityRole="button"
-                    accessibilityLabel="Share reel"
-                    className="items-center"
-                    onPress={() => handleShareReel(item)}
-                  >
-                    <View className="h-11 w-11 items-center justify-center rounded-full bg-white/18">
-                      <Feather name="share-2" size={19} color="white" />
-                    </View>
-                    <Text className="mt-1 text-xs font-black text-white" style={{ fontFamily: fonts.body }}>
-                      Share
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                <View className="absolute bottom-5 left-5 right-24">
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    className="mb-3 flex-row items-center gap-2"
-                    onPress={() => setSelectedCreator(item)}
-                  >
-                    <Text
-                      className="flex-1 text-sm font-black text-white"
-                      numberOfLines={1}
-                      style={{ fontFamily: fonts.heading }}
-                    >
-                      {item.creatorName}
-                    </Text>
-                    <View className="rounded-full bg-white/18 px-2 py-0.5">
-                      <Text className="text-[11.5px] font-black uppercase text-white" style={{ fontFamily: fonts.body }}>
-                        {item.category}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-
-                  <Text
-                    className="text-base font-black leading-5 text-white"
-                    numberOfLines={3}
-                    style={{ fontFamily: fonts.heading }}
-                  >
-                    {item.title}
-                  </Text>
-
-                  <View className="mt-3 flex-row items-center gap-3">
-                    <View className="flex-row items-center gap-1 rounded-full bg-black/30 px-2.5 py-1">
-                      <Ionicons
-                        name="time-outline"
-                        size={12}
-                        color="rgba(255,255,255,0.82)"
-                      />
-                      <Text className="text-xs font-bold text-white/85" style={{ fontFamily: fonts.mono }}>
-                        {item.duration}
-                      </Text>
-                    </View>
-                    <Text className="text-xs font-bold text-white/70" style={{ fontFamily: fonts.body }}>
-                      Board-certified cycle education
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            );
-          })}
-        </ScrollView>
-        )}
-
-        {loadingMore && (
-          <View className="absolute bottom-6 self-center rounded-full bg-black/50 px-4 py-2">
-            <ActivityIndicator color="white" />
-          </View>
-        )}
-      </SafeAreaView>
-
-      <Modal
-        visible={!!selectedCreator}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setSelectedCreator(null)}
-      >
-        {selectedCreator ? (
-          <SafeAreaView
-            className="flex-1"
-            style={{ backgroundColor: colors.background }}
-          >
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: 40 }}
-            >
-              <View className="flex-row items-center justify-between px-6 pt-6">
-                <Text
-                  className="text-xl font-black tracking-tight"
-                  style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                >
-                  Creator Profile
-                </Text>
-                <TouchableOpacity
-                  accessibilityLabel="Close creator profile"
-                  className="rounded-full border p-2"
-                  onPress={() => setSelectedCreator(null)}
-                  style={{
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  }}
-                >
-                  <Feather name="x" size={18} color={colors.foreground} />
-                </TouchableOpacity>
-              </View>
-
-              <View className="items-center px-6 pt-8">
-                <Image
-                  source={{ uri: selectedCreator.creatorAvatar }}
-                  className="h-28 w-28 rounded-full bg-neutral-200"
-                />
-                <View className="mt-4 flex-row items-center gap-1.5">
-                  <Text
-                    className="text-2xl font-black tracking-tight text-center"
-                    style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                  >
-                    {selectedCreator.creatorName}
-                  </Text>
-                  {selectedCreator.verified ? (
-                    <MaterialCommunityIcons
-                      name="shield-check"
-                      size={18}
-                      color={colors.success}
-                    />
-                  ) : null}
-                </View>
-                <Text
-                  className="mt-1 text-xs font-bold uppercase tracking-wider"
-                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                >
-                  {selectedCreator.category} creator
-                </Text>
-              </View>
-
-              <View className="mx-6 mt-8 flex-row gap-3">
-                {[
-                  {
-                    label: "Videos",
-                    value: getCreatorStats(selectedCreator.creatorId).reelsCount,
-                    icon: "play-circle-outline",
-                  },
-                  {
-                    label: "Views",
-                    value: getCreatorStats(
-                      selectedCreator.creatorId,
-                    ).totalViews.toLocaleString(),
-                    icon: "eye-outline",
-                  },
-                  {
-                    label: "Topics",
-                    value: getCreatorStats(
-                      selectedCreator.creatorId,
-                    ).categories.length,
-                    icon: "albums-outline",
-                  },
-                ].map((metric) => (
-                  <View
-                    key={metric.label}
-                    className="flex-1 items-center rounded-2xl border p-4"
-                    style={{
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                    }}
-                  >
-                    <Ionicons
-                      name={metric.icon as any}
-                      size={18}
-                      color={colors.primary}
-                    />
-                    <Text
-                      className="mt-2 text-base font-black"
-                      style={{ color: colors.foreground, fontFamily: fonts.mono }}
-                    >
-                      {metric.value}
-                    </Text>
-                    <ColumnLabel style={{ fontSize: 13, fontWeight: "700", color: colors.mutedText, fontFamily: fonts.body }}>{metric.label}</ColumnLabel>
-                  </View>
-                ))}
-              </View>
-
-              <View
-                className="mx-6 mt-6 rounded-3xl border p-5"
-                style={{
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                }}
-              >
-                <Text
-                  className="text-sm font-black"
-                  style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                >
-                  About this creator
-                </Text>
-                <Text
-                  className="mt-2 text-xs font-semibold leading-5"
-                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                >
-                  Follow this specialist to keep their cycle education videos,
-                  polls, and comfort-first health guidance close in your feed.
-                </Text>
-
-                <TouchableOpacity
-                  activeOpacity={0.85}
-                  className="mt-5 rounded-full py-3.5 items-center justify-center"
-                  onPress={() =>
-                    handleToggleFollow(
-                      selectedCreator.id,
-                      selectedCreator.creatorId,
-                    )
-                  }
-                  style={{
-                    backgroundColor: followingCreatorIds.has(
-                      selectedCreator.creatorId,
-                    )
-                      ? colors.input
-                      : colors.primary,
-                    borderColor: colors.border,
-                    borderWidth: followingCreatorIds.has(
-                      selectedCreator.creatorId,
-                    )
-                      ? 1
-                      : 0,
-                  }}
-                >
-                  <Text
-                    className="text-sm font-black"
-                    style={{
-                      color: followingCreatorIds.has(selectedCreator.creatorId)
-                        ? colors.foreground
-                        : colors.buttonText,
-                      fontFamily: fonts.body,
-                    }}
-                  >
-                    {followingCreatorIds.has(selectedCreator.creatorId)
-                      ? "Following"
-                      : "Follow Creator"}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              <View className="mx-6 mt-6">
-                <Text
-                  className="mb-3 text-xs font-black uppercase tracking-widest"
-                  style={{ color: colors.primary, fontFamily: fonts.heading }}
-                >
-                  Videos by this creator
-                </Text>
-                <View className="gap-3">
-                  {reels
-                    .filter(
-                      (reel) =>
-                        reel.creatorId === selectedCreator.creatorId,
-                    )
-                    .map((reel) => (
-                      <TouchableOpacity
-                        key={reel.id}
-                        activeOpacity={0.8}
-                        className="flex-row overflow-hidden rounded-2xl border"
-                        onPress={() => {
-                          setSelectedCreator(null);
-                          handlePlay(reel.id);
-                        }}
-                        style={{
-                          backgroundColor: colors.surface,
-                          borderColor: colors.border,
-                        }}
-                      >
-                        <Image
-                          source={{ uri: reel.thumbnailUrl }}
-                          className="h-20 w-24 bg-neutral-200"
-                        />
-                        <View className="flex-1 justify-center p-3">
-                          <Text
-                            className="text-xs font-black"
-                            numberOfLines={2}
-                            style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                          >
-                            {reel.title}
-                          </Text>
-                          <Text
-                            className="mt-1 text-xs font-bold"
-                            style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                          >
-                            {reel.duration} • {reel.views.toLocaleString()} views
-                          </Text>
-                        </View>
-                      </TouchableOpacity>
-                    ))}
-                </View>
-              </View>
-            </ScrollView>
-          </SafeAreaView>
-        ) : null}
-      </Modal>
-
-      {/* --- CATEGORY FILTER DROPDOWN SELECT MODAL --- */}
-      <Modal
-        visible={categoryPickerVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setCategoryPickerVisible(false)}
-      >
-        <Pressable
-          className="flex-1 justify-center items-center px-8"
-          style={{ backgroundColor: "rgba(0,0,0,0.6)" }}
-          onPress={() => setCategoryPickerVisible(false)}
-        >
-          <View
-            className="w-full max-w-[280px] p-4 rounded-3xl border"
-            style={{
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-              ...getShadow(colors, isDark),
-            }}
-          >
-            <Text
-              className="text-center font-extrabold mb-3 text-base"
-              style={{ color: colors.foreground, fontFamily: fonts.heading }}
-            >
-              Filter by Category
-            </Text>
-            {["all", ...availableCategories].map((cat) => {
-              const isSelected = selectedCategory === cat;
-              return (
-                <TouchableOpacity
-                  key={cat}
-                  onPress={() => {
-                    setSelectedCategory(cat);
-                    setCategoryPickerVisible(false);
-                  }}
-                  className="py-3 px-4 rounded-xl flex-row items-center justify-between"
-                  style={{
-                    backgroundColor: isSelected ? colors.primaryLight : "transparent",
-                  }}
-                >
-                  <Text
-                    className="font-bold text-sm"
-                    style={{
-                      color: isSelected ? colors.primary : colors.foreground,
-                      fontFamily: fonts.body,
-                    }}
-                  >
-                    {cat === "all" ? "For You (All Categories)" : cat}
-                  </Text>
-                  {isSelected && (
-                    <Feather name="check" size={16} color={colors.primary} />
-                  )}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </Pressable>
-      </Modal>
-
-      {/* --- POLL MODAL - kept off the video by default so the reel stays the focus --- */}
-      <Modal
-        visible={!!pollReel}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setPollReelId(null)}
-      >
-        <Pressable
-          className="flex-1 justify-end"
-          style={{ backgroundColor: "rgba(0,0,0,0.6)" }}
-          onPress={() => setPollReelId(null)}
-        >
-          <Pressable
-            className="rounded-t-3xl border-t p-5"
-            style={{
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-              paddingBottom: insets.bottom + 20,
-            }}
-            onPress={(event) => event.stopPropagation()}
-          >
-            <View className="mb-4 flex-row items-center justify-between">
-              <View className="flex-row items-center gap-1.5">
-                <MaterialCommunityIcons
-                  name="vote-outline"
-                  size={16}
-                  color={colors.primary}
-                />
-                <Text
-                  className="text-[11.5px] font-black uppercase tracking-widest"
-                  style={{ color: colors.primary, fontFamily: fonts.body }}
-                >
-                  Next topic poll
-                </Text>
-              </View>
-              <TouchableOpacity
-                accessibilityLabel="Close poll"
-                className="h-7 w-7 items-center justify-center rounded-full"
-                onPress={() => setPollReelId(null)}
-                style={{ backgroundColor: colors.surfaceSoft }}
-              >
-                <Feather name="x" size={16} color={colors.foreground} />
-              </TouchableOpacity>
-            </View>
-
-            {pollReel ? (
-              <>
-                <Text
-                  className="mb-4 text-base font-black"
-                  style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                >
-                  {pollReel.pollQuestion}
-                </Text>
-
-                <View style={{ gap: 8 }}>
-                  {pollReel.pollOptions.map((option) => {
-                    const percentValue =
-                      pollTotalVotes > 0
-                        ? Math.round((option.votes / pollTotalVotes) * 100)
-                        : 0;
-                    const isThisChoiceVoted = pollReel.votedOptionId === option.id;
-
-                    return (
-                      <TouchableOpacity
-                        activeOpacity={0.82}
-                        className="overflow-hidden rounded-2xl border px-4 py-3"
-                        disabled={!!pollReel.votedOptionId}
-                        key={option.id}
-                        onPress={() => handleTriggerVote(pollReel.id, option.id)}
-                        style={{ borderColor: colors.border, backgroundColor: colors.input }}
-                      >
-                        {!!pollReel.votedOptionId ? (
-                          <View
-                            className="absolute bottom-0 left-0 top-0"
-                            style={{ width: `${percentValue}%`, backgroundColor: colors.primaryLight }}
-                          />
-                        ) : null}
-                        <View className="flex-row items-center justify-between gap-3">
-                          <Text
-                            className="flex-1 text-xs font-bold"
-                            numberOfLines={2}
-                            style={{ color: colors.foreground, fontFamily: fonts.body }}
-                          >
-                            {option.topic}
-                          </Text>
-                          {!!pollReel.votedOptionId ? (
-                            <Text
-                              className="text-xs font-black"
-                              style={{
-                                color: isThisChoiceVoted ? colors.primary : colors.mutedText,
-                                fontFamily: fonts.mono,
-                              }}
-                            >
-                              {percentValue}%
-                            </Text>
-                          ) : null}
-                        </View>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-
-                {pollReel.votedOptionId ? (
-                  <Text
-                    className="mt-3 text-center text-xs font-bold"
-                    style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                  >
-                    Thanks for voting — {pollTotalVotes.toLocaleString()} total votes
-                  </Text>
-                ) : null}
-              </>
-            ) : null}
-          </Pressable>
-        </Pressable>
-      </Modal>
-    </>
+      <PollSheet reel={pollReel} onVote={vote} onClose={() => setPollReelId(null)} />
+      <CreatorSheet
+        creator={creator}
+        reels={reels}
+        following={creator ? followingCreatorIds.has(creator.creatorId) : false}
+        onToggleFollow={(reel) => void toggleFollow(reel.id, reel.creatorId)}
+        onPlayReel={(id) => {
+          setCreator(null);
+          scrollToReel(id);
+        }}
+        onClose={() => setCreator(null)}
+      />
+      <FeedPicker
+        visible={pickerOpen}
+        value={feed}
+        categories={categories}
+        onSelect={(value) => {
+          setPickerOpen(false);
+          setFeed(value);
+        }}
+        onClose={() => setPickerOpen(false)}
+      />
+    </View>
   );
 }

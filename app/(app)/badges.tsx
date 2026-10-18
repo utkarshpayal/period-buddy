@@ -133,6 +133,7 @@ export default function BadgesScreen() {
   const [celebrate, setCelebrate] = useState<Badge[]>([]);
   const { data, loading, refreshing, error, offline, reload } = useAsyncLoad(() => genzApi.getBadges(), [], {
     refreshOn: ["cycle", "dashboard", "habits", "circles"],
+    cacheKey: "genz:badges",
   });
 
   // Reveal badges earned since this device last looked.
