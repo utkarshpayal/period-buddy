@@ -3,6 +3,7 @@ import React from "react";
 import { Text, TouchableOpacity, View, type StyleProp, type ViewStyle } from "react-native";
 import { useTheme } from "./theme";
 import { getShadow } from "./ui-tokens";
+import { Icon } from "./Icon";
 
 type IconName = React.ComponentProps<typeof Ionicons>["name"];
 
@@ -68,7 +69,7 @@ export function ListRow({
       style={{ flexDirection: "row", alignItems: "center", paddingVertical: 12, paddingHorizontal: 16, gap: 14 }}
     >
       <View style={{ width: 42, height: 42, borderRadius: 13, backgroundColor: iconBg, alignItems: "center", justifyContent: "center" }}>
-        <Ionicons name={icon} size={20} color={iconColor} style={{ opacity: dim }} />
+        <Icon set="ion" name={icon} size={20} color={iconColor} style={{ opacity: dim }} />
         {iconAccessory}
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
@@ -93,7 +94,7 @@ export function ListRow({
         ) : null}
       </View>
       {trailing === "none" ? null : (
-        <Ionicons
+        <Icon set="ion"
           name={trailing === "external" ? "open-outline" : "chevron-forward"}
           size={18}
           color={colors.mutedText}

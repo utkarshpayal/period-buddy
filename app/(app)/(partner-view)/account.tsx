@@ -1,4 +1,3 @@
-import { Feather, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
@@ -20,11 +19,12 @@ import { usePartnerViewState } from "../../../components/partner-view-state";
 import { ThemeToggle, useTheme } from "../../../components/theme";
 import { getShadow, getSoftTints } from "../../../components/ui-tokens";
 import { alert } from "../../../lib/alert";
-import { authApi, partnerApi, type AuthUser } from "../../../lib/api";
+import { authApi, partnerApi, type AuthUser, getFriendlyErrorMessage } from "../../../lib/api";
 import {
   enablePushOnDeviceAsync,
   getCurrentPushTokenQuietlyAsync,
 } from "../../../lib/notifications";
+import { Icon } from "../../../components/Icon";
 
 export default function PartnerViewAccount() {
   const { colors, isDark, fonts } = useTheme();
@@ -74,7 +74,7 @@ export default function PartnerViewAccount() {
       setNotificationsEnabled(!next);
       alert(
         "Couldn't save preference",
-        error instanceof Error ? error.message : "Please try again.",
+        getFriendlyErrorMessage(error),
       );
     } finally {
       setSavingPreference(false);
@@ -100,7 +100,7 @@ export default function PartnerViewAccount() {
             } catch (err) {
               alert(
                 "Error",
-                err instanceof Error ? err.message : "Failed to disconnect",
+                getFriendlyErrorMessage(err),
               );
             } finally {
               setIsDisconnecting(false);
@@ -117,7 +117,7 @@ export default function PartnerViewAccount() {
       setIsLoggingOut(true);
       await authApi.logoutAlias(await getCurrentPushTokenQuietlyAsync());
     } catch (networkError) {
-      console.log("Server verification skipped during exit:", networkError);
+      console.warn("Server verification skipped during exit:", networkError);
     } finally {
       await signOut();
       router.replace("/login");
@@ -203,7 +203,7 @@ export default function PartnerViewAccount() {
                 backgroundColor: colors.surface,
               }}
             >
-              <Ionicons name="eye-outline" size={12} color={colors.primary} />
+              <Icon set="ion" name="eye-outline" size={12} color={colors.primary} />
               <Text
                 className="text-[11.5px] font-black uppercase tracking-wider"
                 style={{ color: colors.primary, fontFamily: fonts.body }}
@@ -234,7 +234,7 @@ export default function PartnerViewAccount() {
                   : colors.surfaceSoft,
               }}
             >
-              <Ionicons
+              <Icon set="ion"
                 name={isConnected ? "link" : "unlink-outline"}
                 size={18}
                 color={isConnected ? "#fff" : colors.mutedText}
@@ -278,7 +278,7 @@ export default function PartnerViewAccount() {
                   className="p-2.5 rounded-xl mr-4"
                   style={{ backgroundColor: softTints.pink }}
                 >
-                  <Ionicons
+                  <Icon set="ion"
                     name="notifications-outline"
                     size={18}
                     color={colors.primary}
@@ -319,7 +319,7 @@ export default function PartnerViewAccount() {
                 className="p-2.5 rounded-xl mr-4"
                 style={{ backgroundColor: softTints.pink }}
               >
-                <Ionicons
+                <Icon set="ion"
                   name="finger-print-outline"
                   size={18}
                   color={colors.primary}
@@ -331,7 +331,7 @@ export default function PartnerViewAccount() {
               >
                 App Lock
               </Text>
-              <Feather
+              <Icon set="feather"
                 name="chevron-right"
                 size={16}
                 color={colors.mutedText}
@@ -352,7 +352,7 @@ export default function PartnerViewAccount() {
                 className="p-2.5 rounded-xl mr-4"
                 style={{ backgroundColor: softTints.pink }}
               >
-                <Ionicons
+                <Icon set="ion"
                   name="help-circle-outline"
                   size={18}
                   color={colors.primary}
@@ -364,7 +364,7 @@ export default function PartnerViewAccount() {
               >
                 Help & Support
               </Text>
-              <Feather
+              <Icon set="feather"
                 name="chevron-right"
                 size={16}
                 color={colors.mutedText}
@@ -384,7 +384,7 @@ export default function PartnerViewAccount() {
                 backgroundColor: colors.dangerLight,
               }}
             >
-              <Ionicons name="unlink-outline" size={15} color={colors.danger} />
+              <Icon set="ion" name="unlink-outline" size={15} color={colors.danger} />
               <Text
                 className="ml-2 text-sm font-bold tracking-wide"
                 style={{ color: colors.danger, fontFamily: fonts.body }}
@@ -401,7 +401,7 @@ export default function PartnerViewAccount() {
             disabled={isLoggingOut}
             className="mx-6 mt-4 flex-row items-center justify-center py-3"
           >
-            <Feather name="log-out" size={15} color={colors.danger} />
+            <Icon set="feather" name="log-out" size={15} color={colors.danger} />
             <Text
               className="ml-2 text-sm font-bold tracking-wide"
               style={{ color: colors.danger, fontFamily: fonts.body }}

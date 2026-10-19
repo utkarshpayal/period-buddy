@@ -159,7 +159,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // as on partner disconnect).
       const partnerRole =
         u.partnerRole !== undefined ? u.partnerRole : current.user?.partnerRole;
-      const next = { ...current, user: { ...u, partnerRole } };
+      const user = { ...u, partnerRole };
+      // Most calls (every useUserStats fetch) pass back the same profile;
+      // keeping `current` then spares all useAuth consumers — AppShell and
+      // the Stack included — a re-render, and the device a storage write.
+      if (current.user && JSON.stringify(current.user) === JSON.stringify(user)) return current;
+      const next = { ...current, user };
       saveSessionProfile(next).catch(() => {});
       return next;
     });
@@ -176,6 +181,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  // One server lookup at a time: callers arriving while it's in flight share it.
+  const roleSyncInFlight = useRef<Promise<void> | null>(null);
+
   const syncPartnerRole = useCallback(
     async (role?: PartnerRole) => {
       if (role !== undefined) {
@@ -183,26 +191,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         applyPartnerRole(role);
         return;
       }
+      if (roleSyncInFlight.current) return roleSyncInFlight.current;
       const seq = roleWriteSeq.current;
-      try {
-        const profile = await partnerApi.getProfile();
-        if (seq !== roleWriteSeq.current) return;
-        applyPartnerRole(profile.role ?? null);
-      } catch {
-        // Offline/server error: keep the role we already have rather than
-        // guessing and flipping the UI.
-      }
+      const run = (async () => {
+        try {
+          const profile = await partnerApi.getProfile();
+          if (seq !== roleWriteSeq.current) return;
+          applyPartnerRole(profile.role ?? null);
+        } catch {
+          // Offline/server error: keep the role we already have rather than
+          // guessing and flipping the UI.
+        } finally {
+          roleSyncInFlight.current = null;
+        }
+      })();
+      roleSyncInFlight.current = run;
+      return run;
     },
     [applyPartnerRole],
   );
 
   // The role is only ever stored on this device, so re-check it on every
-  // launch/login and whenever the app comes back to the foreground.
+  // launch/login and whenever the app comes back from the background (not
+  // on inactive -> active: the Face ID sheet, Control Center and permission
+  // prompts all cause that, and none can change the role).
   useEffect(() => {
     if (!session?.token) return;
-    syncPartnerRole();
+    void syncPartnerRole();
+    let previous = AppState.currentState;
     const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active") syncPartnerRole();
+      if (state === "active" && previous === "background") void syncPartnerRole();
+      previous = state;
     });
     return () => sub.remove();
   }, [session?.token, syncPartnerRole]);

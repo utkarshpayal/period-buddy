@@ -102,26 +102,25 @@ export async function connectPartnerAndResolveRoute(inviteCode?: string) {
   };
 }
 
+/**
+ * `token` is the session's own token (already handed to the API client by
+ * setSessionToken); it's sent explicitly as well because onboarding runs in
+ * the moment right after sign-in. These go through the normal authed path
+ * (no skipAuth), so a revoked session still signs out on a 401.
+ */
 export function submitOnboarding(payload: OnboardingPayload, token: string) {
   return apiEnvelopeRequest<AuthUser>("/api/auth/onboarding", {
     body: JSON.stringify(payload),
     headers: { Authorization: `Bearer ${token}` },
     method: "POST",
-    skipAuth: true,
   });
 }
 
-/**
- * Called right after submitOnboarding, from the same pre-hydration moment
- * (session isn't in AsyncStorage yet), so it needs the token passed
- * explicitly rather than relying on cycleApi.saveSettings' automatic
- * Authorization header.
- */
+/** Called right after submitOnboarding; see its note on the token. */
 export function submitCycleSettings(payload: CycleSettingsPayload, token: string) {
   return apiEnvelopeRequest("/api/cycle/settings", {
     body: JSON.stringify(payload),
     headers: { Authorization: `Bearer ${token}` },
     method: "POST",
-    skipAuth: true,
   });
 }

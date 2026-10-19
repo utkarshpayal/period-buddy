@@ -1,9 +1,9 @@
-import { Feather } from "@expo/vector-icons";
 import React from "react";
 import { Modal, Pressable, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Language, LanguageCode } from "../lib/api";
 import { useTheme } from "./theme";
+import { Icon } from "./Icon";
 
 export type LanguagePickerSheetProps = {
   languages: Language[];
@@ -64,7 +64,7 @@ export function LanguagePickerSheet({
                 <Text className="text-xs font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
                   {item.label}
                 </Text>
-                {item.code === selectedCode ? <Feather name="check" size={16} color={colors.primary} /> : null}
+                {item.code === selectedCode ? <Icon set="feather" name="check" size={16} color={colors.primary} /> : null}
               </TouchableOpacity>
             ))}
           </ScrollView>

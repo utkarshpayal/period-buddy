@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import React, { useEffect } from "react";
 import { ActivityIndicator, TouchableOpacity } from "react-native";
 import Animated, {
@@ -6,10 +5,12 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
+  withDelay,
   withTiming,
   type SharedValue,
 } from "react-native-reanimated";
 import type { ThemeColors } from "./theme";
+import { Icon } from "./Icon";
 
 interface VoiceOrbProps {
   colors: ThemeColors;
@@ -37,10 +38,10 @@ function Ring({
 
   useEffect(() => {
     if (active) {
-      ambient.value = withRepeat(
-        withTiming(1, { duration: 1400, easing: Easing.out(Easing.ease) }),
-        -1,
-        false,
+      // Staggered so the rings ripple outwards instead of pulsing together.
+      ambient.value = withDelay(
+        delay,
+        withRepeat(withTiming(1, { duration: 1400, easing: Easing.out(Easing.ease) }), -1, false),
       );
     } else {
       ambient.value = withTiming(0, { duration: 250 });
@@ -132,7 +133,7 @@ export function VoiceOrb({ colors, isRecording, isTranscribing, level, onPress, 
         {isTranscribing ? (
           <ActivityIndicator size="small" color={iconColor} />
         ) : (
-          <Feather name="mic" size={size * 0.42} color={iconColor} />
+          <Icon set="feather" name="mic" size={size * 0.42} color={iconColor} />
         )}
       </Animated.View>
     </TouchableOpacity>

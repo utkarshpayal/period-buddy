@@ -1,4 +1,3 @@
-import { Feather, Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -22,6 +21,7 @@ import { useAuth } from "../auth-context";
 import { EmptyState } from "../EmptyState";
 import { AppModalHost } from "../modals/AppModalHost";
 import { useTheme } from "../theme";
+import { Icon } from "../Icon";
 
 const PAGE_SIZE = 20;
 
@@ -77,7 +77,7 @@ const CommentRow = React.memo(function CommentRow({
             onPress={() => onDelete(comment)}
             className="pt-1"
           >
-            <Feather name="trash-2" size={16} color={colors.mutedText} />
+            <Icon set="feather" name="trash-2" size={16} color={colors.mutedText} />
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
@@ -87,7 +87,7 @@ const CommentRow = React.memo(function CommentRow({
             onPress={() => onReport(comment)}
             className="pt-1"
           >
-            <Feather name="flag" size={15} color={colors.mutedText} />
+            <Icon set="feather" name="flag" size={15} color={colors.mutedText} />
           </TouchableOpacity>
         )
       ) : null}
@@ -124,6 +124,11 @@ export function CommentsSheet({
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const requestRef = useRef(0);
+  // Sends and deletes finish after awaits; the sheet may show another reel by then.
+  const currentReelRef = useRef(reelId);
+  currentReelRef.current = reelId;
+  // State lags a frame: a double tap would pass a `sending` check twice.
+  const sendingRef = useRef(false);
   const visible = reelId !== null;
 
   const updateCount = useCallback(
@@ -182,7 +187,9 @@ export function CommentsSheet({
 
   async function send() {
     const body = text.trim();
-    if (!reelId || !body || sending) return;
+    if (!reelId || !body || sendingRef.current) return;
+    const id = reelId;
+    const isCurrent = () => currentReelRef.current === id;
     const tempId = `temp-${Date.now()}`;
     const name = [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "You";
     const optimistic: ReelComment = {
@@ -195,20 +202,32 @@ export function CommentsSheet({
       canDelete: true,
       pending: true,
     };
+    const before = count;
+    sendingRef.current = true;
     setSending(true);
     setText("");
     setComments((current) => [optimistic, ...current]);
-    updateCount(count + 1);
+    updateCount(before + 1);
     try {
-      const result = await reelsApi.addComment(reelId, body);
-      setComments((current) => current.map((comment) => (comment.id === tempId ? result.comment : comment)));
-      updateCount(result.commentCount);
+      const result = await reelsApi.addComment(id, body);
+      if (isCurrent()) {
+        setComments((current) => current.map((comment) => (comment.id === tempId ? result.comment : comment)));
+        updateCount(result.commentCount);
+      } else {
+        // Another reel is open now: only its own count in the pager changes.
+        onCountChange(id, result.commentCount);
+      }
     } catch (err) {
-      setComments((current) => current.filter((comment) => comment.id !== tempId));
-      updateCount(Math.max(0, count));
-      setText(body);
+      if (isCurrent()) {
+        setComments((current) => current.filter((comment) => comment.id !== tempId));
+        updateCount(before);
+        setText(body);
+      } else {
+        onCountChange(id, before);
+      }
       alert("Comment not posted", getFriendlyErrorMessage(err));
     } finally {
+      sendingRef.current = false;
       setSending(false);
     }
   }
@@ -222,17 +241,21 @@ export function CommentsSheet({
           text: "Delete",
           style: "destructive",
           onPress: async () => {
-            let position = -1;
-            setComments((current) => {
-              position = current.findIndex((comment) => comment.id === target.id);
-              return current.filter((comment) => comment.id !== target.id);
-            });
+            const id = reelId;
+            const position = comments.findIndex((comment) => comment.id === target.id);
+            setComments((current) => current.filter((comment) => comment.id !== target.id));
             const before = count;
             updateCount(Math.max(0, count - 1));
             try {
-              const result = await reelsApi.deleteComment(reelId, target.id);
-              updateCount(result.commentCount);
+              const result = await reelsApi.deleteComment(id, target.id);
+              if (currentReelRef.current === id) updateCount(result.commentCount);
+              else onCountChange(id, result.commentCount);
             } catch (err) {
+              if (currentReelRef.current !== id) {
+                onCountChange(id, before);
+                alert("Couldn't delete", getFriendlyErrorMessage(err));
+                return;
+              }
               setComments((current) => {
                 if (current.some((comment) => comment.id === target.id)) return current;
                 const next = [...current];
@@ -246,7 +269,7 @@ export function CommentsSheet({
         },
       ]);
     },
-    [count, reelId, updateCount],
+    [comments, count, onCountChange, reelId, updateCount],
   );
 
   const handleReport = useCallback(
@@ -295,7 +318,7 @@ export function CommentsSheet({
               Comments{count > 0 ? ` · ${count}` : ""}
             </Text>
             <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close comments" hitSlop={10} onPress={onClose}>
-              <Feather name="x" size={22} color={colors.foreground} />
+              <Icon set="feather" name="x" size={22} color={colors.foreground} />
             </TouchableOpacity>
           </View>
           <View style={{ height: 1, backgroundColor: colors.border }} />
@@ -360,7 +383,7 @@ export function CommentsSheet({
               className="h-10 w-10 items-center justify-center rounded-full"
               style={{ backgroundColor: text.trim() ? colors.primary : colors.surfaceSoft }}
             >
-              <Ionicons name="arrow-up" size={20} color={text.trim() ? colors.buttonText : colors.mutedText} />
+              <Icon set="ion" name="arrow-up" size={20} color={text.trim() ? colors.buttonText : colors.mutedText} />
             </TouchableOpacity>
           </View>
         </View>

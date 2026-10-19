@@ -255,14 +255,14 @@ export const FEATURE_REGISTRY: FeatureDefinition[] = [
   // Wellness & Support
   // ?new=1 always starts a fresh chat — qa.tsx redirects a bare push to the
   // chat-history list instead (see docs/fixes.md 2.3).
-  { key: "nuraAi", title: "Nura AI", description: "Ask privately, anytime", icon: "sparkles-outline", route: "/(app)/qa", placement: "wellness_hub", size: "large", colorKey: "info" },
+  { key: "nuraAi", title: "Nura AI", description: "Ask privately, anytime", icon: "chatbubble-ellipses-outline", route: "/(app)/qa", placement: "wellness_hub", size: "large", colorKey: "info" },
   { key: "healthConcerns", title: "Health Concerns", description: "Irregularities & symptoms", icon: "medkit-outline", route: "/(app)/health-issues", placement: "wellness_hub", size: "large", colorKey: "warning" },
   { key: "hygiene", title: "Hygiene & Care", description: "Product guidance & comfort", icon: "water-outline", route: "/(app)/hygiene", placement: "wellness_hub", size: "small", colorKey: "accent" },
   { key: "sexualWellbeing", title: "Sexual Wellbeing", description: "Consent, intimacy & safety", icon: "heart-circle-outline", route: "/(app)/sexual-wellbeing", placement: "wellness_hub", size: "small", colorKey: "secondary" },
   { key: "checkinCall", title: "Check-in Call", description: "Buddy calls you, hands-free", icon: "call-outline", route: "/(app)/checkin-call", placement: "wellness_hub", size: "small", colorKey: "sky" },
   // Explore
   { key: "forest", title: "Forest", description: "Grow your wellness tree", icon: "leaf-outline", route: "/(app)/forest", placement: "explore_hub", size: "small", colorKey: "success" },
-  { key: "blogs", title: "Blogs", description: "Articles on cycle health", icon: "book-outline", route: "/(app)/blogs", placement: "explore_hub", size: "small", colorKey: "info" },
+  { key: "blogs", title: "Articles", description: "Articles on cycle health", icon: "book-outline", route: "/(app)/blogs", placement: "explore_hub", size: "small", colorKey: "info" },
   { key: "videos", title: "Videos", description: "Short videos and reels", icon: "play-circle-outline", route: "/(app)/reels", placement: "explore_hub", size: "small", colorKey: "primary" },
   { key: "partnerSync", title: "Partner Sync", description: "Share cycle info & chat", icon: "heart-half-outline", route: "/(app)/partner", placement: "explore_hub", size: "small", colorKey: "accent" },
   { key: "habits", title: "Habits", description: "Daily habit tracking", icon: "checkmark-circle-outline", route: "/(app)/habits", placement: "explore_hub", size: "small", colorKey: "warning" },

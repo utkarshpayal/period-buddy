@@ -10,7 +10,7 @@ there.
 |---|---|
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | **The system-wide picture**: all five repos, the API, database, AWS, roles, deploys. The only copy; other repos link here. |
 | [SETUP.md](./SETUP.md) | Run the app and backend locally; every environment variable. |
-| [API_REFERENCE.md](./API_REFERENCE.md) | Every backend endpoint the app calls, grouped by `lib/api.ts` object. |
+| [API_REFERENCE.md](./API_REFERENCE.md) | Every backend endpoint the app calls, grouped by `lib/api/` object. |
 | [security-implementation.md](./security-implementation.md) | How the app side of security and privacy works (keystore, screen privacy, sessions, AI consent, exports). |
 | [../CLAUDE.md](../CLAUDE.md) | The most detailed, always-current technical notes for this repo. |
 

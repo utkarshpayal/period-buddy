@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect } from "react";
 import { Image, ScrollView, Text, TouchableOpacity, View } from "react-native";
@@ -10,6 +9,7 @@ import { appConfigApi } from "../lib/api";
 import { BannerPlacement, PromoBanner, bannersFor } from "../lib/appConfig";
 import { runTapAction } from "../lib/tapAction";
 import { useContentWidth } from "../lib/layout";
+import { Icon } from "./Icon";
 
 /*
  * Impressions for CTR in the CMS: each banner is reported once per app
@@ -106,7 +106,7 @@ function BannerCard({ banner, width, onDismiss }: { banner: PromoBanner; width: 
         justifyContent: "center",
       }}
     >
-      <Ionicons name="close" size={13} color="#fff" />
+      <Icon set="ion" name="close" size={13} color="#fff" />
     </TouchableOpacity>
   ) : null;
 
@@ -135,7 +135,7 @@ function BannerCard({ banner, width, onDismiss }: { banner: PromoBanner; width: 
         {banner.ctaLabel && tappable ? (
           <View style={{ flexDirection: "row", alignItems: "center", marginLeft: 8 }}>
             <Text style={{ color: fg, fontSize: 12.5, fontWeight: "800", fontFamily: fonts.body }}>{banner.ctaLabel}</Text>
-            <Ionicons name="arrow-forward" size={13} color={fg} style={{ marginLeft: 3 }} />
+            <Icon set="ion" name="arrow-forward" size={13} color={fg} style={{ marginLeft: 3 }} />
           </View>
         ) : null}
         {close}

@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { useKeepAwake } from "expo-keep-awake";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Linking,
@@ -20,14 +20,16 @@ import {
   buildJitsiHtml,
   describeJoinError,
   initialCallState,
-  peerMessageCount,
   type CallChat,
   type CallState,
   type JitsiEventData,
 } from "../lib/jitsiCall";
+import { useCallSession } from "../hooks/useCallSession";
 import { CallChatPanel } from "./CallChatPanel";
 import { useSecureScreen } from "../lib/screenPrivacy";
 import { useTheme } from "./theme";
+import { AppLockCover } from "./AppLockScreen";
+import { Icon } from "./Icon";
 
 type Props = {
   /** Identifies the call (consultation id, buddy pairing): a new id is a new call. */
@@ -100,31 +102,28 @@ function CallModal({ callKey, peerName, fetchJoin, onAttendance, endedMessage, c
   const [call, setCall] = useState<CallState>(initialCallState());
   const [offline, setOffline] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
-  // Peer messages already seen (counted while the panel is open): the rest are unread.
-  const peerCount = chat ? peerMessageCount(chat.messages) : 0;
-  const seenPeerCountRef = useRef(peerCount);
-  if (chatOpen) seenPeerCountRef.current = peerCount;
-  const unread = Math.max(0, peerCount - seenPeerCountRef.current);
-  const leavingRef = useRef(false);
-  const joinedRef = useRef(false);
-  const closedRef = useRef(false);
-  // Set once the session ended elsewhere: a join still in flight must not reopen the call.
-  const endedRef = useRef(false);
-  // Latest callbacks without re-running the join effect on every parent render.
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
-  const fetchJoinRef = useRef(fetchJoin);
-  fetchJoinRef.current = fetchJoin;
-  const attendanceRef = useRef(onAttendance);
-  attendanceRef.current = onAttendance;
 
-  const finish = useCallback(() => {
-    if (closedRef.current) return;
-    closedRef.current = true;
-    if (joinedRef.current) attendanceRef.current?.("left");
-    joinedRef.current = false;
-    onCloseRef.current();
-  }, []);
+  const command = (name: string, arg?: boolean) => {
+    const args = arg === undefined ? "" : `, ${arg ? "true" : "false"}`;
+    webRef.current?.injectJavaScript(
+      `window.__nura && window.__nura.cmd(${JSON.stringify(name)}${args}); true;`,
+    );
+  };
+
+  const { leavingRef, endedRef, fetchJoinRef, markJoined, finish, finishSoon, unread } = useCallSession({
+    fetchJoin,
+    onAttendance,
+    onClose,
+    endedMessage,
+    call,
+    chat,
+    chatOpen,
+    onEnded: (message) => {
+      command("hangup");
+      setPhase({ kind: "blocked", message, canRetry: false });
+    },
+    onFailure: (message) => setPhase({ kind: "blocked", message, canRetry: true }),
+  });
 
   // Permissions, then a fresh token. Re-runs on Retry/Rejoin.
   useEffect(() => {
@@ -172,25 +171,9 @@ function CallModal({ callKey, peerName, fetchJoin, onAttendance, endedMessage, c
     return () => {
       cancelled = true;
     };
+    // The refs are stable; only a new call or a Retry re-runs this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [callKey, attempt]);
-
-  // The session ended elsewhere: hang up and say why (no Rejoin).
-  useEffect(() => {
-    if (!endedMessage) return;
-    endedRef.current = true;
-    leavingRef.current = true;
-    command("hangup");
-    if (joinedRef.current) attendanceRef.current?.("left");
-    joinedRef.current = false;
-    setPhase({ kind: "blocked", message: endedMessage, canRetry: false });
-  }, [endedMessage]);
-
-  const command = (name: string, arg?: boolean) => {
-    const args = arg === undefined ? "" : `, ${arg ? "true" : "false"}`;
-    webRef.current?.injectJavaScript(
-      `window.__nura && window.__nura.cmd(${JSON.stringify(name)}${args}); true;`,
-    );
-  };
 
   const onMessage = (event: WebViewMessageEvent) => {
     let msg: { type?: string; name?: string; data?: JitsiEventData; online?: boolean };
@@ -212,25 +195,9 @@ function CallModal({ callKey, peerName, fetchJoin, onAttendance, endedMessage, c
       return;
     }
     if (msg.type !== "event" || !msg.name) return;
-    if (msg.name === "videoConferenceJoined") {
-      joinedRef.current = true;
-      attendanceRef.current?.("joined");
-    }
+    if (msg.name === "videoConferenceJoined") markJoined();
     setCall((prev) => applyJitsiEvent(prev, msg.name!, msg.data, leavingRef.current));
   };
-
-  // A finished hang-up closes the screen; a fatal failure offers Rejoin.
-  useEffect(() => {
-    if (call.closed) finish();
-  }, [call.closed, finish]);
-  useEffect(() => {
-    if (call.failure && !leavingRef.current) {
-      // Dropped out of the call: report it once (Rejoin reports "joined" again).
-      if (joinedRef.current) attendanceRef.current?.("left");
-      joinedRef.current = false;
-      setPhase({ kind: "blocked", message: call.failure, canRetry: true });
-    }
-  }, [call.failure]);
 
   const leave = () => {
     if (phase.kind !== "call") {
@@ -240,7 +207,7 @@ function CallModal({ callKey, peerName, fetchJoin, onAttendance, endedMessage, c
     leavingRef.current = true;
     command("hangup");
     // readyToClose normally follows; don't hang if the page is gone.
-    setTimeout(finish, 1500);
+    finishSoon();
   };
 
   const toggleAudioOnly = () => {
@@ -304,7 +271,7 @@ function CallModal({ callKey, peerName, fetchJoin, onAttendance, endedMessage, c
 
         {phase.kind === "blocked" && (
           <View className="absolute inset-0 items-center justify-center px-8" style={{ backgroundColor: BG }}>
-            <Feather name="video-off" size={36} color="#FFFFFF" />
+            <Icon set="feather" name="video-off" size={36} color="#FFFFFF" />
             <Text
               className="text-base font-extrabold mt-4 text-center"
               style={{ color: "#FFFFFF", fontFamily: fonts.heading }}
@@ -417,7 +384,7 @@ function CallModal({ callKey, peerName, fetchJoin, onAttendance, endedMessage, c
               className="h-[64px] w-[64px] rounded-full items-center justify-center"
               style={{ backgroundColor: colors.danger }}
             >
-              <Feather name="phone-off" size={26} color="#FFFFFF" />
+              <Icon set="feather" name="phone-off" size={26} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
         )}
@@ -432,10 +399,11 @@ function CallModal({ callKey, peerName, fetchJoin, onAttendance, endedMessage, c
             className="absolute rounded-full p-2"
             style={{ top: insets.top + 12, right: 16, backgroundColor: "rgba(255,255,255,0.16)" }}
           >
-            <Feather name="x" size={22} color="#FFFFFF" />
+            <Icon set="feather" name="x" size={22} color="#FFFFFF" />
           </TouchableOpacity>
         )}
       </View>
+      <AppLockCover />
     </Modal>
   );
 }
@@ -477,7 +445,7 @@ function ControlButton({
       className="h-[56px] w-[56px] rounded-full items-center justify-center"
       style={{ backgroundColor: active ? "#FFFFFF" : "rgba(255,255,255,0.18)", opacity: disabled ? 0.45 : 1 }}
     >
-      <Feather name={icon} size={22} color={active ? BG : "#FFFFFF"} />
+      <Icon set="feather" name={icon} size={22} color={active ? BG : "#FFFFFF"} />
     </TouchableOpacity>
   );
 }

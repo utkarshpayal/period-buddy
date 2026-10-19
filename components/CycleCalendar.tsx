@@ -1,4 +1,3 @@
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useMemo } from "react";
 import { Text, TouchableOpacity, View } from "react-native";
 import type { DayEntry as LocalDayEntry } from "./AppState";
@@ -7,6 +6,7 @@ import { getSoftTints } from "./ui-tokens";
 import type { CyclePhase } from "../lib/cycle";
 import { MONTH_NAMES, WEEKDAY_LABELS, dayStatus, monthSlots, type CalendarModel, type DayStatus } from "../lib/cycleCalendar";
 import { getDateKey } from "../lib/format";
+import { Icon } from "./Icon";
 
 /**
  * Calendar pieces shared by the Calendar screen's month and year views.
@@ -33,7 +33,7 @@ export function usePhasePalette(): PhasePalette {
   }, [colors]);
 }
 
-type Lookups = {
+export type Lookups = {
   model: CalendarModel;
   entryFor: (dateKey: string) => LocalDayEntry | undefined;
   noteFor: (dateKey: string) => string | undefined;
@@ -100,8 +100,9 @@ export function CalendarDayCell({
         ? colors.info
         : colors.foreground;
   const showLogDot = s.isLogged;
-  // Future days can't be logged, so they don't open the log modal.
-  const isFuture = s.dateKey > getDateKey(new Date());
+  // Future days can't be logged, so they don't open the log modal. Same
+  // `todayKey` as `isToday`, so the two can't disagree around midnight.
+  const isFuture = s.isFuture;
 
   return (
     <TouchableOpacity
@@ -137,7 +138,7 @@ export function CalendarDayCell({
           {s.day}
         </Text>
         {s.isOvulation && !filled ? (
-          <MaterialCommunityIcons
+          <Icon set="mci"
             name="egg"
             size={9}
             color={palette.ovulation.color}
@@ -183,7 +184,7 @@ export function CalendarLegend() {
       {item("Period", <View style={{ ...swatch, backgroundColor: palette.period.color }} />)}
       {item("Predicted", <View style={{ ...swatch, borderWidth: 1.5, borderStyle: "dashed", borderColor: palette.period.color }} />)}
       {item("Fertile", <View style={{ ...swatch, backgroundColor: colors.secondaryLight, borderWidth: 1, borderColor: colors.secondary }} />)}
-      {item("Ovulation", <MaterialCommunityIcons name="egg" size={12} color={palette.ovulation.color} />)}
+      {item("Ovulation", <Icon set="mci" name="egg" size={12} color={palette.ovulation.color} />)}
       {item("Logged", <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: colors.primary }} />)}
     </View>
   );
@@ -267,10 +268,7 @@ export const MiniMonth = React.memo(function MiniMonth({
   const palette = usePhasePalette();
   const slots = useMemo(() => monthSlots(monthDate), [monthDate]);
   const { model, entryFor, noteFor, todayKey } = lookups;
-  const isThisMonth = (() => {
-    const now = new Date();
-    return now.getFullYear() === monthDate.getFullYear() && now.getMonth() === monthDate.getMonth();
-  })();
+  const isThisMonth = todayKey.slice(0, 7) === getDateKey(monthDate).slice(0, 7);
   const dot = MINI_CELL - 2;
   return (
     <TouchableOpacity
@@ -287,9 +285,17 @@ export const MiniMonth = React.memo(function MiniMonth({
         {slots.map((date, i) => {
           if (!date) return <View key={i} style={{ width: `${100 / 7}%`, height: MINI_CELL }} />;
           const s = dayStatus(date, model, entryFor, noteFor, todayKey);
-          const loggedPeriod = s.phase === "period" && s.isLogged;
-          // Same signals as CalendarDayCell, scaled down.
-          const bg = loggedPeriod ? palette.period.color : s.isFertile && s.phase !== "period" ? colors.secondaryLight : "transparent";
+          // Same rules as CalendarDayCell, scaled down.
+          const isPeriod = s.phase === "period";
+          const loggedPeriod = isPeriod && (s.hasFlow || s.isLogged);
+          const pastPeriod = isPeriod && !loggedPeriod && !s.isPredictedPeriod;
+          const bg = loggedPeriod
+            ? palette.period.color
+            : pastPeriod
+              ? palette.period.bg
+              : (s.isFertile && !isPeriod) || s.isOvulation
+                ? colors.secondaryLight
+                : "transparent";
           const ring = s.isToday ? colors.foreground : s.isPredictedPeriod ? palette.period.color : null;
           return (
             <View key={i} style={{ width: `${100 / 7}%`, height: MINI_CELL, alignItems: "center", justifyContent: "center" }}>

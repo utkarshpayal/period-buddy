@@ -1,219 +1,75 @@
-import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
+import { router } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  RefreshControl,
-  ScrollView,
-  StatusBar,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { RefreshControl, ScrollView, StatusBar, Text, TouchableOpacity, View } from "react-native";
+import Animated, { FadeInDown } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
-import Svg, { Circle, Defs, LinearGradient as SvgGradient, Polyline, Stop } from "react-native-svg";
-import { useTheme } from "../../components/theme";
-import { ColumnLabel } from "../../components/ColumnLabel";
-import { SkeletonCard } from "../../components/Skeleton";
-import {
-  getHeroGradient,
-  getSoftTints,
-  getSurfaceGradient,
-  getShadow,
-} from "../../components/ui-tokens";
-import { cycleApi, type Predictions as CyclePredictions } from "../../lib/api";
-import { useDataRefresh } from "../../hooks/useDataRefresh";
 import { ScreenHeader } from "../../components/ScreenHeader";
+import { SkeletonCard } from "../../components/Skeleton";
+import { useTheme } from "../../components/theme";
+import { getShadow } from "../../components/ui-tokens";
+import { useDataRefresh } from "../../hooks/useDataRefresh";
+import { cycleApi, type Predictions as CyclePredictions, getFriendlyErrorMessage } from "../../lib/api";
+import { getCyclePhase, type CyclePhase } from "../../lib/cycle";
+import { addDays } from "../../lib/cycleCalendar";
+import { dateFromDayKey } from "../../lib/format";
+import { useSecureScreen } from "../../lib/screenPrivacy";
+import { Icon } from "../../components/Icon";
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-type AnalyticsBar = {
-  daysLogged?: number;
-  isPlaceholder: boolean;
-  length: number;
-  month: string;
+/** Stages named by when they happen; the medical name is small print. */
+const STAGES: Record<CyclePhase, { title: string; bar: string; note: string }> = {
+  period: { title: "During your period", bar: "Period", note: "Rest, stay hydrated, and go easy on yourself." },
+  follicular: { title: "After your period", bar: "After", note: "Energy and mood often lift around now." },
+  ovulation: { title: "Your fertile days", bar: "Fertile", note: "The days you could get pregnant, most likely the 2 days before ovulation." },
+  luteal: { title: "Before your period", bar: "Before", note: "Cravings, mood or sleep can shift before your period." },
 };
 
-const MONTH_LABELS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-];
+const startOfToday = () => dateFromDayKey(new Date());
+const daysBetween = (a: Date, b: Date) => Math.round((b.getTime() - a.getTime()) / DAY_MS);
+const fmtDay = (d: Date) => `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+const fmtLong = (d: Date) => `${WEEKDAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+const fmtRange = (a: Date, b: Date) =>
+  a.getMonth() === b.getMonth() ? `${a.getDate()}–${b.getDate()} ${MONTHS[b.getMonth()]}` : `${fmtDay(a)} – ${fmtDay(b)}`;
 
-function parseMonthIndex(month: string) {
-  const normalized = month.slice(0, 3).toLowerCase();
-  return MONTH_LABELS.findIndex(
-    (label) => label.toLowerCase() === normalized,
-  );
+function inDays(n: number) {
+  if (n === 0) return "Today";
+  if (n === 1) return "Tomorrow";
+  if (n > 1) return `In ${n} days`;
+  return n === -1 ? "Yesterday" : `${-n} days ago`;
 }
 
-function buildFiveMonthAnalytics(
-  entries: CyclePredictions["analyticsData"] = [],
-): AnalyticsBar[] {
-  const cleanEntries = entries
-    .filter((entry) => entry.month)
-    .slice(-5)
-    .map((entry) => {
-      const monthIndex = parseMonthIndex(entry.month);
-
-      return {
-        ...entry,
-        month:
-          monthIndex >= 0
-            ? MONTH_LABELS[monthIndex]
-            : entry.month.slice(0, 3) || "Now",
-      };
-    });
-
-  const latestMonth = cleanEntries[cleanEntries.length - 1]?.month;
-  const latestIndex =
-    latestMonth && parseMonthIndex(latestMonth) >= 0
-      ? parseMonthIndex(latestMonth)
-      : new Date().getMonth();
-  const byMonth = new Map(cleanEntries.map((entry) => [entry.month, entry]));
-
-  return Array.from({ length: 5 }, (_, index) => {
-    const monthIndex = (latestIndex - 4 + index + 12) % 12;
-    const month = MONTH_LABELS[monthIndex];
-    const entry = byMonth.get(month);
-
-    return {
-      daysLogged: entry?.daysLogged,
-      isPlaceholder: !entry,
-      length: entry?.length ?? 0,
-      month,
-    };
-  });
-}
-
-const TREND_CHART_WIDTH = 100;
-const TREND_CHART_HEIGHT = 40;
-
-function CycleTrendLine({ bars }: { bars: AnalyticsBar[] }) {
-  const { colors, isDark, fonts } = useTheme();
-  const heroGradient = getHeroGradient(colors, isDark);
-  const loggedValues = bars.map((b) => b.length).filter((v) => v > 0);
-
-  if (loggedValues.length < 2) {
-    return (
-      <Text
-        className="text-xs font-semibold text-center py-6"
-        style={{ color: colors.mutedText, fontFamily: fonts.body }}
-      >
-        Log at least two cycles to see your trend line.
-      </Text>
-    );
+/** First and last cycle day of each phase for this cycle length. */
+function phaseDayRanges(periodLength: number, cycleLength: number) {
+  const ranges = {} as Record<CyclePhase, { from: number; to: number }>;
+  for (let day = 1; day <= cycleLength; day++) {
+    const phase = getCyclePhase(day, periodLength, cycleLength);
+    const r = ranges[phase];
+    if (r) r.to = day;
+    else ranges[phase] = { from: day, to: day };
   }
-
-  const max = Math.max(...loggedValues);
-  const min = Math.min(...loggedValues);
-  const range = Math.max(max - min, 1);
-  const stepX = TREND_CHART_WIDTH / (bars.length - 1);
-
-  const points = bars.map((bar, index) => {
-    const x = index * stepX;
-    const y =
-      bar.length > 0
-        ? TREND_CHART_HEIGHT - 4 - ((bar.length - min) / range) * (TREND_CHART_HEIGHT - 8)
-        : null;
-    return { x, y, length: bar.length };
-  });
-
-  const loggedPoints = points.filter((p) => p.y !== null) as { x: number; y: number; length: number }[];
-  const polylinePoints = loggedPoints.map((p) => `${p.x},${p.y}`).join(" ");
-
-  const firstLogged = loggedPoints[0].length;
-  const lastLogged = loggedPoints[loggedPoints.length - 1].length;
-  const delta = lastLogged - firstLogged;
-  const trendColor = delta > 0 ? colors.danger : delta < 0 ? colors.success : colors.mutedText;
-  const trendIcon = delta > 0 ? "trending-up" : delta < 0 ? "trending-down" : "trending-neutral";
-  const trendLabel =
-    delta === 0
-      ? "Steady cycle length"
-      : `${delta > 0 ? "Up" : "Down"} ${Math.abs(delta)} day${Math.abs(delta) === 1 ? "" : "s"} vs 5 months ago`;
-
-  return (
-    <View>
-      <View className="flex-row items-center gap-1.5 mb-2">
-        <MaterialCommunityIcons name={trendIcon} size={14} color={trendColor} />
-        <Text className="text-xs font-bold" style={{ color: trendColor, fontFamily: fonts.body }}>
-          {trendLabel}
-        </Text>
-      </View>
-      <Svg width="100%" height={64} viewBox={`0 0 ${TREND_CHART_WIDTH} ${TREND_CHART_HEIGHT}`}>
-        <Defs>
-          <SvgGradient id="trendLineGradient" x1="0" y1="0" x2="1" y2="0">
-            {heroGradient.map((stop, index) => (
-              <Stop
-                key={stop}
-                offset={index / (heroGradient.length - 1)}
-                stopColor={stop}
-              />
-            ))}
-          </SvgGradient>
-        </Defs>
-        <Polyline
-          points={polylinePoints}
-          fill="none"
-          stroke="url(#trendLineGradient)"
-          strokeWidth={2}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        {loggedPoints.map((p, index) => (
-          <Circle key={index} cx={p.x} cy={p.y} r={2.4} fill={colors.primaryDark} />
-        ))}
-      </Svg>
-      <View className="flex-row justify-between mt-1">
-        {bars.map((bar, index) => (
-          <Text
-            key={`${bar.month}-${index}`}
-            className="text-xs font-bold flex-1 text-center"
-            style={{ color: colors.mutedText, fontFamily: fonts.body }}
-          >
-            {bar.month}
-          </Text>
-        ))}
-      </View>
-    </View>
-  );
+  return ranges;
 }
 
 export default function Predictions() {
+  useSecureScreen("predictions");
   const { colors, isDark, fonts } = useTheme();
-
-  const PHASE_META: Record<string, { label: string; color: string; description: string }> = {
-    period: { label: "Period", color: colors.rose, description: "Rest, hydrate, and notice what your body needs." },
-    follicular: { label: "Follicular", color: colors.warning, description: "Energy often starts to rise after bleeding slows." },
-    ovulation: { label: "Ovulation", color: colors.primary, description: "A common peak-fertility window for many cycles." },
-    luteal: { label: "Luteal", color: colors.secondary, description: "Mood, cravings, and sleep can shift before your period." },
-  };
 
   const [data, setData] = useState<CyclePredictions | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const softTints = getSoftTints(colors);
-  const surfaceGradient = getSurfaceGradient(colors, isDark) as [string, string];
-  const heroGradient = getHeroGradient(colors, isDark) as [string, string, string];
-
   const load = useCallback(async (isRefresh = false) => {
     try {
       if (isRefresh) setRefreshing(true);
       else setLoading(true);
       setError(null);
-      const predictions = await cycleApi.getPredictions({ force: isRefresh });
-      setData(predictions);
+      setData(await cycleApi.getPredictions({ force: isRefresh }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load predictions");
+      setError(getFriendlyErrorMessage(err));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -228,31 +84,91 @@ export default function Predictions() {
     cycleApi.getPredictions().then((predictions) => {
       setData(predictions);
       setError(null);
+    })
+  );
+
+  const stageColors = useMemo<Record<CyclePhase, { solid: string; soft: string }>>(
+    () => ({
+      period: { solid: colors.rose, soft: colors.roseLight },
+      follicular: { solid: colors.mint, soft: colors.mintLight },
+      ovulation: { solid: colors.lavender, soft: colors.lavenderLight },
+      luteal: { solid: colors.gold, soft: colors.goldLight },
     }),
+    [colors]
   );
 
-  const phaseMeta = data ? PHASE_META[data.currentPhase] ?? PHASE_META.follicular : null;
-  const analyticsBars = useMemo(
-    () => buildFiveMonthAnalytics(data?.analyticsData),
-    [data?.analyticsData],
-  );
-  const hasAnalyticsHistory = analyticsBars.some((bar) => bar.length > 0);
+  const view = useMemo(() => {
+    if (!data) return null;
+    const today = startOfToday();
+    const cycleLength = Math.max(data.cycleLength || 28, 1);
+    const periodLength = data.periodLength || 5;
+    const phase: CyclePhase = (["period", "follicular", "ovulation", "luteal"] as const).includes(data.currentPhase as CyclePhase)
+      ? (data.currentPhase as CyclePhase)
+      : getCyclePhase(data.currentCycleDay, periodLength, cycleLength);
 
-  const maxBarLength = Math.max(
-    ...analyticsBars.map((d) => d.length),
-    data?.cycleLength ?? 1,
-    1,
+    const nextPeriod = data.nextPeriodDateKey
+      ? dateFromDayKey(data.nextPeriodDateKey)
+      : data.nextPeriodDateISO
+        ? dateFromDayKey(data.nextPeriodDateISO)
+        : addDays(today, data.nextPeriodDaysAway);
+    const windowStart = data.predictedPeriodStartEarliestISO ? dateFromDayKey(data.predictedPeriodStartEarliestISO) : null;
+    const windowEnd = data.predictedPeriodStartLatestISO ? dateFromDayKey(data.predictedPeriodStartLatestISO) : null;
+
+    // Next fertile window: this cycle's if it hasn't ended yet, else next cycle's.
+    // The window is the 5 days before ovulation plus ovulation day (Wilcox 1995).
+    let ovulation = data.ovulationDateISO ? dateFromDayKey(data.ovulationDateISO) : addDays(today, data.ovulationDaysAway);
+    if (daysBetween(today, ovulation) < 0) ovulation = addDays(ovulation, cycleLength);
+    const fertileStart = addDays(ovulation, -5);
+    const fertileEnd = ovulation;
+    const fertileNow = daysBetween(fertileStart, today) >= 0 && daysBetween(today, fertileEnd) >= 0;
+
+    const history = (data.cycleLengthHistory?.length ? data.cycleLengthHistory : data.analyticsData.map((a) => a.length)).filter((n) => n > 0).slice(-6);
+
+    return {
+      isLate: !!data.isLate,
+      daysLate: data.daysLate ?? 0,
+      today,
+      cycleLength,
+      periodLength,
+      phase,
+      cycleDay: data.currentCycleDay,
+      nextPeriod,
+      daysAway: daysBetween(today, nextPeriod),
+      windowStart,
+      windowEnd,
+      ovulation,
+      fertileStart,
+      fertileEnd,
+      fertileNow,
+      ranges: phaseDayRanges(periodLength, cycleLength),
+      history,
+    };
+  }, [data]);
+
+  const card = {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 24,
+    ...getShadow(colors, isDark),
+  } as const;
+
+  const sectionTitle = (title: string, subtitle?: string) => (
+    <View style={{ marginTop: 28, marginBottom: 12 }}>
+      <Text accessibilityRole="header" style={{ fontSize: 17, fontWeight: "700", color: colors.foreground, fontFamily: fonts.heading }}>
+        {title}
+      </Text>
+      {subtitle ? <Text style={{ marginTop: 2, fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}>{subtitle}</Text> : null}
+    </View>
   );
+
+  const needsSetup = !!error && error.toLowerCase().includes("setup");
 
   return (
     <>
-      <StatusBar
-        barStyle={isDark ? "light-content" : "dark-content"}
-        backgroundColor={colors.background}
-      />
-
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
       <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
-        <ScreenHeader title="Smart Predictions" />
+        <ScreenHeader title="Smart Predictions" subtitle={data?.cyclesAnalyzed ? `Based on ${data.cyclesAnalyzed} cycles you logged` : undefined} />
 
         {loading ? (
           <View className="px-6 mt-6 gap-4">
@@ -262,399 +178,386 @@ export default function Predictions() {
           </View>
         ) : error ? (
           <View className="flex-1 items-center justify-center px-8">
-            <MaterialCommunityIcons name="calendar-alert" size={48} color={colors.primary} />
-            <Text className="mt-4 text-base font-bold text-center" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-              {error.includes("setup") ? "No cycle data yet" : "Couldn't load predictions"}
+            <Icon set="ion" name="calendar-outline" size={44} color={colors.primary} />
+            <Text style={{ marginTop: 14, fontSize: 17, fontWeight: "700", textAlign: "center", color: colors.foreground, fontFamily: fonts.heading }}>
+              {needsSetup ? "Tell us about your cycle first" : "Couldn't load predictions"}
             </Text>
-            <Text className="mt-2 text-xs text-center leading-5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-              {error.includes("setup")
-                ? "Set up your cycle settings in the tracker to unlock predictions."
-                : error}
+            <Text style={{ marginTop: 6, fontSize: 14, lineHeight: 20, textAlign: "center", color: colors.mutedText, fontFamily: fonts.body }}>
+              {needsSetup ? "Add when your last period started and we'll predict the next one." : "Check your connection and try again."}
             </Text>
             <TouchableOpacity
-              onPress={() => load()}
-              className="mt-6 px-6 py-3 rounded-2xl"
-              style={{ backgroundColor: colors.primary }}
+              onPress={() => (needsSetup ? router.push("/(app)/(dashboard)/tracker") : load())}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              style={{ marginTop: 20, paddingHorizontal: 24, height: 48, borderRadius: 16, justifyContent: "center", backgroundColor: colors.primary }}
             >
-              <Text className="text-sm font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-                {error.includes("setup") ? "Go to Tracker" : "Retry"}
-              </Text>
+              <Text style={{ fontSize: 15, fontWeight: "700", color: colors.buttonText, fontFamily: fonts.body }}>{needsSetup ? "Go to tracker" : "Try again"}</Text>
             </TouchableOpacity>
           </View>
-        ) : data ? (
+        ) : data && view ? (
           <ScrollView
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 60 }}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={() => load(true)}
-                tintColor={colors.primary}
-              />
-            }
+            contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 60 }}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={colors.primary} />}
           >
-            <View className="mx-6 mt-8">
-              {/* Current Phase Badge */}
-              {phaseMeta && (
-                <View
-                  className="flex-row items-center gap-3 p-4 rounded-2xl border mb-5"
-                  style={{ backgroundColor: `${phaseMeta.color}0D`, borderColor: `${phaseMeta.color}40`, borderRadius: 28 }}
-                >
-                  <View className="w-3 h-3 rounded-full" style={{ backgroundColor: phaseMeta.color }} />
-                  <View className="flex-1">
-                    <Text className="text-xs font-black uppercase tracking-widest" style={{ color: phaseMeta.color, fontFamily: fonts.heading }}>
-                      {phaseMeta.label} Phase — Day {data.currentCycleDay}
-                    </Text>
-                    <Text className="text-xs mt-0.5 font-medium" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                      {phaseMeta.description}
-                    </Text>
-                  </View>
-                </View>
-              )}
-
-              {/* Stale-data warning — the user stopped logging, so the
-                  projection has drifted far from a real anchor. */}
-              {data.isStale && (
-                <View
-                  className="flex-row items-start gap-3 p-4 border mb-5"
-                  style={{ backgroundColor: `${colors.warning}12`, borderColor: `${colors.warning}40`, borderRadius: 28 }}
-                >
-                  <Feather name="alert-triangle" size={18} color={colors.warning} />
-                  <View className="flex-1">
-                    <Text className="text-xs font-black" style={{ color: colors.warning, fontFamily: fonts.heading }}>
-                      Predictions may be off
-                    </Text>
-                    <Text className="text-xs mt-0.5 font-medium leading-4" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                      It&apos;s been a while since your last logged period{typeof data.daysSinceLastActualPeriod === "number" ? ` (${data.daysSinceLastActualPeriod} days)` : ""}. Log your current period to re-anchor these dates.
-                    </Text>
-                  </View>
-                </View>
-              )}
-
-              {/* Hero: Next Period — circular countdown ring */}
+            {/* Out-of-date warning, with the fix one tap away */}
+            {data.isStale ? (
               <View
-                className="border overflow-hidden mb-5 items-center py-6"
                 style={{
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                  borderRadius: 28,
-                  ...getShadow(colors, isDark),
+                  flexDirection: "row",
+                  alignItems: "flex-start",
+                  gap: 12,
+                  padding: 16,
+                  marginBottom: 16,
+                  borderRadius: 20,
+                  backgroundColor: colors.warningLight,
                 }}
               >
-                {(() => {
-                  const size = 150;
-                  const strokeWidth = 10;
-                  const radius = (size - strokeWidth) / 2;
-                  const circumference = 2 * Math.PI * radius;
-                  const cycleLen = Math.max(data.cycleLength || 28, 1);
-                  const progress = Math.min(
-                    Math.max((cycleLen - data.nextPeriodDaysAway) / cycleLen, 0),
-                    1,
-                  );
-                  const dashOffset = circumference * (1 - progress);
-                  return (
-                    <View style={{ width: size, height: size }}>
-                      <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-                        <Defs>
-                          <SvgGradient id="countdownRingGradient" x1="0" y1="0" x2="1" y2="1">
-                            {heroGradient.map((stop, index) => (
-                              <Stop
-                                key={stop}
-                                offset={index / (heroGradient.length - 1)}
-                                stopColor={stop}
-                              />
-                            ))}
-                          </SvgGradient>
-                        </Defs>
-                        <Circle
-                          cx={size / 2}
-                          cy={size / 2}
-                          r={radius}
-                          stroke={colors.border}
-                          strokeWidth={strokeWidth}
-                          fill="none"
+                <Icon set="feather" name="alert-circle" size={18} color={colors.warning} style={{ marginTop: 1 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 14, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>These dates may be off</Text>
+                  <Text style={{ marginTop: 2, fontSize: 13, lineHeight: 18, color: colors.foreground, opacity: 0.8, fontFamily: fonts.body }}>
+                    {`You haven't logged a period in ${typeof data.daysSinceLastActualPeriod === "number" ? `${data.daysSinceLastActualPeriod} days` : "a while"}. Log your next one and we'll correct them.`}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => router.push({ pathname: "/(app)/(dashboard)/tracker", params: { log: "today", focus: "flow" } })}
+                    accessibilityRole="button"
+                    hitSlop={6}
+                    style={{ marginTop: 8, alignSelf: "flex-start" }}
+                  >
+                    <Text style={{ fontSize: 13, fontWeight: "800", color: colors.primaryDark, fontFamily: fonts.body }}>Log period</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : null}
+
+            {/* 1. Next period */}
+            {view.isLate ? (
+              <Animated.View entering={FadeInDown.duration(320)} style={{ ...card, padding: 20, marginBottom: 16, backgroundColor: stageColors.period.soft, borderColor: isDark ? colors.border : "transparent" }}>
+                <Text style={{ fontSize: 13, fontWeight: "700", color: colors.mutedText, fontFamily: fonts.body }}>
+                  {`Was due ${fmtLong(view.nextPeriod)}`}
+                </Text>
+                <Text style={{ marginTop: 6, fontSize: 24, lineHeight: 30, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
+                  {`Your period is ${view.daysLate} ${view.daysLate === 1 ? "day" : "days"} late`}
+                </Text>
+                <Text style={{ marginTop: 8, fontSize: 14, lineHeight: 20, color: colors.foreground, fontFamily: fonts.body }}>
+                  {data.noPeriodTooLong
+                    ? "You haven't had a period in over 3 months. Please see a doctor: causes like thyroid problems, PCOS, stress or weight change are common and treatable."
+                    : view.daysLate >= 7
+                      ? "If there's any chance you could be pregnant, take a home pregnancy test now. It's most reliable from the day your period was due. If it's negative and your period still doesn't come, test again in a few days or see a doctor."
+                      : "A few days late is common. Stress, illness, travel or a change in routine can delay ovulation. If there's any chance you could be pregnant, a home test is reliable from the day your period was due."}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => router.push({ pathname: "/(app)/(dashboard)/tracker", params: { log: "today", focus: "flow" } })}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  style={{ marginTop: 14, alignSelf: "flex-start", paddingHorizontal: 16, height: 40, borderRadius: 14, justifyContent: "center", backgroundColor: colors.primary }}
+                >
+                  <Text style={{ fontSize: 14, fontWeight: "700", color: colors.buttonText, fontFamily: fonts.body }}>It started: log period</Text>
+                </TouchableOpacity>
+              </Animated.View>
+            ) : null}
+
+            <Animated.View entering={FadeInDown.duration(320)} style={{ ...card, padding: 20 }}>
+              <Text style={{ fontSize: 13, fontWeight: "700", color: colors.mutedText, fontFamily: fonts.body }}>
+                {view.isLate ? "Where you are in this cycle" : "Your next period"}
+              </Text>
+              {!view.isLate ? (
+              <View style={{ flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: 12, marginTop: 6 }}>
+                <Text style={{ flexShrink: 1, fontSize: 26, lineHeight: 32, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
+                  {fmtLong(view.nextPeriod)}
+                </Text>
+                <View style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: stageColors.period.soft }}>
+                  <Text style={{ fontSize: 13, fontWeight: "800", color: colors.foreground, fontFamily: fonts.body }}>{inDays(view.daysAway)}</Text>
+                </View>
+              </View>
+              ) : null}
+              {!view.isLate && view.windowStart && view.windowEnd ? (
+                <Text style={{ marginTop: 6, fontSize: 14, lineHeight: 20, color: colors.mutedText, fontFamily: fonts.body }}>
+                  {data.isEstimate
+                    ? `Your cycles vary, so it could come anytime between ${fmtRange(view.windowStart, view.windowEnd)}.`
+                    : `Most likely between ${fmtRange(view.windowStart, view.windowEnd)}. Even regular cycles shift by a day or two.`}
+                </Text>
+              ) : null}
+
+              {/* Where you are in this cycle */}
+              <View style={{ marginTop: 20 }}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
+                  <Text style={{ fontSize: 13, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>
+                    {view.isLate ? `Day ${view.cycleDay} · period due` : `Day ${view.cycleDay} · ${STAGES[view.phase].title.toLowerCase()}`}
+                  </Text>
+                  <Text style={{ fontSize: 13, color: colors.mutedText, fontFamily: fonts.mono }}>{`${view.cycleLength}-day cycle`}</Text>
+                </View>
+                <View style={{ height: 30 }}>
+                  <View style={{ position: "absolute", top: 8, left: 0, right: 0, flexDirection: "row", gap: 2 }}>
+                    {(["period", "follicular", "ovulation", "luteal"] as const).map((p) => {
+                      const r = view.ranges[p];
+                      if (!r) return null;
+                      return (
+                        <View
+                          key={p}
+                          style={{
+                            flex: r.to - r.from + 1,
+                            height: 10,
+                            borderRadius: 5,
+                            backgroundColor: stageColors[p].solid,
+                            opacity: p === view.phase ? 1 : 0.4,
+                          }}
                         />
-                        <Circle
-                          cx={size / 2}
-                          cy={size / 2}
-                          r={radius}
-                          stroke="url(#countdownRingGradient)"
-                          strokeWidth={strokeWidth}
-                          fill="none"
-                          strokeDasharray={`${circumference} ${circumference}`}
-                          strokeDashoffset={dashOffset}
-                          strokeLinecap="round"
-                          rotation={-90}
-                          originX={size / 2}
-                          originY={size / 2}
-                        />
-                      </Svg>
-                      {/* Absolutely centered over the ring via inset:0 + flex
-                          centering, instead of a hand-tuned `top` offset that
-                          drifted out of the circle's actual center. */}
-                      <View
+                      );
+                    })}
+                  </View>
+                  {/* Today marker */}
+                  <View
+                    style={{
+                      position: "absolute",
+                      top: 2,
+                      left: `${Math.min(99, Math.max(0, ((Math.min(view.cycleDay, view.cycleLength) - 0.5) / view.cycleLength) * 100))}%`,
+                      marginLeft: -11,
+                      width: 22,
+                      height: 22,
+                      borderRadius: 11,
+                      borderWidth: 4,
+                      borderColor: colors.surface,
+                      backgroundColor: colors.foreground,
+                    }}
+                  />
+                </View>
+                <View style={{ flexDirection: "row", gap: 2, marginTop: 2 }}>
+                  {(["period", "follicular", "ovulation", "luteal"] as const).map((p) => {
+                    const r = view.ranges[p];
+                    if (!r) return null;
+                    return (
+                      <Text
+                        key={p}
+                        numberOfLines={1}
                         style={{
-                          position: "absolute",
-                          top: 0,
-                          bottom: 0,
-                          left: 0,
-                          right: 0,
-                          alignItems: "center",
-                          justifyContent: "center",
+                          flex: r.to - r.from + 1,
+                          fontSize: 11.5,
+                          fontWeight: p === view.phase ? "800" : "600",
+                          color: p === view.phase ? colors.foreground : colors.mutedText,
+                          fontFamily: fonts.body,
                         }}
                       >
-                        <Text className="text-3xl font-black" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-                          {data.nextPeriodDaysAway}
-                        </Text>
-                        <Text className="text-xs font-bold" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                          days left
-                        </Text>
-                      </View>
-                    </View>
-                  );
-                })()}
-                <Text className="mt-2.5 text-base font-black tracking-tight" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-                  {data.isEstimate ? "Estimated next period" : "Next period"} · {data.nextPeriodDate}
-                </Text>
-                {data.isEstimate && data.predictedWindowRange ? (
-                  <Text
-                    className="mt-1 text-xs font-semibold text-center px-6"
-                    style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                  >
-                    Your cycles vary — it may arrive anytime {data.predictedWindowRange}.
-                  </Text>
+                        {STAGES[p].bar}
+                      </Text>
+                    );
+                  })}
+                </View>
+                {!view.isLate ? (
+                  <Text style={{ marginTop: 10, fontSize: 13.5, lineHeight: 19, color: colors.mutedText, fontFamily: fonts.body }}>{STAGES[view.phase].note}</Text>
                 ) : null}
-                {data.confidence ? (
+              </View>
+            </Animated.View>
+
+            {/* 2. Coming up */}
+            {sectionTitle("Coming up")}
+            <View style={{ ...card, paddingHorizontal: 16 }}>
+              {[
+                {
+                  key: "period",
+                  icon: "water-outline" as const,
+                  tint: stageColors.period,
+                  title: "Period starts",
+                  detail: view.isLate ? `Was due ${fmtLong(view.nextPeriod)}` : fmtLong(view.nextPeriod),
+                  when: view.isLate ? "Any day" : inDays(view.daysAway),
+                },
+                view.isLate
+                  ? {
+                      key: "fertile",
+                      icon: "egg-outline" as const,
+                      tint: stageColors.ovulation,
+                      title: "Fertile days",
+                      detail: "We'll work these out once your period starts",
+                      when: "",
+                    }
+                  : data.fertileWindowReliable === false || data.ovulationReliable === false
+                  ? {
+                      key: "fertile",
+                      icon: "egg-outline" as const,
+                      tint: stageColors.ovulation,
+                      title: "Fertile days",
+                      detail: "Hard to predict when cycles vary a lot",
+                      when: "",
+                    }
+                  : {
+                      key: "fertile",
+                      icon: "egg-outline" as const,
+                      tint: stageColors.ovulation,
+                      title: "Fertile days",
+                      detail: `${fmtRange(view.fertileStart, view.fertileEnd)} · most likely to get pregnant`,
+                      when: view.fertileNow ? "Now" : inDays(daysBetween(view.today, view.fertileStart)),
+                    },
+                ...(data.ovulationReliable === false || view.isLate
+                  ? []
+                  : [
+                      {
+                        key: "ovulation",
+                        icon: "ellipse-outline" as const,
+                        tint: stageColors.ovulation,
+                        title: "Ovulation",
+                        detail: `${fmtLong(view.ovulation)} · your egg is released`,
+                        when: inDays(daysBetween(view.today, view.ovulation)),
+                      },
+                    ]),
+              ]
+                .sort((a, b) => {
+                  const at = a.key === "period" ? view.nextPeriod : a.key === "fertile" ? view.fertileStart : view.ovulation;
+                  const bt = b.key === "period" ? view.nextPeriod : b.key === "fertile" ? view.fertileStart : view.ovulation;
+                  return at.getTime() - bt.getTime();
+                })
+                .map((row, i, rows) => (
                   <View
-                    className="mt-2 rounded-full px-3 py-1"
-                    style={{ backgroundColor: `${colors.primary}14` }}
+                    key={row.key}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 12,
+                      paddingVertical: 14,
+                      borderBottomWidth: i < rows.length - 1 ? 1 : 0,
+                      borderBottomColor: colors.border,
+                    }}
                   >
-                    <Text
-                      className="text-[11.5px] font-black uppercase tracking-wider"
-                      style={{ color: colors.primary, fontFamily: fonts.body }}
-                    >
-                      {data.confidence} confidence
-                      {data.cyclesAnalyzed ? ` · ${data.cyclesAnalyzed} cycles` : ""}
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-
-              {/* Fertile Window + Ovulation */}
-              <View className="flex-row gap-4 mb-5">
-                <View
-                  className="flex-1 border p-5 justify-between min-h-[140px]"
-                  style={{
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                    borderRadius: 28,
-                    ...getShadow(colors, isDark),
-                  }}
-                >
-                  <View className="self-start p-2.5 rounded-xl" style={{ backgroundColor: softTints.purple }}>
-                    <Ionicons name="heart-outline" size={18} color={colors.accent} />
-                  </View>
-                  <View className="mt-4">
-                    <Text className="text-xs font-bold tracking-wide" style={{ color: colors.mutedText, fontFamily: fonts.heading }}>
-                      Fertile Window
-                    </Text>
-                    <Text className="text-lg font-black tracking-tight mt-0.5" style={{ color: colors.foreground, fontFamily: fonts.mono }}>
-                      {data.fertileWindowRange}
-                    </Text>
-                    <Text className="text-xs font-semibold mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                      {data.fertileWindowDuration}
-                    </Text>
-                  </View>
-                </View>
-
-                <View
-                  className="flex-1 border p-5 justify-between min-h-[140px]"
-                  style={{
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                    borderRadius: 28,
-                    ...getShadow(colors, isDark),
-                  }}
-                >
-                  <View className="self-start p-2.5 rounded-xl" style={{ backgroundColor: softTints.pink }}>
-                    <Feather name="zap" size={16} color={colors.primary} />
-                  </View>
-                  <View className="mt-4">
-                    <Text className="text-xs font-bold tracking-wide" style={{ color: colors.mutedText, fontFamily: fonts.heading }}>
-                      Ovulation Day
-                    </Text>
-                    <Text className="text-lg font-black tracking-tight mt-0.5" style={{ color: colors.foreground, fontFamily: fonts.mono }}>
-                      {data.ovulationReliable === false ? "—" : data.ovulationDate}
-                    </Text>
-                    <Text className="text-xs font-semibold mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                      {data.ovulationReliable === false
-                        ? "Less reliable for irregular cycles"
-                        : data.ovulationDaysAway === 0
-                          ? "Today!"
-                          : `In ${data.ovulationDaysAway} days`}
-                    </Text>
-                  </View>
-                </View>
-              </View>
-
-              {/* Analytics graph */}
-              <View
-                className="border overflow-hidden mb-5"
-                style={{
-                  borderColor: colors.border,
-                  borderRadius: 28,
-                  ...getShadow(colors, isDark),
-                }}
-              >
-                <LinearGradient
-                  colors={surfaceGradient}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  className="p-5"
-                >
-                  <Text className="text-xs font-bold tracking-widest uppercase mb-1" style={{ color: colors.secondary, fontFamily: fonts.heading }}>
-                    Analytics
-                  </Text>
-                  <View className="mb-5 flex-row items-start justify-between gap-3">
-                    <View className="flex-1">
-                      <Text className="text-base font-extrabold tracking-tight" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-                        Last 5 Cycle Entries
-                      </Text>
-                      <Text className="mt-1 text-xs font-semibold leading-4" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                        {hasAnalyticsHistory
-                           ? "Missing months stay visible as 0 so trends are easy to read."
-                           : "Log your first cycle month to start building this trend."}
-                      </Text>
+                    <View style={{ width: 40, height: 40, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: row.tint.soft }}>
+                      <Icon set="ion" name={row.icon} size={18} color={colors.foreground} />
                     </View>
-                    <View
-                      className="rounded-full px-3 py-1"
-                      style={{ backgroundColor: softTints.emerald }}
-                    >
-                      <Text className="text-[11.5px] font-black uppercase" style={{ color: colors.success, fontFamily: fonts.body }}>
-                        5 months
-                      </Text>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={{ fontSize: 15, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>{row.title}</Text>
+                      <Text style={{ marginTop: 1, fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}>{row.detail}</Text>
                     </View>
+                    {row.when ? (
+                      <Text style={{ fontSize: 13, fontWeight: "800", color: row.when === "Now" ? colors.primaryDark : colors.foreground, fontFamily: fonts.body }}>
+                        {row.when}
+                      </Text>
+                    ) : null}
                   </View>
-                  <View className="h-36 flex-row justify-between items-end px-1">
-                    {analyticsBars.map((d, i) => {
-                      const heightPct =
-                        d.length > 0 ? Math.max(0.15, d.length / maxBarLength) : 0;
-                      const isLatest = i === analyticsBars.length - 1;
+                ))}
+            </View>
+
+            {/* 3. Recent cycles */}
+            {sectionTitle("Your recent cycles", "Days from the start of one period to the next")}
+            <View style={{ ...card, padding: 18 }}>
+              {view.history.length >= 2 ? (
+                <>
+                  {(() => {
+                    const min = Math.min(...view.history);
+                    const max = Math.max(...view.history);
+                    const spread = max - min;
+                    // Regular per FIGO: shortest-to-longest within 7–9 days (decided by the backend).
+                    const range = data.normalCycleRange ?? { min: 24, max: 38 };
+                    return (
+                      <>
+                        <Text style={{ fontSize: 15, lineHeight: 22, color: colors.foreground, fontFamily: fonts.body }}>
+                          {min === max ? "Your cycles are " : "Your cycles are usually "}
+                          <Text style={{ fontWeight: "800" }}>{min === max ? `${min} days` : `${min}–${max} days`}</Text>
+                          {data.isRegular === true
+                            ? ". That's regular."
+                            : data.isRegular === false
+                              ? `. They vary by ${spread} days, which counts as irregular and makes dates harder to predict.`
+                              : "."}
+                        </Text>
+                        {data.outsideNormalRange ? (
+                          <Text style={{ marginTop: 6, fontSize: 13, lineHeight: 18, color: colors.foreground, fontFamily: fonts.body }}>
+                            {`A typical cycle is ${range.min}–${range.max} days. Yours is often outside that, so it's worth mentioning to a doctor.`}
+                          </Text>
+                        ) : null}
+                        {data.isRegular === false && !data.outsideNormalRange ? (
+                          <Text style={{ marginTop: 6, fontSize: 13, lineHeight: 18, color: colors.mutedText, fontFamily: fonts.body }}>
+                            Some variation is normal. If it keeps happening, a doctor can check for things like thyroid problems or PCOS.
+                          </Text>
+                        ) : null}
+                        {data.longPeriod ? (
+                          <Text style={{ marginTop: 6, fontSize: 13, lineHeight: 18, color: colors.foreground, fontFamily: fonts.body }}>
+                            {`Your last period lasted ${data.lastPeriodDays} days. Bleeding for more than 8 days is worth checking with a doctor.`}
+                          </Text>
+                        ) : null}
+                      </>
+                    );
+                  })()}
+                  <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 8, height: 130, marginTop: 18 }}>
+                    {view.history.map((len, i) => {
+                      const top = Math.max(...view.history, 35);
+                      const latest = i === view.history.length - 1;
                       return (
-                        <View key={`${d.month}-${i}`} className="items-center flex-1 gap-1.5">
-                          <Text className="text-xs font-bold" style={{ color: d.length ? colors.foreground : colors.mutedText, fontFamily: fonts.mono }}>
-                            {d.length}d
-                          </Text>
+                        <View key={i} style={{ flex: 1, alignItems: "center", justifyContent: "flex-end", height: "100%" }}>
+                          <Text style={{ fontSize: 12.5, fontWeight: latest ? "800" : "600", color: colors.foreground, fontFamily: fonts.mono, marginBottom: 4 }}>{len}</Text>
                           <View
-                            className="w-5 rounded-full overflow-hidden justify-end"
                             style={{
-                              backgroundColor: colors.surfaceSoft,
-                              borderColor: colors.border,
-                              borderWidth: 1,
-                              height: 108,
+                              width: "70%",
+                              maxWidth: 28,
+                              height: `${Math.max(12, (len / top) * 78)}%`,
+                              borderTopLeftRadius: 6,
+                              borderTopRightRadius: 6,
+                              backgroundColor: latest ? colors.primary : colors.primaryLight,
                             }}
-                          >
-                            {d.length > 0 ? (
-                              <LinearGradient
-                                colors={isLatest ? heroGradient : [colors.accent, colors.mintLight]}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 0, y: 1 }}
-                                style={{
-                                  borderRadius: 999,
-                                  height: 108 * heightPct,
-                                  opacity: isLatest ? 1 : 0.62,
-                                  width: "100%",
-                                }}
-                              />
-                            ) : (
-                              <View
-                                style={{
-                                  backgroundColor: colors.border,
-                                  borderRadius: 999,
-                                  height: 4,
-                                  margin: 4,
-                                }}
-                              />
-                            )}
-                          </View>
-                          <Text className="text-xs font-bold mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                            {d.month}
-                          </Text>
+                          />
                         </View>
                       );
                     })}
                   </View>
-                </LinearGradient>
-              </View>
-
-              {/* Cycle length trend line */}
-              <View
-                className="border p-5 mb-5"
-                style={{
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                  borderRadius: 28,
-                  ...getShadow(colors, isDark),
-                }}
-              >
-                <Text
-                  className="text-xs font-bold tracking-widest uppercase mb-3"
-                  style={{ color: colors.secondary, fontFamily: fonts.heading }}
-                >
-                  Cycle Length Trend
+                  <View style={{ flexDirection: "row", gap: 8, marginTop: 6, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 6 }}>
+                    {view.history.map((_, i) => (
+                      <Text
+                        key={i}
+                        numberOfLines={1}
+                        style={{ flex: 1, textAlign: "center", fontSize: 11.5, color: colors.mutedText, fontFamily: fonts.body }}
+                      >
+                        {i === view.history.length - 1 ? "Latest" : `${view.history.length - 1 - i} ago`}
+                      </Text>
+                    ))}
+                  </View>
+                </>
+              ) : (
+                <Text style={{ fontSize: 14, lineHeight: 20, color: colors.mutedText, fontFamily: fonts.body }}>
+                  Log at least 2 periods and you&apos;ll see how long your cycles are here.
                 </Text>
-                <CycleTrendLine bars={analyticsBars} />
-              </View>
+              )}
 
-              {/* Cycle stats */}
-              <View className="flex-row gap-3 mb-5">
+              <View style={{ flexDirection: "row", gap: 10, marginTop: 18 }}>
                 {[
-                  { label: "Cycle Length", value: `${data.cycleLength}d`, icon: "repeat", color: colors.accent },
-                  { label: "Period Length", value: `${data.periodLength}d`, icon: "droplet", color: colors.primary },
+                  { label: "Usual cycle", value: `${view.cycleLength} days`, icon: "repeat" as const },
+                  { label: "Usual period", value: `${view.periodLength} days`, icon: "droplet" as const },
                 ].map((s) => (
-                  <View
-                    key={s.label}
-                    className="flex-1 border p-4 items-center"
-                    style={{
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                      borderRadius: 20,
-                      ...getShadow(colors, isDark),
-                    }}
-                  >
-                    <Feather name={s.icon as any} size={18} color={s.color} />
-                    <Text className="mt-2 text-lg font-black" style={{ color: colors.foreground, fontFamily: fonts.mono }}>
-                      {s.value}
-                    </Text>
-                    <ColumnLabel style={{ fontSize: 13, fontWeight: "600", marginTop: 2, color: colors.mutedText, fontFamily: fonts.body }}>{s.label}</ColumnLabel>
+                  <View key={s.label} style={{ flex: 1, padding: 14, borderRadius: 16, backgroundColor: colors.surfaceSoft }}>
+                    <Icon set="feather" name={s.icon} size={15} color={colors.mutedText} />
+                    <Text style={{ marginTop: 8, fontSize: 18, fontWeight: "700", color: colors.foreground, fontFamily: fonts.monoSemiBold ?? fonts.mono }}>{s.value}</Text>
+                    <Text style={{ marginTop: 1, fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}>{s.label}</Text>
                   </View>
                 ))}
               </View>
-
-              {/* AI notice */}
-              <View
-                className="p-5 border flex-row items-start gap-4"
-                style={{
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                  borderRadius: 28,
-                  ...getShadow(colors, isDark),
-                }}
-              >
-                <View className="p-2 rounded-xl" style={{ backgroundColor: softTints.emerald }}>
-                  <MaterialCommunityIcons name="shield-check-outline" size={18} color={colors.success} />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-xs font-bold" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-                    {data.isDataHighlyAccurate ? "✓ High accuracy" : "Improving accuracy"}
-                  </Text>
-                  <Text className="mt-1 text-xs leading-4 font-medium" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                    Built from your logged cycle history. Keep logging regularly
-                    to make predictions more personal and useful.
-                  </Text>
-                </View>
-              </View>
             </View>
+
+            {/* 4. How sure we are */}
+            {sectionTitle("How sure are we?")}
+            {(() => {
+              const level = data.confidence === "high" ? 3 : data.confidence === "medium" ? 2 : 1;
+              const headline = level === 3 ? "Very sure" : level === 2 ? "Fairly sure" : "A rough guess for now";
+              const reason =
+                level === 3
+                  ? `Your last ${data.cyclesAnalyzed ?? "few"} cycles were steady, so these dates should be close.`
+                  : level === 2
+                    ? "We have some history, but a few more logged periods will sharpen these dates."
+                    : "We need more logged periods to learn your pattern. Each one you log makes this better.";
+              return (
+                <View style={{ ...card, padding: 18 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                    <Text style={{ fontSize: 16, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>{headline}</Text>
+                    <View style={{ flexDirection: "row", gap: 4 }} accessibilityLabel={`${level} of 3`}>
+                      {[1, 2, 3].map((n) => (
+                        <View key={n} style={{ width: 22, height: 8, borderRadius: 4, backgroundColor: n <= level ? colors.primary : colors.track }} />
+                      ))}
+                    </View>
+                  </View>
+                  <Text style={{ marginTop: 6, fontSize: 14, lineHeight: 20, color: colors.mutedText, fontFamily: fonts.body }}>{reason}</Text>
+                  <View style={{ flexDirection: "row", gap: 8, marginTop: 14 }}>
+                    <Icon set="feather" name="info" size={14} color={colors.mutedText} style={{ marginTop: 2 }} />
+                    <Text style={{ flex: 1, fontSize: 13, lineHeight: 18, color: colors.mutedText, fontFamily: fonts.body }}>
+                      Predictions are estimates from your own logs. Don&apos;t rely on fertile days alone for birth control.
+                    </Text>
+                  </View>
+                </View>
+              );
+            })()}
           </ScrollView>
         ) : null}
       </SafeAreaView>

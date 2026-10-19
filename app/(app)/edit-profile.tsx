@@ -1,20 +1,16 @@
-import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
-  ScrollView,
   StatusBar,
   Text,
   TextInput,
   View,
   type TextInputProps,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Avatar from "../../components/Avatar";
 import { useAuth } from "../../components/auth-context";
 import { PrimaryButton } from "../../components/onboarding/parts";
@@ -22,18 +18,24 @@ import { ScreenHeader } from "../../components/ScreenHeader";
 import { useTheme } from "../../components/theme";
 import { BirthdayInput } from "../../components/BirthdayInput";
 import { alert } from "../../lib/alert";
-import { authApi, uploadApi } from "../../lib/api";
+import { authApi, uploadApi, getFriendlyErrorMessage } from "../../lib/api";
 import { openAppSettings } from "../../lib/modal-host";
 import { requestPhotoLibraryAccess } from "../../lib/photoAccess";
 import { isPlausiblePhone, normalizePhone } from "../../lib/onboarding";
+import { useSecureScreen } from "../../lib/screenPrivacy";
+import { KeyboardAwareScrollView, KeyboardStickyView } from "react-native-keyboard-controller";
+import { Icon } from "../../components/Icon";
 
 /**
  * Name, photo, phone and birthday. Phone and photo used to be onboarding
  * steps; they're optional, so they live here (reached from Profile) instead.
  */
 export default function EditProfile() {
+  useSecureScreen("edit-profile");
   const router = useRouter();
   const { colors, fonts, isDark } = useTheme();
+  // The footer sits on the keyboard, not on the home-indicator inset, while it is open.
+  const insets = useSafeAreaInsets();
   const { user, updateUser } = useAuth();
 
   const initialDob = user?.dateOfBirth ? String(user.dateOfBirth).slice(0, 10) : "";
@@ -95,7 +97,7 @@ export default function EditProfile() {
       setPhotoUrl(uploaded.url);
     } catch (error) {
       setLocalPhoto(null);
-      alert("Upload failed", error instanceof Error ? error.message : "Couldn't upload that photo. Please try again.");
+      alert("Upload failed", getFriendlyErrorMessage(error));
     } finally {
       setIsUploading(false);
     }
@@ -116,7 +118,7 @@ export default function EditProfile() {
       updateUser(updated);
       router.back();
     } catch (error) {
-      alert("Couldn't save", error instanceof Error ? error.message : "Please try again.");
+      alert("Couldn't save", getFriendlyErrorMessage(error));
     } finally {
       setIsSaving(false);
     }
@@ -127,8 +129,8 @@ export default function EditProfile() {
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
       <ScreenHeader title="Edit profile" />
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <ScrollView
+      <View style={{ flex: 1 }}>
+        <KeyboardAwareScrollView bottomOffset={96}
           contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 24, paddingBottom: 24 }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
@@ -180,7 +182,7 @@ export default function EditProfile() {
                   borderColor: colors.background,
                 }}
               >
-                <Ionicons name="camera" size={15} color={colors.buttonText} />
+                <Icon set="ion" name="camera" size={15} color={colors.buttonText} />
               </View>
             </Pressable>
             <Pressable onPress={pickPhoto} disabled={isUploading} hitSlop={8} style={{ marginTop: 12 }}>
@@ -226,12 +228,15 @@ export default function EditProfile() {
             Birthday
           </Text>
           <BirthdayInput value={dateOfBirth} onChange={onBirthdayChange} />
-        </ScrollView>
+        </KeyboardAwareScrollView>
 
+        {/* Rides on top of the keyboard while it is open. */}
+        <KeyboardStickyView offset={{ opened: insets.bottom }}>
         <View style={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 12 }}>
           <PrimaryButton label="Save changes" icon="checkmark" disabled={!canSave} loading={isSaving} onPress={save} />
         </View>
-      </KeyboardAvoidingView>
+        </KeyboardStickyView>
+      </View>
     </SafeAreaView>
   );
 }

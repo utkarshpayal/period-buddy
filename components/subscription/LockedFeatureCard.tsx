@@ -1,14 +1,9 @@
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
 import { Text, TouchableOpacity, View } from "react-native";
 import { useTheme } from "../theme";
 import type { BillingCycle } from "../../lib/api";
-
-const CYCLE_SUFFIX: Record<BillingCycle, string> = {
-  monthly: "/mo",
-  yearly: "/yr",
-  one_time: " once",
-};
+import { CYCLE_SUFFIX } from "./billing";
+import { LockedFeatureHeading } from "./LockedFeatureHeading";
 
 /**
  * Friendly "this is a premium feature" placeholder — swap this in wherever
@@ -48,28 +43,7 @@ export function LockedFeatureCard({
         borderStyle: "dashed",
       }}
     >
-      <View
-        className="h-14 w-14 items-center justify-center rounded-full"
-        style={{ backgroundColor: colors.gold ?? colors.primary }}
-      >
-        <MaterialCommunityIcons name="lock-outline" size={26} color={colors.buttonText} />
-      </View>
-
-      <Text
-        className="mt-4 text-base font-bold text-center"
-        style={{ color: colors.foreground, fontFamily: fonts.heading }}
-      >
-        {title}
-      </Text>
-
-      {description ? (
-        <Text
-          className="mt-1.5 text-xs text-center leading-5"
-          style={{ color: colors.mutedText, fontFamily: fonts.body }}
-        >
-          {description}
-        </Text>
-      ) : null}
+      <LockedFeatureHeading title={title} description={description} />
 
       <View
         className="mt-5 flex-row items-center rounded-full px-5 py-2.5"

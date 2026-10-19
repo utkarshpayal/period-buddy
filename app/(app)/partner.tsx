@@ -1,11 +1,8 @@
-import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
   RefreshControl,
   ScrollView,
   StatusBar,
@@ -25,14 +22,30 @@ import { useSubscriptionAccess } from "../../hooks/useSubscriptionAccess";
 import { useDataRefresh } from "../../hooks/useDataRefresh";
 import { PaywallModal } from "../../components/subscription/PaywallModal";
 import {
+  getFriendlyErrorMessage,
   isFeatureLockedError,
+  isNetworkError,
   partnerApi,
-  type PartnerMessage,
+  type PartnerPermissions,
   type PartnerProfile,
 } from "../../lib/api";
 import { shareWithAppLink } from "../../lib/share";
 import { useRealtimeSocket, type RealtimeMessage } from "../../hooks/useRealtimeSocket";
+import { usePartnerChat } from "../../hooks/usePartnerChat";
+import { partnerDisplayName, type LocalPartnerMessage } from "../../lib/partnerChat";
 import { useSecureScreen } from "../../lib/screenPrivacy";
+import { LoadingErrorState } from "../../components/LoadingErrorState";
+import { SendStatusLabel } from "../../components/partner-view/SendStatusLabel";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import { Icon } from "../../components/Icon";
+
+const DEFAULT_PERMS: PartnerPermissions = {
+  shareCyclePhase: true,
+  shareSymptoms: false,
+  shareIntimacyLog: false,
+  shareAlerts: true,
+  shareReports: false,
+};
 
 export default function Partner() {
   useSecureScreen("partner");
@@ -43,6 +56,7 @@ export default function Partner() {
 
   const [profile, setProfile] = useState<PartnerProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const [activeTab, setActiveTab] = useState<"info" | "invite" | "access" | "chat">("info");
@@ -53,19 +67,25 @@ export default function Partner() {
   const { hasAccess, refresh: refreshSubscriptionAccess } = useSubscriptionAccess();
   const [inviteCode, setInviteCode] = useState("");
 
-  // Permissions (local mirrors, saved on toggle)
-  const [perms, setPerms] = useState({
-    shareCyclePhase: true,
-    shareSymptoms: false,
-    shareIntimacyLog: false,
-    shareAlerts: true,
-    shareReports: false,
-  });
+  // Permissions (local mirrors, saved on toggle). Writes go out one at a
+  // time, newest state last, so a slow earlier request can never land after
+  // a later one and re-enable sharing the user just turned off.
+  const [perms, setPerms] = useState(DEFAULT_PERMS);
+  const permsRef = useRef(DEFAULT_PERMS); // what the switches show
+  const savedPermsRef = useRef(DEFAULT_PERMS); // what the server last confirmed
+  const permSeqRef = useRef(0);
+  const permWritesInFlightRef = useRef(0);
+  const permChainRef = useRef<Promise<void>>(Promise.resolve());
 
   // Chat
-  const [chatMessages, setChatMessages] = useState<PartnerMessage[]>([]);
+  const [chatMessages, setChatMessages] = useState<LocalPartnerMessage[]>([]);
   const [typedMessage, setTypedMessage] = useState("");
-  const [sendingMessage, setSendingMessage] = useState(false);
+  const {
+    loadMessages,
+    sendMessage,
+    retryMessage,
+    receiveMessage,
+  } = usePartnerChat({ setMessages: setChatMessages, onLocked: () => setPaywallVisible(true) });
 
   const softTints = getSoftTints(colors);
 
@@ -73,30 +93,23 @@ export default function Partner() {
     try {
       const p = await partnerApi.getProfile();
       setProfile(p);
+      setLoadError(null);
       if (p.permissions) {
-        setPerms({
-          shareCyclePhase: p.permissions.shareCyclePhase ?? true,
-          shareSymptoms: p.permissions.shareSymptoms ?? false,
-          shareIntimacyLog: p.permissions.shareIntimacyLog ?? false,
-          shareAlerts: p.permissions.shareAlerts ?? true,
-          shareReports: p.permissions.shareReports ?? false,
-        });
+        const serverPerms = { ...DEFAULT_PERMS, ...p.permissions };
+        savedPermsRef.current = serverPerms;
+        // Don't overwrite switches whose save is still on its way.
+        if (permWritesInFlightRef.current === 0) {
+          permsRef.current = serverPerms;
+          setPerms(serverPerms);
+        }
       }
       if (p.inviteCode) setInviteCode(p.inviteCode);
-    } catch {
-      // fail silently
+    } catch (err) {
+      // Shown only while there's no profile yet; a failed background refresh
+      // keeps what's on screen.
+      setLoadError(err);
     } finally {
       setLoading(false);
-    }
-  }, []);
-
-  const loadMessages = useCallback(async () => {
-    try {
-      const msgs = await partnerApi.getMessages();
-      setChatMessages(msgs);
-      setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: false }), 100);
-    } catch {
-      // keep empty
     }
   }, []);
 
@@ -133,44 +146,19 @@ export default function Partner() {
       (data: RealtimeMessage) => {
         if (!partnerChatRoom) return;
         if (data.type === "message" && data.room === partnerChatRoom && data.message) {
-          setChatMessages((prev) => {
-            const next = [...prev];
-            let found = false;
-            for (let i = 0; i < next.length; i++) {
-              const m = next[i];
-              if (m._id === data.message._id) {
-                found = true;
-                break;
-              }
-              const isOptimisticMatch =
-                !m._id &&
-                m.sender === data.message.sender &&
-                m.text === data.message.text;
-
-              const isTimeMatch =
-                m.sender === data.message.sender &&
-                m.text === data.message.text &&
-                m.sentAt &&
-                data.message.sentAt &&
-                Math.abs(new Date(m.sentAt).getTime() - new Date(data.message.sentAt).getTime()) < 5000;
-
-              if (isOptimisticMatch || isTimeMatch) {
-                next[i] = data.message;
-                found = true;
-                break;
-              }
-            }
-            if (!found) {
-              next.push(data.message);
-            }
-            return next;
-          });
-          setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 100);
+          receiveMessage(data.message);
         }
       },
       // Deliberately narrow: only re-bind on room identity changes, not every
       // `profile` mutation (e.g. incoming messages).
-      [partnerChatRoom],
+      [partnerChatRoom, receiveMessage],
+    ),
+    // Back after a drop: fetch what arrived while the socket was down.
+    onConnectionChange: useCallback(
+      (open: boolean) => {
+        if (open) loadMessages();
+      },
+      [loadMessages],
     ),
     rooms: partnerChatRoom ? [partnerChatRoom] : [],
   });
@@ -204,7 +192,7 @@ export default function Partner() {
       if (isFeatureLockedError(err)) {
         setPaywallVisible(true);
       } else {
-        alert("Error", err instanceof Error ? err.message : "Failed to generate code");
+        alert("Couldn't generate a code", getFriendlyErrorMessage(err));
       }
     } finally {
       setGeneratingCode(false);
@@ -228,15 +216,31 @@ export default function Partner() {
   };
 
 
-  const updatePerm = async (key: keyof typeof perms, value: boolean) => {
-    const next = { ...perms, [key]: value };
+  const updatePerm = (key: keyof PartnerPermissions, value: boolean) => {
+    const next = { ...permsRef.current, [key]: value };
+    permsRef.current = next;
     setPerms(next);
-    try {
-      await partnerApi.updatePermissions(next);
-    } catch {
-      // revert on failure
-      setPerms(perms);
-    }
+    const seq = ++permSeqRef.current;
+    permWritesInFlightRef.current += 1;
+    permChainRef.current = permChainRef.current.then(async () => {
+      try {
+        // A newer toggle is queued behind this one and sends the full latest
+        // state, this change included.
+        if (seq !== permSeqRef.current) return;
+        const sent = permsRef.current;
+        await partnerApi.updatePermissions(sent);
+        savedPermsRef.current = sent;
+      } catch (err) {
+        // Only the newest write rolls back; an older failure is superseded.
+        if (seq === permSeqRef.current) {
+          permsRef.current = savedPermsRef.current;
+          setPerms(savedPermsRef.current);
+          alert("Couldn't update sharing", getFriendlyErrorMessage(err));
+        }
+      } finally {
+        permWritesInFlightRef.current -= 1;
+      }
+    });
   };
 
   const handleDisconnect = () => {
@@ -258,7 +262,7 @@ export default function Partner() {
               setChatMessages([]);
               setActiveTab("invite");
             } catch (err) {
-              alert("Error", err instanceof Error ? err.message : "Failed to disconnect partner");
+              alert("Couldn't disconnect", getFriendlyErrorMessage(err));
             }
           },
         },
@@ -266,30 +270,14 @@ export default function Partner() {
     );
   };
 
-  const handleSendMessage = async () => {
-    if (!typedMessage.trim() || sendingMessage) return;
-    const text = typedMessage.trim();
+  const handleSendMessage = () => {
+    if (!typedMessage.trim()) return;
+    sendMessage(typedMessage);
     setTypedMessage("");
-    setSendingMessage(true);
-
-    // Optimistic
-    setChatMessages((prev) => [...prev, { sender: "user", text, sentAt: new Date().toISOString() }]);
-    setTimeout(() => chatScrollRef.current?.scrollToEnd({ animated: true }), 50);
-
-    try {
-      await partnerApi.sendMessage(text);
-    } catch {
-      // stays optimistically
-    } finally {
-      setSendingMessage(false);
-    }
   };
 
   const isConnected = profile?.isConnected ?? false;
-  const partnerName =
-    profile?.partnerId && typeof profile.partnerId === "object"
-      ? [profile.partnerId.firstName, profile.partnerId.lastName].filter(Boolean).join(" ") || "Your Partner"
-      : "Your Partner";
+  const partnerName = partnerDisplayName(profile) ?? "Your Partner";
 
   return (
     <>
@@ -297,9 +285,9 @@ export default function Partner() {
 
       <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          behavior="padding"
           className="flex-1"
-          keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
+          keyboardVerticalOffset={8}
         >
         <ScreenHeader
           title="Partner Sync"
@@ -368,6 +356,10 @@ export default function Partner() {
           className="flex-1"
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
+          // The thread grows at the bottom: keep the newest message in view.
+          onContentSizeChange={() => {
+            if (activeTab === "chat") chatScrollRef.current?.scrollToEnd({ animated: false });
+          }}
           refreshControl={
             // Not on the chat tab — a pull there would fight the auto-scroll.
             activeTab === "chat" ? undefined : (
@@ -379,12 +371,25 @@ export default function Partner() {
             {/* Until the first profile fetch resolves, don't render the
                 (default "not connected") tab content — it would flash the
                 invite flow at an already-connected user. */}
-            {loading && !profile ? (
-              <View className="gap-4">
-                <SkeletonBlock width="100%" height={72} radius={16} />
-                <SkeletonCard />
-                <SkeletonCard />
-              </View>
+            {!profile ? (
+              <LoadingErrorState
+                loading={loading}
+                error={loadError ? getFriendlyErrorMessage(loadError) : null}
+                offline={isNetworkError(loadError)}
+                onRetry={() => {
+                  setLoading(true);
+                  load();
+                }}
+                skeleton={
+                  <View className="gap-4">
+                    <SkeletonBlock width="100%" height={72} radius={16} />
+                    <SkeletonCard />
+                    <SkeletonCard />
+                  </View>
+                }
+              >
+                {null}
+              </LoadingErrorState>
             ) : (
             <>
             {/* ── OVERVIEW ── */}
@@ -413,7 +418,7 @@ export default function Partner() {
                     style={{ backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
                   >
                     <View className="p-3 rounded-2xl mr-4" style={{ backgroundColor: card.bg }}>
-                      <Ionicons name={card.icon as any} size={20} color={card.color} />
+                      <Icon set="ion" name={card.icon as any} size={20} color={card.color} />
                     </View>
                     <View className="flex-1">
                       <Text className="text-sm font-black tracking-tight" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
@@ -448,7 +453,7 @@ export default function Partner() {
                   style={{ backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
                 >
                   <View className="p-4 rounded-2xl mb-4" style={{ backgroundColor: softTints.pink }}>
-                    <MaterialCommunityIcons name="heart-flash" size={32} color={colors.primary} />
+                    <Icon set="mci" name="heart-flash" size={32} color={colors.primary} />
                   </View>
                   <Text className="text-base font-black tracking-tight" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
                     Invite Your Partner
@@ -534,7 +539,7 @@ export default function Partner() {
                   className="flex-row items-start p-3.5 rounded-2xl border gap-2.5"
                   style={{ backgroundColor: softTints.pink, borderColor: colors.border }}
                 >
-                  <Ionicons name="shield-checkmark-outline" size={15} color={colors.primary} style={{ marginTop: 1 }} />
+                  <Icon set="ion" name="shield-checkmark-outline" size={15} color={colors.primary} style={{ marginTop: 1 }} />
                   <Text className="flex-1 text-xs font-semibold leading-4" style={{ color: colors.foreground, fontFamily: fonts.body }}>
                     You&apos;re in control — change these anytime, and disconnecting removes access immediately.
                   </Text>
@@ -596,7 +601,7 @@ export default function Partner() {
               <View className="gap-4 pb-28">
                 {!isConnected ? (
                   <View className="items-center py-16">
-                    <MaterialCommunityIcons name="account-heart-outline" size={48} color={colors.mutedText} />
+                    <Icon set="mci" name="account-heart-outline" size={48} color={colors.mutedText} />
                     <Text className="mt-4 text-sm font-bold text-center" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
                       No partner connected
                     </Text>
@@ -613,7 +618,7 @@ export default function Partner() {
                   </View>
                 ) : chatMessages.length === 0 ? (
                   <View className="items-center py-12">
-                    <MaterialCommunityIcons name="chat-outline" size={40} color={colors.mutedText} />
+                    <Icon set="mci" name="chat-outline" size={40} color={colors.mutedText} />
                     <Text className="mt-3 text-xs text-center" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                       No messages yet. Say hello! 👋
                     </Text>
@@ -622,20 +627,23 @@ export default function Partner() {
                   chatMessages.map((msg, i) => {
                     const isPartner = msg.sender === "partner";
                     return (
-                      <View
-                        key={msg._id ?? i}
-                        className={`max-w-[80%] p-4 rounded-2xl ${isPartner ? "self-start rounded-tl-none border" : "self-end rounded-tr-none"}`}
-                        style={{
-                          backgroundColor: isPartner ? colors.surface : colors.primaryDark,
-                          borderColor: isPartner ? colors.border : undefined,
-                        }}
-                      >
-                        <Text
-                          className="text-xs font-medium leading-5"
-                          style={{ color: isPartner ? colors.foreground : "#FFFFFF", fontFamily: fonts.body }}
+                      <View key={msg.localId ?? msg._id ?? i} className={isPartner ? "self-start max-w-[80%]" : "self-end items-end max-w-[80%]"}>
+                        <View
+                          className={`p-4 rounded-2xl ${isPartner ? "rounded-tl-none border" : "rounded-tr-none"}`}
+                          style={{
+                            backgroundColor: isPartner ? colors.surface : colors.primaryDark,
+                            borderColor: isPartner ? colors.border : undefined,
+                            opacity: msg.status === "failed" ? 0.6 : 1,
+                          }}
                         >
-                          {msg.text}
-                        </Text>
+                          <Text
+                            className="text-xs font-medium leading-5"
+                            style={{ color: isPartner ? colors.foreground : "#FFFFFF", fontFamily: fonts.body }}
+                          >
+                            {msg.text}
+                          </Text>
+                        </View>
+                        <SendStatusLabel status={msg.status} onRetry={() => retryMessage(msg)} />
                       </View>
                     );
                   })
@@ -669,18 +677,14 @@ export default function Partner() {
               returnKeyType="send"
             />
             <TouchableOpacity
-              disabled={!typedMessage.trim() || sendingMessage}
+              disabled={!typedMessage.trim()}
               onPress={handleSendMessage}
               accessibilityRole="button"
               accessibilityLabel="Send message"
               className="p-2.5 rounded-full items-center justify-center"
               style={{ backgroundColor: typedMessage.trim() ? colors.primary : colors.border }}
             >
-              {sendingMessage ? (
-                <ActivityIndicator size="small" color={colors.buttonText} />
-              ) : (
-                <Feather name="arrow-up" size={16} color={typedMessage.trim() ? colors.buttonText : colors.mutedText} />
-              )}
+              <Icon set="feather" name="arrow-up" size={16} color={typedMessage.trim() ? colors.buttonText : colors.mutedText} />
             </TouchableOpacity>
           </View>
         )}

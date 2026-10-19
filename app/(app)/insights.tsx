@@ -1,45 +1,110 @@
-import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import React from "react";
 import { RefreshControl, ScrollView, StatusBar, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { EmptyState } from "../../components/EmptyState";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
-import { ScreenHeader } from "../../components/ScreenHeader";
-import { SkeletonCard } from "../../components/Skeleton";
+import { ScreenHeader, SectionHeader } from "../../components/ScreenHeader";
+import { SkeletonBlock } from "../../components/Skeleton";
 import { useTheme } from "../../components/theme";
-import { getHeroGradient, getShadow, getSoftTints } from "../../components/ui-tokens";
+import { getShadow } from "../../components/ui-tokens";
 import { useAsyncLoad } from "../../hooks/useAsyncLoad";
 import { insightsApi } from "../../lib/api";
+import type { CyclePhase } from "../../lib/cycle";
+import { isCyclePhase, PHASE_COPY } from "../../lib/cycleCopy";
+import { useSecureScreen } from "../../lib/screenPrivacy";
+import { Icon } from "../../components/Icon";
 
 type DailyInsights = Awaited<ReturnType<typeof insightsApi.getDaily>>;
+type IconName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
 
-const PHASE_LABELS: Record<string, string> = {
-  period: "Menstrual",
-  follicular: "Follicular",
-  ovulation: "Ovulatory",
-  luteal: "Luteal",
+const PHASE_ICONS: Record<CyclePhase, IconName> = {
+  period: "water-outline",
+  follicular: "sprout-outline",
+  ovulation: "flower-outline",
+  luteal: "moon-waning-crescent",
 };
 
-function SuggestionChips({
+function useCardStyle() {
+  const { colors, isDark } = useTheme();
+  return {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 24,
+    ...getShadow(colors, isDark),
+  };
+}
+
+function TintIcon({ name, color, bg, size = 36 }: { name: IconName; color: string; bg: string; size?: number }) {
+  return (
+    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: bg, alignItems: "center", justifyContent: "center" }}>
+      <Icon set="mci" name={name} size={Math.round(size * 0.5)} color={color} />
+    </View>
+  );
+}
+
+/** One "how today may feel" row (hormones / mood / energy / skin). */
+function InsightRow({
+  icon,
+  title,
+  body,
+  color,
+  bg,
+  first,
+}: {
+  icon: IconName;
+  title: string;
+  body: string;
+  color: string;
+  bg: string;
+  first: boolean;
+}) {
+  const { colors, fonts } = useTheme();
+  return (
+    <View style={{ flexDirection: "row", gap: 14, paddingVertical: 16, borderTopWidth: first ? 0 : 1, borderTopColor: colors.border }}>
+      <TintIcon name={icon} color={color} bg={bg} />
+      <View style={{ flex: 1 }}>
+        <Text numberOfLines={2} style={{ flexShrink: 1, fontSize: 15, lineHeight: 21, fontWeight: "700", color: colors.foreground, fontFamily: fonts.heading }}>
+          {title}
+        </Text>
+        <Text style={{ marginTop: 4, fontSize: 15, lineHeight: 22, fontWeight: "400", color: colors.foreground, fontFamily: fonts.body }}>
+          {body}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+/** A titled card of short suggestions, each a bullet row with a small icon. */
+function SuggestionGroup({
+  icon,
+  title,
   items,
+  color,
   bg,
 }: {
+  icon: IconName;
+  title: string;
   items: string[];
+  color: string;
   bg: string;
 }) {
   const { colors, fonts } = useTheme();
-  if (!items.length) return null;
+  const card = useCardStyle();
   return (
-    <View className="flex-row flex-wrap gap-2 mt-3">
+    <View style={[card, { padding: 18 }]}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 6 }}>
+        <TintIcon name={icon} color={color} bg={bg} size={32} />
+        <Text accessibilityRole="header" numberOfLines={1} style={{ flexShrink: 1, fontSize: 15, fontWeight: "700", color: colors.foreground, fontFamily: fonts.heading }}>
+          {title}
+        </Text>
+      </View>
       {items.map((item, idx) => (
-        <View
-          key={`${item}-${idx}`}
-          className="rounded-full px-3 py-1.5"
-          style={{ backgroundColor: bg }}
-        >
-          {/* Text uses foreground, not the accent `color`: the chip's bg is a
-              soft tint of that same accent, so accent-on-tint was near-invisible. */}
-          <Text className="text-xs font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
+        <View key={`${item}-${idx}`} style={{ flexDirection: "row", alignItems: "flex-start", gap: 10, paddingTop: 8 }}>
+          <Icon set="mci" name="circle-medium" size={18} color={color} style={{ marginTop: 2 }} />
+          <Text style={{ flex: 1, fontSize: 15, lineHeight: 22, fontWeight: "400", color: colors.foreground, fontFamily: fonts.body }}>
             {item}
           </Text>
         </View>
@@ -48,49 +113,45 @@ function SuggestionChips({
   );
 }
 
-function InsightCard({
-  icon,
-  title,
-  body,
-  color,
-  bg,
-}: {
-  icon: React.ComponentProps<typeof Feather>["name"];
-  title: string;
-  body: string;
-  color: string;
-  bg: string;
-}) {
-  const { colors, isDark, fonts } = useTheme();
-  if (!body) return null;
+function InsightsSkeleton() {
+  const card = useCardStyle();
   return (
-    <View
-      className="border p-5 mb-3.5"
-      style={{
-        backgroundColor: colors.surface,
-        borderColor: colors.border,
-        borderRadius: 24,
-        ...getShadow(colors, isDark),
-      }}
-    >
-      <View className="flex-row items-center gap-2.5 mb-2">
-        <View className="p-2 rounded-xl" style={{ backgroundColor: bg }}>
-          <Feather name={icon} size={15} color={color} />
+    <View style={{ paddingHorizontal: 24, paddingTop: 20, gap: 28 }}>
+      <View style={[card, { padding: 18, gap: 12 }]}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+          <SkeletonBlock width={44} height={44} radius={22} />
+          <View style={{ flex: 1, gap: 8 }}>
+            <SkeletonBlock width="60%" height={20} />
+            <SkeletonBlock width="35%" height={12} />
+          </View>
         </View>
-        <Text className="text-xs font-black uppercase tracking-wide" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-          {title}
-        </Text>
+        <SkeletonBlock width="100%" height={14} />
+        <SkeletonBlock width="85%" height={14} />
       </View>
-      <Text className="text-[13px] leading-5 font-medium" style={{ color: colors.foreground, fontFamily: fonts.body }}>
-        {body}
-      </Text>
+      <View style={{ gap: 12 }}>
+        <SkeletonBlock width="40%" height={18} />
+        <View style={[card, { paddingHorizontal: 18, paddingVertical: 4 }]}>
+          {[0, 1, 2].map((i) => (
+            <View key={i} style={{ flexDirection: "row", gap: 14, paddingVertical: 16 }}>
+              <SkeletonBlock width={36} height={36} radius={18} />
+              <View style={{ flex: 1, gap: 8 }}>
+                <SkeletonBlock width="45%" height={14} />
+                <SkeletonBlock width="100%" height={12} />
+                <SkeletonBlock width="75%" height={12} />
+              </View>
+            </View>
+          ))}
+        </View>
+      </View>
     </View>
   );
 }
 
 export default function DailyInsightsScreen() {
+  useSecureScreen("insights");
   const { colors, isDark, fonts } = useTheme();
-  const softTints = getSoftTints(colors);
+  const router = useRouter();
+  const card = useCardStyle();
 
   const { data, loading, refreshing, error, offline, reload } = useAsyncLoad<DailyInsights>(
     () => insightsApi.getDaily(),
@@ -98,184 +159,149 @@ export default function DailyInsightsScreen() {
     { refreshOn: ["cycle"] },
   );
 
-  const phaseLabel = data?.phase ? PHASE_LABELS[data.phase] ?? data.phase : null;
+  const logToday = () => router.push({ pathname: "/(app)/(dashboard)/tracker", params: { log: "today" } });
+
+  // Phase copy only for the four known phases, and never in pregnancy mode;
+  // anything else (no settings yet, "late", …) gets a neutral "Today" hero.
+  const phase: CyclePhase | null = data && !data.pregnancyMode && isCyclePhase(data.phase) ? data.phase : null;
+  const phaseTone: Record<CyclePhase, { solid: string; soft: string }> = {
+    period: { solid: colors.rose, soft: colors.roseLight },
+    follicular: { solid: colors.mint, soft: colors.mintLight },
+    ovulation: { solid: colors.lavender, soft: colors.lavenderLight },
+    luteal: { solid: colors.gold, soft: colors.goldLight },
+  };
+  const tone = phase ? phaseTone[phase] : { solid: colors.primaryDark, soft: colors.primaryLight };
+
+  const insights = data
+    ? [
+        { key: "hormones", icon: "pulse" as const, title: "Your hormones today", body: data.hormoneExplanation, color: colors.lavender, bg: colors.lavenderLight },
+        { key: "mood", icon: "emoticon-happy-outline" as const, title: "Mood", body: data.moodInsight, color: colors.sky, bg: colors.skyLight },
+        { key: "energy", icon: "lightning-bolt-outline" as const, title: "Energy", body: data.energyInsight, color: colors.gold, bg: colors.goldLight },
+        { key: "skin", icon: "face-woman-outline" as const, title: "Skin", body: data.skinInsight, color: colors.rose, bg: colors.roseLight },
+      ].filter((i) => !!i.body)
+    : [];
+
+  const suggestions = data
+    ? [
+        { key: "exercise", icon: "walk" as const, title: "Exercise", items: data.exerciseSuggestions ?? [], color: colors.mint, bg: colors.mintLight },
+        { key: "food", icon: "food-apple-outline" as const, title: "Food and drink", items: data.nutritionSuggestions ?? [], color: colors.gold, bg: colors.goldLight },
+        { key: "sleep", icon: "weather-night" as const, title: "Sleep", items: data.sleepSuggestions ?? [], color: colors.lavender, bg: colors.lavenderLight },
+        { key: "selfcare", icon: "heart-outline" as const, title: "Self-care", items: data.wellnessRecommendations ?? [], color: colors.rose, bg: colors.roseLight },
+      ].filter((s) => s.items.length > 0)
+    : [];
+
+  const nothingYet = !!data && !data.dailySummary && insights.length === 0 && suggestions.length === 0;
+  const summary = data?.dailySummary || (phase ? PHASE_COPY[phase].note : "");
 
   return (
     <>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
       <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
-        <ScreenHeader title="Daily Insights" />
+        <ScreenHeader title="Daily insights" />
 
         <LoadingErrorState
           loading={loading}
           error={error}
           offline={offline}
           onRetry={() => reload()}
-          loadingLabel="Building today's insights…"
-          errorTitle="Couldn't load insights"
-          skeleton={
-            <View className="gap-4 px-6 pt-4">
-              <SkeletonCard />
-              <SkeletonCard />
-              <SkeletonCard />
-            </View>
-          }
+          errorTitle="Couldn't load today's insights"
+          skeleton={<InsightsSkeleton />}
         >
-          {data ? (
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 60 }}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={() => reload(true)} tintColor={colors.primary} />
-            }
-          >
-            <View className="mx-6 mt-5">
+          {!data ? (
+            <EmptyState
+              icon="lightbulb-on-outline"
+              title="No insights yet"
+              message="Log how you feel today and we'll build your daily briefing."
+              actionLabel="Log today"
+              onAction={logToday}
+            />
+          ) : (
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 20, paddingBottom: 60, gap: 28 }}
+              refreshControl={
+                <RefreshControl refreshing={refreshing} onRefresh={() => reload(true)} tintColor={colors.primary} />
+              }
+            >
               {data.pregnancyMode ? (
-                <View
-                  className="p-5 border flex-row items-start gap-4 mb-5"
-                  style={{
-                    backgroundColor: softTints.mint,
-                    borderColor: colors.border,
-                    borderRadius: 24,
-                  }}
-                >
-                  <MaterialCommunityIcons name="baby-face-outline" size={22} color={colors.success} />
-                  <View className="flex-1">
-                    <Text className="text-xs font-black uppercase" style={{ color: colors.success, fontFamily: fonts.heading }}>
-                      Pregnancy mode
-                    </Text>
-                    <Text className="mt-1 text-xs leading-5 font-medium" style={{ color: colors.foreground, fontFamily: fonts.body }}>
-                      Phase insights are paused in pregnancy mode.
+                <View style={[card, { padding: 16, flexDirection: "row", alignItems: "center", gap: 14 }]}>
+                  <TintIcon name="baby-face-outline" color={colors.success} bg={colors.successLight} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 15, fontWeight: "700", color: colors.foreground, fontFamily: fonts.heading }}>Pregnancy mode is on</Text>
+                    <Text style={{ marginTop: 2, fontSize: 14, lineHeight: 20, color: colors.foreground, fontFamily: fonts.body }}>
+                      Cycle phase tips are paused while you&apos;re pregnant.
                     </Text>
                   </View>
                 </View>
               ) : null}
 
-              {/* Phase pill row */}
-              <View className="flex-row flex-wrap gap-2 mb-4">
-                {(["period", "follicular", "ovulation", "luteal"] as const).map((phase) => {
-                  const active = data.phase === phase;
-                  return (
-                    <View
-                      key={phase}
-                      className="rounded-full px-3.5 py-2"
-                      style={{ backgroundColor: active ? colors.primary : colors.surface }}
-                    >
-                      <Text
-                        className="text-xs font-bold"
-                        style={{ color: active ? colors.buttonText : colors.mutedText, fontFamily: fonts.body }}
-                      >
-                        {PHASE_LABELS[phase]}
+              {/* Today hero: surface underneath so the (translucent in dark mode) tint reads the same on both themes. */}
+              <View style={[card, { overflow: "hidden" }]}>
+                <View style={{ backgroundColor: tone.soft, padding: 18 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+                    <TintIcon name={phase ? PHASE_ICONS[phase] : "white-balance-sunny"} color={tone.solid} bg={colors.surface} size={44} />
+                    <View style={{ flex: 1 }}>
+                      <Text maxFontSizeMultiplier={1.4} style={{ fontSize: 11.5, fontWeight: "800", letterSpacing: 0.6, color: colors.foreground, fontFamily: fonts.heading }}>
+                        TODAY
                       </Text>
-                    </View>
-                  );
-                })}
-              </View>
-
-              {/* Summary hero */}
-              <View
-                className="border overflow-hidden mb-5"
-                style={{ borderColor: colors.border, borderRadius: 22, ...getShadow(colors, isDark) }}
-              >
-                <LinearGradient colors={getHeroGradient(colors, isDark) as [string, string, string]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} className="p-[18px]">
-                  <Text className="text-xs font-bold tracking-widest uppercase mb-1" style={{ color: "#FFFFFF", opacity: 0.85, fontFamily: fonts.heading }}>
-                    {phaseLabel ? `${phaseLabel} phase` : "Today"}
-                  </Text>
-                  <Text className="text-[13.5px] font-semibold leading-6" style={{ color: "#FFFFFF", fontFamily: fonts.body }}>
-                    {data.dailySummary || "No summary available yet — keep logging to unlock a fuller picture."}
-                  </Text>
-                </LinearGradient>
-              </View>
-
-              <Text className="text-sm font-black mb-2.5 px-1" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-                Picked for you
-              </Text>
-
-              <InsightCard
-                icon="activity"
-                title="Hormones today"
-                body={data.hormoneExplanation}
-                color={colors.accent}
-                bg={softTints.mint}
-              />
-              <InsightCard
-                icon="smile"
-                title="Mood"
-                body={data.moodInsight}
-                color={colors.secondary}
-                bg={softTints.lavender}
-              />
-              <InsightCard
-                icon="zap"
-                title="Energy"
-                body={data.energyInsight}
-                color={colors.warning}
-                bg={softTints.amber}
-              />
-              <InsightCard
-                icon="sun"
-                title="Skin"
-                body={data.skinInsight}
-                color={colors.primary}
-                bg={softTints.pink}
-              />
-
-              {/* Suggestion lists */}
-              {[
-                { title: "Exercise", icon: "activity" as const, items: data.exerciseSuggestions, color: colors.success, bg: softTints.emerald },
-                { title: "Nutrition", icon: "coffee" as const, items: data.nutritionSuggestions, color: colors.accent, bg: softTints.mint },
-                { title: "Sleep", icon: "moon" as const, items: data.sleepSuggestions, color: colors.secondary, bg: softTints.lavender },
-                { title: "Wellness", icon: "heart" as const, items: data.wellnessRecommendations, color: colors.primary, bg: softTints.pink },
-              ].map((section) =>
-                section.items?.length ? (
-                  <View
-                    key={section.title}
-                    className="border p-5 mb-3.5"
-                    style={{
-                      backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                      borderRadius: 24,
-                      ...getShadow(colors, isDark),
-                    }}
-                  >
-                    <View className="flex-row items-center gap-2.5">
-                      <View className="p-2 rounded-xl" style={{ backgroundColor: section.bg }}>
-                        <Feather name={section.icon} size={15} color={section.color} />
-                      </View>
-                      <Text className="text-xs font-black uppercase tracking-wide" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-                        {section.title} suggestions
+                      <Text accessibilityRole="header" numberOfLines={2} style={{ flexShrink: 1, fontSize: 22, lineHeight: 28, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
+                        {phase ? PHASE_COPY[phase].title : "Your day"}
                       </Text>
+                      {phase ? (
+                        <Text style={{ fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}>{PHASE_COPY[phase].medical}</Text>
+                      ) : null}
                     </View>
-                    <SuggestionChips items={section.items} bg={section.bg} />
                   </View>
-                ) : null,
-              )}
+                  {summary ? (
+                    <Text style={{ marginTop: 14, fontSize: 16, lineHeight: 24, fontWeight: "500", color: colors.foreground, fontFamily: fonts.body }}>
+                      {summary}
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
 
-              {!data.dailySummary &&
-              !data.hormoneExplanation &&
-              !data.moodInsight &&
-              !data.energyInsight &&
-              !data.skinInsight &&
-              !data.exerciseSuggestions?.length &&
-              !data.nutritionSuggestions?.length &&
-              !data.sleepSuggestions?.length &&
-              !data.wellnessRecommendations?.length ? (
-                <View
-                  className="border p-6 items-center mb-3.5"
-                  style={{ backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 24 }}
-                >
-                  <Ionicons name="bulb-outline" size={28} color={colors.mutedText} />
-                  <Text className="mt-3 text-sm font-bold text-center" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-                    Nothing personalized yet
-                  </Text>
-                  <Text className="mt-1.5 text-xs text-center leading-5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                    Log a few days in your tracker so we can tailor today&apos;s insights to you.
-                  </Text>
+              {nothingYet ? (
+                <View style={card}>
+                  <EmptyState
+                    compact
+                    icon="lightbulb-on-outline"
+                    title="Nothing personal yet"
+                    message="Log a few days in your tracker so we can shape today's insights around you."
+                    actionLabel="Log today"
+                    onAction={logToday}
+                  />
                 </View>
               ) : null}
-            </View>
-          </ScrollView>
-          ) : null}
+
+              {insights.length ? (
+                <View>
+                  <SectionHeader title="Picked for you" subtitle="How today may feel" />
+                  <View style={[card, { paddingHorizontal: 18, paddingVertical: 2 }]}>
+                    {insights.map((i, idx) => (
+                      <InsightRow key={i.key} icon={i.icon} title={i.title} body={i.body} color={i.color} bg={i.bg} first={idx === 0} />
+                    ))}
+                  </View>
+                </View>
+              ) : null}
+
+              {suggestions.length ? (
+                <View>
+                  <SectionHeader title="Ideas for today" subtitle="Small things that may help" />
+                  <View style={{ gap: 14 }}>
+                    {suggestions.map((s) => (
+                      <SuggestionGroup key={s.key} icon={s.icon} title={s.title} items={s.items} color={s.color} bg={s.bg} />
+                    ))}
+                  </View>
+                </View>
+              ) : null}
+
+              {!nothingYet ? (
+                <Text style={{ fontSize: 13, lineHeight: 19, textAlign: "center", color: colors.mutedText, fontFamily: fonts.body }}>
+                  Based on your logs and today&apos;s cycle phase · Updated today · General guidance, not medical advice.
+                </Text>
+              ) : null}
+            </ScrollView>
+          )}
         </LoadingErrorState>
       </SafeAreaView>
     </>

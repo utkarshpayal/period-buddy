@@ -1,8 +1,8 @@
-import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useRef, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import { checkBirthday } from "../lib/onboarding";
 import { useTheme } from "./theme";
+import { Icon } from "./Icon";
 
 type Segment = "day" | "month" | "year";
 
@@ -203,7 +203,7 @@ export function BirthdayInput({ value, onChange, autoFocus }: BirthdayInputProps
               backgroundColor: colors.successLight,
             }}
           >
-            <Ionicons name="checkmark-circle" size={16} color={colors.success} />
+            <Icon set="ion" name="checkmark-circle" size={16} color={colors.success} />
             <Text style={{ color: colors.success, fontSize: 13.5, fontWeight: "800", fontFamily: fonts.body }}>
               You&apos;re {check.age}
             </Text>
@@ -217,7 +217,7 @@ export function BirthdayInput({ value, onChange, autoFocus }: BirthdayInputProps
           </Text>
         ) : (
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-            <Ionicons name="lock-closed" size={12} color={colors.mutedText} />
+            <Icon set="ion" name="lock-closed" size={12} color={colors.mutedText} />
             <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body }}>
               Private. Never shown on your profile.
             </Text>

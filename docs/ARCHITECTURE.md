@@ -86,7 +86,7 @@ invited; its role has to be changed in the database.
   partner's read-only view, and every feature is one screen under `(app)/`.
   Home stays short; features are grouped behind three hubs (Care & Insights,
   Wellness & Support, Explore).
-- **Data layer:** one file, `lib/api.ts`, owns every HTTP call (see
+- **Data layer:** one file, `lib/api/`, owns every HTTP call (see
   [API_REFERENCE.md](./API_REFERENCE.md)). Every failure is a typed
   `ApiError`; a 401 signs the user out globally; writes emit data-change
   topics so other mounted screens refetch (`lib/data-sync.ts`).
@@ -149,7 +149,7 @@ must never claim more than `SECURITY.md` does.
 
 ```
 User taps "Log period"
-  → DayDetailsModal → cycleApi.saveLog()                    (lib/api.ts)
+  → DayDetailsModal → cycleApi.saveLog()                    (lib/api/)
   → POST /api/cycle/log   Authorization: Bearer <jwt>
   → auth middleware: token → live UserSession
   → feature gate: route not gated

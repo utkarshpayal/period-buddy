@@ -1,4 +1,3 @@
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import React, { useEffect, useRef, useState } from "react";
@@ -10,9 +9,9 @@ import Animated, {
   useSharedValue,
   withRepeat,
   withTiming,
-  ZoomIn,
   Easing,
 } from "react-native-reanimated";
+import { alert } from "../../lib/alert";
 import type { DocType } from "../../lib/api";
 import { showPermissionModal } from "../../lib/modal-host";
 import { requestPhotoLibraryAccess } from "../../lib/photoAccess";
@@ -21,14 +20,13 @@ import { useTheme } from "../theme";
 import {
   DOC_TYPE_META,
   DOC_TYPE_ORDER,
-  docTypeAccent,
   fileKind,
-  fileKindStyle,
   formatDateLabel,
   formatFileSize,
   nameWithoutExtension,
   toDateKey,
 } from "./documentMeta";
+import { fileBadge, PageBadge } from "./DocumentCard";
 import { ChoiceChips, DateField, DocumentSheet, FieldLabel, SheetButton } from "./DocumentSheet";
 
 export type PickedFile = {
@@ -70,6 +68,14 @@ export function UploadSheet({
   const [dateKey, setDateKey] = useState("");
   const [calendarVisible, setCalendarVisible] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The title we filled in from the file name, so "Change" can replace it
+  // (but never a title the person typed).
+  const autoTitleRef = useRef("");
+  // A ref, not `phase`: a double tap lands before the re-render.
+  const submittingRef = useRef(false);
+  // The pickers reject when one is already open ("Different document picking
+  // in progress") or the camera fails.
+  const pickingRef = useRef(false);
 
   // Fresh form every time the sheet opens.
   useEffect(() => {
@@ -79,6 +85,7 @@ export function UploadSheet({
     setPhase("source");
     setFile(null);
     setTitle("");
+    autoTitleRef.current = "";
     setDocType("other");
     setDateKey(toDateKey(new Date()));
   }, [visible]);
@@ -91,11 +98,29 @@ export function UploadSheet({
 
   function accept(picked: PickedFile) {
     setFile(picked);
-    setTitle((prev) => prev || nameWithoutExtension(picked.name));
+    const autoTitle = nameWithoutExtension(picked.name);
+    setTitle((prev) => (!prev || prev === autoTitleRef.current ? autoTitle : prev));
+    autoTitleRef.current = autoTitle;
     setPhase("details");
   }
 
-  async function pickCamera() {
+  async function runPicker(pick: () => Promise<void>) {
+    if (pickingRef.current) return;
+    pickingRef.current = true;
+    try {
+      await pick();
+    } catch {
+      alert("Couldn't open that", "Please try again.");
+    } finally {
+      pickingRef.current = false;
+    }
+  }
+
+  const pickCamera = () => runPicker(pickCameraInner);
+  const pickPhoto = () => runPicker(pickPhotoInner);
+  const pickFile = () => runPicker(pickFileInner);
+
+  async function pickCameraInner() {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
       showPermissionModal({
@@ -116,7 +141,7 @@ export function UploadSheet({
     });
   }
 
-  async function pickPhoto() {
+  async function pickPhotoInner() {
     const permission = await requestPhotoLibraryAccess();
     if (!permission.granted) {
       showPermissionModal({
@@ -137,7 +162,7 @@ export function UploadSheet({
     });
   }
 
-  async function pickFile() {
+  async function pickFileInner() {
     const result = await DocumentPicker.getDocumentAsync({
       copyToCacheDirectory: true,
       type: ["application/pdf", "image/*"],
@@ -155,9 +180,15 @@ export function UploadSheet({
   const canSubmit = !!file && !!title.trim() && !!dateKey;
 
   async function submit() {
-    if (!file || !canSubmit || busy) return;
+    if (!file || !canSubmit || submittingRef.current) return;
+    submittingRef.current = true;
     setPhase("uploading");
-    const ok = await onUpload({ file, title: title.trim(), docType, documentDate: dateKey });
+    let ok = false;
+    try {
+      ok = await onUpload({ file, title: title.trim(), docType, documentDate: dateKey });
+    } finally {
+      submittingRef.current = false;
+    }
     if (!ok) {
       setPhase("details");
       return;
@@ -166,23 +197,14 @@ export function UploadSheet({
     closeTimer.current = setTimeout(onClose, 900);
   }
 
-  const sheetTitle = phase === "source" ? "Add a document" : phase === "done" ? "Saved" : "Document details";
-  const sheetSubtitle =
-    phase === "source"
-      ? "PDF or photo · stays private to you"
-      : phase === "uploading"
-        ? "Uploading securely…"
-        : phase === "done"
-          ? "Your document is in your list"
-          : "Name it so it's easy to find";
+  const sheetTitle = phase === "source" ? "Add a document" : phase === "done" ? "Saved" : "Details";
+  const sheetSubtitle = phase === "source" ? "A PDF or a photo of a report, prescription or bill. Only you can see it." : undefined;
 
-  const sources: { key: string; label: string; hint: string; icon: keyof typeof Ionicons.glyphMap; color: string; bg: string; onPress: () => void }[] = [
-    { key: "camera", label: "Camera", hint: "Scan a page", icon: "camera-outline", color: colors.primary, bg: colors.primaryLight, onPress: pickCamera },
-    { key: "photos", label: "Photos", hint: "From gallery", icon: "images-outline", color: colors.sky, bg: colors.skyLight, onPress: pickPhoto },
-    { key: "files", label: "Files", hint: "PDF or image", icon: "folder-open-outline", color: colors.accent, bg: colors.accentLight, onPress: pickFile },
+  const sources: { key: string; label: string; onPress: () => void }[] = [
+    { key: "camera", label: "Take a photo", onPress: pickCamera },
+    { key: "photos", label: "Choose from photos", onPress: pickPhoto },
+    { key: "files", label: "Choose a file", onPress: pickFile },
   ];
-
-  const kind = file ? fileKindStyle(colors, fileKind(file.mimeType)) : null;
 
   return (
     <DocumentSheet
@@ -191,15 +213,11 @@ export function UploadSheet({
       locked={busy}
       title={sheetTitle}
       subtitle={sheetSubtitle}
-      icon={phase === "done" ? "checkmark-circle-outline" : "cloud-upload-outline"}
-      iconColor={phase === "done" ? colors.success : colors.primary}
-      iconBg={phase === "done" ? colors.successLight : colors.primaryLight}
       footer={
         phase === "details" || phase === "uploading" ? (
           <SheetButton
-            label="Upload document"
+            label="Save"
             loadingLabel="Uploading…"
-            icon="cloud-upload-outline"
             onPress={submit}
             disabled={!canSubmit}
             loading={busy}
@@ -208,6 +226,7 @@ export function UploadSheet({
       }
       overlay={
         <CalendarModal
+          title="Document date"
           initialDateKey={dateKey || undefined}
           maximumDate={new Date()}
           onClose={() => setCalendarVisible(false)}
@@ -220,77 +239,48 @@ export function UploadSheet({
       }
     >
       {phase === "source" ? (
-        <Animated.View entering={FadeIn.duration(200)} style={{ flexDirection: "row", gap: 10 }}>
-          {sources.map((source) => (
+        <View style={{ borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: "hidden" }}>
+          {sources.map((source, i) => (
             <TouchableOpacity
               key={source.key}
               onPress={source.onPress}
-              activeOpacity={0.8}
+              activeOpacity={0.6}
               accessibilityRole="button"
-              accessibilityLabel={`${source.label}. ${source.hint}`}
-              style={{
-                flex: 1,
-                alignItems: "center",
-                paddingVertical: 18,
-                paddingHorizontal: 6,
-                borderRadius: 20,
-                backgroundColor: colors.surface,
-                borderWidth: 1,
-                borderColor: colors.border,
-              }}
+              accessibilityLabel={source.label}
+              style={{ height: 52, justifyContent: "center", paddingHorizontal: 16, borderTopWidth: i ? 1 : 0, borderColor: colors.border }}
             >
-              <View style={{ width: 48, height: 48, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: source.bg }}>
-                <Ionicons name={source.icon} size={22} color={source.color} />
-              </View>
-              <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={{ marginTop: 10, fontSize: 15, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>
+              <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={{ fontSize: 15, fontWeight: "500", color: colors.foreground, fontFamily: fonts.body }}>
                 {source.label}
-              </Text>
-              <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={{ marginTop: 1, fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}>
-                {source.hint}
               </Text>
             </TouchableOpacity>
           ))}
-        </Animated.View>
+        </View>
       ) : phase === "done" ? (
-        <View style={{ alignItems: "center", paddingVertical: 24 }}>
-          <Animated.View
-            entering={ZoomIn.duration(320)}
-            style={{ width: 72, height: 72, borderRadius: 36, alignItems: "center", justifyContent: "center", backgroundColor: colors.successLight }}
-          >
-            <Ionicons name="checkmark" size={36} color={colors.success} />
-          </Animated.View>
-          <Text numberOfLines={2} style={{ marginTop: 14, fontSize: 15, fontWeight: "700", textAlign: "center", color: colors.foreground, fontFamily: fonts.body }}>
+        <View style={{ paddingVertical: 8 }}>
+          <Text numberOfLines={2} style={{ fontSize: 15, fontWeight: "600", color: colors.foreground, fontFamily: fonts.body }}>
             {title.trim()}
           </Text>
+          <Text style={{ marginTop: 4, fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}>Added to your documents.</Text>
         </View>
-      ) : file && kind ? (
+      ) : file ? (
         <Animated.View entering={FadeInDown.duration(240)} style={{ gap: 20 }}>
           {/* Picked file */}
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 12,
-              padding: 12,
-              borderRadius: 18,
-              backgroundColor: colors.surface,
-              borderWidth: 1,
-              borderColor: colors.border,
-            }}
-          >
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
             {fileKind(file.mimeType) === "image" ? (
-              <Image source={{ uri: file.uri }} style={{ width: 52, height: 52, borderRadius: 12, backgroundColor: kind.bg }} resizeMode="cover" />
+              <Image
+                source={{ uri: file.uri }}
+                style={{ width: 34, height: 42, borderRadius: 6, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft }}
+                resizeMode="cover"
+              />
             ) : (
-              <View style={{ width: 52, height: 52, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: kind.bg }}>
-                <MaterialCommunityIcons name={kind.icon} size={26} color={kind.color} />
-              </View>
+              <PageBadge label={fileBadge(file.mimeType)} />
             )}
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text numberOfLines={1} style={{ fontSize: 15, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>
+              <Text numberOfLines={1} style={{ fontSize: 15, fontWeight: "600", color: colors.foreground, fontFamily: fonts.body }}>
                 {file.name}
               </Text>
               <Text numberOfLines={1} style={{ fontSize: 13, color: colors.mutedText, fontFamily: fonts.body, marginTop: 1 }}>
-                {[kind.label, formatFileSize(file.size)].filter(Boolean).join(" · ")}
+                {[fileBadge(file.mimeType), formatFileSize(file.size)].filter(Boolean).join(" · ")}
               </Text>
             </View>
             <TouchableOpacity
@@ -299,9 +289,9 @@ export function UploadSheet({
               accessibilityRole="button"
               accessibilityLabel="Choose a different file"
               hitSlop={8}
-              style={{ paddingHorizontal: 12, height: 34, borderRadius: 17, justifyContent: "center", backgroundColor: colors.surfaceSoft, opacity: busy ? 0.4 : 1 }}
+              style={{ opacity: busy ? 0.4 : 1 }}
             >
-              <Text style={{ fontSize: 13, fontWeight: "700", color: colors.primaryDark, fontFamily: fonts.body }}>Change</Text>
+              <Text style={{ fontSize: 14, fontWeight: "600", color: colors.primaryDark, fontFamily: fonts.body }}>Change</Text>
             </TouchableOpacity>
           </View>
 
@@ -319,9 +309,9 @@ export function UploadSheet({
                 returnKeyType="done"
                 accessibilityLabel="Document name"
                 style={{
-                  minHeight: 50,
-                  paddingHorizontal: 16,
-                  borderRadius: 14,
+                  minHeight: 48,
+                  paddingHorizontal: 14,
+                  borderRadius: 12,
                   fontSize: 15,
                   backgroundColor: colors.input,
                   borderWidth: 1,
@@ -337,10 +327,7 @@ export function UploadSheet({
               <ChoiceChips
                 value={docType}
                 onChange={setDocType}
-                options={DOC_TYPE_ORDER.map((type) => {
-                  const accent = docTypeAccent(colors, type);
-                  return { value: type, label: DOC_TYPE_META[type].label, icon: DOC_TYPE_META[type].icon, color: accent.color, bg: accent.bg };
-                })}
+                options={DOC_TYPE_ORDER.map((type) => ({ value: type, label: DOC_TYPE_META[type].label }))}
               />
             </View>
 
@@ -360,7 +347,7 @@ export function UploadSheet({
  * this shows that it's working without pretending to know how far along.
  */
 function UploadProgress() {
-  const { colors, fonts } = useTheme();
+  const { colors } = useTheme();
   const x = useSharedValue(0);
   useEffect(() => {
     x.value = withRepeat(withTiming(1, { duration: 1100, easing: Easing.inOut(Easing.quad) }), -1, false);
@@ -368,12 +355,8 @@ function UploadProgress() {
   const barStyle = useAnimatedStyle(() => ({ left: `${-40 + x.value * 140}%` }));
   return (
     <Animated.View entering={FadeIn.duration(180)} style={{ gap: 8 }}>
-      <View style={{ height: 6, borderRadius: 3, overflow: "hidden", backgroundColor: colors.track }}>
+      <View style={{ height: 3, borderRadius: 2, overflow: "hidden", backgroundColor: colors.track }}>
         <Animated.View style={[{ position: "absolute", top: 0, bottom: 0, width: "40%", borderRadius: 3, backgroundColor: colors.primary }, barStyle]} />
-      </View>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-        <Ionicons name="lock-closed" size={13} color={colors.mutedText} />
-        <Text style={{ fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}>Sending over a secure connection</Text>
       </View>
     </Animated.View>
   );

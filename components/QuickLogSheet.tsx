@@ -8,6 +8,8 @@ import { useTheme } from "./theme";
 import { getLogCategoryTints, MOOD_OPTIONS, type LogCategoryTint } from "./ui-tokens";
 import { isPeriodFlow, type DayLogPatch } from "../hooks/useTodayLog";
 import { useSecureScreen } from "../lib/screenPrivacy";
+import { AppLockCover } from "./AppLockScreen";
+import { Icon } from "./Icon";
 
 export type QuickLogKind = "flow" | "symptoms" | "mood";
 
@@ -168,7 +170,7 @@ export function QuickLogSheet({
 
           <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
             <View style={{ width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center", backgroundColor: tint.light }}>
-              <Ionicons name={copy.icon} size={20} color={tint.color} />
+              <Icon set="ion" name={copy.icon} size={20} color={tint.color} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 18, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>{copy.title}</Text>
@@ -182,7 +184,7 @@ export function QuickLogSheet({
               hitSlop={8}
               style={{ width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceSoft }}
             >
-              <Ionicons name="close" size={18} color={colors.foreground} />
+              <Icon set="ion" name="close" size={18} color={colors.foreground} />
             </TouchableOpacity>
           </View>
 
@@ -217,7 +219,7 @@ export function QuickLogSheet({
                           {saving && on ? (
                             <ActivityIndicator size="small" color={colors.buttonText} />
                           ) : (
-                            <Ionicons name={o.icon} size={19} color={on ? colors.buttonText : tint.color} />
+                            <Icon set="ion" name={o.icon} size={19} color={on ? colors.buttonText : tint.color} />
                           )}
                         </View>
                         <Text
@@ -274,7 +276,7 @@ export function QuickLogSheet({
                       }}
                     >
                       <View style={{ width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: on ? tint.fill : tint.light }}>
-                        <Ionicons name={on ? "checkmark" : o.icon} size={15} color={on ? colors.buttonText : tint.color} />
+                        <Icon set="ion" name={on ? "checkmark" : o.icon} size={15} color={on ? colors.buttonText : tint.color} />
                       </View>
                       <Text style={{ fontSize: 13.5, fontWeight: on ? "800" : "700", color: on ? tint.color : colors.foreground, fontFamily: fonts.body }}>
                         {o.label}
@@ -316,10 +318,11 @@ export function QuickLogSheet({
             style={{ alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 4, paddingVertical: 12, marginTop: 2 }}
           >
             <Text style={{ fontSize: 13.5, fontWeight: "700", color: colors.primary, fontFamily: fonts.body }}>All details for today</Text>
-            <Ionicons name="chevron-forward" size={14} color={colors.primary} />
+            <Icon set="ion" name="chevron-forward" size={14} color={colors.primary} />
           </TouchableOpacity>
         </View>
       </View>
+      <AppLockCover />
     </Modal>
   );
 }

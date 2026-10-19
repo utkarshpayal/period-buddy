@@ -1,6 +1,7 @@
 import type { DayEntry as LocalDayEntry } from "../components/AppState";
 import type { DayEntry as ApiDayEntry, Predictions } from "./api";
 import { getCyclePhase, type CyclePhase } from "./cycle";
+import { PHASE_COPY } from "./cycleCopy";
 import { dateFromDayKey, getDateKey } from "./format";
 
 /**
@@ -74,11 +75,18 @@ export type CalendarModel = {
   /** The logged current period, to hide predicted "tail" days after it ended. */
   periodMask: { start: Date; windowEnd: Date; actualEnd: Date } | null;
   todayStart: Date;
+  /** Set while the period is late: future days project from tomorrow, since it can start any day. */
+  lateProjectionStart: Date | null;
 };
 
+/**
+ * `today` should come from `useTodayKey()` on long-lived screens, so the
+ * model rolls over at midnight instead of keeping the day it was built on.
+ */
 export function buildCalendarModel(
   predictions: Predictions | null,
   settings: { lastPeriodStartDate?: string | null; cycleLength?: number; periodLength?: number } | null,
+  today: Date = new Date(),
 ): CalendarModel {
   const cycleLength = predictions?.cycleLength ?? settings?.cycleLength ?? DEFAULT_CYCLE_LENGTH;
   const periodLength = predictions?.periodLength ?? settings?.periodLength ?? 5;
@@ -86,7 +94,7 @@ export function buildCalendarModel(
     ? dateFromDayKey(predictions.currentPeriodStartDateISO)
     : settings?.lastPeriodStartDate
       ? dateFromDayKey(settings.lastPeriodStartDate)
-      : addDays(new Date(), -13);
+      : addDays(today, -13);
 
   let periodMask: CalendarModel["periodMask"] = null;
   const startISO = predictions?.currentPeriodStartDateISO;
@@ -99,13 +107,16 @@ export function buildCalendarModel(
     }
   }
 
+  const todayStart = startOfDay(today);
+  const sinceStartToday = Math.round((todayStart.getTime() - startOfDay(cycleStartDate).getTime()) / MS_PER_DAY) + 1;
   return {
     cycleStartDate,
     cycleLength,
     periodLength,
     ovulationDay: Math.max(periodLength + 1, cycleLength - 13),
     periodMask,
-    todayStart: startOfDay(new Date()),
+    todayStart,
+    lateProjectionStart: sinceStartToday > cycleLength ? addDays(todayStart, 1) : null,
   };
 }
 
@@ -116,6 +127,8 @@ export type DayStatus = {
   cycleDay: number;
   phase: CyclePhase;
   isToday: boolean;
+  /** After today: can't be logged yet. Compared with the same `todayKey` as `isToday`. */
+  isFuture: boolean;
   isLogged: boolean;
   hasFlow: boolean;
   /** Future/today period day the user hasn't logged (dashed ring). */
@@ -128,7 +141,16 @@ type EntryLookup = (dateKey: string) => LocalDayEntry | undefined;
 
 export function dayStatus(date: Date, model: CalendarModel, entryFor: EntryLookup, noteFor: (dateKey: string) => string | undefined, todayKey: string): DayStatus {
   const dateKey = getDateKey(date);
-  const cycleDay = getCycleDay(date, model.cycleStartDate, model.cycleLength);
+  // From the current period's start up to today the days count on without
+  // wrapping: a late period's days are late (day 31, 32…), not a new period.
+  const day0 = startOfDay(date);
+  const sinceStart = Math.round((day0.getTime() - startOfDay(model.cycleStartDate).getTime()) / MS_PER_DAY) + 1;
+  const cycleDay =
+    sinceStart >= 1 && day0 <= model.todayStart
+      ? sinceStart
+      : model.lateProjectionStart && day0 > model.todayStart
+        ? getCycleDay(date, model.lateProjectionStart, model.cycleLength)
+        : getCycleDay(date, model.cycleStartDate, model.cycleLength);
   const phase = getCyclePhase(cycleDay, model.periodLength, model.cycleLength);
   const entry = entryFor(dateKey);
   const isLogged = Boolean(entry?.note.trim() || entry?.symptoms.length || entry?.flow || entry?.mood || entry?.energy || noteFor(dateKey)?.trim());
@@ -142,10 +164,11 @@ export function dayStatus(date: Date, model: CalendarModel, entryFor: EntryLooku
     cycleDay,
     phase,
     isToday: dateKey === todayKey,
+    isFuture: dateKey > todayKey,
     isLogged,
     hasFlow: Boolean(entry?.flow && entry.flow !== "none"),
     isPredictedPeriod: phase === "period" && !isLogged && !isPhantomTail && d >= model.todayStart,
-    isFertile: cycleDay >= model.ovulationDay - 5 && cycleDay <= model.ovulationDay + 1,
+    isFertile: cycleDay >= model.ovulationDay - 5 && cycleDay <= model.ovulationDay,
     isOvulation: cycleDay === model.ovulationDay,
   };
 }
@@ -160,4 +183,29 @@ export function monthSlots(monthDate: Date): (Date | null)[] {
   for (let d = 1; d <= days; d += 1) slots.push(new Date(year, month, d));
   while (slots.length < 42) slots.push(null);
   return slots;
+}
+
+/** Monday-first week containing `today`, for the week strips. */
+export function weekDates(today: Date): Date[] {
+  const monday = addDays(startOfDay(today), -getMondayFirstWeekday(today));
+  return Array.from({ length: 7 }, (_, i) => addDays(monday, i));
+}
+
+/** The day-log sheet's subtitle: plain phase name (cycleCopy.ts) and the cycle day. */
+export function dayLogSubtitle(s: Pick<DayStatus, "phase" | "cycleDay">): string {
+  return `${PHASE_COPY[s.phase].title} · Day ${s.cycleDay}`;
+}
+
+/**
+ * Swaps one year's logs for a fresh fetch of that year, so a day deleted
+ * elsewhere (Calendar screen, Undo, another device) disappears instead of
+ * lingering from the earlier copy. Other years are kept.
+ */
+export function replaceYearEntries<T>(current: Record<string, T>, year: number, entries: Record<string, T>): Record<string, T> {
+  const prefix = `${year}-`;
+  const next: Record<string, T> = {};
+  for (const [key, value] of Object.entries(current)) {
+    if (!key.startsWith(prefix)) next[key] = value;
+  }
+  return Object.assign(next, entries);
 }

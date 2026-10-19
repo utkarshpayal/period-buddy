@@ -11,7 +11,7 @@ import { shareWithAppLink } from "../lib/share";
 
 export type DayEntry = {
   digestion?: "bloated" | "constipated" | "diarrhea" | "normal";
-  // Multi-select counterparts (see lib/api.ts DayEntry) — the scalar field
+  // Multi-select counterparts (see lib/api/cycle.ts DayEntry) — the scalar field
   // stays the primary value; these carry the full set for co-occurring states.
   digestions?: ("bloated" | "constipated" | "diarrhea" | "normal")[];
   discharge?: "creamy" | "egg-white" | "none" | "sticky" | "watery";
@@ -35,8 +35,6 @@ export type DayEntry = {
 };
 
 type AppStateType = {
-  tokens: number;
-  earnTokens: (amount: number) => void;
   savedPosts: Set<string>;
   savePost: (id: string) => void;
   toggleSavedPost: (id: string) => void;
@@ -63,12 +61,10 @@ type BrowserStorage = {
 type StoredAppState = {
   reportedPosts?: string[];
   savedPosts?: string[];
-  tokens?: number;
 };
 
 export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [initialState] = useState(readStoredAppState);
-  const [tokens, setTokens] = useState<number>(initialState.tokens ?? 450);
   const [savedPosts, setSavedPosts] = useState<Set<string>>(
     () => new Set(initialState.savedPosts ?? []),
   );
@@ -87,10 +83,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       ).length,
     [dayEntries],
   );
-
-  const earnTokens = useCallback((amount: number) => {
-    setTokens((t) => t + amount);
-  }, []);
 
   const savePost = useCallback((id: string) => {
     setSavedPosts((s) => new Set(Array.from(s).concat(id)));
@@ -153,14 +145,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     writeStoredAppState({
       reportedPosts: Array.from(reportedPosts),
       savedPosts: Array.from(savedPosts),
-      tokens,
     });
-  }, [reportedPosts, savedPosts, tokens]);
+  }, [reportedPosts, savedPosts]);
 
   const value = useMemo<AppStateType>(
     () => ({
-      tokens,
-      earnTokens,
       savedPosts,
       savePost,
       toggleSavedPost,
@@ -175,8 +164,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       trackedDays,
     }),
     [
-      tokens,
-      earnTokens,
       savedPosts,
       savePost,
       toggleSavedPost,
@@ -228,7 +215,6 @@ function readStoredAppState(): StoredAppState {
         ? state.reportedPosts
         : [],
       savedPosts: Array.isArray(state.savedPosts) ? state.savedPosts : [],
-      tokens: typeof state.tokens === "number" ? state.tokens : 450,
     };
   } catch {
     return {};

@@ -7,13 +7,13 @@ import {
   ScrollView,
   StatusBar,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
 import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
+import { AppModalHost } from "../../components/modals/AppModalHost";
 import { useTheme } from "../../components/theme";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
 import { SkeletonBlock } from "../../components/Skeleton";
@@ -21,6 +21,8 @@ import { HEALTH_ISSUE_COLORS } from "../../components/ui-tokens";
 import { useAsyncLoad } from "../../hooks/useAsyncLoad";
 import { healthIssuesApi, type HealthIssue as ApiHealthIssue, type MedicalReview } from "../../lib/api";
 import { ScreenHeader, SectionHeader } from "../../components/ScreenHeader";
+import { FilterChips } from "../../components/FilterChips";
+import { SearchBar } from "../../components/SearchBar";
 import {
   ArticleListSkeleton,
   ArticleRow,
@@ -28,16 +30,19 @@ import {
   ConsultNudge,
   DetailSection,
   DetailSheetHeader,
+  DoctorCallout,
   getWellbeingTones,
   KeyPointList,
   PrivacyNote,
   WellbeingCard,
   WellbeingEmpty,
+  WellbeingGlyph,
   WellbeingIntro,
   type WellbeingToneKey,
 } from "../../components/wellbeing/WellbeingUI";
 import { MedicalReviewBadge } from "../../components/MedicalReviewBadge";
 import { pickMedicalReview } from "../../lib/medicalReview";
+import { Icon } from "../../components/Icon";
 
 // --- BACKEND API LAYER SCHEMAS & CONTRACTS ---
 interface HealthIssue {
@@ -48,7 +53,7 @@ interface HealthIssue {
   color: string;
   summary: string;
   guide: string;
-  imageUrl: string; // Remote CDN asset string for professional illustration renders
+  imageUrl: string; // CMS cover image; "" = none (the detail sheet shows a tinted icon header instead)
   symptoms?: string[];
   causes?: string[];
   treatment?: string;
@@ -61,82 +66,92 @@ const fallbackIssues: HealthIssue[] = [
   {
     id: "hi_1",
     title: "PCOS / PCOD",
-    category: "Hormonal Equilibrium",
+    category: "Hormones",
     icon: "female-outline",
     color: "#ef4444",
     summary:
-      "PCOS/PCOD can affect periods, skin, hair growth, insulin response, and energy. Tracking patterns makes it easier to discuss changes with a doctor.",
+      "PCOS/PCOD (a common hormone condition) can affect your periods, skin, hair growth, energy and how your body handles sugar. Tracking changes makes it easier to talk to a doctor.",
     guide:
-      "1. Track cycle gaps and missed periods.\n2. Note acne, hair growth, weight, and fatigue changes.\n3. Prioritize balanced meals, movement, and sleep.\n4. Consult an endocrinologist or OBGYN for evaluation.",
-    imageUrl:
-      "https://images.unsplash.com/photo-1511556532299-8f662fc26c06?q=80&w=600&auto=format&fit=crop",
+      "1. Track gaps between periods and any missed periods.\n2. Note acne, extra hair growth, weight and tiredness.\n3. Eat regular, balanced meals, stay active and sleep well.\n4. See a gynaecologist or a hormone doctor (endocrinologist) to get checked.",
+    imageUrl: "",
   },
   {
     id: "hi_2",
     title: "Endometriosis",
-    category: "Uterine & Pelvic Wellness",
+    category: "Uterus & ovaries",
     icon: "pulse-outline",
     color: "#f97316",
     summary:
-      "Endometriosis can cause severe pelvic pain, painful periods, fatigue, and pain outside menstruation. Persistent pain deserves medical attention.",
+      "Endometriosis (tissue like the womb lining growing outside the womb) can cause strong pelvic pain, painful periods, tiredness and pain between periods. Pain that keeps coming back needs a doctor.",
     guide:
-      "1. Track pain level during and outside periods.\n2. Record heavy bleeding or pain during intimacy.\n3. Use warmth and rest for short-term relief.\n4. Ask a gynecologist about imaging or treatment options.",
-    imageUrl:
-      "https://images.unsplash.com/photo-1551076805-e1869033e561?q=80&w=600&auto=format&fit=crop",
+      "1. Track how bad the pain is, during and between periods.\n2. Note heavy bleeding or pain during sex.\n3. A hot water bag and rest can help for a short time.\n4. Ask a gynaecologist about scans and treatment.",
+    imageUrl: "",
   },
   {
     id: "hi_3",
-    title: "Fibroids Tracker",
-    category: "Structural Health",
+    title: "Fibroids",
+    category: "Uterus & ovaries",
     icon: "circle-multiple-outline",
     color: "#fbbf24",
     summary:
-      "Fibroids are usually non-cancerous growths that can cause heavy bleeding, pelvic pressure, frequent urination, or fatigue.",
+      "Fibroids are lumps in the womb that are usually not cancer. They can cause heavy bleeding, pressure low in the tummy, peeing often, or tiredness.",
     guide:
-      "1. Log heavy flow or bleeding between periods.\n2. Track pelvic pressure and lower back pain.\n3. Ask about iron if bleeding is heavy.\n4. Confirm size and location with medical imaging.",
-    imageUrl:
-      "https://images.unsplash.com/photo-1530026405186-ed1ea0ac7a63?q=80&w=600&auto=format&fit=crop",
+      "1. Log heavy flow or bleeding between periods.\n2. Track pressure low in your tummy and lower back pain.\n3. Ask your doctor about iron if your bleeding is heavy.\n4. A scan (ultrasound) shows their size and where they are.",
+    imageUrl: "",
   },
   {
     id: "hi_4",
-    title: "Pregnancy Wellness",
-    category: "Maternal Milestone Care",
+    title: "Pregnancy",
+    category: "Pregnancy",
     icon: "human-pregnant",
     color: "#ec4899",
     summary:
-      "Pregnancy support helps track early symptoms, missed periods, nausea, food changes, and care milestones.",
+      "Track early signs like a missed period, nausea, food changes and tiredness, and keep up with your check-ups.",
     guide:
-      "1. Record missed periods and test dates.\n2. Track nausea, breast tenderness, and fatigue.\n3. Stay hydrated and discuss folate with a clinician.\n4. Schedule regular prenatal care if pregnancy is confirmed.",
-    imageUrl:
-      "https://images.unsplash.com/photo-1516627145497-ae6968895b74?q=80&w=600&auto=format&fit=crop",
+      "1. Note missed periods and the dates you took a test.\n2. Track nausea, sore breasts and tiredness.\n3. Drink enough water and ask a doctor about folic acid.\n4. Go for regular pregnancy check-ups once it's confirmed.",
+    imageUrl: "",
   },
   {
     id: "hi_5",
-    title: "Irregular Cycle Maps",
-    category: "Rhythm Diagnostics",
+    title: "Irregular periods",
+    category: "Periods & cycles",
     icon: "calendar-outline",
     color: "#8b5cf6",
     summary:
-      "Irregular cycles can be influenced by stress, sleep, travel, weight changes, hormones, or underlying conditions.",
+      "Periods can come early, late or not at all because of stress, sleep, travel, weight changes, hormones or a health condition.",
     guide:
-      "1. Track start dates for at least 3 months.\n2. Compare changes with sleep, stress, travel, or illness.\n3. Notice spotting, pain, or very heavy flow.\n4. Seek care if cycles are consistently very short, long, or absent.",
-    imageUrl:
-      "https://images.unsplash.com/photo-1506126613408-eca07ce68773?q=80&w=600&auto=format&fit=crop",
+      "1. Track your period start dates for at least 3 months.\n2. Compare changes with sleep, stress, travel or illness.\n3. Notice spotting, pain or very heavy flow.\n4. See a doctor if your cycles are often very short, very long, or stop.",
+    imageUrl: "",
   },
   {
     id: "hi_6",
-    title: "Menopause Support",
-    category: "Transition & Longevity",
+    title: "Menopause",
+    category: "Menopause",
     icon: "thermometer-outline",
     color: "#06b6d4",
     summary:
-      "Menopause and perimenopause can bring hot flashes, sleep changes, mood shifts, vaginal dryness, and bone health changes.",
+      "Menopause and the years before it (perimenopause) can bring hot flashes, poor sleep, mood changes, vaginal dryness and weaker bones.",
     guide:
-      "1. Track hot flashes and night sweats.\n2. Note sleep, mood, and energy changes.\n3. Discuss calcium, vitamin D, and bone health.\n4. Ask a clinician about treatment options if symptoms disrupt daily life.",
-    imageUrl:
-      "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?q=80&w=600&auto=format&fit=crop",
+      "1. Track hot flashes and night sweats.\n2. Note changes in sleep, mood and energy.\n3. Ask about calcium, vitamin D and bone health.\n4. Ask a doctor about treatment if symptoms get in the way of daily life.",
+    imageUrl: "",
   },
 ];
+
+// Older CMS entries were seeded with the same jargon labels the bundled list
+// used to have; show them in plain words. Anything else is shown as written.
+const PLAIN_LABELS: Record<string, string> = {
+  "Hormonal Equilibrium": "Hormones",
+  "Uterine & Pelvic Wellness": "Uterus & ovaries",
+  "Structural Health": "Uterus & ovaries",
+  "Maternal Milestone Care": "Pregnancy",
+  "Rhythm Diagnostics": "Periods & cycles",
+  "Transition & Longevity": "Menopause",
+  "Fibroids Tracker": "Fibroids",
+  "Pregnancy Wellness": "Pregnancy",
+  "Irregular Cycle Maps": "Irregular periods",
+  "Menopause Support": "Menopause",
+};
+const plainLabel = (label: string) => PLAIN_LABELS[label?.trim()] ?? label;
 
 // Maps an issue's content hex tag to one of the shared wellbeing tones.
 function issueToneKey(issue: Pick<HealthIssue, "color">): WellbeingToneKey {
@@ -167,15 +182,13 @@ function guideSteps(guide: string): string[] {
 function mapHealthIssue(issue: ApiHealthIssue): HealthIssue {
   return {
     id: issue.id ?? issue._id ?? issue.title,
-    title: issue.title,
-    category: issue.category,
+    title: plainLabel(issue.title),
+    category: plainLabel(issue.category),
     icon: issue.icon,
     color: issue.color,
     summary: issue.summary,
     guide: issue.guide,
-    imageUrl:
-      issue.imageUrl ||
-      "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?q=80&w=600&auto=format&fit=crop",
+    imageUrl: issue.imageUrl || "",
     symptoms: issue.symptoms,
     causes: issue.causes,
     treatment: issue.treatment,
@@ -193,6 +206,7 @@ export default function HealthIssues() {
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [query, setQuery] = useState("");
 
   // Public CMS content: cached (and kept on the device) as the raw response so a
   // revisit or cold start paints at once while it revalidates.
@@ -218,24 +232,39 @@ export default function HealthIssues() {
           : fallbackIssues,
     [issueResponse],
   );
+  // A failed pull-to-refresh with a list already on screen keeps the list and
+  // shows a small notice; the full error state is only for "nothing to show".
+  const showingSaved = !!error && !!issueResponse;
 
-  const categoryOptions = [
-    "all",
-    ...Array.from(new Set(issues.map((issue) => issue.category).filter(Boolean))),
-  ];
-  const filteredIssues =
-    selectedCategory === "all"
-      ? issues
-      : issues.filter((issue) => issue.category === selectedCategory);
+  const categoryOptions = useMemo(
+    () => [
+      { key: "all", label: "All" },
+      ...Array.from(new Set(issues.map((issue) => issue.category).filter(Boolean))).map((cat) => ({ key: cat, label: cat })),
+    ],
+    [issues],
+  );
+  const activeCategory = categoryOptions.some((o) => o.key === selectedCategory) ? selectedCategory : "all";
+  const needle = query.trim().toLowerCase();
+  const filteredIssues = issues.filter(
+    (issue) =>
+      (activeCategory === "all" || issue.category === activeCategory) &&
+      (!needle || issue.title.toLowerCase().includes(needle) || issue.summary.toLowerCase().includes(needle)),
+  );
 
   const selectedIssueData = issues.find(
     (issue) => issue.id === selectedIssueId,
   );
   const selectedTone = selectedIssueData ? tones[issueToneKey(selectedIssueData)] : tones.mint;
+  const selectedSteps = selectedIssueData ? guideSteps(selectedIssueData.guide) : [];
 
   function handleTriggerDetails(id: string) {
     setSelectedIssueId(id);
     setDetailModalVisible(true);
+  }
+
+  function resetFilters() {
+    setQuery("");
+    setSelectedCategory("all");
   }
 
   const metaFor = (issue: HealthIssue) =>
@@ -243,6 +272,9 @@ export default function HealthIssues() {
       (issue.symptoms?.length ?? 0) > 0 ? { icon: "pulse-outline", label: `${issue.symptoms!.length} symptoms` } : null,
       { icon: "list-outline", label: `${guideSteps(issue.guide).length} care steps` },
     ].filter((m): m is { icon: string; label: string } => m !== null);
+
+  const listTitle = needle ? "Search results" : activeCategory === "all" ? "All topics" : activeCategory;
+  const listSubtitle = `${filteredIssues.length} ${filteredIssues.length === 1 ? "condition" : "conditions"}`;
 
   return (
     <>
@@ -259,7 +291,7 @@ export default function HealthIssues() {
 
         <LoadingErrorState
           loading={loadingIssues}
-          error={error}
+          error={showingSaved ? null : error}
           offline={offline}
           onRetry={() => reload()}
           loadingLabel="Loading health concerns…"
@@ -267,10 +299,11 @@ export default function HealthIssues() {
           skeleton={
             <View style={{ paddingHorizontal: 24, paddingTop: 12, gap: 16 }}>
               <SkeletonBlock width="100%" height={92} radius={24} />
+              <SkeletonBlock width="100%" height={48} radius={16} />
               <View className="flex-row" style={{ gap: 8 }}>
-                <SkeletonBlock width={56} height={34} radius={17} />
-                <SkeletonBlock width={110} height={34} radius={17} />
-                <SkeletonBlock width={96} height={34} radius={17} />
+                <SkeletonBlock width={56} height={36} radius={18} />
+                <SkeletonBlock width={110} height={36} radius={18} />
+                <SkeletonBlock width={96} height={36} radius={18} />
               </View>
               <ArticleListSkeleton rows={5} />
             </View>
@@ -278,73 +311,66 @@ export default function HealthIssues() {
         >
         <ScrollView
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           contentContainerStyle={{ paddingTop: 12, paddingBottom: insets.bottom + 48 }}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={() => reload(true)} tintColor={colors.primary} />
           }
         >
           <View style={{ paddingHorizontal: 24 }}>
+            {showingSaved ? (
+              <View
+                className="flex-row items-center"
+                style={{ gap: 8, marginBottom: 14, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 14, backgroundColor: colors.surfaceSoft }}
+              >
+                <Icon set="ion" name="cloud-offline-outline" size={16} color={colors.mutedText} />
+                <Text style={{ flex: 1, color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "500", fontFamily: fonts.body }}>
+                  Showing saved guides. Pull down to refresh.
+                </Text>
+              </View>
+            ) : null}
+
             <WellbeingIntro
               icon="medkit-outline"
               tone={tones.amber}
               title="Know your body"
               body="Plain-language guides to common conditions, and when to see a doctor."
             />
+
+            <SearchBar
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search conditions or symptoms"
+              style={{ marginTop: 20 }}
+            />
           </View>
 
           {/* Category filter */}
           {categoryOptions.length > 2 ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ paddingHorizontal: 24, gap: 8 }}
-              style={{ marginTop: 20, flexGrow: 0 }}
-            >
-              {categoryOptions.map((cat) => {
-                const isSelected = selectedCategory === cat;
-                return (
-                  <TouchableOpacity
-                    key={cat}
-                    onPress={() => setSelectedCategory(cat)}
-                    activeOpacity={0.8}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: isSelected }}
-                    style={{
-                      height: 36,
-                      paddingHorizontal: 14,
-                      borderRadius: 18,
-                      justifyContent: "center",
-                      backgroundColor: isSelected ? colors.primary : colors.surface,
-                      borderWidth: 1,
-                      borderColor: isSelected ? colors.primary : colors.border,
-                    }}
-                  >
-                    <Text
-                      numberOfLines={1}
-                      maxFontSizeMultiplier={1.3}
-                      style={{ color: isSelected ? colors.buttonText : colors.foreground, fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}
-                    >
-                      {cat === "all" ? "All" : cat}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
+            <FilterChips
+              options={categoryOptions}
+              value={activeCategory}
+              onChange={setSelectedCategory}
+              gutter={24}
+              style={{ marginTop: 14, flexGrow: 0 }}
+            />
           ) : null}
 
           <View style={{ paddingHorizontal: 24, marginTop: 24 }}>
             <SectionHeader
-              title={selectedCategory === "all" ? "All topics" : selectedCategory}
-              actionLabel={selectedCategory === "all" ? undefined : "Show all"}
-              onAction={selectedCategory === "all" ? undefined : () => setSelectedCategory("all")}
+              title={listTitle}
+              subtitle={issues.length > 0 ? listSubtitle : undefined}
+              actionLabel={activeCategory === "all" && !needle ? undefined : "Show all"}
+              onAction={activeCategory === "all" && !needle ? undefined : resetFilters}
             />
             {filteredIssues.length === 0 ? (
               <WellbeingEmpty
                 icon="search-outline"
-                title={issues.length === 0 ? "No guides yet" : "Nothing in this category yet"}
-                message={issues.length === 0 ? "Pull down to refresh." : "Try another category."}
-                actionLabel={selectedCategory === "all" ? undefined : "Show all topics"}
-                onAction={selectedCategory === "all" ? undefined : () => setSelectedCategory("all")}
+                title={issues.length === 0 ? "No guides yet" : needle ? "No matching conditions" : "Nothing in this category yet"}
+                message={issues.length === 0 ? "Pull down to refresh." : needle ? "Try a different word, like \"pain\" or \"periods\"." : "Try another category."}
+                actionLabel={issues.length === 0 ? "Refresh" : "Show all topics"}
+                onAction={issues.length === 0 ? () => reload(true) : resetFilters}
               />
             ) : (
               <WellbeingCard>
@@ -395,8 +421,9 @@ export default function HealthIssues() {
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 4, paddingBottom: insets.bottom + 40 }}
               >
+                {/* Hero: the CMS image when there is one, else a tinted header in the condition's tone (never a stock photo). */}
                 {selectedIssueData.imageUrl ? (
-                  <View style={{ height: 180, borderRadius: 22, overflow: "hidden", backgroundColor: selectedTone.bg }}>
+                  <View style={{ aspectRatio: 16 / 9, borderRadius: 24, overflow: "hidden", backgroundColor: selectedTone.bg }}>
                     <Image
                       source={{ uri: selectedIssueData.imageUrl }}
                       style={{ width: "100%", height: "100%" }}
@@ -404,13 +431,27 @@ export default function HealthIssues() {
                       accessibilityIgnoresInvertColors
                     />
                   </View>
-                ) : null}
+                ) : (
+                  <View
+                    accessibilityElementsHidden
+                    importantForAccessibility="no-hide-descendants"
+                    style={{ height: 112, borderRadius: 24, backgroundColor: selectedTone.bg, alignItems: "center", justifyContent: "center" }}
+                  >
+                    <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" }}>
+                      <WellbeingGlyph name={selectedIssueData.icon} size={30} color={selectedTone.fg} fallback="medkit-outline" />
+                    </View>
+                  </View>
+                )}
 
-                <MedicalReviewBadge item={selectedIssueData.review} style={{ marginTop: selectedIssueData.imageUrl ? 14 : 0 }} />
+                <MedicalReviewBadge item={selectedIssueData.review} style={{ marginTop: 14 }} />
 
-                <Text style={{ color: colors.foreground, fontSize: 16, lineHeight: 25, fontFamily: fonts.body, marginTop: 18 }}>
+                <Text style={{ color: colors.foreground, fontSize: 16, lineHeight: 26, fontWeight: "400", fontFamily: fonts.body, marginTop: 16 }}>
                   {selectedIssueData.summary}
                 </Text>
+
+                {selectedIssueData.whenToSeeDoctor ? (
+                  <DoctorCallout body={selectedIssueData.whenToSeeDoctor} style={{ marginTop: 18 }} />
+                ) : null}
 
                 {(selectedIssueData.symptoms?.length ?? 0) > 0 ? (
                   <DetailSection icon="pulse-outline" tone={tones.amber} title="Common symptoms">
@@ -428,30 +469,31 @@ export default function HealthIssues() {
                   </DetailSection>
                 ) : null}
 
-                {guideSteps(selectedIssueData.guide).length > 0 ? (
-                  <DetailSection icon="checkmark-done-outline" tone={tones.green} title="Care guidance">
-                    <KeyPointList points={guideSteps(selectedIssueData.guide)} />
+                {selectedSteps.length > 0 ? (
+                  <DetailSection icon="checkmark-done-outline" tone={tones.green} title="What you can do">
+                    <KeyPointList points={selectedSteps} />
                   </DetailSection>
                 ) : null}
 
                 {[
                   { label: "Treatment", icon: "medical-outline", tone: tones.sky, value: selectedIssueData.treatment },
                   { label: "Prevention", icon: "shield-checkmark-outline", tone: tones.mint, value: selectedIssueData.prevention },
-                  { label: "When to see a doctor", icon: "alert-circle-outline", tone: tones.red, value: selectedIssueData.whenToSeeDoctor },
                 ]
                   .filter((section) => !!section.value)
                   .map((section) => (
                     <DetailSection key={section.label} icon={section.icon} tone={section.tone} title={section.label}>
                       <WellbeingCard style={{ padding: 16 }}>
-                        <Text style={{ color: colors.foreground, fontSize: 14.5, lineHeight: 22, fontFamily: fonts.body }}>{section.value}</Text>
+                        <Text style={{ color: colors.foreground, fontSize: 15, lineHeight: 23, fontWeight: "400", fontFamily: fonts.body }}>{section.value}</Text>
                       </WellbeingCard>
                     </DetailSection>
                   ))}
 
+                <PrivacyNote style={{ marginTop: 24 }} text="General information, not a diagnosis. A doctor can advise on your situation." />
+
                 <ConsultNudge
-                  style={{ marginTop: 28 }}
-                  title="Persistent symptoms?"
-                  body="Connect privately with a gynecologist who can help."
+                  style={{ marginTop: 20 }}
+                  title="Symptoms that won't go away?"
+                  body="Talk privately with a gynaecologist who can help."
                   onPress={() => {
                     setDetailModalVisible(false);
                     router.push("/(app)/consultation" as any);
@@ -460,6 +502,7 @@ export default function HealthIssues() {
               </ScrollView>
             </SafeAreaView>
           )}
+          {detailModalVisible ? <AppModalHost inline /> : null}
         </Modal>
       </SafeAreaView>
     </>

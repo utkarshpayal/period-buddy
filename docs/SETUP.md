@@ -134,7 +134,7 @@ npx expo start           # press w for web, a for Android, i for iOS
 
 | Variable | What it's for |
 |---|---|
-| `EXPO_PUBLIC_API_BASE_URL` | Which backend to use. On a phone, `localhost` is the phone itself, so use `http://<your computer's LAN IP>:5000` for a local backend, or leave it out: in `__DEV__` without it, `lib/api.ts` derives the host from the Expo dev server's own address on port 5000. A release build without it uses `app.json` → `extra.apiBaseUrl` (`https://www.backend.thenura.care`). |
+| `EXPO_PUBLIC_API_BASE_URL` | Which backend to use. On a phone, `localhost` is the phone itself, so use `http://<your computer's LAN IP>:5000` for a local backend, or leave it out: in `__DEV__` without it, `lib/api/` derives the host from the Expo dev server's own address on port 5000. A release build without it uses `app.json` → `extra.apiBaseUrl` (`https://www.backend.thenura.care`). |
 | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` / `_IOS_CLIENT_ID` / `_ANDROID_CLIENT_ID` / `_EXPO_CLIENT_ID` | Google sign-in OAuth client IDs; must match the backend's `GOOGLE_*_CLIENT_ID`. Optional: without them the app uses `app.json` → `extra.googleClientIds` (the real, public IDs; also in `.env.example` and `eas.json`). |
 
 Two native config files (tracked in git; EAS builds use them) are needed for push notifications /
@@ -175,10 +175,10 @@ Both repos use a pre-commit hook (husky) — don't bypass it with
   *what* where it isn't obvious from the diff.
 - **CLAUDE.md stays in sync** — both repos' `CLAUDE.md` files are living
   architecture docs; if a change touches routes, the API surface
-  (`lib/api.ts`), providers, or the commands in this file, update the
+  (`lib/api/`), providers, or the commands in this file, update the
   relevant `CLAUDE.md` section in the same change, not as a follow-up.
 - **One file owns the API surface** — all frontend→backend calls go through
-  `lib/api.ts`; don't `fetch()` the backend directly from a screen/component.
+  `lib/api/`; don't `fetch()` the backend directly from a screen/component.
 - **Feature gating goes through the registry** — a new premium backend
   route is added to `config/subscriptionRouteRegistry.js`, not an inline
   `requireFeatureAccess()` scattered per-route.

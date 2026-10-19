@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import Animated, { SlideInDown } from "react-native-reanimated";
@@ -7,13 +6,12 @@ import { AppModalHost } from "../modals/AppModalHost";
 import { documentsLayout } from "./documentMeta";
 import { useContentWidth } from "../../lib/layout";
 import { useTheme } from "../theme";
-
-type IconName = keyof typeof Ionicons.glyphMap;
+import { Icon } from "../Icon";
 
 /**
  * Bottom sheet used by the Documents feature (upload, summarize, doctor
  * report): dimmed backdrop that fades, sheet that slides up, grab handle,
- * icon + title header with a close button, scrollable body and an optional
+ * title header with a close button, scrollable body and an optional
  * pinned footer. `locked` blocks closing while something is in flight.
  * `overlay` is rendered inside the Modal (e.g. a CalendarModal), so it can
  * present on top of the sheet.
@@ -23,9 +21,6 @@ export function DocumentSheet({
   onClose,
   title,
   subtitle,
-  icon,
-  iconColor,
-  iconBg,
   locked = false,
   children,
   footer,
@@ -35,15 +30,12 @@ export function DocumentSheet({
   onClose: () => void;
   title: string;
   subtitle?: string;
-  icon: IconName;
-  iconColor: string;
-  iconBg: string;
   locked?: boolean;
   children: React.ReactNode;
   footer?: React.ReactNode;
   overlay?: React.ReactNode;
 }) {
-  const { colors, fonts } = useTheme();
+  const { colors, isDark, fonts } = useTheme();
   const { gutter } = documentsLayout(useContentWidth());
   const insets = useSafeAreaInsets();
   const close = () => {
@@ -63,9 +55,13 @@ export function DocumentSheet({
           entering={SlideInDown.duration(300)}
           accessibilityViewIsModal
           style={{
-            backgroundColor: colors.background,
+            // Dark: lift the sheet off the dimmed page (surface + hairline edge).
+            backgroundColor: isDark ? colors.surface : colors.background,
             borderTopLeftRadius: 28,
             borderTopRightRadius: 28,
+            borderWidth: isDark ? 1 : 0,
+            borderBottomWidth: 0,
+            borderColor: colors.border,
             paddingTop: 10,
             maxHeight: "90%",
             width: "100%",
@@ -75,21 +71,18 @@ export function DocumentSheet({
         >
           <View style={{ alignSelf: "center", width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: 14 }} />
 
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: gutter }}>
-            <View style={{ width: 42, height: 42, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: iconBg }}>
-              <Ionicons name={icon} size={20} color={iconColor} />
-            </View>
+          <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12, paddingHorizontal: gutter }}>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text
                 accessibilityRole="header"
                 numberOfLines={1}
                 maxFontSizeMultiplier={1.4}
-                style={{ fontSize: 18, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}
+                style={{ fontSize: 18, fontWeight: "700", color: colors.foreground, fontFamily: fonts.heading }}
               >
                 {title}
               </Text>
               {subtitle ? (
-                <Text numberOfLines={1} maxFontSizeMultiplier={1.4} style={{ fontSize: 13, color: colors.mutedText, fontFamily: fonts.body, marginTop: 1 }}>
+                <Text numberOfLines={2} maxFontSizeMultiplier={1.4} style={{ fontSize: 13, lineHeight: 18, color: colors.mutedText, fontFamily: fonts.body, marginTop: 3 }}>
                   {subtitle}
                 </Text>
               ) : null}
@@ -100,17 +93,9 @@ export function DocumentSheet({
               accessibilityRole="button"
               accessibilityLabel="Close"
               hitSlop={8}
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: 18,
-                alignItems: "center",
-                justifyContent: "center",
-                backgroundColor: colors.surfaceSoft,
-                opacity: locked ? 0.4 : 1,
-              }}
+              style={{ width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceSoft, opacity: locked ? 0.4 : 1 }}
             >
-              <Ionicons name="close" size={18} color={colors.foreground} />
+              <Icon set="ion" name="close" size={18} color={colors.foreground} />
             </TouchableOpacity>
           </View>
 
@@ -135,43 +120,45 @@ export function DocumentSheet({
   );
 }
 
-/** Small uppercase-free field label used inside the sheets. */
+/** Quiet field label used inside the sheets. */
 export function FieldLabel({ children }: { children: React.ReactNode }) {
   const { colors, fonts } = useTheme();
   return (
-    <Text style={{ fontSize: 13, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body, marginBottom: 8 }}>{children}</Text>
+    <Text style={{ fontSize: 13, fontWeight: "600", color: colors.mutedText, fontFamily: fonts.body, marginBottom: 8 }}>{children}</Text>
   );
 }
 
 /** Tappable field showing a date (or a placeholder), opens a calendar. */
-export function DateField({ value, placeholder, onPress }: { value: string; placeholder: string; onPress: () => void }) {
+export function DateField({ value, placeholder, onPress, label }: { value: string; placeholder: string; onPress: () => void; label?: string }) {
   const { colors, fonts } = useTheme();
   return (
     <TouchableOpacity
-      activeOpacity={0.8}
+      activeOpacity={0.7}
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={value || placeholder}
+      accessibilityLabel={label ? `${label}: ${value || placeholder}` : value || placeholder}
       style={{
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 10,
-        paddingHorizontal: 16,
-        minHeight: 50,
-        borderRadius: 14,
+        justifyContent: "center",
+        paddingHorizontal: 14,
+        minHeight: label ? 56 : 48,
+        borderRadius: 12,
         backgroundColor: colors.input,
         borderWidth: 1,
         borderColor: colors.border,
       }}
     >
-      <Ionicons name="calendar-outline" size={17} color={value ? colors.primary : colors.mutedText} />
+      {label ? (
+        <Text maxFontSizeMultiplier={1.3} style={{ fontSize: 12, color: colors.mutedText, fontFamily: fonts.body }}>
+          {label}
+        </Text>
+      ) : null}
       <Text
         numberOfLines={1}
-        style={{ flex: 1, fontSize: 15, fontWeight: value ? "600" : "400", color: value ? colors.foreground : colors.mutedText, fontFamily: fonts.body }}
+        maxFontSizeMultiplier={1.3}
+        style={{ fontSize: 15, fontWeight: value ? "600" : "400", color: value ? colors.foreground : colors.mutedText, fontFamily: fonts.body, marginTop: label ? 2 : 0 }}
       >
         {value || placeholder}
       </Text>
-      <Ionicons name="chevron-down" size={16} color={colors.mutedText} />
     </TouchableOpacity>
   );
 }
@@ -179,14 +166,12 @@ export function DateField({ value, placeholder, onPress }: { value: string; plac
 /** Wide primary button with a spinner state. */
 export function SheetButton({
   label,
-  icon,
   onPress,
   disabled,
   loading,
   loadingLabel,
 }: {
   label: string;
-  icon?: IconName;
   onPress: () => void;
   disabled?: boolean;
   loading?: boolean;
@@ -203,8 +188,8 @@ export function SheetButton({
       accessibilityLabel={label}
       accessibilityState={{ disabled: Boolean(off), busy: Boolean(loading) }}
       style={{
-        height: 54,
-        borderRadius: 18,
+        height: 50,
+        borderRadius: 14,
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "center",
@@ -213,8 +198,7 @@ export function SheetButton({
         opacity: loading ? 0.85 : 1,
       }}
     >
-      {loading ? null : icon ? <Ionicons name={icon} size={18} color={disabled ? colors.mutedText : colors.buttonText} /> : null}
-      <Text style={{ fontSize: 15, fontWeight: "800", color: disabled && !loading ? colors.mutedText : colors.buttonText, fontFamily: fonts.body }}>
+      <Text style={{ fontSize: 15, fontWeight: "700", color: disabled && !loading ? colors.mutedText : colors.buttonText, fontFamily: fonts.body }}>
         {loading ? loadingLabel ?? label : label}
       </Text>
     </TouchableOpacity>
@@ -229,14 +213,13 @@ export function ChoiceChips<T extends string>({
   scroll = false,
 }: {
   value: T | null;
-  options: { value: T; label: string; icon?: IconName; color?: string; bg?: string }[];
+  options: { value: T; label: string }[];
   onChange: (value: T) => void;
   scroll?: boolean;
 }) {
   const { colors, fonts } = useTheme();
   const chips = options.map((option) => {
     const on = value === option.value;
-    const tint = option.color ?? colors.primary;
     return (
       <TouchableOpacity
         key={option.value}
@@ -246,22 +229,19 @@ export function ChoiceChips<T extends string>({
         accessibilityState={{ selected: on }}
         accessibilityLabel={option.label}
         style={{
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 6,
+          justifyContent: "center",
           paddingHorizontal: 14,
-          height: 40,
-          borderRadius: 20,
+          height: 36,
+          borderRadius: 18,
           borderWidth: 1,
-          borderColor: on ? tint : colors.border,
-          backgroundColor: on ? option.bg ?? colors.primaryLight : colors.surface,
+          borderColor: on ? colors.primary : colors.border,
+          backgroundColor: on ? colors.primary : colors.surface,
         }}
       >
-        {option.icon ? <Ionicons name={option.icon} size={15} color={on ? tint : colors.mutedText} /> : null}
         <Text
           numberOfLines={1}
           maxFontSizeMultiplier={1.3}
-          style={{ fontSize: 13, fontWeight: "700", color: on ? colors.foreground : colors.mutedText, fontFamily: fonts.body }}
+          style={{ fontSize: 13, fontWeight: "700", color: on ? colors.buttonText : colors.foreground, fontFamily: fonts.body }}
         >
           {option.label}
         </Text>

@@ -1,4 +1,4 @@
-import { forestApi, isNetworkError, type ForestStatus } from "./api";
+import { ApiError, forestApi, type ForestStatus } from "./api";
 import { packForestStatus, unpackForestStatus } from "./forestView";
 import { secureGetItem, secureRemoveItem, secureSetItem } from "./secureStorage";
 
@@ -95,10 +95,10 @@ export async function queueWatering(userId: string, dateKey: string): Promise<vo
 let flushing: Promise<ForestStatus | null> | null = null;
 
 /**
- * Sends queued waterings, oldest first. Stops at the first connectivity
- * failure (they stay queued) and drops one the server refuses outright.
+ * Sends queued waterings, oldest first. Stops at the first connectivity or
+ * server failure (they stay queued) and drops one the server refuses (4xx).
  * Returns the newest status the server sent back, or null if nothing was
- * queued; throws the connectivity error if none could be sent.
+ * queued; throws the first failure (offline or server) if none could be sent.
  */
 export function flushWaterings(userId: string, todayKey: string): Promise<ForestStatus | null> {
   if (flushing) return flushing;
@@ -116,7 +116,10 @@ export function flushWaterings(userId: string, todayKey: string): Promise<Forest
         );
         latest = result.status;
       } catch (err) {
-        if (isNetworkError(err)) {
+        // Only a 4xx is the server refusing this watering for good; offline,
+        // a timeout or a 5xx (e.g. mid-deploy) keeps it queued for next time.
+        const status = err instanceof ApiError ? err.status : undefined;
+        if (!(status && status >= 400 && status < 500)) {
           offlineError = err;
           break;
         }

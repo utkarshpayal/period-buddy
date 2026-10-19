@@ -1,6 +1,5 @@
-import { Feather, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   RefreshControl,
@@ -10,7 +9,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useDataRefresh } from "../../hooks/useDataRefresh";
+import { usePaginatedList } from "../../hooks/usePaginatedList";
 import { EmptyState } from "../../components/EmptyState";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
 import { LoadMoreButton } from "../../components/LoadMoreButton";
@@ -22,7 +21,6 @@ import { alert } from "../../lib/alert";
 import { formatShortDate } from "../../lib/format";
 import {
   getFriendlyErrorMessage,
-  isNetworkError,
   schemeApplicationsApi,
   type SchemeApplication,
   type SchemeApplicationStatus,
@@ -33,74 +31,41 @@ import {
   applicationDisplayName,
   schemeSlugOf,
 } from "../../lib/schemeHelpers";
+import { useSecureScreen } from "../../lib/screenPrivacy";
+import { Icon } from "../../components/Icon";
 
 const PAGE_SIZE = 20;
 
 export default function SchemeApplications() {
+  useSecureScreen("scheme-applications");
   const { colors, fonts, isDark } = useTheme();
   const router = useRouter();
   const softTints = getSoftTints(colors);
 
-  const [applications, setApplications] = useState<SchemeApplication[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [offline, setOffline] = useState(false);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-  const load = useCallback(async (isRefresh = false) => {
-    try {
-      if (isRefresh) setRefreshing(true);
-      else setLoading(true);
-      setError(null);
-      setOffline(false);
-      const res = await schemeApplicationsApi.list({ page: 1, limit: PAGE_SIZE });
-      setApplications(res.applications);
-      setPage(1);
-      setHasMore(res.pagination.page < res.pagination.pages);
-    } catch (err) {
-      setError(getFriendlyErrorMessage(err));
-      setOffline(isNetworkError(err));
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  // Picks up an application saved from a scheme detail screen opened on top.
-  useDataRefresh(["schemeApplications"], async () => {
-    const res = await schemeApplicationsApi.list({ page: 1, limit: PAGE_SIZE });
-    setApplications(res.applications);
-    setPage(1);
-    setHasMore(res.pagination.page < res.pagination.pages);
-    setError(null);
-  });
-
-  const handleLoadMore = useCallback(async () => {
-    if (loadingMore || !hasMore) return;
-    setLoadingMore(true);
-    try {
-      const nextPage = page + 1;
-      const res = await schemeApplicationsApi.list({
-        page: nextPage,
-        limit: PAGE_SIZE,
-      });
-      setApplications((prev) => [...prev, ...res.applications]);
-      setPage(nextPage);
-      setHasMore(res.pagination.page < res.pagination.pages);
-    } catch {
-      setHasMore(true);
-    } finally {
-      setLoadingMore(false);
-    }
-  }, [loadingMore, hasMore, page]);
+  // A refresh (an application saved from a scheme screen, or this screen's
+  // own withdraw) re-fetches the pages already shown instead of collapsing
+  // the list back to page 1, and a stale "Load more" is dropped.
+  const {
+    items: applications,
+    setItems: setApplications,
+    loading,
+    refreshing,
+    error,
+    offline,
+    hasMore,
+    loadingMore,
+    loadMore: handleLoadMore,
+    reload: load,
+  } = usePaginatedList(
+    async (page) => {
+      const res = await schemeApplicationsApi.list({ page, limit: PAGE_SIZE });
+      return { items: res.applications, hasMore: res.pagination.page < res.pagination.pages };
+    },
+    [],
+    { refreshOn: ["schemeApplications"] },
+  );
 
   // Users can only withdraw their own application — approval/decline is an
   // admin action handled in the admin portal, never self-served here.
@@ -118,13 +83,13 @@ export default function SchemeApplications() {
     } finally {
       setUpdatingId(null);
     }
-  }, []);
+  }, [setApplications]);
 
   const confirmWithdraw = useCallback(
     (app: SchemeApplication) => {
       alert(
         "Withdraw application?",
-        `${applicationDisplayName(app)} will be marked as withdrawn. You can’t undo this.`,
+        `${applicationDisplayName(app)} will be marked as withdrawn. You can't undo this.`,
         [
           { text: "Withdraw", style: "destructive", onPress: () => withdraw(app) },
           { text: "Cancel", style: "cancel" },
@@ -140,7 +105,7 @@ export default function SchemeApplications() {
 
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
-      <ScreenHeader title="My Applications" />
+      <ScreenHeader title="My applications" subtitle="Schemes you saved to follow up" />
       <LoadingErrorState
         loading={loading}
         error={error}
@@ -150,8 +115,8 @@ export default function SchemeApplications() {
         skeleton={<SkeletonCardList count={4} style={{ paddingTop: 16 }} />}
       >
         <ScrollView
-          className="flex-1 mt-4"
-          contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 40 }}
+          className="flex-1"
+          contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 12, paddingBottom: 40 }}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -163,8 +128,8 @@ export default function SchemeApplications() {
           {applications.length === 0 ? (
             <EmptyState
               icon="folder-outline"
-              title="No applications yet"
-              message="Applications you start will show up here."
+              title="Nothing saved yet"
+              message="Tap “Track this scheme” on any scheme to follow it here."
               actionLabel="Browse schemes"
               onAction={() => router.push("/government-schemes")}
             />
@@ -175,110 +140,126 @@ export default function SchemeApplications() {
                 const tintColor = colors[STATUS_TINT_TO_COLOR_KEY[meta.tint]];
                 const name = applicationDisplayName(app);
                 const slug = schemeSlugOf(app);
+                const busy = updatingId === app._id;
+                const openDetail = () =>
+                  slug && router.push(`/government-scheme-detail?id=${slug}`);
                 return (
                   <View
                     key={app._id}
-                    className="rounded-2xl p-4 mb-3"
-                    style={{ backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
+                    style={{
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                      borderWidth: 1,
+                      borderRadius: 24,
+                      marginBottom: 12,
+                      overflow: "hidden",
+                      ...getShadow(colors, isDark),
+                    }}
                   >
-                    <View className="flex-row items-center">
-                      <View
-                        className="p-2.5 rounded-xl mr-3"
-                        style={{ backgroundColor: softTints.pink }}
-                      >
-                        <Ionicons
-                          name="document-attach-outline"
-                          size={18}
-                          color={colors.primary}
-                        />
+                    {/* The whole top of the card opens the scheme */}
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      disabled={!slug}
+                      onPress={openDetail}
+                      accessibilityRole={slug ? "button" : undefined}
+                      accessibilityLabel={`${name}. ${meta.label}. ${meta.next}`}
+                      accessibilityHint={slug ? "Opens the scheme details" : undefined}
+                      style={{ padding: 16, paddingBottom: canWithdraw(app.status) ? 12 : 16 }}
+                    >
+                      <View className="flex-row items-start" style={{ gap: 12 }}>
+                        <View
+                          className="items-center justify-center"
+                          style={{ width: 42, height: 42, borderRadius: 14, backgroundColor: softTints.pink }}
+                        >
+                          <Icon set="ion"
+                            name="document-attach-outline"
+                            size={19}
+                            color={colors.primaryDark}
+                          />
+                        </View>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text
+                            numberOfLines={2}
+                            style={{ flexShrink: 1, fontSize: 15, lineHeight: 21, fontWeight: "700", color: colors.foreground, fontFamily: fonts.heading }}
+                          >
+                            {name}
+                          </Text>
+                          <Text
+                            maxFontSizeMultiplier={1.4}
+                            style={{ marginTop: 2, fontSize: 13, fontWeight: "400", color: colors.mutedText, fontFamily: fonts.body }}
+                          >
+                            Saved {formatShortDate(app.createdAt)}
+                          </Text>
+                        </View>
+                        {slug ? (
+                          <Icon set="feather" name="chevron-right" size={18} color={colors.mutedText} style={{ marginTop: 2 }} />
+                        ) : null}
                       </View>
-                      <TouchableOpacity
-                        activeOpacity={0.8}
-                        disabled={!slug}
-                        onPress={() =>
-                          slug && router.push(`/government-scheme-detail?id=${slug}`)
-                        }
-                        className="flex-1"
-                      >
-                        <Text
-                          className="text-sm font-bold"
-                          style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                        >
-                          {name}
-                        </Text>
-                        <Text
-                          className="text-xs mt-0.5"
-                          style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                        >
-                          Started {formatShortDate(app.createdAt)}
-                        </Text>
-                      </TouchableOpacity>
+
+                      {/* Status + what happens next */}
                       <View
-                        className="px-2.5 py-1 rounded-full"
-                        style={{ backgroundColor: `${tintColor}22` }}
+                        className="flex-row items-center self-start"
+                        style={{ marginTop: 12, gap: 6, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: softTints[meta.tint] }}
                       >
+                        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: tintColor }} />
                         <Text
-                          className="text-xs font-bold"
-                          style={{ color: tintColor, fontFamily: fonts.body }}
+                          numberOfLines={1}
+                          maxFontSizeMultiplier={1.3}
+                          style={{ fontSize: 13, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}
                         >
                           {meta.label}
                         </Text>
                       </View>
-                    </View>
-
-                    {/* Manage row */}
-                    <View className="flex-row items-center justify-between mt-3">
-                      {slug ? (
-                        <TouchableOpacity
-                          activeOpacity={0.7}
-                          onPress={() => router.push(`/government-scheme-detail?id=${slug}`)}
-                          className="flex-row items-center"
+                      <Text
+                        style={{ marginTop: 8, fontSize: 14, lineHeight: 20, fontWeight: "400", color: colors.foreground, fontFamily: fonts.body }}
+                      >
+                        {meta.next}
+                      </Text>
+                      {app.reviewNote ? (
+                        <Text
+                          numberOfLines={4}
+                          style={{ marginTop: 6, fontSize: 13, lineHeight: 18, fontWeight: "400", color: colors.mutedText, fontFamily: fonts.body }}
                         >
-                          <Text
-                            className="text-xs font-bold"
-                            style={{ color: colors.primary, fontFamily: fonts.body }}
-                          >
-                            View details
-                          </Text>
-                          <Feather
-                            name="chevron-right"
-                            size={13}
-                            color={colors.primary}
-                          />
-                        </TouchableOpacity>
-                      ) : (
-                        <View />
-                      )}
-                      {canWithdraw(app.status) ? (
+                          Note: {app.reviewNote}
+                        </Text>
+                      ) : null}
+                    </TouchableOpacity>
+
+                    {canWithdraw(app.status) ? (
+                      <View
+                        className="flex-row justify-end"
+                        style={{ borderTopWidth: 1, borderColor: colors.border, paddingHorizontal: 8 }}
+                      >
                         <TouchableOpacity
                           activeOpacity={0.7}
                           onPress={() => confirmWithdraw(app)}
-                          disabled={updatingId === app._id}
-                          className="flex-row items-center px-3 py-1.5 rounded-full"
-                          style={{ backgroundColor: colors.surfaceSoft ?? colors.surface }}
+                          disabled={busy}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Withdraw ${name}`}
+                          accessibilityState={{ disabled: busy, busy }}
+                          className="flex-row items-center justify-center"
+                          style={{ minHeight: 44, paddingHorizontal: 12, gap: 6 }}
                         >
-                          {updatingId === app._id ? (
-                            <ActivityIndicator size="small" color={colors.primary} />
+                          {busy ? (
+                            <ActivityIndicator size="small" color={colors.danger} />
                           ) : (
                             <>
-                              <Ionicons
+                              <Icon set="ion"
                                 name="close-circle-outline"
-                                size={14}
+                                size={18}
                                 color={colors.danger}
                               />
                               <Text
-                                className="text-xs font-bold ml-1"
-                                style={{ color: colors.danger, fontFamily: fonts.body }}
+                                maxFontSizeMultiplier={1.3}
+                                style={{ fontSize: 14, fontWeight: "700", color: colors.danger, fontFamily: fonts.body }}
                               >
                                 Withdraw
                               </Text>
                             </>
                           )}
                         </TouchableOpacity>
-                      ) : (
-                        <View />
-                      )}
-                    </View>
+                      </View>
+                    ) : null}
                   </View>
                 );
               })}

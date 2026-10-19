@@ -1,12 +1,8 @@
-import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useState } from "react";
 import {
-  KeyboardAvoidingView,
-  Platform,
   StatusBar,
-  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
@@ -18,6 +14,8 @@ import { useAuth } from "../../components/auth-context";
 import { useTheme } from "../../components/theme";
 import { connectPartnerAndResolveRoute } from "../../lib/auth";
 import { getShadow } from "../../components/ui-tokens";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
+import { Icon } from "../../components/Icon";
 
 const BENEFITS = [
   "Share your cycle phase, gently",
@@ -83,13 +81,10 @@ export default function PartnerConnect() {
       />
 
       <SafeAreaView className="flex-1">
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        <View
           className="flex-1"
-          keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
         >
-          <ScrollView
-            automaticallyAdjustKeyboardInsets
+          <KeyboardAwareScrollView bottomOffset={24}
             contentContainerStyle={{
               alignItems: "center",
               flexGrow: 1,
@@ -107,7 +102,7 @@ export default function PartnerConnect() {
                 end={{ x: 1, y: 1 }}
                 style={{ flex: 1, alignItems: "center", justifyContent: "center" }}
               >
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Go back"
                   onPress={() => router.back()}
                   activeOpacity={0.7}
                   className="absolute left-4 items-center justify-center rounded-full"
@@ -119,7 +114,7 @@ export default function PartnerConnect() {
                     ...getShadow(colors, isDark),
                   }}
                 >
-                  <Feather name="chevron-left" size={20} color={colors.foreground} />
+                  <Icon set="feather" name="chevron-left" size={20} color={colors.foreground} />
                 </TouchableOpacity>
 
                 <View
@@ -132,7 +127,7 @@ export default function PartnerConnect() {
                     ...getShadow(colors, isDark),
                   }}
                 >
-                  <Feather name="heart" size={30} color={colors.primary} />
+                  <Icon set="feather" name="heart" size={30} color={colors.primary} />
                 </View>
               </LinearGradient>
             </View>
@@ -175,7 +170,7 @@ export default function PartnerConnect() {
                       className="items-center justify-center rounded-full"
                       style={{ width: 22, height: 22, backgroundColor: colors.accentLight }}
                     >
-                      <Feather name="check" size={13} color={colors.accent} />
+                      <Icon set="feather" name="check" size={13} color={colors.accent} />
                     </View>
                     <Text
                       className="flex-1 text-xs font-semibold"
@@ -200,7 +195,7 @@ export default function PartnerConnect() {
                     height: 52,
                   }}
                 >
-                  <Feather
+                  <Icon set="feather"
                     name="key"
                     size={16}
                     color={codeFocused ? colors.primary : colors.mutedText}
@@ -275,8 +270,8 @@ export default function PartnerConnect() {
                 ) : null}
               </View>
             </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
+          </KeyboardAwareScrollView>
+        </View>
       </SafeAreaView>
     </View>
   );

@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -16,7 +15,6 @@ import {
   type ViewToken,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useAppState } from "../../components/AppState";
 import { EmptyState } from "../../components/EmptyState";
 import { CommentsSheet } from "../../components/reels/CommentsSheet";
 import { ReelPage, type ReelPageActions } from "../../components/reels/ReelPage";
@@ -38,6 +36,7 @@ import {
   type ReelItem,
 } from "../../lib/reels";
 import { shareWithAppLink } from "../../lib/share";
+import { Icon } from "../../components/Icon";
 
 const MUTE_KEY = "period-buddy.reels.muted";
 const SKELETON_TINT = { backgroundColor: "rgba(255,255,255,0.14)" };
@@ -64,7 +63,6 @@ export default function Reels() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const width = useContentWidth();
-  const { earnTokens } = useAppState();
   // "reels?reelId=..." deep link (Share on a reel, or a reel card in blogs.tsx):
   // that reel is fetched and pinned first. `openedAt` (app/_layout.tsx) makes
   // the same link tapped twice count as new.
@@ -313,10 +311,8 @@ export default function Reels() {
         else next.add(creatorId);
         return next;
       });
-      if (!wasFollowing) earnTokens(2);
       try {
         const result = await reelsApi.toggleFollowCreator(id);
-        if (result.tokensAwarded) earnTokens(result.tokensAwarded);
         setFollowingCreatorIds((prev) => {
           if (prev.has(creatorId) === result.followedByMe) return prev;
           const next = new Set(prev);
@@ -324,11 +320,19 @@ export default function Reels() {
           else next.delete(creatorId);
           return next;
         });
-      } catch {
-        // The optimistic state stays while offline, as before.
+      } catch (err) {
+        // Put the button back the way it was, so the tap can be tried again.
+        setFollowingCreatorIds((prev) => {
+          if (prev.has(creatorId) === wasFollowing) return prev;
+          const next = new Set(prev);
+          if (wasFollowing) next.add(creatorId);
+          else next.delete(creatorId);
+          return next;
+        });
+        alert(wasFollowing ? "Couldn't unfollow" : "Couldn't follow", getFriendlyErrorMessage(err));
       }
     },
-    [earnTokens, followingCreatorIds],
+    [followingCreatorIds],
   );
   const toggleFollowRef = useRef(toggleFollow);
   toggleFollowRef.current = toggleFollow;
@@ -360,6 +364,7 @@ export default function Reels() {
     async (reelId: string, optionId: string) => {
       const current = reelsRef.current.find((reel) => reel.id === reelId);
       if (!current || current.votedOptionId) return;
+      const before = { votedOptionId: current.votedOptionId, pollOptions: current.pollOptions };
       setReels((list) =>
         updateReel(list, reelId, (reel) => ({
           ...reel,
@@ -367,10 +372,8 @@ export default function Reels() {
           pollOptions: reel.pollOptions.map((option) => (option.id === optionId ? { ...option, votes: option.votes + 1 } : option)),
         })),
       );
-      earnTokens(5);
       try {
         const result = await reelsApi.votePoll(reelId, optionId);
-        earnTokens(result.tokensAwarded);
         setReels((list) =>
           updateReel(list, reelId, (reel) => ({
             ...reel,
@@ -378,11 +381,13 @@ export default function Reels() {
             pollOptions: result.pollOptions.map((option) => ({ id: option.optionId, topic: option.topic, votes: option.votes })),
           })),
         );
-      } catch {
-        // The optimistic vote stays visible while offline, as before.
+      } catch (err) {
+        // Undo, so the vote isn't stuck as "done" and can be cast again.
+        setReels((list) => updateReel(list, reelId, (reel) => ({ ...reel, ...before })));
+        alert("Couldn't save your vote", getFriendlyErrorMessage(err));
       }
     },
-    [earnTokens],
+    [],
   );
 
   // A reel that played to the end moves on to the next one.
@@ -580,7 +585,7 @@ export default function Reels() {
           className="h-10 w-10 items-center justify-center rounded-full bg-black/30"
           onPress={() => router.back()}
         >
-          <Feather name="arrow-left" size={20} color="white" />
+          <Icon set="feather" name="arrow-left" size={20} color="white" />
         </TouchableOpacity>
         <Text className="flex-1 text-xl font-extrabold text-white" style={{ fontFamily: fonts.heading }}>
           Reels
@@ -596,7 +601,7 @@ export default function Reels() {
           <Text numberOfLines={1} className="text-[13px] font-bold text-white" style={{ flexShrink: 1, fontFamily: fonts.body }}>
             {feedLabel}
           </Text>
-          <Feather name="chevron-down" size={14} color="white" />
+          <Icon set="feather" name="chevron-down" size={14} color="white" />
         </TouchableOpacity>
       </View>
 
@@ -606,7 +611,7 @@ export default function Reels() {
           className="absolute self-center flex-row items-center rounded-full bg-black/55 px-4 py-2"
           style={{ top: insets.top + 60, gap: 6 }}
         >
-          <Feather name="volume-x" size={14} color="white" />
+          <Icon set="feather" name="volume-x" size={14} color="white" />
           <Text className="text-[13px] font-bold text-white" style={{ fontFamily: fonts.body }}>
             Tap for sound
           </Text>
@@ -628,7 +633,7 @@ export default function Reels() {
           className="absolute self-center flex-row items-center rounded-full bg-black/60 px-4 py-2"
           style={{ top: insets.top + 60, gap: 6 }}
         >
-          <Feather name="refresh-cw" size={14} color="white" />
+          <Icon set="feather" name="refresh-cw" size={14} color="white" />
           <Text className="text-[13px] font-bold text-white" style={{ fontFamily: fonts.body }}>
             Couldn&apos;t load more · Try again
           </Text>

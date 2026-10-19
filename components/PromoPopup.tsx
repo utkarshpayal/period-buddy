@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
 import { Image, Modal, Pressable, Text, TouchableOpacity, View } from "react-native";
@@ -9,6 +8,7 @@ import { useViewer } from "../hooks/useViewer";
 import { appConfigApi } from "../lib/api";
 import { PromoBanner, bannersFor } from "../lib/appConfig";
 import { runTapAction } from "../lib/tapAction";
+import { Icon } from "./Icon";
 
 // A beat after Home settles, so it never lands on top of the first paint
 // or a permission prompt.
@@ -98,7 +98,7 @@ export function PromoPopup() {
             accessibilityLabel="Close"
             style={{ position: "absolute", top: 12, right: 12, width: 28, height: 28, borderRadius: 14, backgroundColor: "rgba(0,0,0,0.35)", alignItems: "center", justifyContent: "center" }}
           >
-            <Ionicons name="close" size={16} color="#fff" />
+            <Icon set="ion" name="close" size={16} color="#fff" />
           </TouchableOpacity>
         </Pressable>
       </Pressable>

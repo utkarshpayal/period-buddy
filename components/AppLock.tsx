@@ -40,25 +40,47 @@ type AppLockContextValue = {
 
 const AppLockContext = createContext<AppLockContextValue | undefined>(undefined);
 
+/**
+ * After the OS prompt closes, AppState events from it (Android's PIN/pattern
+ * screen is a separate activity, so the app briefly goes to "background")
+ * can still arrive; ignore them for this long so unlocking never re-locks.
+ */
+const AUTH_GRACE_MS = 1000;
+
 export function AppLockProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
   const [hasHydrated, setHasHydrated] = useState(false);
   const [settings, setSettings] = useState<StoredAppLockSettings>(DEFAULT_SETTINGS);
   const [isLocked, setIsLocked] = useState(false);
   const [deviceLockLabel, setDeviceLockLabel] = useState("device lock");
-  const appStateRef = useRef<AppStateStatus>(RNAppState.currentState);
+  // True while the OS prompt is up (and for AUTH_GRACE_MS after), so the
+  // AppState changes it causes don't re-lock the app.
+  // A count rather than a flag, so an older prompt's grace timer can't
+  // clear it while a newer prompt is still up.
+  const authenticatingRef = useRef(0);
+  const isAuthenticatedRef = useRef(isAuthenticated);
+  isAuthenticatedRef.current = isAuthenticated;
 
+  // Cold start: start locked in the same render that marks the settings
+  // hydrated, so AppShell (which waits on `hasHydrated`) never paints app
+  // content first. AuthProvider only mounts us once the session is known,
+  // so isAuthenticated is already final here. Signing in later doesn't lock.
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY)
       .then((raw) => {
-        if (raw) {
-          const parsed = JSON.parse(raw) as StoredAppLockSettings;
-          setSettings({ ...DEFAULT_SETTINGS, ...parsed });
-        }
+        if (!raw) return;
+        const next = { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as StoredAppLockSettings) };
+        setSettings(next);
+        if (next.enabled && isAuthenticatedRef.current) setIsLocked(true);
       })
       .catch(() => {})
       .finally(() => setHasHydrated(true));
   }, []);
+
+  // A signed-out app has nothing to lock; don't carry a lock into the next sign-in.
+  useEffect(() => {
+    if (!isAuthenticated) setIsLocked(false);
+  }, [isAuthenticated]);
 
   const persist = useCallback(async (next: StoredAppLockSettings) => {
     setSettings(next);
@@ -84,30 +106,23 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
       .catch(() => setDeviceLockLabel("device lock"));
   }, []);
 
-  // Start locked once we know the user has app lock enabled — re-lock is
-  // handled below on every background -> foreground transition too.
+  // Lock as the app goes to the background, not when it comes back: the
+  // app-switcher snapshot and the first frames after resume then already
+  // show the lock. "inactive" alone (iOS Face ID sheet, Control Center,
+  // permission prompts) doesn't count, or unlocking would re-lock at once.
   useEffect(() => {
-    if (hasHydrated && settings.enabled && isAuthenticated) {
-      setIsLocked(true);
-    }
-  }, [hasHydrated, settings.enabled, isAuthenticated]);
-
-  useEffect(() => {
-    const subscription = RNAppState.addEventListener("change", (nextState) => {
-      const cameFromBackground =
-        appStateRef.current.match(/inactive|background/) && nextState === "active";
-      appStateRef.current = nextState;
-      if (cameFromBackground && settings.enabled && isAuthenticated) {
-        setIsLocked(true);
-      }
+    const subscription = RNAppState.addEventListener("change", (nextState: AppStateStatus) => {
+      if (nextState !== "background" || authenticatingRef.current > 0) return;
+      if (settings.enabled && isAuthenticatedRef.current) setIsLocked(true);
     });
     return () => subscription.remove();
-  }, [settings.enabled, isAuthenticated]);
+  }, [settings.enabled]);
 
   // Delegates entirely to the OS: `disableDeviceFallback: false` lets it use
   // whatever the phone's own lock screen offers (fingerprint, Face ID, PIN,
   // pattern, or passcode) instead of a custom in-app credential.
   const authenticate = useCallback(async (promptMessage: string): Promise<AuthResult> => {
+    authenticatingRef.current += 1;
     try {
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage,
@@ -121,6 +136,10 @@ export function AppLockProvider({ children }: { children: React.ReactNode }) {
       };
     } catch {
       return { success: false, error: "Your device lock isn't available here." };
+    } finally {
+      setTimeout(() => {
+        authenticatingRef.current -= 1;
+      }, AUTH_GRACE_MS);
     }
   }, []);
 

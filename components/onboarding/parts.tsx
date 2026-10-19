@@ -6,6 +6,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-na
 import { getDateKey } from "../../lib/format";
 import { addDays, parseDateKey } from "../../lib/onboarding";
 import { useTheme } from "../theme";
+import { Icon } from "../Icon";
 
 // Building blocks for components/onboarding/OnboardingFlow.tsx. Kept
 // presentational: every value comes in through props.
@@ -68,7 +69,7 @@ export function PrimaryButton({ label, onPress, disabled, loading, icon = "arrow
       ) : (
         <>
           <Text style={{ color: colors.buttonText, fontSize: 16, fontWeight: "800", fontFamily: fonts.body }}>{label}</Text>
-          {icon ? <Ionicons name={icon} size={18} color={colors.buttonText} /> : null}
+          {icon ? <Icon set="ion" name={icon} size={18} color={colors.buttonText} /> : null}
         </>
       )}
     </Pressable>
@@ -132,7 +133,7 @@ export function OptionCard({ icon, label, hint, selected, onPress, multi }: Opti
           backgroundColor: selected ? colors.surface : colors.surfaceSoft,
         }}
       >
-        <Ionicons name={icon} size={20} color={colors.primary} />
+        <Icon set="ion" name={icon} size={20} color={colors.primary} />
       </View>
       <View style={{ flex: 1 }}>
         <Text style={{ color: colors.foreground, fontSize: 15.5, fontWeight: "800", fontFamily: fonts.body }}>{label}</Text>
@@ -152,7 +153,7 @@ export function OptionCard({ icon, label, hint, selected, onPress, multi }: Opti
           backgroundColor: selected ? colors.primary : "transparent",
         }}
       >
-        {selected ? <Ionicons name="checkmark" size={15} color={colors.buttonText} /> : null}
+        {selected ? <Icon set="ion" name="checkmark" size={15} color={colors.buttonText} /> : null}
       </View>
     </Pressable>
   );
@@ -215,7 +216,7 @@ export function NumberStepper({ value, min, max, unit, onChange, quickPicks }: N
         opacity: disabled ? 0.35 : pressed ? 0.7 : 1,
       })}
     >
-      <Ionicons name={icon} size={24} color={colors.foreground} />
+      <Icon set="ion" name={icon} size={24} color={colors.foreground} />
     </Pressable>
   );
 
@@ -315,7 +316,7 @@ export function MonthCalendar({ selectedKey, onSelect, highlightLength, minDate,
         opacity: !enabled ? 0.3 : pressed ? 0.6 : 1,
       })}
     >
-      <Ionicons name={direction < 0 ? "chevron-back" : "chevron-forward"} size={18} color={colors.foreground} />
+      <Icon set="ion" name={direction < 0 ? "chevron-back" : "chevron-forward"} size={18} color={colors.foreground} />
     </Pressable>
   );
 

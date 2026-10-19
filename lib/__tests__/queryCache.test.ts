@@ -121,3 +121,14 @@ test("an old persisted copy is ignored", async () => {
   store.map.set("nura.qc.i", JSON.stringify({ at: Date.now() - 8 * 24 * 3600 * 1000, data: 1 }));
   assert.equal(await hydrateQuery("i"), undefined);
 });
+
+test("a request in flight when its topic changes is not shared or cached as fresh", async () => {
+  let resolveOld!: (value: string) => void;
+  const old = fetchQuery("p", () => new Promise<string>((resolve) => (resolveOld = resolve)), { topics: ["cycle"] });
+  emitDataChange("cycle");
+  const fresh = fetchQuery("p", async () => "after-save", { topics: ["cycle"], force: true });
+  resolveOld("before-save");
+  assert.equal(await old, "before-save");
+  assert.equal(await fresh, "after-save");
+  assert.equal(peekQuery("p"), "after-save");
+});

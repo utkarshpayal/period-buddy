@@ -19,6 +19,8 @@ import { getSoftTints } from "./ui-tokens";
 import { PaymentTrustFooter } from "./subscription/PaymentTrustFooter";
 import { isPlausibleUpiId, payWithUpiCollect, startUpiIntent } from "../lib/cashfreeUpi";
 import { UPI_APPS, upiAppLaunchUrls, type UpiApp } from "../lib/upiIntent";
+import { AppLockCover } from "./AppLockScreen";
+import { Icon } from "./Icon";
 
 export type PaymentSheetOutcome = { type: "success" } | { type: "failed"; message?: string } | { type: "dismiss" };
 
@@ -82,10 +84,17 @@ export function PaymentSheet({
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const deadline = useRef(0);
   const lastPoll = useRef(0);
-  const verifying = useRef(false);
+  /** The verify in flight, shared so a close can wait for a poll's answer instead of dropping it. */
+  const inflight = useRef<Promise<"paid" | "pending" | "failed" | null> | null>(null);
   const settled = useRef(false);
+  const mounted = useRef(true);
+  const closing = useRef(false);
+  const submittingRef = useRef(false);
+  const openingRef = useRef(false);
   const stepRef = useRef(step);
   stepRef.current = step;
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
   const onVerifyRef = useRef(onVerify);
   onVerifyRef.current = onVerify;
   const onOutcomeRef = useRef(onOutcome);
@@ -103,12 +112,25 @@ export function PaymentSheet({
     onOutcomeRef.current(result);
   };
 
-  /** One verify; settles on paid/failed. Resolves the status it saw. */
-  const checkOnce = async (): Promise<"paid" | "pending" | "failed" | null> => {
-    if (verifying.current || settled.current) return null;
-    verifying.current = true;
-    try {
-      const status = await onVerifyRef.current();
+  /** True once the sheet has settled or gone: nothing more may open an app or start polling. */
+  const gone = () => settled.current || !mounted.current || !visibleRef.current;
+
+  /**
+   * One verify; settles on paid/failed. Resolves the status it saw, or null
+   * once settled. A check already in flight is shared rather than skipped.
+   */
+  const checkOnce = (): Promise<"paid" | "pending" | "failed" | null> => {
+    if (settled.current) return Promise.resolve(null);
+    if (inflight.current) return inflight.current;
+    const run = (async () => {
+      let status: "paid" | "pending" | "failed";
+      try {
+        status = await onVerifyRef.current();
+      } catch {
+        // A throwing verify says nothing about the payment: keep waiting.
+        status = "pending";
+      }
+      if (settled.current) return null;
       if (status === "paid") finish({ type: "success" });
       else if (status === "failed" && stepRef.current === "waiting") {
         stopPolling();
@@ -116,9 +138,12 @@ export function PaymentSheet({
         setStep("error");
       }
       return status;
-    } finally {
-      verifying.current = false;
-    }
+    })();
+    inflight.current = run;
+    void run.finally(() => {
+      if (inflight.current === run) inflight.current = null;
+    });
+    return run;
   };
 
   const startWaiting = (label: string) => {
@@ -146,10 +171,19 @@ export function PaymentSheet({
     }, 1000);
   };
 
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      stopPolling();
+    };
+  }, []);
+
   // Fresh state each time the sheet opens.
   useEffect(() => {
     if (!visible) return;
     settled.current = false;
+    closing.current = false;
     setStep("choose");
     setNotice(null);
     setError(null);
@@ -181,13 +215,24 @@ export function PaymentSheet({
   }, [visible]);
 
   const payWithApp = async (app: UpiApp | null) => {
-    if (opening) return;
+    if (openingRef.current) return;
+    openingRef.current = true;
+    try {
+      await openUpiApp(app);
+    } finally {
+      openingRef.current = false;
+      if (mounted.current) setOpening(null);
+    }
+  };
+
+  const openUpiApp = async (app: UpiApp | null) => {
     setOpening(app?.id ?? "other");
     setNotice(null);
     // A fresh payment attempt per tap: a link the person cancelled in one app can't be reused.
     const result = await startUpiIntent({ mode, paymentSessionId });
+    // Closed while the link was being made: don't send them off to pay for nothing.
+    if (gone()) return;
     if (result.type === "error") {
-      setOpening(null);
       setNotice(result.message);
       return;
     }
@@ -201,7 +246,7 @@ export function PaymentSheet({
         /* try the next link */
       }
     }
-    setOpening(null);
+    if (gone()) return;
     if (!opened) {
       setNotice(`Couldn't open ${app?.name ?? "a UPI app"}. Try another app or pay with your UPI ID.`);
       return;
@@ -210,14 +255,24 @@ export function PaymentSheet({
   };
 
   const submitUpiId = async () => {
+    // The keyboard's Go key skips the button's `disabled`, so guard here: two
+    // taps would send two collect requests to the person's UPI app.
+    if (submittingRef.current) return;
     if (!isPlausibleUpiId(upiId)) {
       setUpiError("Enter a valid UPI ID, like name@bank.");
       return;
     }
     setUpiError(null);
+    submittingRef.current = true;
     setSubmitting(true);
-    const result = await payWithUpiCollect({ mode, paymentSessionId, upiId });
-    setSubmitting(false);
+    let result: Awaited<ReturnType<typeof payWithUpiCollect>>;
+    try {
+      result = await payWithUpiCollect({ mode, paymentSessionId, upiId });
+    } finally {
+      submittingRef.current = false;
+      if (mounted.current) setSubmitting(false);
+    }
+    if (gone()) return;
     if (result.type === "error") {
       setUpiError(result.message);
       return;
@@ -228,24 +283,35 @@ export function PaymentSheet({
   const checkNow = async () => {
     setChecking(true);
     const status = await checkOnce();
+    if (!mounted.current) return;
     setChecking(false);
     if (status === "pending") {
       setNotice("Not received yet. If you've paid, give it a few seconds — this updates on its own.");
     }
   };
 
-  /** Close (X / back). While waiting, one last check so a payment made just now still counts. */
+  /**
+   * Close (X / back). While waiting, one last check so a payment made just
+   * now still counts; if a poll is already asking, its answer is the one
+   * that counts (dismissing over it would drop a payment that just landed).
+   */
   const close = async () => {
-    if (step === "upiId") {
+    if (closing.current || openingRef.current || submittingRef.current) return;
+    if (stepRef.current === "upiId") {
       setStep("choose");
       return;
     }
-    if (step === "waiting") {
+    if (stepRef.current === "waiting") {
+      closing.current = true;
       stopPolling();
       setChecking(true);
-      const status = await checkOnce();
-      setChecking(false);
-      if (status === "paid" || status === "failed") return;
+      try {
+        const status = await checkOnce();
+        if (status !== "pending") return;
+      } finally {
+        closing.current = false;
+        if (mounted.current) setChecking(false);
+      }
     }
     finish({ type: "dismiss" });
   };
@@ -308,7 +374,7 @@ export function PaymentSheet({
       style={{ minHeight: 56 }}
     >
       <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: softTints.rose }}>
-        <Feather name={icon} size={18} color={colors.primary} />
+        <Icon set="feather" name={icon} size={18} color={colors.primary} />
       </View>
       <View className="flex-1 ml-3">
         <Text className="text-sm font-bold" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
@@ -318,7 +384,7 @@ export function PaymentSheet({
           {detail}
         </Text>
       </View>
-      <Feather name="chevron-right" size={18} color={colors.mutedText} />
+      <Icon set="feather" name="chevron-right" size={18} color={colors.mutedText} />
     </TouchableOpacity>
   );
 
@@ -338,7 +404,7 @@ export function PaymentSheet({
                   hitSlop={10}
                   className="mr-2 p-1"
                 >
-                  <Feather name="arrow-left" size={20} color={colors.foreground} />
+                  <Icon set="feather" name="arrow-left" size={20} color={colors.foreground} />
                 </TouchableOpacity>
               ) : null}
               <View className="flex-1">
@@ -353,12 +419,12 @@ export function PaymentSheet({
               </View>
               <TouchableOpacity
                 onPress={() => void close()}
-                disabled={checking}
+                disabled={checking || opening !== null || submitting}
                 accessibilityLabel="Close"
                 hitSlop={10}
                 className="p-1"
               >
-                <Feather name="x" size={20} color={colors.mutedText} />
+                <Icon set="feather" name="x" size={20} color={colors.mutedText} />
               </TouchableOpacity>
             </View>
 
@@ -386,7 +452,7 @@ export function PaymentSheet({
                             installed.length ? "Other app" : "UPI app",
                             colors.primary,
                             () => void payWithApp(null),
-                            <Feather name="grid" size={22} color="#FFFFFF" />,
+                            <Icon set="feather" name="grid" size={22} color="#FFFFFF" />,
                           )}
                       </View>
                     )}
@@ -395,7 +461,7 @@ export function PaymentSheet({
 
                 {notice ? (
                   <View className="flex-row items-start rounded-2xl px-3.5 py-3 mt-2" style={{ backgroundColor: softTints.rose }}>
-                    <Feather name="alert-circle" size={15} color={colors.danger} style={{ marginTop: 1 }} />
+                    <Icon set="feather" name="alert-circle" size={15} color={colors.danger} style={{ marginTop: 1 }} />
                     <Text className="flex-1 text-xs font-semibold ml-2" style={{ color: colors.foreground, fontFamily: fonts.body }}>
                       {notice}
                     </Text>
@@ -421,7 +487,7 @@ export function PaymentSheet({
             {step === "upiId" && (
               <>
                 <View className="flex-row items-center rounded-2xl px-3.5" style={{ backgroundColor: colors.input }}>
-                  <Feather name="at-sign" size={15} color={colors.mutedText} />
+                  <Icon set="feather" name="at-sign" size={15} color={colors.mutedText} />
                   <TextInput
                     value={upiId}
                     onChangeText={(v) => {
@@ -519,7 +585,7 @@ export function PaymentSheet({
             {step === "error" && (
               <View className="items-center py-2">
                 <View className="w-14 h-14 rounded-full items-center justify-center mb-4" style={{ backgroundColor: softTints.rose }}>
-                  <Feather name="alert-circle" size={26} color={colors.danger} />
+                  <Icon set="feather" name="alert-circle" size={26} color={colors.danger} />
                 </View>
                 <Text className="text-sm font-semibold text-center px-2 mb-5" style={{ color: colors.foreground, fontFamily: fonts.body }}>
                   {error}
@@ -540,6 +606,7 @@ export function PaymentSheet({
           </View>
         </KeyboardAvoidingView>
       </View>
+      <AppLockCover />
     </Modal>
   );
 }

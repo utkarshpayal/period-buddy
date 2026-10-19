@@ -1,4 +1,3 @@
-import { Feather, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useCallback, useRef, useState } from "react";
 import {
@@ -11,7 +10,8 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { useAppState } from "../../components/AppState";
+import { useAuth } from "../../components/auth-context";
+import { AppModalHost } from "../../components/modals/AppModalHost";
 import { useTheme } from "../../components/theme";
 import { SkeletonBlock } from "../../components/Skeleton";
 import { useAsyncLoad } from "../../hooks/useAsyncLoad";
@@ -36,6 +36,13 @@ import {
 } from "../../components/wellbeing/WellbeingUI";
 import { MedicalReviewBadge } from "../../components/MedicalReviewBadge";
 import { pickMedicalReview } from "../../lib/medicalReview";
+import { computeAge } from "../../lib/chatTopics";
+import { Icon } from "../../components/Icon";
+
+// The couples decks (conversation "spark" cards and the comfort/position
+// cards) are 18+. Same rule as the 18+ chat topic: an unknown birthday stays
+// locked. STI, consent and contraception guides stay visible to everyone.
+const ADULT_DECKS_MIN_AGE = 18;
 
 interface ResourceCategory {
   id: string;
@@ -106,7 +113,7 @@ function normalizePositionCard(card: unknown, index: number): PositionCard {
       name:
         typeof objectCard.name === "string"
           ? objectCard.name
-          : `Comfort Card ${index + 1}`,
+          : `Comfort card ${index + 1}`,
       focus:
         typeof objectCard.focus === "string"
           ? objectCard.focus
@@ -122,7 +129,7 @@ function normalizePositionCard(card: unknown, index: number): PositionCard {
   }
 
   return {
-    name: `Comfort Card ${index + 1}`,
+    name: `Comfort card ${index + 1}`,
     focus: "Comfort, consent, and communication",
     tip: normalizeTextCard(
       card,
@@ -133,10 +140,12 @@ function normalizePositionCard(card: unknown, index: number): PositionCard {
 
 export default function SexualWellbeing() {
   const { colors, isDark, fonts } = useTheme();
-  const { earnTokens } = useAppState();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const tones = getWellbeingTones(colors);
+  const { user } = useAuth();
+  const age = computeAge(user?.dateOfBirth);
+  const canSeeAdultDecks = age !== null && age >= ADULT_DECKS_MIN_AGE;
 
   // Which card deck is open inline, if any.
   const [activeGameMode, setActiveGameMode] = useState<"none" | "spark" | "positions">("none");
@@ -150,11 +159,11 @@ export default function SexualWellbeing() {
   const categories: ResourceCategory[] = [
     {
       id: "sw_1",
-      title: "Intimacy & Periods",
+      title: "Intimacy during periods",
       icon: "heart-circle-outline",
       color: colors.primary,
       items: 8,
-      summary: "Guidance on comfort, consent, and clear boundaries during periods.",
+      summary: "Comfort, consent and clear boundaries when you're on your period.",
       extendedGuide: [
         "Talk about energy, flow, and comfort before intimacy.",
         "Protection still matters during periods because pregnancy and infection risks can remain.",
@@ -163,37 +172,37 @@ export default function SexualWellbeing() {
     },
     {
       id: "sw_2",
-      title: "STI Prevention Guide",
+      title: "Preventing STIs",
       icon: "shield-checkmark-outline",
       color: colors.success,
       items: 12,
-      summary: "Clear guidance on barrier protection, routine screening, and stigma-free conversations.",
+      summary: "Condoms, regular testing and talking about STIs (sexually transmitted infections) without shame.",
       extendedGuide: [
         "Use protection from the start of sex, not halfway through.",
-        "Consider routine testing every 6 months with active partners.",
+        "Get tested for STIs at least once a year if you're sexually active and under 25, and whenever you have a new partner or symptoms.",
         "Many STIs can have no symptoms, so testing is part of care.",
       ],
     },
     {
       id: "sw_3",
-      title: "Contraception Matrix",
+      title: "Birth control options",
       icon: "pill",
       color: colors.accentText,
       items: 15,
-      summary: "Compare hormonal options, barriers, emergency contraception, and what to discuss with an OBGYN.",
+      summary: "Compare the pill, condoms, emergency contraception (the morning-after pill) and what to ask a gynaecologist.",
       extendedGuide: [
         "Combining condoms with another method can improve protection.",
         "Emergency contraception works best as soon as possible after unprotected sex.",
-        "Ask a clinician before starting or changing hormonal contraception.",
+        "Ask a doctor before starting or changing hormonal birth control, like the pill.",
       ],
     },
     {
       id: "sw_4",
-      title: "Consent & Safety",
+      title: "Consent & safety",
       icon: "hand-left-outline",
       color: colors.warning,
       items: 6,
-      summary: "Boundaries, communication, privacy, and enthusiastic consent.",
+      summary: "Boundaries, talking openly, privacy, and a clear, happy yes.",
       extendedGuide: [
         "Consent should be clear, conscious, and enthusiastic.",
         "Anyone can pause, change their mind, or stop at any point.",
@@ -207,6 +216,7 @@ export default function SexualWellbeing() {
     data: wellbeingData,
     loading: loadingWellbeing,
     refreshing,
+    error: loadError,
     reload,
   } = useAsyncLoad<{ resources: WellbeingResource[]; sparkDeck: WellbeingGameDeck; positionsDeck: WellbeingGameDeck }>(
     async () => {
@@ -269,7 +279,6 @@ export default function SexualWellbeing() {
   async function handleNextSparkCard() {
     const nextIndex = (sparkIndex + 1) % sparkCards.length;
     setCurrentPromptIdx(nextIndex);
-    earnTokens(1);
     try {
       await wellbeingApi.drawGameCard("spark", nextIndex);
     } catch {
@@ -280,7 +289,6 @@ export default function SexualWellbeing() {
   async function handleNextPositionCard() {
     const nextIndex = (positionIndex + 1) % positionCards.length;
     setCurrentPositionIdx(nextIndex);
-    earnTokens(2);
     try {
       await wellbeingApi.drawGameCard("positions", nextIndex);
     } catch {
@@ -291,7 +299,6 @@ export default function SexualWellbeing() {
   function handleOpenArticleModal(category: ResourceCategory) {
     setSelectedCategory(category);
     setModalVisible(true);
-    earnTokens(3);
     openedAtRef.current = Date.now();
   }
 
@@ -349,6 +356,18 @@ export default function SexualWellbeing() {
           contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 12, paddingBottom: insets.bottom + 48 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
         >
+          {loadError && !loadingWellbeing ? (
+            <View
+              className="flex-row items-center"
+              style={{ gap: 8, marginBottom: 14, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 14, backgroundColor: colors.surfaceSoft }}
+            >
+              <Icon set="ion" name="cloud-offline-outline" size={16} color={colors.mutedText} />
+              <Text style={{ flex: 1, color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "500", fontFamily: fonts.body }}>
+                Showing saved guides. Pull down to refresh.
+              </Text>
+            </View>
+          ) : null}
+
           <WellbeingIntro
             icon="heart-circle-outline"
             tone={tones.rose}
@@ -356,115 +375,12 @@ export default function SexualWellbeing() {
             body="Consent, protection and comfort, explained without judgement."
             chips={[
               { icon: "lock-closed-outline", label: "Private" },
-              { icon: "shield-checkmark-outline", label: "Evidence-based" },
+              { icon: "heart-outline", label: "No judgement" },
             ]}
           />
 
-          {/* Partner card decks */}
-          <SectionHeader title="Together" style={{ marginTop: 28 }} />
-          {loadingWellbeing ? (
-            <View className="flex-row" style={{ gap: 12 }}>
-              <SkeletonBlock width="48%" height={150} radius={22} />
-              <SkeletonBlock width="48%" height={150} radius={22} />
-            </View>
-          ) : openDeck ? (
-            <WellbeingCard style={{ padding: 18 }}>
-              <View className="flex-row items-center" style={{ gap: 12 }}>
-                <IconCircle icon={openDeck.icon} tone={openDeck.tone} size={42} />
-                <View className="flex-1">
-                  <Text numberOfLines={1} style={{ color: colors.foreground, fontSize: 15, fontWeight: "800", fontFamily: fonts.heading }}>{openDeck.title}</Text>
-                  <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.mono, marginTop: 1 }}>
-                    {`${(openDeck.mode === "spark" ? sparkIndex : positionIndex) + 1} of ${openDeck.count}`}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  onPress={() => setActiveGameMode("none")}
-                  hitSlop={8}
-                  accessibilityRole="button"
-                  accessibilityLabel="Close cards"
-                  style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surfaceSoft, alignItems: "center", justifyContent: "center" }}
-                >
-                  <Feather name="x" size={16} color={colors.foreground} />
-                </TouchableOpacity>
-              </View>
-
-              <View
-                style={{ marginTop: 16, minHeight: 168, borderRadius: 20, backgroundColor: openDeck.tone.bg, paddingHorizontal: 22, paddingVertical: 24, justifyContent: "center" }}
-              >
-                <Ionicons
-                  name={openDeck.mode === "spark" ? "chatbubble-ellipses-outline" : "sparkles-outline"}
-                  size={20}
-                  color={openDeck.tone.fg}
-                  style={{ alignSelf: "center", marginBottom: 12, opacity: 0.8 }}
-                />
-                {openDeck.mode === "spark" ? (
-                  <Text style={{ color: colors.foreground, fontSize: 17, lineHeight: 25, fontWeight: "700", fontFamily: fonts.heading, textAlign: "center" }}>
-                    {sparkCards[sparkIndex]}
-                  </Text>
-                ) : currentPosition ? (
-                  <View className="items-center">
-                    <Text style={{ color: colors.foreground, fontSize: 17, fontWeight: "800", fontFamily: fonts.heading, textAlign: "center" }}>
-                      {currentPosition.name}
-                    </Text>
-                    <Text style={{ color: openDeck.tone.fg, fontSize: 13, fontWeight: "700", fontFamily: fonts.body, textAlign: "center", marginTop: 4 }}>
-                      {currentPosition.focus}
-                    </Text>
-                    <Text style={{ color: colors.foreground, fontSize: 14.5, lineHeight: 22, fontFamily: fonts.body, textAlign: "center", marginTop: 12 }}>
-                      {currentPosition.tip}
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-
-              <TouchableOpacity
-                onPress={openDeck.mode === "spark" ? handleNextSparkCard : handleNextPositionCard}
-                activeOpacity={0.85}
-                accessibilityRole="button"
-                className="flex-row items-center justify-center"
-                style={{ marginTop: 14, height: 48, borderRadius: 24, backgroundColor: colors.primary, gap: 8 }}
-              >
-                <Text style={{ color: colors.buttonText, fontSize: 14.5, fontWeight: "800", fontFamily: fonts.body }}>Next card</Text>
-                <Feather name="arrow-right" size={16} color={colors.buttonText} />
-              </TouchableOpacity>
-            </WellbeingCard>
-          ) : (
-            <View className="flex-row" style={{ gap: 12 }}>
-              {decks.map((deck) => (
-                <TouchableOpacity
-                  key={deck.mode}
-                  activeOpacity={0.8}
-                  disabled={deck.count === 0}
-                  onPress={() => setActiveGameMode(deck.mode)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${deck.title}, ${deck.description}`}
-                  style={{ flex: 1, opacity: deck.count === 0 ? 0.5 : 1 }}
-                >
-                  <WellbeingCard style={{ padding: 16, flex: 1 }}>
-                    <IconCircle icon={deck.icon} tone={deck.tone} size={44} />
-                    <Text
-                      numberOfLines={2}
-                      maxFontSizeMultiplier={1.3}
-                      style={{ color: colors.foreground, fontSize: 15, lineHeight: 20, fontWeight: "700", fontFamily: fonts.heading, marginTop: 14 }}
-                    >
-                      {deck.title}
-                    </Text>
-                    <Text numberOfLines={2} maxFontSizeMultiplier={1.3} style={{ color: colors.mutedText, fontSize: 13, lineHeight: 18, marginTop: 3, fontFamily: fonts.body }}>
-                      {deck.description}
-                    </Text>
-                    <View className="flex-row items-center" style={{ gap: 4, marginTop: 12 }}>
-                      <Text style={{ color: deck.tone.fg, fontSize: 13, fontWeight: "800", fontFamily: fonts.body }}>
-                        {deck.count > 0 ? `${deck.count} cards` : "No cards yet"}
-                      </Text>
-                      {deck.count > 0 ? <Ionicons name="arrow-forward" size={14} color={deck.tone.fg} /> : null}
-                    </View>
-                  </WellbeingCard>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-
           {/* Guides, as a reading list: short articles with no cover art, so rows read better than tiles. */}
-          <SectionHeader title="Guides" style={{ marginTop: 28 }} />
+          <SectionHeader title="Guides" subtitle="Short reads for everyone" style={{ marginTop: 28 }} />
           {loadingWellbeing ? (
             <ArticleListSkeleton rows={4} />
           ) : visibleCategories.length === 0 ? (
@@ -487,10 +403,130 @@ export default function SexualWellbeing() {
             </WellbeingCard>
           )}
 
+          {/* Partner card decks (18+ only) */}
+          <SectionHeader title="Together" subtitle="Card games for couples · 18+" style={{ marginTop: 28 }} />
+          {!canSeeAdultDecks ? (
+            <WellbeingCard style={{ padding: 18 }}>
+              <View className="flex-row items-center" style={{ gap: 12 }}>
+                <IconCircle icon="lock-closed-outline" tone={tones.lavender} size={42} />
+                <View className="flex-1">
+                  <Text style={{ color: colors.foreground, fontSize: 15, lineHeight: 21, fontWeight: "700", fontFamily: fonts.heading }}>
+                    For 18 and over
+                  </Text>
+                  <Text style={{ color: colors.foreground, fontSize: 13.5, lineHeight: 19, fontWeight: "400", fontFamily: fonts.body, marginTop: 2 }}>
+                    {age === null
+                      ? "The couples cards open once your profile shows you're 18+. Add your date of birth in your profile. The guides above are for everyone."
+                      : "The couples cards are for adults. The guides above on consent, STIs and birth control are for everyone, and you can always ask a doctor or trusted adult."}
+                  </Text>
+                </View>
+              </View>
+            </WellbeingCard>
+          ) : loadingWellbeing ? (
+            <View className="flex-row" style={{ gap: 12 }}>
+              <SkeletonBlock width="48%" height={150} radius={24} />
+              <SkeletonBlock width="48%" height={150} radius={24} />
+            </View>
+          ) : openDeck ? (
+            <WellbeingCard style={{ padding: 18 }}>
+              <View className="flex-row items-center" style={{ gap: 12 }}>
+                <IconCircle icon={openDeck.icon} tone={openDeck.tone} size={42} />
+                <View className="flex-1">
+                  <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={{ color: colors.foreground, fontSize: 15, fontWeight: "700", fontFamily: fonts.heading }}>{openDeck.title}</Text>
+                  <Text maxFontSizeMultiplier={1.3} style={{ color: colors.mutedText, fontSize: 13, fontWeight: "400", fontFamily: fonts.mono, marginTop: 1 }}>
+                    {`${(openDeck.mode === "spark" ? sparkIndex : positionIndex) + 1} of ${openDeck.count}`}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setActiveGameMode("none")}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Close ${openDeck.title.toLowerCase()}`}
+                  style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surfaceSoft, alignItems: "center", justifyContent: "center" }}
+                >
+                  <Icon set="feather" name="x" size={18} color={colors.foreground} />
+                </TouchableOpacity>
+              </View>
+
+              <View
+                style={{ marginTop: 16, minHeight: 168, borderRadius: 20, backgroundColor: openDeck.tone.bg, paddingHorizontal: 22, paddingVertical: 24, justifyContent: "center" }}
+              >
+                <Icon set="ion"
+                  name={openDeck.mode === "spark" ? "chatbubble-ellipses-outline" : "heart-outline"}
+                  size={20}
+                  color={openDeck.tone.fg}
+                  style={{ alignSelf: "center", marginBottom: 12, opacity: 0.8 }}
+                />
+                {openDeck.mode === "spark" ? (
+                  <Text style={{ color: colors.foreground, fontSize: 17, lineHeight: 25, fontWeight: "700", fontFamily: fonts.heading, textAlign: "center" }}>
+                    {sparkCards[sparkIndex]}
+                  </Text>
+                ) : currentPosition ? (
+                  <View className="items-center">
+                    <Text style={{ color: colors.foreground, fontSize: 17, lineHeight: 23, fontWeight: "700", fontFamily: fonts.heading, textAlign: "center" }}>
+                      {currentPosition.name}
+                    </Text>
+                    <Text style={{ color: openDeck.tone.fg, fontSize: 13, fontWeight: "700", fontFamily: fonts.body, textAlign: "center", marginTop: 4 }}>
+                      {currentPosition.focus}
+                    </Text>
+                    <Text style={{ color: colors.foreground, fontSize: 15, lineHeight: 23, fontWeight: "400", fontFamily: fonts.body, textAlign: "center", marginTop: 12 }}>
+                      {currentPosition.tip}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+
+              <TouchableOpacity
+                onPress={openDeck.mode === "spark" ? handleNextSparkCard : handleNextPositionCard}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel="Next card"
+                className="flex-row items-center justify-center"
+                style={{ marginTop: 14, height: 48, borderRadius: 16, backgroundColor: colors.primary, gap: 8 }}
+              >
+                <Text maxFontSizeMultiplier={1.3} style={{ color: colors.buttonText, fontSize: 15, fontWeight: "700", fontFamily: fonts.body }}>Next card</Text>
+                <Icon set="feather" name="arrow-right" size={16} color={colors.buttonText} />
+              </TouchableOpacity>
+            </WellbeingCard>
+          ) : (
+            <View className="flex-row" style={{ gap: 12 }}>
+              {decks.map((deck) => (
+                <TouchableOpacity
+                  key={deck.mode}
+                  activeOpacity={0.8}
+                  disabled={deck.count === 0}
+                  onPress={() => setActiveGameMode(deck.mode)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${deck.title}, ${deck.description}${deck.count > 0 ? `, ${deck.count} cards` : ", no cards yet"}`}
+                  accessibilityState={{ disabled: deck.count === 0 }}
+                  style={{ flex: 1, opacity: deck.count === 0 ? 0.5 : 1 }}
+                >
+                  <WellbeingCard style={{ padding: 16, flex: 1 }}>
+                    <IconCircle icon={deck.icon} tone={deck.tone} size={44} />
+                    <Text
+                      numberOfLines={2}
+                      maxFontSizeMultiplier={1.3}
+                      style={{ color: colors.foreground, fontSize: 15, lineHeight: 20, fontWeight: "700", fontFamily: fonts.heading, marginTop: 14 }}
+                    >
+                      {deck.title}
+                    </Text>
+                    <Text numberOfLines={2} maxFontSizeMultiplier={1.3} style={{ color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "400", marginTop: 3, fontFamily: fonts.body }}>
+                      {deck.description}
+                    </Text>
+                    <View className="flex-row items-center" style={{ gap: 4, marginTop: 12 }}>
+                      <Text maxFontSizeMultiplier={1.3} style={{ color: deck.tone.fg, fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}>
+                        {deck.count > 0 ? `${deck.count} cards` : "No cards yet"}
+                      </Text>
+                      {deck.count > 0 ? <Icon set="ion" name="arrow-forward" size={14} color={deck.tone.fg} /> : null}
+                    </View>
+                  </WellbeingCard>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+
           <ConsultNudge
             style={{ marginTop: 28 }}
             title="Something doesn't feel right?"
-            body="Pain, unusual discharge or a missed period: talk privately with a gynecologist."
+            body="Pain, unusual discharge or a missed period: talk privately with a gynaecologist."
             onPress={() => router.push("/(app)/consultation" as any)}
           />
 
@@ -520,7 +556,7 @@ export default function SexualWellbeing() {
                   ))}
                 </View>
                 <MedicalReviewBadge item={selectedCategory.review} style={{ marginTop: 10 }} />
-                <Text style={{ color: colors.foreground, fontSize: 16, lineHeight: 25, fontFamily: fonts.body, marginTop: 14 }}>{selectedCategory.summary}</Text>
+                <Text style={{ color: colors.foreground, fontSize: 16, lineHeight: 26, fontWeight: "400", fontFamily: fonts.body, marginTop: 14 }}>{selectedCategory.summary}</Text>
 
                 <MediaButtons videoUrl={selectedCategory.videoUrl} audioUrl={selectedCategory.audioUrl} style={{ marginTop: 18 }} />
 
@@ -532,6 +568,7 @@ export default function SexualWellbeing() {
               </ScrollView>
             </SafeAreaView>
           )}
+          {modalVisible ? <AppModalHost inline /> : null}
         </Modal>
       </SafeAreaView>
     </>

@@ -37,3 +37,28 @@ export function releaseAudioUri(uri: string) {
     // Cache files are cleaned by the OS eventually anyway.
   }
 }
+
+/**
+ * Deletes a voice recording once it has been transcribed: it is the person's
+ * spoken health question, so it must not sit in the cache. Native recorder
+ * URIs can come back with or without the file:// scheme; on web it's a blob URL.
+ */
+export function deleteRecording(uri: string | null | undefined) {
+  if (!uri) return;
+  if (Platform.OS === "web") {
+    if (uri.startsWith("blob:")) {
+      try {
+        URL.revokeObjectURL(uri);
+      } catch {
+        // Nothing to free.
+      }
+    }
+    return;
+  }
+  try {
+    const file = new File(uri.startsWith("/") ? `file://${uri}` : uri);
+    if (file.exists) file.delete();
+  } catch {
+    // Already gone, or the OS cleans the cache eventually.
+  }
+}

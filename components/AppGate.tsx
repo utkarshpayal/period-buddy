@@ -12,6 +12,7 @@ import { useViewer } from "../hooks/useViewer";
 import { gateState, type UpdatePrompt } from "../lib/appConfig";
 import { openStoreLink } from "../lib/notifications";
 import { hideUpdatePreview, useUpdatePreview } from "../lib/updatePreview";
+import { Icon } from "./Icon";
 
 // Holds the last closed prompt's key: its `promptId`, else the
 // `latestVersion` (the only thing builds before promptId stored here).
@@ -121,7 +122,7 @@ function AppIconBadge({ icon, tint }: { icon: keyof typeof Ionicons.glyphMap; ti
           justifyContent: "center",
         }}
       >
-        <Ionicons name={icon} size={15} color={colors.buttonText} />
+        <Icon set="ion" name={icon} size={15} color={colors.buttonText} />
       </View>
     </View>
   );
@@ -160,7 +161,7 @@ function WhatsNew({ highlights }: { highlights: string[] }) {
               marginTop: 1,
             }}
           >
-            <Ionicons name="checkmark" size={13} color={colors.primary} />
+            <Icon set="ion" name="checkmark" size={13} color={colors.primary} />
           </View>
           <Text style={{ flex: 1, fontSize: 14, lineHeight: 20, color: colors.foreground, fontFamily: fonts.body }}>{h}</Text>
         </View>
@@ -191,7 +192,7 @@ function PrimaryButton({ label, icon, onPress, disabled }: { label: string; icon
         opacity: disabled ? 0.6 : 1,
       }}
     >
-      {icon ? <Ionicons name={icon} size={18} color={colors.buttonText} /> : null}
+      {icon ? <Icon set="ion" name={icon} size={18} color={colors.buttonText} /> : null}
       <Text numberOfLines={1} maxFontSizeMultiplier={1.4} style={{ color: colors.buttonText, fontSize: 15.5, fontWeight: "800", fontFamily: fonts.body }}>
         {label}
       </Text>
@@ -388,7 +389,7 @@ function BlockingScreen({
               }}
               accessibilityRole="button"
             >
-              <Ionicons name="refresh" size={17} color={colors.foreground} />
+              <Icon set="ion" name="refresh" size={17} color={colors.foreground} />
               <Text style={{ color: colors.foreground, fontWeight: "800", fontSize: 15, fontFamily: fonts.body }}>{checking ? "Checking…" : "Try again"}</Text>
             </TouchableOpacity>
           ) : gate.storeUrl ? (

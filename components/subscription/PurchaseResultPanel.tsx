@@ -1,9 +1,9 @@
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
 import { useTheme } from "../theme";
 import { getSoftTints } from "../ui-tokens";
 import type { PurchaseResult } from "../../hooks/usePaymentCheckout";
+import { Icon } from "../Icon";
 
 /**
  * In-app success/failure/pending state rendered in place of a native OS
@@ -28,12 +28,16 @@ export function PurchaseResultPanel({
   const { colors, fonts } = useTheme();
   const softTints = getSoftTints(colors);
   const [checking, setChecking] = useState(false);
+  const checkingRef = useRef(false);
 
   const handleRecheck = async () => {
+    if (checkingRef.current) return;
+    checkingRef.current = true;
     setChecking(true);
     try {
       await onRecheckPending();
     } finally {
+      checkingRef.current = false;
       setChecking(false);
     }
   };
@@ -42,7 +46,7 @@ export function PurchaseResultPanel({
     return (
       <View className="flex-1 items-center justify-center px-8">
         <View className="h-16 w-16 items-center justify-center rounded-full" style={{ backgroundColor: softTints.emerald }}>
-          <MaterialCommunityIcons name="check-circle" size={34} color={colors.success} />
+          <Icon set="mci" name="check-circle" size={34} color={colors.success} />
         </View>
         <Text className="mt-5 text-lg font-bold text-center" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
           Unlocked!
@@ -77,13 +81,13 @@ export function PurchaseResultPanel({
     return (
       <View className="flex-1 items-center justify-center px-8">
         <View className="h-16 w-16 items-center justify-center rounded-full" style={{ backgroundColor: softTints.gold ?? softTints.amber }}>
-          <MaterialCommunityIcons name="clock-outline" size={32} color={colors.gold ?? colors.warning} />
+          <Icon set="mci" name="clock-outline" size={32} color={colors.gold ?? colors.warning} />
         </View>
         <Text className="mt-5 text-lg font-bold text-center" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
           Almost there
         </Text>
         <Text className="mt-1.5 text-sm text-center" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-          Payment is still processing. Tap below to check again.
+          {result.message ?? "Payment is still processing. Tap below to check again."}
         </Text>
 
         <TouchableOpacity
@@ -116,7 +120,7 @@ export function PurchaseResultPanel({
   return (
     <View className="flex-1 items-center justify-center px-8">
       <View className="h-16 w-16 items-center justify-center rounded-full" style={{ backgroundColor: softTints.rose }}>
-        <MaterialCommunityIcons name="close-circle" size={32} color={colors.danger} />
+        <Icon set="mci" name="close-circle" size={32} color={colors.danger} />
       </View>
       <Text className="mt-5 text-lg font-bold text-center" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
         Payment failed

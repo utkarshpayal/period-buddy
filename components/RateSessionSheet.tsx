@@ -1,5 +1,4 @@
-import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -14,6 +13,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { consultationApi, getFriendlyErrorMessage, type Consultation, type Doctor } from "../lib/api";
 import { DoctorPhoto } from "./DoctorPhoto";
 import { useTheme } from "./theme";
+import { AppLockCover } from "./AppLockScreen";
+import { Icon } from "./Icon";
 
 const LABELS = ["", "Poor", "Fair", "Good", "Very good", "Excellent"];
 const COMMENT_MAX = 500;
@@ -37,6 +38,8 @@ export function RateSessionSheet({
   const [rating, setRating] = useState(initialRating);
   const [comment, setComment] = useState("");
   const [saving, setSaving] = useState(false);
+  // State lags a frame: two quick taps would both pass a `saving` check.
+  const savingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -49,7 +52,8 @@ export function RateSessionSheet({
   const doctor = typeof consultation.doctorId === "object" ? (consultation.doctorId as Doctor) : null;
 
   const submit = async () => {
-    if (!rating || saving) return;
+    if (!rating || savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     setError(null);
     try {
@@ -58,6 +62,7 @@ export function RateSessionSheet({
     } catch (err) {
       setError(getFriendlyErrorMessage(err));
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -80,7 +85,7 @@ export function RateSessionSheet({
               className="h-9 w-9 rounded-full items-center justify-center"
               style={{ backgroundColor: colors.surfaceSoft }}
             >
-              <Feather name="x" size={18} color={colors.foreground} />
+              <Icon set="feather" name="x" size={18} color={colors.foreground} />
             </TouchableOpacity>
           </View>
 
@@ -113,7 +118,7 @@ export function RateSessionSheet({
                 accessibilityLabel={`${n} star${n > 1 ? "s" : ""}`}
                 hitSlop={6}
               >
-                <MaterialCommunityIcons
+                <Icon set="mci"
                   name={n <= rating ? "star" : "star-outline"}
                   size={40}
                   color={n <= rating ? colors.primary : colors.mutedText}
@@ -171,6 +176,7 @@ export function RateSessionSheet({
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+      <AppLockCover />
     </Modal>
   );
 }

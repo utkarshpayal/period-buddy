@@ -95,10 +95,6 @@ export function showLaunchSheet(opts: Omit<LaunchSheetRequest, "kind" | "id">): 
   return true;
 }
 
-export function dismissModal() {
-  listener?.(null);
-}
-
 export function openAppSettings() {
   Linking.openSettings().catch(() => {});
 }

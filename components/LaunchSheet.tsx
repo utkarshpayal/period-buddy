@@ -10,6 +10,7 @@ import { ThemeColors, useTheme } from "./theme";
 import { appConfigApi } from "../lib/api";
 import type { TapAction } from "../lib/appConfig";
 import { runTapAction } from "../lib/tapAction";
+import { Icon } from "./Icon";
 
 /**
  * Bottom sheet for a feature the App CMS has locked (The-Nura-CMS
@@ -93,7 +94,7 @@ export function LaunchSheet({ request, onClose }: { request: LaunchSheetRequest;
           <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: 22 }} />
 
           <View style={{ width: 64, height: 64, borderRadius: 20, backgroundColor: bg, alignItems: "center", justifyContent: "center" }}>
-            <Ionicons name={request.icon as keyof typeof Ionicons.glyphMap} size={28} color={color} />
+            <Icon set="ion" name={request.icon as keyof typeof Ionicons.glyphMap} size={28} color={color} />
             {paused ? (
               <View
                 style={{
@@ -110,7 +111,7 @@ export function LaunchSheet({ request, onClose }: { request: LaunchSheetRequest;
                   justifyContent: "center",
                 }}
               >
-                <Ionicons name="pause" size={10} color={colors.buttonText} />
+                <Icon set="ion" name="pause" size={10} color={colors.buttonText} />
               </View>
             ) : null}
           </View>
@@ -214,7 +215,7 @@ function SheetButton({
         borderColor: muted ? colors.successLight : secondary ? colors.border : colors.primary,
       }}
     >
-      {busy ? <ActivityIndicator size="small" color={fg} /> : icon ? <Ionicons name={icon} size={17} color={fg} /> : null}
+      {busy ? <ActivityIndicator size="small" color={fg} /> : icon ? <Icon set="ion" name={icon} size={17} color={fg} /> : null}
       <Text style={{ fontSize: 15, fontWeight: plain ? "700" : "800", color: fg, fontFamily: fonts.body }}>{label}</Text>
     </TouchableOpacity>
   );

@@ -1,34 +1,31 @@
-import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  type AudioPlayer,
-  createAudioPlayer,
-} from "expo-audio";
-import { LinearGradient } from "expo-linear-gradient";
-import { useLocalSearchParams } from "expo-router";
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator,
   AppState,
-  Image,
+  FlatList,
   Modal,
-  Pressable,
   RefreshControl,
-  ScrollView,
   StatusBar,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
-import Markdown from "react-native-markdown-display";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useAppState } from "../../components/AppState";
+import { ArticleReader } from "../../components/content/ArticleReader";
+import { MediaTile, type MediaTone } from "../../components/content/MediaTile";
+import { EmptyState } from "../../components/EmptyState";
+import { FilterChips, type FilterChipOption } from "../../components/FilterChips";
+import { LoadingErrorState } from "../../components/LoadingErrorState";
+import { LoadMoreButton } from "../../components/LoadMoreButton";
+import { AppModalHost } from "../../components/modals/AppModalHost";
+import { ScreenHeader } from "../../components/ScreenHeader";
+import { SearchBar } from "../../components/SearchBar";
+import { SkeletonMediaGrid } from "../../components/Skeleton";
+import { type ThemeColors, useTheme } from "../../components/theme";
 import { alert } from "../../lib/alert";
-import { LanguagePickerSheet } from "../../components/LanguagePickerSheet";
-import { useTheme } from "../../components/theme";
-import { SkeletonBlock, SkeletonMediaGrid } from "../../components/Skeleton";
-import { getShadow, getSoftTints } from "../../components/ui-tokens";
 import {
   blogsApi,
+  getFriendlyErrorMessage,
+  isNetworkError,
   speechApi,
   type Blog,
   type BlogCategory,
@@ -36,29 +33,28 @@ import {
   type Language,
   type LanguageCode,
 } from "../../lib/api";
-import { resolveAudioUri } from "../../lib/audio";
-import { fetchQuery, hydrateQuery, peekQuery } from "../../lib/queryCache";
+import { useSpokenReply } from "../../hooks/useSpokenReply";
 import { SUPPORTED_LANGUAGES } from "../../lib/languages";
+import { useContentWidth } from "../../lib/layout";
+import { fetchQuery, hydrateQuery, peekQuery } from "../../lib/queryCache";
 import { createReadTimer, formatReadDuration } from "../../lib/readTimer";
 import { shareWithAppLink } from "../../lib/share";
-import { HeaderIconButton, ScreenHeader } from "../../components/ScreenHeader";
-import { MedicalReviewBadge } from "../../components/MedicalReviewBadge";
+import { Icon } from "../../components/Icon";
 
-// --- BACKEND REST API PAYLOAD CONTRACTS ---
+// One article or video as this screen shows it (feed items, bookmarks and
+// deep-linked articles all map into this).
 interface ContentItem {
   id: string;
   title: string;
   author: string;
   type: "blog" | "reel";
+  /** Read time for articles ("3 min read"), duration for videos. */
   time: string;
   imageUrl: string;
-  verified: boolean;
   summary: string;
   slug?: string;
   category?: BlogCategory;
-  tags?: string[];
-  viewCount?: number;
-  likeCount?: number;
+  publishedAt?: string;
 }
 
 const CATEGORY_LABELS: Record<BlogCategory, string> = {
@@ -67,65 +63,33 @@ const CATEGORY_LABELS: Record<BlogCategory, string> = {
   lifestyle: "Lifestyle",
   beauty: "Beauty",
 };
+const CATEGORY_ORDER = Object.keys(CATEGORY_LABELS) as BlogCategory[];
 
-const CATEGORY_OPTIONS: { id: "all" | BlogCategory; label: string }[] = [
-  { id: "all", label: "All Categories" },
-  ...(Object.keys(CATEGORY_LABELS) as BlogCategory[]).map((id) => ({
-    id,
-    label: CATEGORY_LABELS[id],
-  })),
-];
+function categoryLabel(category?: string): string | undefined {
+  if (!category) return undefined;
+  return CATEGORY_LABELS[category as BlogCategory] ?? category.charAt(0).toUpperCase() + category.slice(1);
+}
 
-const fallbackContent: ContentItem[] = [
-  {
-    id: "c1",
-    title: "Understanding Your Hormonal Cycle",
-    author: "Dr. Sarah Chen (Endocrinologist)",
-    type: "blog",
-    time: "8 min read",
-    imageUrl:
-      "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?q=80&w=600&auto=format&fit=crop",
-    verified: true,
-    summary:
-      "A practical guide to the common phases of a menstrual cycle, what can change in mood and energy, and how tracking helps you notice your own pattern.",
-  },
-  {
-    id: "c2",
-    title: "Yoga and Targeted Stretching for Cramps",
-    author: "Coach Fernanda Fit",
-    type: "reel",
-    time: "10 min playback",
-    imageUrl:
-      "https://images.unsplash.com/photo-1506126613408-eca07ce68773?q=80&w=600&auto=format&fit=crop",
-    verified: true,
-    summary:
-      "Gentle movements like child pose, cat-cow, and supported hip stretches may reduce tension and make cramps easier to manage.",
-  },
-  {
-    id: "c3",
-    title: "PCOS / PCOD: What You Need to Know Today",
-    author: "Dr. Priya Sharma (OBGYN)",
-    type: "blog",
-    time: "12 min read",
-    imageUrl:
-      "https://images.unsplash.com/photo-1511556532299-8f662fc26c06?q=80&w=600&auto=format&fit=crop",
-    verified: true,
-    summary:
-      "Learn the common signs of PCOS/PCOD, what to track, and when to bring symptoms to a clinician for a proper evaluation.",
-  },
-  {
-    id: "c4",
-    title: "Period Myths vs Clinical Facts",
-    author: "Jessica Wellness Team",
-    type: "reel",
-    time: "5 min playback",
-    imageUrl:
-      "https://images.unsplash.com/photo-1516627145497-ae6968895b74?q=80&w=600&auto=format&fit=crop",
-    verified: true,
-    summary:
-      "A simple myth-busting guide on swimming, movement, showers, hygiene, and what is actually safe during a period.",
-  },
-];
+/** Placeholder tint + icon per category, so tiles without art still differ. */
+function toneFor(item: Pick<ContentItem, "type" | "category">, colors: ThemeColors): MediaTone {
+  if (item.type === "reel") return { bg: colors.primaryLight, fg: colors.primaryDark, icon: "play-circle-outline" };
+  switch (item.category) {
+    case "health":
+      return { bg: colors.roseLight, fg: colors.rose, icon: "medkit-outline" };
+    case "lifestyle":
+      return { bg: colors.successLight, fg: colors.success, icon: "leaf-outline" };
+    case "beauty":
+      return { bg: colors.accentLight, fg: colors.accentText, icon: "flower-outline" };
+    default:
+      return { bg: colors.skyLight, fg: colors.sky, icon: "book-outline" };
+  }
+}
+
+/** A video's duration for its badge, or null when the server has none ("0"). */
+function videoDuration(time: string): string | null {
+  const value = time?.trim();
+  return value && value !== "0" ? value : null;
+}
 
 /**
  * Reading time shown on cards and articles: how long readers really spend
@@ -148,80 +112,86 @@ function mapFeedItem(item: ContentFeedItem): ContentItem {
     type: item.type,
     time: item.type === "blog" ? formatReadTime(item.readTimeMinutes, item.averageReadSeconds) : item.time,
     imageUrl: item.imageUrl,
-    verified: item.verified,
     summary: item.summary,
     slug: item.slug,
     category: item.category,
-    tags: item.tags,
-    viewCount: item.viewCount,
-    likeCount: item.likeCount,
+    publishedAt: item.publishedAt,
   };
-}
-
-function formatCount(count?: number): string {
-  if (!count) return "0";
-  if (count >= 1000) return `${(count / 1000).toFixed(1)}k`;
-  return String(count);
 }
 
 function mapBlogToContentItem(blog: Blog): ContentItem {
   return {
     id: blog._id,
     title: blog.title,
-    author: blog.author || "Period Buddy Team",
+    author: blog.author || "Nura team",
     type: "blog",
     time: formatReadTime(blog.readTimeMinutes, blog.averageReadSeconds),
     imageUrl: blog.coverImageUrl || "",
-    verified: true,
     summary: blog.excerpt || "",
     slug: blog.slug,
     category: blog.category,
-    tags: blog.tags,
-    viewCount: blog.viewCount,
-    likeCount: blog.likeCount,
+    publishedAt: blog.publishedAt,
   };
 }
 
 // Only the first page of the unfiltered feed is cached (and kept on the
-// device), so a revisit or cold start paints at once; other filters and
-// later pages stay live. Bookmark writes ("blogs" topic) mark it stale.
+// device), so a revisit or cold start paints at once; other filters,
+// searches and later pages stay live. Bookmark writes ("blogs" topic) mark
+// it stale.
 type FeedResponse = Awaited<ReturnType<typeof blogsApi.getFeed>>;
 const DEFAULT_FEED_CACHE_KEY = "blogs:feed:type=all:category=all:p1";
 const FEED_CACHE = { staleMs: 5 * 60_000, persist: true, topics: ["blogs" as const] };
+const PAGE_SIZE = 10;
+// useSpokenReply id for the article being read aloud.
+const ARTICLE_SPEECH_ID = "article";
+const GUTTER = 24;
+const GRID_GAP = 12;
+
+type TypeFilter = "all" | "blog" | "reel" | "saved";
 
 export default function Blogs() {
   const { colors, isDark, fonts } = useTheme();
-  const { slug: deepLinkedSlug } = useLocalSearchParams<{ slug?: string }>();
-  const { earnTokens } = useAppState();
+  const router = useRouter();
+  const contentWidth = useContentWidth();
+  // `openedAt` changes on every tap of a link (app/_layout.tsx), so the same
+  // article link opens again while this screen is mounted.
+  const { slug: deepLinkedSlug, openedAt } = useLocalSearchParams<{ slug?: string; openedAt?: string }>();
 
-  // Functional Interface States
-  const [selectedType, setSelectedType] = useState<"all" | "blog" | "reel">(
-    "all",
-  );
-  const [selectedCategory, setSelectedCategory] = useState<
-    "all" | BlogCategory
-  >("all");
-  const [categoryPickerVisible, setCategoryPickerVisible] = useState(false);
+  // Filters
+  const [selectedType, setSelectedType] = useState<"all" | "blog" | "reel">("all");
+  const [selectedCategory, setSelectedCategory] = useState<"all" | BlogCategory>("all");
+  const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [seenCategories, setSeenCategories] = useState<BlogCategory[]>([]);
+
+  // Feed
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
   const [content, setContent] = useState<ContentItem[]>(
     () => peekQuery<FeedResponse>(DEFAULT_FEED_CACHE_KEY)?.items.map(mapFeedItem) ?? [],
   );
+  const contentRef = useRef(content);
+  contentRef.current = content;
   const [loadingFeed, setLoadingFeed] = useState(() => peekQuery(DEFAULT_FEED_CACHE_KEY) === undefined);
   const [refreshing, setRefreshing] = useState(false);
-  const [usingFallback, setUsingFallback] = useState(false);
+  const [feedError, setFeedError] = useState<string | null>(null);
+  const [feedOffline, setFeedOffline] = useState(false);
+  /** The list on screen is an older copy because the latest fetch failed. */
+  const [showingCached, setShowingCached] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(() => {
     const cached = peekQuery<FeedResponse>(DEFAULT_FEED_CACHE_KEY);
     return cached ? cached.pagination.page < cached.pagination.pages : false;
   });
   const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreFailed, setLoadMoreFailed] = useState(false);
 
-  // "See all bookmarks" view
+  // "Saved" view (bookmarked articles)
   const [showBookmarksOnly, setShowBookmarksOnly] = useState(false);
   const [bookmarkedContent, setBookmarkedContent] = useState<ContentItem[]>([]);
   const [loadingBookmarks, setLoadingBookmarks] = useState(false);
+  const [bookmarksError, setBookmarksError] = useState<string | null>(null);
 
-  // Immersive Preview Modal Layer States
+  // Reader
   const [selectedItem, setSelectedItem] = useState<ContentItem | null>(null);
   const [previewVisible, setPreviewVisible] = useState(false);
   const [fullBlog, setFullBlog] = useState<Blog | null>(null);
@@ -276,11 +246,13 @@ export default function Blogs() {
   // Translate + listen (text-to-speech) states
   const [language, setLanguage] = useState<LanguageCode>("en-IN");
   const [languages, setLanguages] = useState<Language[]>(SUPPORTED_LANGUAGES);
-  const [languagePickerVisible, setLanguagePickerVisible] = useState(false);
   const [translating, setTranslating] = useState(false);
   const [translated, setTranslated] = useState<{ content: string; title: string } | null>(null);
-  const [isSynthesizing, setIsSynthesizing] = useState(false);
-  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const translateRequestId = useRef(0);
+  // Read aloud in sentence chunks; stops when the reader closes or the screen goes.
+  const spoken = useSpokenReply(language);
+  const isPlayingAudio = spoken.playingId === ARTICLE_SPEECH_ID;
+  const isSynthesizing = spoken.preparingId === ARTICLE_SPEECH_ID;
 
   // Listening to the article counts as reading it, without touching the screen.
   useEffect(() => {
@@ -289,29 +261,49 @@ export default function Blogs() {
     const id = setInterval(() => readTimerRef.current?.activity(), 20_000);
     return () => clearInterval(id);
   }, [isPlayingAudio]);
-  const playerRef = useRef<AudioPlayer | null>(null);
 
-  const softTints = getSoftTints(colors);
+  // Search goes to the server once typing pauses; meanwhile the loaded
+  // list is filtered on the phone so results react at once.
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedQuery(query.trim()), 400);
+    return () => clearTimeout(id);
+  }, [query]);
 
-  const PAGE_SIZE = 10;
+  // Category chips come from the data: every category seen so far stays,
+  // so picking one doesn't make the others disappear.
+  useEffect(() => {
+    setSeenCategories((prev) => {
+      const next = new Set(prev);
+      for (const item of content) if (item.type === "blog" && item.category) next.add(item.category);
+      if (next.size === prev.length) return prev;
+      return CATEGORY_ORDER.filter((c) => next.has(c)).concat([...next].filter((c) => !CATEGORY_ORDER.includes(c)));
+    });
+  }, [content]);
 
   // Only the latest feed request may update the list, so a slow response
   // for an old filter can't overwrite a newer one.
   const feedRequestId = useRef(0);
+  const lastFilterKey = useRef(`${selectedType}|${selectedCategory}`);
   const loadFeed = useCallback(async (force = false) => {
     const requestId = ++feedRequestId.current;
-    const isDefaultFeed = selectedType === "all" && selectedCategory === "all";
+    const search = debouncedQuery;
+    const isDefaultFeed = selectedType === "all" && selectedCategory === "all" && !search;
+
+    // A new type/category starts from a skeleton rather than showing the
+    // old filter's items; a new search keeps them (filtered) until it lands.
+    const filterKey = `${selectedType}|${selectedCategory}`;
+    if (filterKey !== lastFilterKey.current) {
+      lastFilterKey.current = filterKey;
+      setContent([]);
+      setHasMore(false);
+    }
+
     const applyFeed = (response: FeedResponse) => {
-      if (response.items.length > 0) {
-        setContent(response.items.map(mapFeedItem));
-        setUsingFallback(false);
-        setPage(1);
-        setHasMore(response.pagination.page < response.pagination.pages);
-      } else {
-        setContent([]);
-        setUsingFallback(false);
-        setHasMore(false);
-      }
+      setContent(response.items.map(mapFeedItem));
+      setPage(1);
+      setHasMore(response.items.length > 0 && response.pagination.page < response.pagination.pages);
+      setLoadMoreFailed(false);
+      setFeedError(null);
     };
 
     // Paint the cached (or device-saved) first page, then revalidate quietly.
@@ -332,42 +324,61 @@ export default function Blogs() {
           limit: PAGE_SIZE,
           page: 1,
           type: selectedType,
-          category:
-            selectedCategory === "all" ? undefined : selectedCategory,
+          category: selectedCategory === "all" ? undefined : selectedCategory,
+          search: search || undefined,
         });
       const response = isDefaultFeed
         ? await fetchQuery(DEFAULT_FEED_CACHE_KEY, fetchFeed, { ...FEED_CACHE, force })
         : await fetchFeed();
       if (requestId !== feedRequestId.current) return;
       applyFeed(response);
-    } catch {
+      setShowingCached(false);
+    } catch (error) {
       if (requestId !== feedRequestId.current) return;
-      // A cached first page beats the bundled fallback.
+      // The saved first page (or whatever is already on screen) beats an
+      // error screen; say it may be out of date.
       const cached = isDefaultFeed ? peekQuery<FeedResponse>(DEFAULT_FEED_CACHE_KEY) : undefined;
       if (cached) {
         applyFeed(cached);
+        setShowingCached(true);
+      } else if (contentRef.current.length > 0) {
+        setShowingCached(true);
       } else {
-        setContent(fallbackContent);
-        setUsingFallback(true);
+        setFeedError(getFriendlyErrorMessage(error));
+        setFeedOffline(isNetworkError(error));
         setHasMore(false);
       }
     } finally {
       if (requestId === feedRequestId.current) setLoadingFeed(false);
     }
-  }, [selectedType, selectedCategory]);
+  }, [selectedType, selectedCategory, debouncedQuery]);
 
   useEffect(() => {
     loadFeed();
   }, [loadFeed]);
 
+  const loadBookmarks = useCallback(async () => {
+    if (bookmarkedContent.length === 0) setLoadingBookmarks(true);
+    try {
+      const result = await blogsApi.getBookmarks();
+      setBookmarkedContent(result.blogs.map(mapBlogToContentItem));
+      setBookmarkedIds(new Set(result.blogs.map((b) => b._id)));
+      setBookmarksError(null);
+    } catch (error) {
+      if (bookmarkedContent.length === 0) setBookmarksError(getFriendlyErrorMessage(error));
+    } finally {
+      setLoadingBookmarks(false);
+    }
+  }, [bookmarkedContent.length]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await loadFeed(true);
+      await (showBookmarksOnly ? loadBookmarks() : loadFeed(true));
     } finally {
       setRefreshing(false);
     }
-  }, [loadFeed]);
+  }, [loadFeed, loadBookmarks, showBookmarksOnly]);
 
   useEffect(() => {
     let isMounted = true;
@@ -385,7 +396,6 @@ export default function Blogs() {
       .catch(() => {});
     return () => {
       isMounted = false;
-      playerRef.current?.release();
     };
   }, []);
 
@@ -398,7 +408,7 @@ export default function Blogs() {
     blogsApi
       .getBlogBySlug(deepLinkedSlug)
       .then((blog) => {
-        if (isMounted) handleTriggerPreview(mapBlogToContentItem(blog));
+        if (isMounted) handleOpenItem(mapBlogToContentItem(blog), blog);
       })
       .catch(() => {
         if (isMounted) alert("Couldn't open that article", "It may have been removed.");
@@ -407,12 +417,14 @@ export default function Blogs() {
     return () => {
       isMounted = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only meant to fire once for the initial deep link, not re-run when handleTriggerPreview is redefined each render
-  }, [deepLinkedSlug]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only meant to fire once for the initial deep link, not re-run when handleOpenItem is redefined each render
+  }, [deepLinkedSlug, openedAt]);
 
   async function handleLoadMore() {
     if (loadingMore || !hasMore) return;
+    const requestId = feedRequestId.current;
     setLoadingMore(true);
+    setLoadMoreFailed(false);
     try {
       const nextPage = page + 1;
       const response = await blogsApi.getFeed({
@@ -420,40 +432,43 @@ export default function Blogs() {
         page: nextPage,
         type: selectedType,
         category: selectedCategory === "all" ? undefined : selectedCategory,
+        search: debouncedQuery || undefined,
       });
-      setContent((prev) => [...prev, ...response.items.map(mapFeedItem)]);
+      if (requestId !== feedRequestId.current) return;
+      setContent((prev) => {
+        const seen = new Set(prev.map((item) => `${item.type}:${item.id}`));
+        return [...prev, ...response.items.map(mapFeedItem).filter((item) => !seen.has(`${item.type}:${item.id}`))];
+      });
       setPage(nextPage);
       setHasMore(response.pagination.page < response.pagination.pages);
     } catch {
-      setHasMore(false);
+      // Keep the button so the person can try again.
+      if (requestId === feedRequestId.current) setLoadMoreFailed(true);
     } finally {
       setLoadingMore(false);
     }
   }
 
-  async function handleToggleBookmarksView() {
-    const next = !showBookmarksOnly;
-    setShowBookmarksOnly(next);
-    if (!next || bookmarkedContent.length > 0) return;
-
-    setLoadingBookmarks(true);
-    try {
-      const result = await blogsApi.getBookmarks();
-      setBookmarkedContent(result.blogs.map(mapBlogToContentItem));
-    } catch {
-      alert("Couldn't load bookmarks", "Please try again.");
-    } finally {
-      setLoadingBookmarks(false);
+  function handleTypeChange(key: TypeFilter) {
+    if (key === "saved") {
+      setShowBookmarksOnly(true);
+      loadBookmarks();
+      return;
     }
+    setShowBookmarksOnly(false);
+    setSelectedType(key);
+    // Categories only apply to articles.
+    if (key === "reel") setSelectedCategory("all");
   }
 
-  const filteredContent = showBookmarksOnly
-    ? bookmarkedContent
-    : selectedType === "all"
-      ? content
-      : content.filter((c) => c.type === selectedType);
+  function handleBrowseAll() {
+    setShowBookmarksOnly(false);
+    setQuery("");
+    setDebouncedQuery("");
+    setSelectedType("all");
+    setSelectedCategory("all");
+  }
 
-  // --- ACTIONS CONTROLLERS INTERACTIVITY LAYER ---
   async function handleToggleBookmark(id: string) {
     const wasBookmarked = bookmarkedIds.has(id);
 
@@ -464,7 +479,6 @@ export default function Blogs() {
       else next.add(id);
       return next;
     });
-    if (!wasBookmarked) earnTokens(2);
 
     try {
       const result = await blogsApi.toggleBookmark(id);
@@ -474,8 +488,12 @@ export default function Blogs() {
         else next.delete(id);
         return next;
       });
-      if (showBookmarksOnly && !result.bookmarked) {
+      if (!result.bookmarked) {
         setBookmarkedContent((prev) => prev.filter((item) => item.id !== id));
+      } else {
+        // Keep the Saved list in step without another request.
+        const item = [...content, ...(selectedItem ? [selectedItem] : [])].find((c) => c.id === id && c.type === "blog");
+        if (item) setBookmarkedContent((prev) => (prev.some((c) => c.id === id) ? prev : [item, ...prev]));
       }
     } catch {
       setBookmarkedIds((prev) => {
@@ -484,40 +502,50 @@ export default function Blogs() {
         else next.delete(id);
         return next;
       });
-      alert("Couldn't save bookmark", "Please try again.");
+      alert("Couldn't save the article", "Please try again.");
     }
   }
 
-  async function handleTriggerPreview(item: ContentItem) {
-    setSelectedItem(item);
-    setPreviewVisible(true);
-    setFullBlog(null);
-    setTranslated(null);
-    setLanguage("en-IN");
-    earnTokens(1);
-    if (item.type === "blog") {
-      const timer = createReadTimer();
-      timer.start();
-      readTimerRef.current = timer;
-      readBlogIdRef.current = item.id;
+  const stopAudio = spoken.stop;
+
+  /** Videos play in the Reels screen; articles open in the reader. */
+  async function handleOpenItem(item: ContentItem, preloaded?: Blog) {
+    if (item.type === "reel") {
+      router.push({ pathname: "/(app)/reels", params: { reelId: item.id } });
+      return;
     }
 
-    if (item.type !== "blog" || !item.slug) return;
+    setSelectedItem(item);
+    setPreviewVisible(true);
+    setFullBlog(preloaded ?? null);
+    setTranslated(null);
+    setTranslating(false);
+    translateRequestId.current++;
+    setLanguage("en-IN");
+
+    const timer = createReadTimer();
+    timer.start();
+    readTimerRef.current = timer;
+    readBlogIdRef.current = item.id;
+
+    if (preloaded || !item.slug) return;
 
     setArticleLoading(true);
+    // A slow answer for an article that was closed (or swapped for another)
+    // must not land in the one being read.
+    const stillOpen = () => readBlogIdRef.current === item.id;
     try {
       const blog = await blogsApi.getBlogBySlug(item.slug);
-      setFullBlog(blog);
+      if (stillOpen()) setFullBlog(blog);
     } catch {
-      setFullBlog(null);
+      if (stillOpen()) setFullBlog(null);
     } finally {
-      setArticleLoading(false);
+      if (stillOpen()) setArticleLoading(false);
     }
   }
 
   function handleClosePreview() {
-    playerRef.current?.pause();
-    setIsPlayingAudio(false);
+    stopAudio();
 
     readTimerRef.current?.pause();
     flushRead();
@@ -527,78 +555,209 @@ export default function Blogs() {
     setPreviewVisible(false);
   }
 
-  async function handleTranslate() {
-    if (!selectedItem?.slug || translating) return;
+  /** Picking a language translates straight away; English shows the original. */
+  async function handleSelectLanguage(code: LanguageCode) {
+    if (code === language) return;
+    stopAudio();
+    const requestId = ++translateRequestId.current;
 
-    if (language === "en-IN") {
+    if (code === "en-IN" || !selectedItem?.slug) {
+      setLanguage(code);
       setTranslated(null);
+      setTranslating(false);
       return;
     }
 
+    const previous = language;
+    setLanguage(code);
     setTranslating(true);
     try {
-      const result = await blogsApi.translateBlog(selectedItem.slug, language);
+      const result = await blogsApi.translateBlog(selectedItem.slug, code);
+      if (requestId !== translateRequestId.current) return;
       setTranslated({ content: result.content, title: result.title });
     } catch (error) {
-      alert("Couldn't translate", error instanceof Error ? error.message : "Please try again.");
+      if (requestId !== translateRequestId.current) return;
+      setLanguage(previous);
+      alert("Couldn't translate", getFriendlyErrorMessage(error));
     } finally {
-      setTranslating(false);
+      if (requestId === translateRequestId.current) setTranslating(false);
     }
   }
 
-  async function handleListen() {
-    if (isPlayingAudio) {
-      playerRef.current?.pause();
-      setIsPlayingAudio(false);
+  function handleListen() {
+    if (isPlayingAudio || isSynthesizing) {
+      stopAudio();
       return;
     }
-
     const text = translated?.content || fullBlog?.content || selectedItem?.summary;
     if (!text) return;
-
-    playerRef.current?.pause();
-    playerRef.current?.release();
-    playerRef.current = null;
-
-    setIsSynthesizing(true);
-    try {
-      const { audioBase64, audioCodec } = await speechApi.synthesize({ languageCode: language, text });
-      const uri = await resolveAudioUri(audioBase64, audioCodec);
-      const player = createAudioPlayer({ uri });
-      playerRef.current = player;
-      player.addListener("playbackStatusUpdate", (status) => {
-        if (status.didJustFinish) setIsPlayingAudio(false);
-      });
-      player.play();
-      setIsPlayingAudio(true);
-    } catch (error) {
-      alert("Couldn't play audio", error instanceof Error ? error.message : "Please try again.");
-    } finally {
-      setIsSynthesizing(false);
-    }
+    spoken.speak(ARTICLE_SPEECH_ID, text).catch((error: unknown) => alert("Couldn't play audio", getFriendlyErrorMessage(error)));
   }
 
   async function handleShareContent(item: ContentItem) {
     try {
       await shareWithAppLink(
-        `Check out this verified health resource on Nura: "${item.title}" by ${item.author}.`,
-        item.type === "blog"
-          ? item.slug
-            ? `blogs?slug=${encodeURIComponent(item.slug)}`
-            : "blogs"
-          : usingFallback
-            ? // Fallback reels are local placeholders with no backend id.
-              "reels"
-            : `reels?reelId=${encodeURIComponent(item.id)}`,
+        `Read "${item.title}" on Nura.`,
+        item.slug ? `blogs?slug=${encodeURIComponent(item.slug)}` : "blogs",
       );
-      earnTokens(3);
     } catch {
-      alert(
-        "Error",
-        "Unable to open the share sheet right now.",
-      );
+      alert("Couldn't share", "Unable to open the share sheet right now.");
     }
   }
+
+  // --- What's on screen ---
+  const trimmedQuery = query.trim().toLowerCase();
+  const visibleItems = useMemo(() => {
+    const base = showBookmarksOnly
+      ? bookmarkedContent
+      : selectedType === "all"
+        ? content
+        : content.filter((c) => c.type === selectedType);
+    if (!trimmedQuery) return base;
+    return base.filter((c) =>
+      [c.title, c.summary, c.author].some((field) => field?.toLowerCase().includes(trimmedQuery)),
+    );
+  }, [showBookmarksOnly, bookmarkedContent, selectedType, content, trimmedQuery]);
+
+  const featured =
+    !showBookmarksOnly && !trimmedQuery && selectedType !== "reel" && visibleItems.length >= 3
+      ? visibleItems.find((c) => c.type === "blog")
+      : undefined;
+  const gridItems = featured ? visibleItems.filter((c) => c !== featured) : visibleItems;
+  const tileWidth = Math.floor((contentWidth - GUTTER * 2 - GRID_GAP) / 2);
+
+  const typeOptions: FilterChipOption<TypeFilter>[] = [
+    { key: "all", label: "All" },
+    { key: "blog", label: "Articles", icon: "document-text-outline" },
+    { key: "reel", label: "Videos", icon: "play-circle-outline" },
+  ];
+  if (bookmarkedIds.size > 0 || showBookmarksOnly) {
+    typeOptions.push({ key: "saved", label: "Saved", icon: "bookmark-outline" });
+  }
+
+  const categoryKeys =
+    selectedCategory !== "all" && !seenCategories.includes(selectedCategory)
+      ? [...seenCategories, selectedCategory]
+      : seenCategories;
+  const showCategories = !showBookmarksOnly && selectedType !== "reel" && categoryKeys.length >= 2;
+  const categoryOptions: FilterChipOption<"all" | BlogCategory>[] = [
+    { key: "all", label: "All topics" },
+    ...categoryKeys.map((key) => ({ key, label: categoryLabel(key) ?? key })),
+  ];
+
+  function itemMeta(item: ContentItem, withAuthor = false) {
+    if (item.type === "reel") return item.author ? `Video · ${item.author}` : "Video";
+    return withAuthor && item.author ? `${item.author} · ${item.time}` : item.time;
+  }
+
+  function renderTile(item: ContentItem, isFeatured = false) {
+    const isBlog = item.type === "blog";
+    return (
+      <MediaTile
+        title={item.title}
+        imageUrl={item.imageUrl}
+        eyebrow={isBlog ? categoryLabel(item.category) ?? "Article" : "Video"}
+        meta={itemMeta(item, isFeatured)}
+        summary={isFeatured ? item.summary : undefined}
+        tone={toneFor(item, colors)}
+        isVideo={!isBlog}
+        duration={isBlog ? null : videoDuration(item.time)}
+        saved={isBlog ? bookmarkedIds.has(item.id) : undefined}
+        onToggleSave={isBlog ? () => handleToggleBookmark(item.id) : undefined}
+        onPress={() => handleOpenItem(item)}
+        featured={isFeatured}
+        width={isFeatured ? undefined : tileWidth}
+      />
+    );
+  }
+
+  const listLoading = showBookmarksOnly ? loadingBookmarks && bookmarkedContent.length === 0 : loadingFeed && content.length === 0;
+  const listError = showBookmarksOnly
+    ? bookmarkedContent.length === 0 ? bookmarksError : null
+    : content.length === 0 ? feedError : null;
+
+  const emptyNode = (
+    <View style={{ paddingTop: 8 }}>
+      <LoadingErrorState
+        loading={listLoading}
+        error={listError}
+        offline={!showBookmarksOnly && feedOffline}
+        onRetry={() => (showBookmarksOnly ? loadBookmarks() : loadFeed(true))}
+        errorTitle="Couldn't load articles"
+        skeleton={<SkeletonMediaGrid count={6} />}
+      >
+        {showBookmarksOnly ? (
+          <EmptyState
+            compact
+            icon="bookmark-outline"
+            title={trimmedQuery ? "No saved articles match" : "No saved articles yet"}
+            message={trimmedQuery ? "Try another word." : "Tap the bookmark on any article to keep it here."}
+            actionLabel="Browse all"
+            onAction={handleBrowseAll}
+          />
+        ) : (
+          <EmptyState
+            compact
+            icon="text-box-search-outline"
+            title={trimmedQuery ? `No results for "${query.trim()}"` : "Nothing here yet"}
+            message={trimmedQuery ? "Try another word, or browse everything." : "New articles and videos are added often. Check back soon."}
+            actionLabel="Browse all"
+            onAction={handleBrowseAll}
+          />
+        )}
+      </LoadingErrorState>
+    </View>
+  );
+
+  const listHeader = (
+    <View>
+      <View style={{ paddingHorizontal: GUTTER, paddingTop: 8 }}>
+        <SearchBar value={query} onChangeText={setQuery} placeholder="Search articles and videos" />
+      </View>
+
+      <FilterChips
+        options={typeOptions}
+        value={showBookmarksOnly ? "saved" : selectedType}
+        onChange={handleTypeChange}
+        gutter={GUTTER}
+        style={{ marginTop: 14, flexGrow: 0 }}
+      />
+
+      {showCategories ? (
+        <FilterChips
+          options={categoryOptions}
+          value={selectedCategory}
+          onChange={setSelectedCategory}
+          gutter={GUTTER}
+          style={{ marginTop: 10, flexGrow: 0 }}
+        />
+      ) : null}
+
+      {showingCached && !showBookmarksOnly && content.length > 0 ? (
+        <View
+          className="flex-row items-center"
+          style={{
+            gap: 8,
+            marginTop: 16,
+            marginHorizontal: GUTTER,
+            paddingHorizontal: 12,
+            paddingVertical: 9,
+            borderRadius: 14,
+            backgroundColor: colors.surfaceSoft,
+          }}
+        >
+          <Icon set="ion" name="cloud-offline-outline" size={16} color={colors.mutedText} />
+          <Text style={{ flex: 1, color: colors.mutedText, fontSize: 13, lineHeight: 18, fontFamily: fonts.body }}>
+            Showing articles from your last visit. Pull down to refresh.
+          </Text>
+        </View>
+      ) : null}
+
+      {featured ? <View style={{ marginTop: 24, marginHorizontal: GUTTER }}>{renderTile(featured, true)}</View> : null}
+
+      <View style={{ height: featured && gridItems.length > 0 ? 16 : 24 }} />
+    </View>
+  );
 
   return (
     <>
@@ -611,318 +770,40 @@ export default function Blogs() {
         className="flex-1"
         style={{ backgroundColor: colors.background }}
       >
-        <ScreenHeader
-          title={showBookmarksOnly ? "Bookmarked" : "Insights Feed"}
-          right={
-            <HeaderIconButton
-              icon={showBookmarksOnly ? "bookmark" : "bookmark-outline"}
-              accessibilityLabel={showBookmarksOnly ? "Show all articles" : "Show bookmarks"}
-              active={showBookmarksOnly}
-              onPress={handleToggleBookmarksView}
-            />
-          }
-        />
+        <ScreenHeader title="Articles" subtitle="Reads and short videos on your health" />
 
-        <ScrollView
-          showsVerticalScrollIndicator={false}
+        <FlatList
+          data={gridItems}
+          keyExtractor={(item) => `${item.type}:${item.id}`}
+          numColumns={2}
+          columnWrapperStyle={{ paddingHorizontal: GUTTER, gap: GRID_GAP }}
+          renderItem={({ item }) => <View style={{ marginBottom: GRID_GAP }}>{renderTile(item)}</View>}
+          ListHeaderComponent={listHeader}
+          ListEmptyComponent={visibleItems.length === 0 ? emptyNode : null}
+          ListFooterComponent={
+            !showBookmarksOnly && visibleItems.length > 0 ? (
+              <LoadMoreButton
+                hasMore={hasMore}
+                loading={loadingMore}
+                onPress={handleLoadMore}
+                label={loadMoreFailed ? "Couldn't load more. Try again" : "Show more"}
+              />
+            ) : null
+          }
           contentContainerStyle={{ paddingBottom: 60 }}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={false}
+          initialNumToRender={8}
+          windowSize={7}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
           }
-        >
-          {/* Segmented Controller Chips Selection */}
-          {!showBookmarksOnly && (
-          <>
-          <View className="mt-5 flex-row gap-2 px-6">
-            {[
-              { id: "all", label: "All Insights" },
-              { id: "blog", label: "Journals & Blogs" },
-              { id: "reel", label: "Video Insights" },
-            ].map((tab) => {
-              const isSelected = selectedType === tab.id;
-              return (
-                <TouchableOpacity
-                  key={tab.id}
-                  onPress={() => setSelectedType(tab.id as any)}
-                  activeOpacity={0.8}
-                  className="rounded-full px-5 py-2.5 border shadow-3xs"
-                  style={{
-                    backgroundColor: isSelected
-                      ? colors.primary
-                      : colors.surface,
-                    borderColor: isSelected ? colors.primary : colors.border,
-                  }}
-                >
-                  <Text
-                    className="text-xs font-bold tracking-wide"
-                    style={{
-                      color: isSelected ? colors.buttonText : colors.foreground,
-                      fontFamily: fonts.body,
-                    }}
-                  >
-                    {tab.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+        />
 
-          {/* Category Filter Dropdown Selection */}
-          {selectedType !== "reel" && (
-            <View className="mt-3 px-6">
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={() => setCategoryPickerVisible(true)}
-                className="self-start flex-row items-center gap-1.5 px-4 py-2 rounded-full border"
-                style={{
-                  backgroundColor:
-                    selectedCategory === "all" ? colors.surface : softTints.pink,
-                  borderColor:
-                    selectedCategory === "all" ? colors.border : colors.primary,
-                }}
-              >
-                <Text
-                  className="text-xs font-bold"
-                  style={{
-                    color:
-                      selectedCategory === "all"
-                        ? colors.foreground
-                        : colors.primary,
-                    fontFamily: fonts.body,
-                  }}
-                >
-                  {
-                    CATEGORY_OPTIONS.find((c) => c.id === selectedCategory)
-                      ?.label
-                  }
-                </Text>
-                <Feather
-                  name="chevron-down"
-                  size={13}
-                  color={selectedCategory === "all" ? colors.mutedText : colors.primary}
-                />
-              </TouchableOpacity>
-            </View>
-          )}
-          </>
-          )}
-
-          {/* DYNAMIC MEDIA CONTENT TIMELINE CARDS WRAPPER */}
-          {(loadingFeed && !showBookmarksOnly && content.length === 0) || (loadingBookmarks && showBookmarksOnly) ? (
-            <SkeletonMediaGrid count={6} style={{ marginTop: 24 }} />
-          ) : (
-<View className="mt-6 px-6">
-  {/* CONTENT GRID */}
-  <View
-    className="flex-row flex-wrap justify-between"
-    style={{ rowGap: 14 }}
-  >
-            {filteredContent.map((item) => {
-              const isBookmarked = bookmarkedIds.has(item.id);
-              const isVideo = item.type === "reel";
-
-              return (
-                <TouchableOpacity
-                  key={item.id}
-                  activeOpacity={0.9}
-                  onPress={() => handleTriggerPreview(item)}
-                  className="overflow-hidden rounded-2xl border shadow-2xl"
-                  style={{
-                    width: "48%",
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                  }}
-                >
-                  <View className="w-full h-36 relative bg-neutral-100 dark:bg-neutral-800">
-                    <Image
-                      source={{ uri: item.imageUrl }}
-                      className="w-full h-full"
-                      resizeMode="cover"
-                    />
-
-                    {isVideo && (
-                      <View className="absolute inset-0 items-center justify-center bg-black/10">
-                        <View className="w-9 h-9 rounded-full bg-white/85 items-center justify-center shadow-sm">
-                          <Ionicons name="play" size={14} color={colors.primary} />
-                        </View>
-                      </View>
-                    )}
-
-                    {isVideo && (
-                      <View className="absolute bottom-2 right-2 flex-row items-center gap-1 px-1.5 py-0.5 rounded-md bg-black/55">
-                        <Feather name="eye" size={9} color="white" />
-                        <Text className="text-xs font-black text-white" style={{ fontFamily: fonts.body }}>
-                          {formatCount(item.viewCount)}
-                        </Text>
-                      </View>
-                    )}
-
-                    <TouchableOpacity
-                      onPress={() => handleToggleBookmark(item.id)}
-                      className="absolute top-2 right-2 w-6 h-6 rounded-full items-center justify-center bg-black/35"
-                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    >
-                      <Ionicons
-                        name={isBookmarked ? "bookmark" : "bookmark-outline"}
-                        size={13}
-                        color="white"
-                      />
-                    </TouchableOpacity>
-                  </View>
-
-                  <View className="p-2.5">
-                    <Text
-                      className="text-xs font-black leading-4"
-                      numberOfLines={2}
-                      style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                    >
-                      {item.title}
-                    </Text>
-                    <View className="flex-row items-center gap-1 mt-1.5">
-                      <Text
-                        className="text-xs font-bold"
-                        style={{ color: colors.mutedText, fontFamily: fonts.body, }}
-                      >
-                        {isVideo ? "Reel" : "Blog"} · {item.time}
-                      </Text>
-                      {item.verified && (
-                        <MaterialCommunityIcons name="shield-check" size={11} color={colors.success} />
-                      )}
-                    </View>
-                    {item.category && (
-                      <View className="flex-row mt-1.5">
-                        <View
-                          className="px-1.5 py-0.5 rounded"
-                          style={{ backgroundColor: isVideo ? softTints.purple : softTints.pink }}
-                        >
-                          <Text
-                            className="text-[11.5px] font-bold uppercase"
-                            style={{ color: isVideo ? colors.accent : colors.primary, fontFamily: fonts.body }}
-                          >
-                            {CATEGORY_LABELS[item.category]}
-                          </Text>
-                        </View>
-                      </View>
-                    )}
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-          
-          {/* EMPTY STATE */}
-            {filteredContent.length === 0 && (
-              <View className="items-center py-10">
-                <Text
-                  className="text-sm font-medium text-center"
-        style={{
-          color: colors.mutedText,
-          fontFamily: fonts.body,
-        }}
-      >
-        {showBookmarksOnly
-          ? "No bookmarked content yet — tap the bookmark icon on any article to save it here."
-          : "No insights found for this filter yet."}
-      </Text>
-    </View>
-  )}
-
-  {/* LOAD MORE */}
-  {!showBookmarksOnly &&
-    !usingFallback &&
-    hasMore &&
-    filteredContent.length > 0 && (
-      <View className="w-full items-center mt-4">
-        <TouchableOpacity
-          onPress={handleLoadMore}
-          disabled={loadingMore}
-          activeOpacity={0.8}
-          className="items-center justify-center px-6 py-3 rounded-2xl border"
-          style={{
-            backgroundColor: colors.surface,
-            borderColor: colors.border,
-          }}
-        >
-          {loadingMore ? (
-            <ActivityIndicator color={colors.primary} />
-          ) : (
-            <Text
-              className="text-xs font-bold text-center"
-              style={{
-                color: colors.primary,
-                fontFamily: fonts.body,
-              }}
-            >
-              Load More
-            </Text>
-          )}
-        </TouchableOpacity>
-      </View>
-    )}
-</View>
-          )}
-        </ScrollView>
-
-        {/* --- CATEGORY FILTER DROPDOWN SELECT MODAL --- */}
-        <Modal
-          visible={categoryPickerVisible}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setCategoryPickerVisible(false)}
-        >
-          <Pressable
-            className="flex-1 justify-center items-center px-8"
-            style={{ backgroundColor: colors.overlay }}
-            onPress={() => setCategoryPickerVisible(false)}
-          >
-            <View
-              className="w-full max-w-[280px] p-4 rounded-3xl border"
-              style={{
-                backgroundColor: colors.surface,
-                borderColor: colors.border,
-                ...getShadow(colors, isDark),
-              }}
-            >
-              <Text
-                className="text-center font-extrabold mb-3 text-base"
-                style={{ color: colors.foreground, fontFamily: fonts.heading }}
-              >
-                Filter by Category
-              </Text>
-              {CATEGORY_OPTIONS.map((cat) => {
-                const isSelected = selectedCategory === cat.id;
-                return (
-                  <TouchableOpacity
-                    key={cat.id}
-                    onPress={() => {
-                      setSelectedCategory(cat.id);
-                      setCategoryPickerVisible(false);
-                    }}
-                    className="py-3 px-4 rounded-xl flex-row items-center justify-between"
-                    style={{
-                      backgroundColor: isSelected ? softTints.pink : "transparent",
-                    }}
-                  >
-                    <Text
-                      className="font-bold text-sm"
-                      style={{
-                        color: isSelected ? colors.primary : colors.foreground,
-                        fontFamily: fonts.body,
-                      }}
-                    >
-                      {cat.label}
-                    </Text>
-                    {isSelected && (
-                      <Feather name="check" size={16} color={colors.primary} />
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </Pressable>
-        </Modal>
-
-        {/* --- DYNAMIC THREADS-STYLE INTERNAL DOCUMENT PREVIEW OVERLAY SHEET MODAL --- */}
+        {/* Article reader. Android ignores presentationStyle="pageSheet" and
+            renders this Modal fullscreen under the status bar, so the
+            SafeAreaView (not a plain View) keeps the reader on screen. */}
         <Modal
           visible={previewVisible}
           animationType="slide"
@@ -930,345 +811,60 @@ export default function Blogs() {
           onRequestClose={handleClosePreview}
         >
           {selectedItem && (
-            <SafeAreaView
-              className="flex-1"
-              style={{ backgroundColor: colors.background }}
-            >
-              {/* Overlay Navigation Sticky Upper Bar segment.
-                  Android ignores presentationStyle="pageSheet" and renders
-                  this Modal truly fullscreen under the status bar, so
-                  SafeAreaView (not a plain View) is required here to keep
-                  this bar — and the reading content below it — on screen. */}
-              <View
-                className="px-6 py-4 border-b border-neutral-100 dark:border-neutral-900/60 flex-row justify-between items-center"
-                style={{ backgroundColor: colors.surface }}
-              >
-                <View className="flex-row items-center gap-2">
-                  <View className="px-2.5 py-0.5 rounded-md bg-neutral-100 dark:bg-neutral-800">
-                    <Text
-                      className="text-[11.5px] font-black uppercase tracking-wider"
-                      style={{ color: !isDark ? "white" : "black", fontFamily: fonts.body }}
-                    >
-                      {selectedItem.type === "blog" ? "Journal" : "Video"}
-                    </Text>
-                  </View>
-                  {selectedItem.verified && (
-                    <MaterialCommunityIcons
-                      name="shield-check"
-                      size={14}
-                      color={colors.success}
-                    />
-                  )}
-                </View>
-                <TouchableOpacity
-                  onPress={handleClosePreview}
-                  className="p-1.5 bg-neutral-100 dark:bg-neutral-800 rounded-full"
-                >
-                  <Feather name="x" size={16} color={!isDark ? "white" : "black"} />
-                </TouchableOpacity>
-              </View>
-
-              {/* Scrollable Clinical Document Framework Canvas section */}
-              <ScrollView
-                showsVerticalScrollIndicator={false}
-                scrollEventThrottle={250}
-                onTouchStart={() => readTimerRef.current?.activity()}
-                onLayout={(e) => {
-                  articleHeightRef.current = e.nativeEvent.layout.height;
+            <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
+              <ArticleReader
+                title={translated?.title || selectedItem.title}
+                author={fullBlog?.author || selectedItem.author}
+                readTime={
+                  fullBlog?.readTimeMinutes
+                    ? formatReadTime(fullBlog.readTimeMinutes, fullBlog.averageReadSeconds)
+                    : selectedItem.time
+                }
+                publishedAt={fullBlog?.publishedAt ?? selectedItem.publishedAt}
+                updatedAt={(fullBlog as (Blog & { updatedAt?: string }) | null)?.updatedAt}
+                imageUrl={fullBlog?.coverImageUrl || selectedItem.imageUrl}
+                categoryLabel={categoryLabel(fullBlog?.category ?? selectedItem.category)}
+                tone={toneFor({ type: "blog", category: fullBlog?.category ?? selectedItem.category }, colors)}
+                review={fullBlog}
+                content={translated?.content ?? fullBlog?.content}
+                summary={selectedItem.summary}
+                loading={articleLoading}
+                onClose={handleClosePreview}
+                saved={bookmarkedIds.has(selectedItem.id)}
+                onToggleSave={() => handleToggleBookmark(selectedItem.id)}
+                onShare={() => handleShareContent(selectedItem)}
+                listening={isPlayingAudio}
+                preparingAudio={isSynthesizing}
+                onListen={handleListen}
+                languages={languages}
+                language={language}
+                onSelectLanguage={handleSelectLanguage}
+                translating={translating}
+                translated={Boolean(translated) && language !== "en-IN"}
+                scrollProps={{
+                  scrollEventThrottle: 250,
+                  onTouchStart: () => readTimerRef.current?.activity(),
+                  onLayout: (e) => {
+                    articleHeightRef.current = e.nativeEvent.layout.height;
+                  },
+                  onContentSizeChange: (_w, h) => {
+                    // A short article that fits on screen is read in full.
+                    if (h > 0 && articleHeightRef.current >= h) readTimerRef.current?.setDepth(1);
+                  },
+                  onScroll: (e) => {
+                    const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
+                    const timer = readTimerRef.current;
+                    if (!timer) return;
+                    timer.activity();
+                    if (contentSize.height > 0) timer.setDepth((contentOffset.y + layoutMeasurement.height) / contentSize.height);
+                  },
                 }}
-                onContentSizeChange={(_w, h) => {
-                  // A short article that fits on screen is read in full.
-                  if (h > 0 && articleHeightRef.current >= h) readTimerRef.current?.setDepth(1);
-                }}
-                onScroll={(e) => {
-                  const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
-                  const timer = readTimerRef.current;
-                  if (!timer) return;
-                  timer.activity();
-                  if (contentSize.height > 0) timer.setDepth((contentOffset.y + layoutMeasurement.height) / contentSize.height);
-                }}
-              >
-                <View className="w-full h-56 bg-neutral-100 dark:bg-neutral-900 relative">
-                  <Image
-                    source={{ uri: selectedItem.imageUrl }}
-                    className="w-full h-full"
-                    resizeMode="cover"
-                  />
-                  {/* Tailwind's bg-gradient-to-t class has no effect in React
-                      Native — nothing was ever darkening this image, so a
-                      white heading over a light photo had zero contrast.
-                      This is a real gradient. */}
-                  <LinearGradient
-                    colors={["transparent", "rgba(0,0,0,0.25)", "rgba(0,0,0,0.85)"]}
-                    locations={[0, 0.45, 1]}
-                    style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
-                  />
-
-                  {/* Title text overlay embedded on asset hero container templates */}
-                  <View className="absolute bottom-5 left-6 right-6">
-                    <Text className="text-xl font-black text-white tracking-tight leading-6 shadow-sm" style={{ fontFamily: fonts.heading }}>
-                      {selectedItem.title}
-                    </Text>
-                    <Text className="text-xs text-white/90 font-medium mt-1" style={{ fontFamily: fonts.body }}>
-                      By {selectedItem.author}
-                      {selectedItem.type === "blog"
-                        ? ` · ${fullBlog?.readTimeMinutes ? formatReadTime(fullBlog.readTimeMinutes, fullBlog.averageReadSeconds) : selectedItem.time}`
-                        : ""}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Main Core Typography reading content area wrapper segments */}
-                <View className="p-6">
-                  {selectedItem.type === "blog" ? <MedicalReviewBadge item={fullBlog} style={{ marginBottom: 12 }} /> : null}
-                  {/* Category, tags and engagement stats segregation row */}
-                  {(fullBlog || selectedItem.category || selectedItem.tags) && (
-                    <View className="flex-row items-center flex-wrap gap-1.5 mb-3">
-                      {(fullBlog?.category ?? selectedItem.category) && (
-                        <View
-                          className="px-2 py-0.5 rounded-md"
-                          style={{ backgroundColor: softTints.pink }}
-                        >
-                          <Text
-                            className="text-[11.5px] font-bold uppercase"
-                            style={{ color: colors.primary, fontFamily: fonts.body }}
-                          >
-                            {
-                              CATEGORY_LABELS[
-                                (fullBlog?.category ?? selectedItem.category)!
-                              ]
-                            }
-                          </Text>
-                        </View>
-                      )}
-                      {(fullBlog?.tags ?? selectedItem.tags ?? []).map((tag) => (
-                        <Text
-                          key={tag}
-                          className="text-xs font-semibold"
-                          style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                        >
-                          #{tag}
-                        </Text>
-                      ))}
-                    </View>
-                  )}
-
-                  {selectedItem.type === "blog" && (
-                    <View className="flex-row items-center gap-4 mb-4 pb-4 border-b border-neutral-100 dark:border-neutral-900">
-                      <View className="flex-row items-center gap-1">
-                        <Feather name="eye" size={12} color={colors.mutedText} />
-                        <Text
-                          className="text-xs font-bold"
-                          style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                        >
-                          {formatCount(fullBlog?.viewCount ?? selectedItem.viewCount)} views
-                        </Text>
-                      </View>
-                      <View className="flex-row items-center gap-1">
-                        <Ionicons name="heart" size={12} color={colors.mutedText} />
-                        <Text
-                          className="text-xs font-bold"
-                          style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                        >
-                          {formatCount(fullBlog?.likeCount ?? selectedItem.likeCount)} likes
-                        </Text>
-                      </View>
-                    </View>
-                  )}
-
-                  <View className="flex-row items-center justify-between mb-3">
-                    <Text
-                      className="text-xs font-bold tracking-widest uppercase"
-                      style={{ color: colors.primary, fontFamily: fonts.heading }}
-                    >
-                      {fullBlog?.content ? "Full Article" : "Verified Health Summary"}
-                    </Text>
-
-                    {selectedItem.type === "blog" && (
-                      <View className="flex-row items-center gap-1.5">
-                        <TouchableOpacity
-                          onPress={() => setLanguagePickerVisible(true)}
-                          activeOpacity={0.7}
-                          className="flex-row items-center gap-1 px-2.5 py-1.5 rounded-full border"
-                          style={{ backgroundColor: softTints.pink, borderColor: colors.border }}
-                        >
-                          <Feather name="globe" size={12} color={colors.primary} />
-                          <Text className="text-xs font-black" style={{ color: colors.primary, fontFamily: fonts.body }}>
-                            {languages.find((l) => l.code === language)?.label ?? "English"}
-                          </Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          onPress={handleListen}
-                          disabled={isSynthesizing}
-                          activeOpacity={0.7}
-                          className="p-1.5 rounded-full border"
-                          style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-                        >
-                          {isSynthesizing ? (
-                            <ActivityIndicator size="small" color={colors.primary} />
-                          ) : (
-                            <Feather
-                              name={isPlayingAudio ? "pause-circle" : "volume-2"}
-                              size={14}
-                              color={colors.primary}
-                            />
-                          )}
-                        </TouchableOpacity>
-                      </View>
-                    )}
-                  </View>
-
-                  {selectedItem.type === "blog" && language !== "en-IN" && (
-                    <TouchableOpacity
-                      onPress={handleTranslate}
-                      disabled={translating}
-                      activeOpacity={0.7}
-                      className="flex-row items-center justify-center gap-2 mb-4 py-2.5 rounded-xl border"
-                      style={{ backgroundColor: colors.input, borderColor: colors.border }}
-                    >
-                      {translating ? (
-                        <ActivityIndicator size="small" color={colors.primary} />
-                      ) : (
-                        <Feather name="repeat" size={13} color={colors.primary} />
-                      )}
-                      <Text className="text-xs font-bold" style={{ color: colors.primary, fontFamily: fonts.body }}>
-                        {translated
-                          ? `Translated to ${languages.find((l) => l.code === language)?.label ?? language}`
-                          : `Translate to ${languages.find((l) => l.code === language)?.label ?? language}`}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-
-                  {articleLoading ? (
-                    <View className="gap-2.5 py-4 mb-8">
-                      <SkeletonBlock width="100%" height={12} />
-                      <SkeletonBlock width="96%" height={12} />
-                      <SkeletonBlock width="88%" height={12} />
-                      <SkeletonBlock width="100%" height={12} />
-                      <SkeletonBlock width="72%" height={12} />
-                      <SkeletonBlock width="94%" height={12} style={{ marginTop: 12 }} />
-                      <SkeletonBlock width="85%" height={12} />
-                      <SkeletonBlock width="60%" height={12} />
-                    </View>
-                  ) : translated?.content || fullBlog?.content ? (
-                    <View className="mb-8">
-                      <Markdown
-                        style={{
-                          body: {
-                            color: colors.foreground,
-                            fontFamily: fonts.body,
-                            fontSize: 14,
-                            lineHeight: 22,
-                          },
-                          heading1: {
-                            color: colors.foreground,
-                            fontFamily: fonts.heading,
-                            fontSize: 20,
-                            marginTop: 4,
-                            marginBottom: 8,
-                          },
-                          heading2: {
-                            color: colors.foreground,
-                            fontFamily: fonts.heading,
-                            fontSize: 16,
-                            marginTop: 16,
-                            marginBottom: 6,
-                          },
-                          heading3: {
-                            color: colors.foreground,
-                            fontFamily: fonts.heading,
-                            fontSize: 14,
-                            marginTop: 12,
-                            marginBottom: 6,
-                          },
-                          strong: { fontFamily: fonts.heading },
-                          bullet_list: { marginBottom: 8 },
-                          ordered_list: { marginBottom: 8 },
-                          list_item: { marginBottom: 4 },
-                          paragraph: { marginTop: 0, marginBottom: 10 },
-                        }}
-                      >
-                        {translated?.content ?? fullBlog?.content}
-                      </Markdown>
-                    </View>
-                  ) : (
-                    <Text
-                      className="text-sm font-medium leading-6 mb-8"
-                      style={{ color: colors.foreground, fontFamily: fonts.body }}
-                    >
-                      {selectedItem.summary}
-                    </Text>
-                  )}
-
-                  {/* Actions utility taskbars footer system inside document sheet overlay */}
-                  <View className="flex-row gap-3 border-t border-neutral-100 dark:border-neutral-900 pt-5">
-                    <TouchableOpacity
-                      onPress={() => handleToggleBookmark(selectedItem.id)}
-                      activeOpacity={0.7}
-                      className="flex-1 flex-row gap-2 items-center justify-center border py-3 rounded-xl shadow-3xs"
-                      style={{
-                        backgroundColor: colors.surface,
-                        borderColor: colors.border,
-                      }}
-                    >
-                      <Ionicons
-                        name={
-                          bookmarkedIds.has(selectedItem.id)
-                            ? "bookmark"
-                            : "bookmark-outline"
-                        }
-                        size={15}
-                        color={
-                          bookmarkedIds.has(selectedItem.id)
-                            ? colors.primary
-                            : colors.foreground
-                        }
-                      />
-                      <Text
-                        className="text-xs font-bold"
-                        style={{ color: colors.foreground, fontFamily: fonts.body }}
-                      >
-                        {bookmarkedIds.has(selectedItem.id)
-                          ? "Saved to Care"
-                          : "Save Article"}
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      onPress={() => handleShareContent(selectedItem)}
-                      activeOpacity={0.7}
-                      className="px-5 items-center justify-center border py-3 rounded-xl shadow-3xs"
-                      style={{
-                        backgroundColor: colors.surface,
-                        borderColor: colors.border,
-                      }}
-                    >
-                      <Ionicons
-                        name="share-social-outline"
-                        size={16}
-                        color={colors.foreground}
-                      />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </ScrollView>
+              />
             </SafeAreaView>
           )}
+          {/* Alerts raised while the reader is open draw above it. */}
+          {previewVisible ? <AppModalHost inline /> : null}
         </Modal>
-
-        {/* --- LANGUAGE PICKER FOR TRANSLATE + LISTEN --- */}
-        <LanguagePickerSheet
-          languages={languages}
-          onClose={() => setLanguagePickerVisible(false)}
-          onSelect={(code) => {
-            setLanguage(code);
-            if (code === "en-IN") setTranslated(null);
-          }}
-          selectedCode={language}
-          title="Translate & listen language"
-          visible={languagePickerVisible}
-        />
       </SafeAreaView>
     </>
   );

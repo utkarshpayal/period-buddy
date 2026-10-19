@@ -3,6 +3,7 @@ import React from "react";
 import { Text, TouchableOpacity, View } from "react-native";
 import { Loader } from "./Loader";
 import { useTheme } from "./theme";
+import { Icon } from "./Icon";
 
 export function LoadingErrorState({
   loading,
@@ -45,7 +46,7 @@ export function LoadingErrorState({
     const title = offline ? "You're offline" : errorTitle;
     return (
       <View className="flex-1 items-center justify-center px-8">
-        <MaterialCommunityIcons name={icon} size={48} color={colors.primary} />
+        <Icon set="mci" name={icon} size={48} color={colors.primary} />
         <Text className="mt-4 text-base font-bold text-center" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
           {title}
         </Text>

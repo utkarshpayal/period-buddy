@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { Image, LayoutAnimation, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -10,27 +9,17 @@ import { useTheme } from "../../components/theme";
 import { usePaginatedList } from "../../hooks/usePaginatedList";
 import { LoadMoreButton } from "../../components/LoadMoreButton";
 import { partnerApi, type AppNotification } from "../../lib/api";
+import { timeAgo } from "../../lib/format";
 import { guardRoute } from "../../lib/launchGuard";
 import { NOTIFICATIONS_LIST_ROUTE, openNotificationStoreLink, resolveNotificationTarget } from "../../lib/notifications";
 import { notificationIcon, notificationImage } from "../../lib/notificationIcons";
 import { useAuth } from "../../components/auth-context";
+import { useSecureScreen } from "../../lib/screenPrivacy";
+import { Icon } from "../../components/Icon";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const notifDate = (n: AppNotification) => n.createdAt ?? n.sentAt ?? undefined;
-
-function timeAgo(dateStr?: string) {
-  if (!dateStr) return "";
-  const diffMs = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diffMs / 60000);
-  if (mins < 1) return "now";
-  if (mins < 60) return `${mins}m`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d`;
-  return new Date(dateStr).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
 
 /** "Today" / "Yesterday" / "This week" / "Earlier", by calendar day. */
 function sectionLabel(dateStr?: string) {
@@ -57,6 +46,7 @@ function groupByDay(list: AppNotification[]) {
 }
 
 export default function NotificationsScreen() {
+  useSecureScreen("notifications");
   const router = useRouter();
   const { user } = useAuth();
   const { colors, fonts, isDark } = useTheme();
@@ -177,7 +167,7 @@ export default function NotificationsScreen() {
                 className="items-center justify-center mb-5"
                 style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: colors.primaryLight }}
               >
-                <Ionicons name="notifications-outline" size={28} color={colors.primary} />
+                <Icon set="ion" name="notifications-outline" size={28} color={colors.primary} />
               </View>
               <Text style={{ color: colors.foreground, fontSize: 16, fontWeight: "700", fontFamily: fonts.heading, textAlign: "center" }}>
                 All quiet for now
@@ -257,7 +247,7 @@ function NotificationRow({
       activeOpacity={0.6}
       onPress={() => onPress(notif)}
       accessibilityRole="button"
-      accessibilityLabel={[unread ? "Unread" : null, notif.title, notif.body, timeAgo(notifDate(notif))].filter(Boolean).join(". ")}
+      accessibilityLabel={[unread ? "Unread" : null, notif.title, notif.body, timeAgo(notifDate(notif), { compact: true })].filter(Boolean).join(". ")}
       style={{ flexDirection: "row", alignItems: "flex-start", paddingHorizontal: SIDE, paddingVertical: 12, gap: GAP }}
     >
       <View>
@@ -271,7 +261,7 @@ function NotificationRow({
             backgroundColor: `${color}1A`,
           }}
         >
-          <Ionicons name={icon} size={18} color={color} />
+          <Icon set="ion" name={icon} size={18} color={color} />
         </View>
         {unread ? (
           <View
@@ -314,10 +304,10 @@ function NotificationRow({
               accessibilityLabel={expanded ? "Hide image" : "Show image"}
               style={{ alignSelf: "center" }}
             >
-              <Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={16} color={colors.primary} />
+              <Icon set="ion" name={expanded ? "chevron-up" : "chevron-down"} size={16} color={colors.primary} />
             </TouchableOpacity>
           ) : null}
-          <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body, opacity: 0.8 }}>{timeAgo(notifDate(notif))}</Text>
+          <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body, opacity: 0.8 }}>{timeAgo(notifDate(notif), { compact: true })}</Text>
         </View>
         {notif.body ? (
           <Text

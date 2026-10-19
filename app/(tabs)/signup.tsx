@@ -1,13 +1,9 @@
-import { Ionicons } from "@expo/vector-icons";
 import { Link, useLocalSearchParams, useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import * as WebBrowser from "expo-web-browser";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -34,6 +30,9 @@ import { isStrongPassword, PASSWORD_RULES } from "../../lib/password";
 import type { AuthUser } from "../../lib/api";
 import { alert } from "../../lib/alert";
 import { getScreenGradient, getShadow } from "../../components/ui-tokens";
+import { getFriendlyErrorMessage } from "../../lib/api";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
+import { Icon } from "../../components/Icon";
 
 const TERMS_URL = "https://thenura.care/terms";
 const PRIVACY_URL = "https://thenura.care/privacy";
@@ -138,6 +137,9 @@ export default function SignUp() {
     }
 
     updateUser({ ...user, partnerRole });
+    // Drop the signed-out screens (welcome, login) under this one, so Android
+    // Back from the dashboard can't return to them while signed in.
+    if (router.canDismiss()) router.dismissAll();
     router.replace(destination);
   }
 
@@ -156,7 +158,7 @@ export default function SignUp() {
       await finishSignIn(signedInUser);
     } catch (error) {
       setIsFinishing(false);
-      setErrorMessage(error instanceof Error ? error.message : "Unable to finish signing up.");
+      setErrorMessage(getFriendlyErrorMessage(error));
     }
   }
 
@@ -168,7 +170,7 @@ export default function SignUp() {
     } catch (error) {
       setIsFinishing(false);
       setErrorMessage(
-        error instanceof Error ? error.message : "Unable to complete Google sign-in.",
+        getFriendlyErrorMessage(error),
       );
     }
   }
@@ -182,15 +184,12 @@ export default function SignUp() {
       />
 
       <SafeAreaView className="flex-1">
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        <View
           className="flex-1"
-          keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
         >
           <AuthTopBar />
 
-          <ScrollView
-            automaticallyAdjustKeyboardInsets
+          <KeyboardAwareScrollView bottomOffset={24}
             contentContainerStyle={{
               alignItems: "center",
               flexGrow: 1,
@@ -231,7 +230,7 @@ export default function SignUp() {
                   className="mb-4 flex-row items-center gap-2.5 p-3.5 rounded-2xl border"
                   style={{ backgroundColor: colors.primaryLight, borderColor: colors.border }}
                 >
-                  <Ionicons name="heart-outline" size={15} color={colors.primary} />
+                  <Icon set="ion" name="heart-outline" size={15} color={colors.primary} />
                   <Text
                     className="flex-1 text-xs font-semibold leading-4"
                     style={{ color: colors.foreground, fontFamily: fonts.body }}
@@ -324,7 +323,7 @@ export default function SignUp() {
                           borderColor: met ? colors.successLight : colors.border,
                         }}
                       >
-                        <Ionicons
+                        <Icon set="ion"
                           name={met ? "checkmark-circle" : "ellipse-outline"}
                           size={13}
                           color={met ? colors.success : colors.mutedText}
@@ -424,8 +423,8 @@ export default function SignUp() {
                 </Link>
               </View>
             </Animated.View>
-          </ScrollView>
-        </KeyboardAvoidingView>
+          </KeyboardAwareScrollView>
+        </View>
       </SafeAreaView>
 
       <OtpModal

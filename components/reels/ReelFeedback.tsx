@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import React, { memo, useEffect } from "react";
 import { View } from "react-native";
 import Animated, {
@@ -11,6 +10,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from "react-native-reanimated";
+import { Icon } from "../Icon";
 
 export type Burst = { key: number; x: number; y: number };
 
@@ -51,7 +51,7 @@ export const HeartBurst = memo(function HeartBurst({ burst }: { burst: Burst | n
       pointerEvents="none"
       style={[{ position: "absolute", left: burst.x - HEART / 2, top: burst.y - HEART / 2 }, style]}
     >
-      <Ionicons name="heart" size={HEART} color="#FF3B5C" style={{ textShadowColor: "rgba(0,0,0,0.25)", textShadowRadius: 8 }} />
+      <Icon set="ion" name="heart" size={HEART} color="#FF3B5C" style={{ textShadowColor: "rgba(0,0,0,0.25)", textShadowRadius: 8 }} />
     </Animated.View>
   );
 });
@@ -77,7 +77,7 @@ export const MuteFlash = memo(function MuteFlash({ flashKey, muted }: { flashKey
           style,
         ]}
       >
-        <Ionicons name={muted ? "volume-mute" : "volume-high"} size={32} color="white" />
+        <Icon set="ion" name={muted ? "volume-mute" : "volume-high"} size={32} color="white" />
       </Animated.View>
     </View>
   );
