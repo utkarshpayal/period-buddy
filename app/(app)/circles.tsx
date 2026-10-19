@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Modal,
@@ -20,12 +20,15 @@ import Avatar from "../../components/Avatar";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { SkeletonCard } from "../../components/Skeleton";
+import { AppModalHost } from "../../components/modals/AppModalHost";
 import { useTheme } from "../../components/theme";
 import { useAsyncLoad } from "../../hooks/useAsyncLoad";
 import { circlesApi, getFriendlyErrorMessage, type CircleDetail, type CircleMember, type CircleVibe } from "../../lib/api";
-import { timeAgo } from "../../lib/genz";
+import { timeAgo } from "../../lib/format";
 import { showAlert } from "../../lib/modal-host";
 import { shareWithAppLink } from "../../lib/share";
+import { useSecureScreen } from "../../lib/screenPrivacy";
+import { Icon } from "../../components/Icon";
 
 /**
  * Bestie Circles — small private friend groups (period-buddy-be /api/circles).
@@ -45,11 +48,31 @@ const SIDE = 20;
 
 /* ─────────────────────────────── Shared bits ─────────────────────────────── */
 
-function Sheet({ visible, title, onClose, children }: { visible: boolean; title: string; onClose: () => void; children: React.ReactNode }) {
+function Sheet({
+  visible,
+  title,
+  onClose,
+  onDismissed,
+  children,
+}: {
+  visible: boolean;
+  title: string;
+  onClose: () => void;
+  /** The sheet has finished closing, so another modal (an alert) can open. */
+  onDismissed?: () => void;
+  children: React.ReactNode;
+}) {
   const { colors, fonts } = useTheme();
   const insets = useSafeAreaInsets();
+  const onDismissedRef = useRef(onDismissed);
+  onDismissedRef.current = onDismissed;
+  useEffect(() => {
+    // iOS reports the end of the slide-out through `onDismiss`; elsewhere the
+    // next modal can open straight away.
+    if (!visible && Platform.OS !== "ios") onDismissedRef.current?.();
+  }, [visible]);
   return (
-    <Modal transparent animationType="slide" visible={visible} onRequestClose={onClose}>
+    <Modal transparent animationType="slide" visible={visible} onRequestClose={onClose} onDismiss={() => onDismissedRef.current?.()}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1, justifyContent: "flex-end", backgroundColor: colors.overlay }}>
         <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} accessibilityLabel="Close" />
         <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: SIDE, paddingTop: 10, paddingBottom: Math.max(insets.bottom, 12) + 22 }}>
@@ -63,12 +86,14 @@ function Sheet({ visible, title, onClose, children }: { visible: boolean; title:
               className="items-center justify-center rounded-full"
               style={{ width: 30, height: 30, backgroundColor: colors.surfaceSoft }}
             >
-              <Feather name="x" size={16} color={colors.mutedText} />
+              <Icon set="feather" name="x" size={16} color={colors.mutedText} />
             </TouchableOpacity>
           </View>
           {children}
         </View>
       </KeyboardAvoidingView>
+      {/* Alerts raised while the sheet is open draw on top of it, not behind. */}
+      {visible ? <AppModalHost inline /> : null}
     </Modal>
   );
 }
@@ -150,7 +175,7 @@ function InviteCode({ code, onShare }: { code: string; onShare: () => void }) {
         className="flex-row items-center rounded-full px-4"
         style={{ height: 38, backgroundColor: colors.primaryLight, gap: 6 }}
       >
-        <Feather name="share-2" size={14} color={colors.primary} />
+        <Icon set="feather" name="share-2" size={14} color={colors.primary} />
         <Text style={{ color: colors.primary, fontSize: 13, fontFamily: fonts.body, fontWeight: "800" }}>Share</Text>
       </TouchableOpacity>
     </View>
@@ -173,13 +198,13 @@ function ActionRow({ icon, label, hint, onPress, last }: { icon: React.Component
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.6} accessibilityRole="button" className="flex-row items-center" style={{ paddingHorizontal: SIDE, paddingVertical: 12, gap: 14 }}>
       <View className="items-center justify-center rounded-full" style={{ width: 48, height: 48, backgroundColor: colors.surface }}>
-        <Feather name={icon} size={19} color={colors.primary} />
+        <Icon set="feather" name={icon} size={19} color={colors.primary} />
       </View>
       <View className="flex-1">
         <Text style={{ color: colors.foreground, fontSize: 15, fontFamily: fonts.body, fontWeight: "700" }}>{label}</Text>
         {hint ? <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body, marginTop: 1 }}>{hint}</Text> : null}
       </View>
-      <Feather name="chevron-right" size={18} color={colors.mutedText} />
+      <Icon set="feather" name="chevron-right" size={18} color={colors.mutedText} />
       {!last ? <Divider inset={SIDE + 48 + 14} /> : null}
     </TouchableOpacity>
   );
@@ -254,7 +279,7 @@ function CircleList({ initialCode }: { initialCode?: string }) {
               className="items-center justify-center rounded-full"
               style={{ width: 36, height: 36, backgroundColor: colors.primaryLight }}
             >
-              <Feather name="plus" size={18} color={colors.primary} />
+              <Icon set="feather" name="plus" size={18} color={colors.primary} />
             </TouchableOpacity>
           ) : null
         }
@@ -483,7 +508,7 @@ function VibeRow({
             </Text>
             {v.isMine ? (
               <TouchableOpacity onPress={() => onDelete(v)} hitSlop={10} accessibilityLabel="Delete vibe">
-                <Feather name="more-horizontal" size={18} color={colors.mutedText} />
+                <Icon set="feather" name="more-horizontal" size={18} color={colors.mutedText} />
               </TouchableOpacity>
             ) : null}
           </View>
@@ -508,7 +533,7 @@ function VibeRow({
               className="items-center justify-center rounded-full"
               style={{ width: 28, height: 28, backgroundColor: colors.surface }}
             >
-              <Feather name={picking ? "x" : "smile"} size={14} color={colors.mutedText} />
+              <Icon set="feather" name={picking ? "x" : "smile"} size={14} color={colors.mutedText} />
             </TouchableOpacity>
           </View>
         </View>
@@ -593,9 +618,22 @@ function CircleView({ id }: { id: string }) {
     }
   };
 
-  const leave = () => {
+  // Runs once the options sheet has closed: iOS drops an alert presented
+  // while another modal is still sliding away.
+  const afterMenuClosed = useRef<(() => void) | null>(null);
+  const closeMenuThen = (action: () => void) => {
+    afterMenuClosed.current = action;
     setMenuOpen(false);
-    showAlert(
+  };
+  const onMenuDismissed = () => {
+    const action = afterMenuClosed.current;
+    afterMenuClosed.current = null;
+    action?.();
+  };
+
+  const leave = () =>
+    closeMenuThen(() =>
+      showAlert(
       "Leave this circle?",
       circle?.isOwner && circle.memberCount > 1 ? "The longest-standing member becomes the owner." : circle?.memberCount === 1 ? "You're the last one here, so the circle will be deleted." : undefined,
       [
@@ -613,19 +651,19 @@ function CircleView({ id }: { id: string }) {
           },
         },
       ],
+      ),
     );
-  };
 
-  const resetCode = async () => {
-    setMenuOpen(false);
-    try {
-      const { inviteCode } = await circlesApi.resetCode(id);
-      setCircle((c) => (c ? { ...c, inviteCode } : c));
-      showAlert("New code", `The old code no longer works. New one: ${inviteCode}`);
-    } catch (err) {
-      showAlert("Couldn't reset", getFriendlyErrorMessage(err));
-    }
-  };
+  const resetCode = () =>
+    closeMenuThen(async () => {
+      try {
+        const { inviteCode } = await circlesApi.resetCode(id);
+        setCircle((c) => (c ? { ...c, inviteCode } : c));
+        showAlert("New code", `The old code no longer works. New one: ${inviteCode}`);
+      } catch (err) {
+        showAlert("Couldn't reset", getFriendlyErrorMessage(err));
+      }
+    });
 
   const me = circle?.members.find((m) => m.isYou);
 
@@ -642,7 +680,7 @@ function CircleView({ id }: { id: string }) {
               className="w-9 h-9 items-center justify-center rounded-full"
               style={{ backgroundColor: colors.surface }}
             >
-              <Feather name="more-horizontal" size={18} color={colors.foreground} />
+              <Icon set="feather" name="more-horizontal" size={18} color={colors.foreground} />
             </TouchableOpacity>
           ) : null
         }
@@ -678,7 +716,7 @@ function CircleView({ id }: { id: string }) {
                   accessibilityLabel="Invite a friend"
                 >
                   <View className="items-center justify-center rounded-full" style={{ width: 52, height: 52, borderColor: colors.border, borderWidth: 1.5, borderStyle: "dashed" }}>
-                    <Feather name="plus" size={20} color={colors.mutedText} />
+                    <Icon set="feather" name="plus" size={20} color={colors.mutedText} />
                   </View>
                   <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body, fontWeight: "600", marginTop: 6 }}>Invite</Text>
                 </TouchableOpacity>
@@ -767,7 +805,7 @@ function CircleView({ id }: { id: string }) {
         ) : null}
       </Sheet>
 
-      <Sheet visible={menuOpen} title="Circle options" onClose={() => setMenuOpen(false)}>
+      <Sheet visible={menuOpen} title="Circle options" onClose={() => setMenuOpen(false)} onDismissed={onMenuDismissed}>
         {circle ? (
           <>
             <FieldLabel first>Invite code</FieldLabel>
@@ -780,7 +818,7 @@ function CircleView({ id }: { id: string }) {
                 .filter((o) => o.show)
                 .map((o) => (
                   <TouchableOpacity key={o.label} onPress={o.onPress} activeOpacity={0.7} accessibilityRole="button" className="flex-row items-center py-3.5" style={{ gap: 12 }}>
-                    <Feather name={o.icon} size={18} color={o.danger ? colors.danger : colors.foreground} />
+                    <Icon set="feather" name={o.icon} size={18} color={o.danger ? colors.danger : colors.foreground} />
                     <Text style={{ color: o.danger ? colors.danger : colors.foreground, fontSize: 15, fontFamily: fonts.body, fontWeight: "600" }}>{o.label}</Text>
                   </TouchableOpacity>
                 ))}
@@ -793,6 +831,7 @@ function CircleView({ id }: { id: string }) {
 }
 
 export default function CirclesScreen() {
+  useSecureScreen("circles");
   const { colors, isDark } = useTheme();
   const { id, code } = useLocalSearchParams<{ id?: string; code?: string }>();
   return (

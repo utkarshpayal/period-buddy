@@ -1,15 +1,12 @@
-import Constants from "expo-constants";
 import { useMemo } from "react";
-import { Platform } from "react-native";
 import { useAuth } from "../components/auth-context";
+import { APP_PLATFORM, APP_VERSION } from "../lib/api";
 import type { Viewer } from "../lib/appConfig";
 import { useSubscriptionAccess } from "./useSubscriptionAccess";
 
-/** The installed app's version (app.json `version`), e.g. "1.0.0". */
-export const APP_VERSION =
-  Constants.expoConfig?.version ?? (Constants as unknown as { nativeAppVersion?: string }).nativeAppVersion ?? "0.0.0";
+export { APP_VERSION };
 
-const PLATFORM: Viewer["platform"] = Platform.OS === "ios" ? "ios" : Platform.OS === "web" ? "web" : "android";
+const PLATFORM: Viewer["platform"] = APP_PLATFORM;
 
 /**
  * Who's looking, for App CMS audience rules (lib/appConfig.ts

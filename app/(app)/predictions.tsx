@@ -1,4 +1,3 @@
-import { Feather, Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshControl, ScrollView, StatusBar, Text, TouchableOpacity, View } from "react-native";
@@ -9,9 +8,12 @@ import { SkeletonCard } from "../../components/Skeleton";
 import { useTheme } from "../../components/theme";
 import { getShadow } from "../../components/ui-tokens";
 import { useDataRefresh } from "../../hooks/useDataRefresh";
-import { cycleApi, type Predictions as CyclePredictions } from "../../lib/api";
+import { cycleApi, type Predictions as CyclePredictions, getFriendlyErrorMessage } from "../../lib/api";
 import { getCyclePhase, type CyclePhase } from "../../lib/cycle";
+import { addDays } from "../../lib/cycleCalendar";
 import { dateFromDayKey } from "../../lib/format";
+import { useSecureScreen } from "../../lib/screenPrivacy";
+import { Icon } from "../../components/Icon";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -25,7 +27,6 @@ const STAGES: Record<CyclePhase, { title: string; bar: string; note: string }> =
   luteal: { title: "Before your period", bar: "Before", note: "Cravings, mood or sleep can shift before your period." },
 };
 
-const addDays = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 const startOfToday = () => dateFromDayKey(new Date());
 const daysBetween = (a: Date, b: Date) => Math.round((b.getTime() - a.getTime()) / DAY_MS);
 const fmtDay = (d: Date) => `${d.getDate()} ${MONTHS[d.getMonth()]}`;
@@ -53,6 +54,7 @@ function phaseDayRanges(periodLength: number, cycleLength: number) {
 }
 
 export default function Predictions() {
+  useSecureScreen("predictions");
   const { colors, isDark, fonts } = useTheme();
 
   const [data, setData] = useState<CyclePredictions | null>(null);
@@ -67,7 +69,7 @@ export default function Predictions() {
       setError(null);
       setData(await cycleApi.getPredictions({ force: isRefresh }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load predictions");
+      setError(getFriendlyErrorMessage(err));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -176,7 +178,7 @@ export default function Predictions() {
           </View>
         ) : error ? (
           <View className="flex-1 items-center justify-center px-8">
-            <Ionicons name="calendar-outline" size={44} color={colors.primary} />
+            <Icon set="ion" name="calendar-outline" size={44} color={colors.primary} />
             <Text style={{ marginTop: 14, fontSize: 17, fontWeight: "700", textAlign: "center", color: colors.foreground, fontFamily: fonts.heading }}>
               {needsSetup ? "Tell us about your cycle first" : "Couldn't load predictions"}
             </Text>
@@ -211,7 +213,7 @@ export default function Predictions() {
                   backgroundColor: colors.warningLight,
                 }}
               >
-                <Feather name="alert-circle" size={18} color={colors.warning} style={{ marginTop: 1 }} />
+                <Icon set="feather" name="alert-circle" size={18} color={colors.warning} style={{ marginTop: 1 }} />
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontSize: 14, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>These dates may be off</Text>
                   <Text style={{ marginTop: 2, fontSize: 13, lineHeight: 18, color: colors.foreground, opacity: 0.8, fontFamily: fonts.body }}>
@@ -363,7 +365,7 @@ export default function Predictions() {
                 view.isLate
                   ? {
                       key: "fertile",
-                      icon: "sparkles-outline" as const,
+                      icon: "egg-outline" as const,
                       tint: stageColors.ovulation,
                       title: "Fertile days",
                       detail: "We'll work these out once your period starts",
@@ -372,7 +374,7 @@ export default function Predictions() {
                   : data.fertileWindowReliable === false || data.ovulationReliable === false
                   ? {
                       key: "fertile",
-                      icon: "sparkles-outline" as const,
+                      icon: "egg-outline" as const,
                       tint: stageColors.ovulation,
                       title: "Fertile days",
                       detail: "Hard to predict when cycles vary a lot",
@@ -380,7 +382,7 @@ export default function Predictions() {
                     }
                   : {
                       key: "fertile",
-                      icon: "sparkles-outline" as const,
+                      icon: "egg-outline" as const,
                       tint: stageColors.ovulation,
                       title: "Fertile days",
                       detail: `${fmtRange(view.fertileStart, view.fertileEnd)} · most likely to get pregnant`,
@@ -417,7 +419,7 @@ export default function Predictions() {
                     }}
                   >
                     <View style={{ width: 40, height: 40, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: row.tint.soft }}>
-                      <Ionicons name={row.icon} size={18} color={colors.foreground} />
+                      <Icon set="ion" name={row.icon} size={18} color={colors.foreground} />
                     </View>
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <Text style={{ fontSize: 15, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>{row.title}</Text>
@@ -517,7 +519,7 @@ export default function Predictions() {
                   { label: "Usual period", value: `${view.periodLength} days`, icon: "droplet" as const },
                 ].map((s) => (
                   <View key={s.label} style={{ flex: 1, padding: 14, borderRadius: 16, backgroundColor: colors.surfaceSoft }}>
-                    <Feather name={s.icon} size={15} color={colors.mutedText} />
+                    <Icon set="feather" name={s.icon} size={15} color={colors.mutedText} />
                     <Text style={{ marginTop: 8, fontSize: 18, fontWeight: "700", color: colors.foreground, fontFamily: fonts.monoSemiBold ?? fonts.mono }}>{s.value}</Text>
                     <Text style={{ marginTop: 1, fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}>{s.label}</Text>
                   </View>
@@ -548,7 +550,7 @@ export default function Predictions() {
                   </View>
                   <Text style={{ marginTop: 6, fontSize: 14, lineHeight: 20, color: colors.mutedText, fontFamily: fonts.body }}>{reason}</Text>
                   <View style={{ flexDirection: "row", gap: 8, marginTop: 14 }}>
-                    <Feather name="info" size={14} color={colors.mutedText} style={{ marginTop: 2 }} />
+                    <Icon set="feather" name="info" size={14} color={colors.mutedText} style={{ marginTop: 2 }} />
                     <Text style={{ flex: 1, fontSize: 13, lineHeight: 18, color: colors.mutedText, fontFamily: fonts.body }}>
                       Predictions are estimates from your own logs. Don&apos;t rely on fertile days alone for birth control.
                     </Text>

@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -17,6 +17,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { DayEntry } from "./AppState";
 import { flowOptions, symptomOptions, type LogOption } from "./logOptions";
 import { alert } from "../lib/alert";
+import { getFriendlyErrorMessage } from "../lib/api";
+import { addedSymptoms, parseDecimal } from "../lib/dayLog";
 import type { LogFocus } from "../lib/logFocus";
 import { AppModalHost } from "./modals/AppModalHost";
 import { useTheme } from "./theme";
@@ -27,6 +29,7 @@ import {
   MOOD_OPTIONS,
   type LogCategoryTint,
 } from "./ui-tokens";
+import { Icon } from "./Icon";
 
 // Free-form tags stored in DayEntry.symptoms (no backend enum, so these are
 // safe to ship without a server change) for categories the typed fields
@@ -123,10 +126,80 @@ const energyOptions: LogOption<NonNullable<DayEntry["energy"]>>[] = [
   { icon: "battery-dead-outline", label: "Low", value: "low" },
 ];
 
+// Hydrated "normal" digestion and retired exercise values have no chip; see hydrate().
+const knownExerciseValues = new Set(exerciseOptions.map((option) => option.value));
+
+/** Everything the form edits, in one comparable shape (dirty check, Quick Log warning). */
+type FormValues = {
+  note: string;
+  energy: DayEntry["energy"];
+  flow: DayEntry["flow"];
+  moods: NonNullable<DayEntry["mood"]>[];
+  symptoms: string[];
+  sleepHours?: number;
+  waterIntake?: number;
+  weightText: string;
+  tempText: string;
+  stressLevel?: number;
+  medText: string;
+  isIntimate: boolean;
+  digestions: NonNullable<DayEntry["digestion"]>[];
+  skins: NonNullable<DayEntry["skin"]>[];
+  discharge: DayEntry["discharge"];
+  exercise: string[];
+};
+
+function formFromEntry(entry: DayEntry | undefined, details: string | undefined): FormValues {
+  return {
+    note: entry?.note ?? details ?? "",
+    energy: entry?.energy,
+    flow: entry?.flow,
+    // Prefer the plural array when present; fall back to the scalar so
+    // previously-saved single values still hydrate.
+    moods: entry?.moods ?? (entry?.mood ? [entry.mood] : []),
+    symptoms: entry?.symptoms ?? [],
+    sleepHours: entry?.sleepHours,
+    waterIntake: entry?.waterIntake,
+    weightText: entry?.weight ? String(entry.weight) : "",
+    tempText: entry?.temperature ? String(entry.temperature) : "",
+    stressLevel: entry?.stressLevel,
+    medText: entry?.medication ? entry.medication.join(", ") : "",
+    isIntimate: entry?.isIntimate ?? false,
+    // "normal" has no chip (an empty selection *means* normal — see the
+    // filter in the render below), so strip it out here too; otherwise it
+    // sits invisibly in the array and `handleSave`'s `selectedDigestions[0]`
+    // can silently resave "normal" instead of whatever the user just picked.
+    digestions: (entry?.digestions ?? (entry?.digestion ? [entry.digestion] : [])).filter((digestion) => digestion !== "normal"),
+    skins: entry?.skins ?? (entry?.skin ? [entry.skin] : []),
+    discharge: entry?.discharge,
+    // Drop any previously-saved values that no longer have a matching chip
+    // (exerciseOptions was replaced wholesale) — otherwise a stale value like
+    // "walking" sits invisibly selected with no chip to toggle it off, and
+    // silently resaves on every future edit of that day.
+    exercise: (entry?.exercise ?? []).filter((value) => knownExerciseValues.has(value)),
+  };
+}
+
+/** Order-insensitive, so toggling a chip off and on again isn't an edit. */
+function formKey(values: FormValues): string {
+  const sorted = (list: string[]) => [...list].sort();
+  return JSON.stringify({
+    ...values,
+    note: values.note.trim(),
+    moods: sorted(values.moods),
+    symptoms: sorted(values.symptoms),
+    digestions: sorted(values.digestions),
+    skins: sorted(values.skins),
+    exercise: sorted(values.exercise),
+  });
+}
+
 export default function DayDetailsModal({
   visible,
   onClose,
   day,
+  dateKey,
+  loaded = true,
   dateLabel,
   details,
   entry,
@@ -140,13 +213,22 @@ export default function DayDetailsModal({
   visible: boolean;
   onClose: () => void;
   day?: number;
+  /** The day being edited; the form loads from `entry` when this changes (not on every refetch). */
+  dateKey?: string;
+  /**
+   * Whether the day's saved log is known yet. Until then Save and Quick Log
+   * are off: a full save over a log that hasn't loaded would erase it.
+   */
+  loaded?: boolean;
   dateLabel?: string;
   details?: string;
   entry?: DayEntry;
   phaseLabel?: string;
-  onSaveEntry?: (entry: Omit<DayEntry, "updatedAt">) => Promise<void> | void;
+  /** Rejects when the save failed; the sheet then stays open with the error. */
+  onSaveEntry?: (entry: Omit<DayEntry, "updatedAt">) => Promise<void>;
   onSaveNote?: (note: string) => void;
-  onLogSymptom?: (symptom: string) => void;
+  /** Quick Log: the tags picked that the day's log doesn't have yet. */
+  onLogSymptom?: (symptoms: string[]) => void;
   /** Deletes this day's saved log. The option only shows when there is a saved entry. */
   onClearEntry?: () => Promise<void>;
   /** When set, the modal scrolls to this section on open (Home quick actions). */
@@ -185,66 +267,44 @@ export default function DayDetailsModal({
   const [selectedDischarge, setSelectedDischarge] = useState<DayEntry["discharge"]>();
   const [selectedExercise, setSelectedExercise] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
-  // Tracks whether anything has changed since this open's hydration, so an
-  // accidental backdrop tap / close doesn't silently discard real edits.
-  const [isDirty, setIsDirty] = useState(false);
-  const isHydratingRef = useRef(true);
+  // State can't block a second tap in the same frame; this can.
+  const savingRef = useRef(false);
+  // What this open's form started from; "dirty" is a difference from it.
+  const [hydrated, setHydrated] = useState<FormValues>(() => formFromEntry(entry, details));
+  // Read at hydration time only, so a refetch of the day while the sheet is
+  // open (foreground, year reload) doesn't wipe the user's edits.
+  const sourceRef = useRef({ entry, details });
+  sourceRef.current = { entry, details };
 
   useEffect(() => {
     if (!visible) return;
+    const values = formFromEntry(sourceRef.current.entry, sourceRef.current.details);
+    setHydrated(values);
+    setNoteText(values.note);
+    setSelectedEnergy(values.energy);
+    setSelectedFlow(values.flow);
+    setSelectedMoods(values.moods);
+    setSelectedSymptoms(values.symptoms);
+    setSleepHours(values.sleepHours);
+    setWaterIntake(values.waterIntake);
+    setWeightText(values.weightText);
+    setTempText(values.tempText);
+    setStressLevel(values.stressLevel);
+    setMedText(values.medText);
+    setIsIntimate(values.isIntimate);
+    setSelectedDigestions(values.digestions);
+    setSelectedSkins(values.skins);
+    setSelectedDischarge(values.discharge);
+    setSelectedExercise(values.exercise);
+    // `loaded` too: a sheet opened while the day was loading fills in once it arrives.
+  }, [visible, dateKey, loaded]);
 
-    isHydratingRef.current = true;
-    setIsDirty(false);
-    setNoteText(entry?.note ?? details ?? "");
-    setSelectedEnergy(entry?.energy);
-    setSelectedFlow(entry?.flow);
-    // Prefer the plural array when present; fall back to the scalar so
-    // previously-saved single values still hydrate.
-    setSelectedMoods(entry?.moods ?? (entry?.mood ? [entry.mood] : []));
-    setSelectedSymptoms(entry?.symptoms ?? []);
-    setSleepHours(entry?.sleepHours);
-    setWaterIntake(entry?.waterIntake);
-    setWeightText(entry?.weight ? String(entry.weight) : "");
-    setTempText(entry?.temperature ? String(entry.temperature) : "");
-    setStressLevel(entry?.stressLevel);
-    setMedText(entry?.medication ? entry.medication.join(", ") : "");
-    setIsIntimate(entry?.isIntimate ?? false);
-    // "normal" has no chip (an empty selection *means* normal — see the
-    // filter in the render below), so strip it out here too; otherwise it
-    // sits invisibly in the array and `handleSave`'s `selectedDigestions[0]`
-    // can silently resave "normal" instead of whatever the user just picked.
-    setSelectedDigestions(
-      (entry?.digestions ?? (entry?.digestion ? [entry.digestion] : [])).filter(
-        (digestion) => digestion !== "normal",
-      ),
-    );
-    setSelectedSkins(entry?.skins ?? (entry?.skin ? [entry.skin] : []));
-    setSelectedDischarge(entry?.discharge);
-    // Drop any previously-saved values that no longer have a matching chip
-    // (exerciseOptions was replaced wholesale) — otherwise a stale value like
-    // "walking" sits invisibly selected with no chip to toggle it off, and
-    // silently resaves on every future edit of that day.
-    const knownExerciseValues = new Set(exerciseOptions.map((option) => option.value));
-    setSelectedExercise((entry?.exercise ?? []).filter((value) => knownExerciseValues.has(value)));
-  }, [visible, details, entry]);
-
-  // Fires on every field change; the first pass after hydration (above) is
-  // just the hydration itself re-rendering, not a real edit, so it's eaten
-  // via isHydratingRef instead of marking the form dirty.
-  useEffect(() => {
-    if (!visible) return;
-    if (isHydratingRef.current) {
-      isHydratingRef.current = false;
-      return;
-    }
-    setIsDirty(true);
-  }, [
-    visible,
-    noteText,
-    selectedEnergy,
-    selectedFlow,
-    selectedMoods,
-    selectedSymptoms,
+  const form: FormValues = {
+    note: noteText,
+    energy: selectedEnergy,
+    flow: selectedFlow,
+    moods: selectedMoods,
+    symptoms: selectedSymptoms,
     sleepHours,
     waterIntake,
     weightText,
@@ -252,11 +312,16 @@ export default function DayDetailsModal({
     stressLevel,
     medText,
     isIntimate,
-    selectedDigestions,
-    selectedSkins,
-    selectedDischarge,
-    selectedExercise,
-  ]);
+    digestions: selectedDigestions,
+    skins: selectedSkins,
+    discharge: selectedDischarge,
+    exercise: selectedExercise,
+  };
+  const formSignature = formKey(form);
+  const hydratedSignature = useMemo(() => formKey(hydrated), [hydrated]);
+  // Tracks whether anything has changed since this open's hydration, so an
+  // accidental backdrop tap / close doesn't silently discard real edits.
+  const isDirty = formSignature !== hydratedSignature;
 
   // Section a Home / tracker quick action asked us to jump to, still pending a
   // scroll. Cleared once we've scrolled to it (see recordSection / the effect).
@@ -306,27 +371,10 @@ export default function DayDetailsModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, focusSection]);
 
-  // Whether any section besides the symptom tags Quick Log actually saves
-  // has data in it — used to warn before Quick Log silently drops the rest.
+  // Whether anything besides the symptom tags (which Quick Log saves) was
+  // changed in the sheet; those edits would be dropped.
   function hasUnsavedByQuickLog() {
-    return (
-      selectedEnergy !== undefined ||
-      selectedFlow !== undefined ||
-      selectedMoods.length > 0 ||
-      selectedSymptoms.length > 1 ||
-      selectedDigestions.length > 0 ||
-      selectedSkins.length > 0 ||
-      selectedDischarge !== undefined ||
-      selectedExercise.length > 0 ||
-      sleepHours !== undefined ||
-      waterIntake !== undefined ||
-      weightText.trim() !== "" ||
-      tempText.trim() !== "" ||
-      stressLevel !== undefined ||
-      medText.trim() !== "" ||
-      isIntimate ||
-      noteText.trim() !== ""
-    );
+    return formSignature !== formKey({ ...hydrated, symptoms: selectedSymptoms });
   }
 
   function confirmDiscardIfDirty(onConfirm: () => void) {
@@ -345,7 +393,7 @@ export default function DayDetailsModal({
   }
 
   async function handleSave() {
-    if (isSaving) return;
+    if (savingRef.current || !loaded) return;
 
     if (!onSaveEntry) {
       if (onSaveNote) onSaveNote(noteText.trim());
@@ -353,14 +401,24 @@ export default function DayDetailsModal({
       return;
     }
 
-    const parsedWeight = parseFloat(weightText) || undefined;
-    const parsedTemp = parseFloat(tempText) || undefined;
+    const parsedWeight = parseDecimal(weightText, 20, 300);
+    const parsedTemp = parseDecimal(tempText, 30, 45);
+    if (parsedWeight === null || parsedTemp === null) {
+      alert(
+        "Check your entry",
+        parsedWeight === null
+          ? "Weight should be a number in kg, like 58.5."
+          : "Temperature should be in °C, like 36.6.",
+      );
+      return;
+    }
     const meds = medText
       .split(",")
       .map((m) => m.trim())
       .filter(Boolean);
 
     try {
+      savingRef.current = true;
       setIsSaving(true);
       await onSaveEntry({
         energy: selectedEnergy,
@@ -387,13 +445,9 @@ export default function DayDetailsModal({
       });
       onClose();
     } catch (error) {
-      alert(
-        "Couldn't save",
-        error instanceof Error
-          ? error.message
-          : "Unable to save this day's log right now. Please try again.",
-      );
+      alert("Couldn't save", getFriendlyErrorMessage(error));
     } finally {
+      savingRef.current = false;
       setIsSaving(false);
     }
   }
@@ -401,32 +455,34 @@ export default function DayDetailsModal({
   // Clears straight away, with no confirm step. The button only shows for a
   // day that already has a saved log.
   async function handleClear() {
-    if (isSaving || !onClearEntry) return;
+    if (savingRef.current || !onClearEntry) return;
     try {
+      savingRef.current = true;
       setIsSaving(true);
       await onClearEntry();
       onClose();
     } catch (error) {
-      alert(
-        "Couldn't clear",
-        error instanceof Error
-          ? error.message
-          : "Unable to clear this day's log right now. Please try again.",
-      );
+      alert("Couldn't clear", getFriendlyErrorMessage(error));
     } finally {
+      savingRef.current = false;
       setIsSaving(false);
     }
   }
 
-  function performQuickLog() {
-    const symptom = selectedSymptoms[0] ?? "general";
-
-    if (onLogSymptom) onLogSymptom(symptom);
+  function performQuickLog(symptoms: string[]) {
+    if (savingRef.current) return;
+    onLogSymptom?.(symptoms);
     onClose();
   }
 
   function handleLog() {
-    if (isSaving) return;
+    if (savingRef.current || !loaded) return;
+    // Only what's new for the day; tags already on the log are kept as they are.
+    const added = addedSymptoms(selectedSymptoms, hydrated.symptoms);
+    if (added.length === 0) {
+      alert("Pick a symptom", "Quick Log saves the symptom tags you pick. Tap one first, or use \"Save Log\" for everything else.");
+      return;
+    }
 
     if (hasUnsavedByQuickLog()) {
       alert(
@@ -434,13 +490,13 @@ export default function DayDetailsModal({
         "You've filled in other sections (mood, flow, sleep, etc.) that Quick Log won't save — only your symptom tags will be logged. Use \"Save Log\" instead to keep everything.",
         [
           { text: "Keep editing", style: "cancel" },
-          { text: "Quick Log anyway", style: "destructive", onPress: performQuickLog },
+          { text: "Quick Log anyway", style: "destructive", onPress: () => performQuickLog(added) },
         ],
       );
       return;
     }
 
-    performQuickLog();
+    performQuickLog(added);
   }
 
   function toggleSymptom(symptom: string) {
@@ -517,7 +573,7 @@ export default function DayDetailsModal({
             width: 28,
           }}
         >
-          <Ionicons
+          <Icon set="ion"
             name={icon}
             size={14}
             color={isSelected ? colors.buttonText : tint.color}
@@ -557,7 +613,7 @@ export default function DayDetailsModal({
             )}
           </View>
         ) : isSelected ? (
-          <Ionicons name="checkmark-circle" size={15} color={tint.color} />
+          <Icon set="ion" name="checkmark-circle" size={15} color={tint.color} />
         ) : null}
       </TouchableOpacity>
     );
@@ -648,7 +704,7 @@ export default function DayDetailsModal({
                 hitSlop={8}
                 style={{ padding: 8, margin: -8 }}
               >
-                <Ionicons name="close" size={22} color={colors.mutedText} />
+                <Icon set="ion" name="close" size={22} color={colors.mutedText} />
               </TouchableOpacity>
             </View>
 
@@ -1111,20 +1167,20 @@ export default function DayDetailsModal({
             <TouchableOpacity
               onPress={handleSave}
               activeOpacity={0.8}
-              disabled={isSaving}
+              disabled={isSaving || !loaded}
               accessibilityRole="button"
-              accessibilityState={{ disabled: isSaving, busy: isSaving }}
+              accessibilityState={{ disabled: isSaving || !loaded, busy: isSaving || !loaded }}
               style={{
                 flex: 1,
                 borderRadius: 12,
                 overflow: "hidden",
                 backgroundColor: colors.primary,
-                opacity: isSaving ? 0.75 : 1,
+                opacity: isSaving || !loaded ? 0.75 : 1,
                 paddingHorizontal: 16,
                 paddingVertical: 13,
               }}
             >
-              {isSaving ? (
+              {isSaving || !loaded ? (
                 <ActivityIndicator color={colors.buttonText} />
               ) : (
                 <Text
@@ -1142,16 +1198,16 @@ export default function DayDetailsModal({
 
             <TouchableOpacity
               onPress={handleLog}
-              disabled={isSaving}
+              disabled={isSaving || !loaded}
               accessibilityRole="button"
-              accessibilityState={{ disabled: isSaving }}
+              accessibilityState={{ disabled: isSaving || !loaded }}
               style={{
                 backgroundColor: colors.input,
                 borderColor: colors.border,
                 borderRadius: 12,
                 borderWidth: 1,
                 flex: 1,
-                opacity: isSaving ? 0.6 : 1,
+                opacity: isSaving || !loaded ? 0.6 : 1,
                 paddingHorizontal: 16,
                 paddingVertical: 13,
               }}
@@ -1186,7 +1242,7 @@ export default function DayDetailsModal({
                 opacity: isSaving ? 0.6 : 1,
               }}
             >
-              <Ionicons name="trash-outline" size={15} color={colors.mutedText} />
+              <Icon set="ion" name="trash-outline" size={15} color={colors.mutedText} />
               <Text style={{ color: colors.mutedText, fontSize: 13, fontWeight: "600", fontFamily: fonts.body }}>
                 Clear this day&apos;s log
               </Text>
@@ -1223,7 +1279,7 @@ function SectionTitle({
       onLayout={onY ? (e) => onY(e.nativeEvent.layout.y - 18) : undefined}
       style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 18 }}
     >
-      {icon ? <Ionicons name={icon} size={15} color={accentColor} /> : null}
+      {icon ? <Icon set="ion" name={icon} size={15} color={accentColor} /> : null}
       <Text
         style={{
           color: colors.foreground,

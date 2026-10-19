@@ -1,4 +1,3 @@
-import { Feather, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useCallback, useRef, useState } from "react";
 import {
@@ -11,8 +10,8 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { useAppState } from "../../components/AppState";
 import { useAuth } from "../../components/auth-context";
+import { AppModalHost } from "../../components/modals/AppModalHost";
 import { useTheme } from "../../components/theme";
 import { SkeletonBlock } from "../../components/Skeleton";
 import { useAsyncLoad } from "../../hooks/useAsyncLoad";
@@ -38,6 +37,7 @@ import {
 import { MedicalReviewBadge } from "../../components/MedicalReviewBadge";
 import { pickMedicalReview } from "../../lib/medicalReview";
 import { computeAge } from "../../lib/chatTopics";
+import { Icon } from "../../components/Icon";
 
 // The couples decks (conversation "spark" cards and the comfort/position
 // cards) are 18+. Same rule as the 18+ chat topic: an unknown birthday stays
@@ -140,7 +140,6 @@ function normalizePositionCard(card: unknown, index: number): PositionCard {
 
 export default function SexualWellbeing() {
   const { colors, isDark, fonts } = useTheme();
-  const { earnTokens } = useAppState();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const tones = getWellbeingTones(colors);
@@ -280,7 +279,6 @@ export default function SexualWellbeing() {
   async function handleNextSparkCard() {
     const nextIndex = (sparkIndex + 1) % sparkCards.length;
     setCurrentPromptIdx(nextIndex);
-    earnTokens(1);
     try {
       await wellbeingApi.drawGameCard("spark", nextIndex);
     } catch {
@@ -291,7 +289,6 @@ export default function SexualWellbeing() {
   async function handleNextPositionCard() {
     const nextIndex = (positionIndex + 1) % positionCards.length;
     setCurrentPositionIdx(nextIndex);
-    earnTokens(2);
     try {
       await wellbeingApi.drawGameCard("positions", nextIndex);
     } catch {
@@ -302,7 +299,6 @@ export default function SexualWellbeing() {
   function handleOpenArticleModal(category: ResourceCategory) {
     setSelectedCategory(category);
     setModalVisible(true);
-    earnTokens(3);
     openedAtRef.current = Date.now();
   }
 
@@ -365,7 +361,7 @@ export default function SexualWellbeing() {
               className="flex-row items-center"
               style={{ gap: 8, marginBottom: 14, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 14, backgroundColor: colors.surfaceSoft }}
             >
-              <Ionicons name="cloud-offline-outline" size={16} color={colors.mutedText} />
+              <Icon set="ion" name="cloud-offline-outline" size={16} color={colors.mutedText} />
               <Text style={{ flex: 1, color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "500", fontFamily: fonts.body }}>
                 Showing saved guides. Pull down to refresh.
               </Text>
@@ -446,15 +442,15 @@ export default function SexualWellbeing() {
                   accessibilityLabel={`Close ${openDeck.title.toLowerCase()}`}
                   style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surfaceSoft, alignItems: "center", justifyContent: "center" }}
                 >
-                  <Feather name="x" size={18} color={colors.foreground} />
+                  <Icon set="feather" name="x" size={18} color={colors.foreground} />
                 </TouchableOpacity>
               </View>
 
               <View
                 style={{ marginTop: 16, minHeight: 168, borderRadius: 20, backgroundColor: openDeck.tone.bg, paddingHorizontal: 22, paddingVertical: 24, justifyContent: "center" }}
               >
-                <Ionicons
-                  name={openDeck.mode === "spark" ? "chatbubble-ellipses-outline" : "sparkles-outline"}
+                <Icon set="ion"
+                  name={openDeck.mode === "spark" ? "chatbubble-ellipses-outline" : "heart-outline"}
                   size={20}
                   color={openDeck.tone.fg}
                   style={{ alignSelf: "center", marginBottom: 12, opacity: 0.8 }}
@@ -487,7 +483,7 @@ export default function SexualWellbeing() {
                 style={{ marginTop: 14, height: 48, borderRadius: 16, backgroundColor: colors.primary, gap: 8 }}
               >
                 <Text maxFontSizeMultiplier={1.3} style={{ color: colors.buttonText, fontSize: 15, fontWeight: "700", fontFamily: fonts.body }}>Next card</Text>
-                <Feather name="arrow-right" size={16} color={colors.buttonText} />
+                <Icon set="feather" name="arrow-right" size={16} color={colors.buttonText} />
               </TouchableOpacity>
             </WellbeingCard>
           ) : (
@@ -519,7 +515,7 @@ export default function SexualWellbeing() {
                       <Text maxFontSizeMultiplier={1.3} style={{ color: deck.tone.fg, fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}>
                         {deck.count > 0 ? `${deck.count} cards` : "No cards yet"}
                       </Text>
-                      {deck.count > 0 ? <Ionicons name="arrow-forward" size={14} color={deck.tone.fg} /> : null}
+                      {deck.count > 0 ? <Icon set="ion" name="arrow-forward" size={14} color={deck.tone.fg} /> : null}
                     </View>
                   </WellbeingCard>
                 </TouchableOpacity>
@@ -572,6 +568,7 @@ export default function SexualWellbeing() {
               </ScrollView>
             </SafeAreaView>
           )}
+          {modalVisible ? <AppModalHost inline /> : null}
         </Modal>
       </SafeAreaView>
     </>

@@ -5,6 +5,7 @@ import { barListHtml, escapeHtml, kpiRowHtml, sparklineSvg } from "./reportChart
 import { simpleMarkdownToHtml } from "./reportMarkdown";
 import { reportApi, type DocType, type HealthReportCycleStats, type LanguageCode, type ReportCountItem } from "./api";
 import { REPORT_THEME } from "./reportTheme";
+import { getDateKey } from "./format";
 
 const DOC_TYPE_LABELS: Record<DocType, string> = {
   bill: "Medical Bill",
@@ -148,7 +149,7 @@ function buildReportHtml(params: {
   // reference number a real clinical/lab report carries — useful for the
   // user to quote if they need to refer back to this specific export.
   const generatedAt = new Date();
-  const reportId = `NURA-${generatedAt.toISOString().slice(0, 10).replace(/-/g, "")}-${generatedAt
+  const reportId = `NURA-${getDateKey(generatedAt).replace(/-/g, "")}-${generatedAt
     .getTime()
     .toString(36)
     .slice(-5)

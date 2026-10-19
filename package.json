@@ -1,7 +1,7 @@
 {
   "name": "period-buddy",
   "main": "expo-router/entry",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
@@ -45,11 +45,13 @@
     "expo-system-ui": "~6.0.9",
     "expo-video": "~3.0.16",
     "expo-web-browser": "~15.0.10",
+    "lucide-react-native": "^1.59.0",
     "nativewind": "^4.2.4",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.5",
     "react-native-gesture-handler": "~2.28.0",
+    "react-native-keyboard-controller": "1.18.5",
     "react-native-markdown-display": "^7.0.2",
     "react-native-reanimated": "~4.1.1",
     "react-native-safe-area-context": "~5.6.0",
@@ -71,6 +73,8 @@
   "private": true,
   "overrides": {
     "postcss": "^8.5.28",
-    "brace-expansion@^1.1.0": "^1.1.21"
+    "brace-expansion@^1.1.0": "^1.1.21",
+    "compression": "^1.8.2",
+    "source-map-js": "^1.2.2"
   }
 }

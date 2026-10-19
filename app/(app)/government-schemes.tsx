@@ -1,11 +1,10 @@
-import { Feather, Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   RefreshControl,
   ScrollView,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -18,7 +17,6 @@ import { FilterChips, type FilterChipOption } from "../../components/FilterChips
 import { SearchBar } from "../../components/SearchBar";
 import { useAuth } from "../../components/auth-context";
 import { useTheme } from "../../components/theme";
-import { getShadow, getSoftTints } from "../../components/ui-tokens";
 import { useSubscriptionAccess } from "../../hooks/useSubscriptionAccess";
 import { LockedFeatureCard } from "../../components/subscription/LockedFeatureCard";
 import { PaywallModal } from "../../components/subscription/PaywallModal";
@@ -31,7 +29,8 @@ import {
   type SchemeCategoryMeta,
 } from "../../lib/api";
 import { fetchQuery, hydrateQuery, peekQuery } from "../../lib/queryCache";
-import { SCHEME_ACTION_LABELS } from "../../lib/schemeHelpers";
+import { SchemeCard } from "../../components/schemes/SchemeCard";
+import { Icon } from "../../components/Icon";
 
 // Government Schemes is a whole-screen premium feature — an admin can price
 // it as locked, in which case browsing the list itself (not just applying)
@@ -56,93 +55,6 @@ type LevelKey = "all" | GovernmentLevel;
 
 const isIoniconName = (name: string): name is keyof typeof Ionicons.glyphMap =>
   Object.prototype.hasOwnProperty.call(Ionicons.glyphMap, name);
-
-function SchemeCard({ scheme }: { scheme: GovernmentBenefit }) {
-  const { colors, fonts, isDark } = useTheme();
-  const router = useRouter();
-  const softTints = getSoftTints(colors);
-  const levelLabel =
-    scheme.governmentLevel === "central" ? "Central" : scheme.state || "State";
-  const actionLabel = SCHEME_ACTION_LABELS[scheme.actionType] || "View";
-
-  return (
-    <TouchableOpacity
-      activeOpacity={0.8}
-      onPress={() =>
-        router.push(`/government-scheme-detail?id=${scheme.slug}`)
-      }
-      accessibilityRole="button"
-      accessibilityLabel={`${scheme.name}. ${levelLabel}. ${actionLabel}`}
-      style={{
-        backgroundColor: colors.surface,
-        borderColor: colors.border,
-        borderWidth: 1,
-        borderRadius: 24,
-        padding: 16,
-        marginBottom: 12,
-        ...getShadow(colors, isDark),
-      }}
-    >
-      <View className="flex-row items-start" style={{ gap: 12 }}>
-        <View
-          className="items-center justify-center"
-          style={{ width: 42, height: 42, borderRadius: 14, backgroundColor: softTints.pink }}
-        >
-          <Ionicons name="ribbon-outline" size={20} color={colors.primaryDark} />
-        </View>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <View className="flex-row items-center flex-wrap" style={{ gap: 6, marginBottom: 6 }}>
-            <View
-              style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: softTints.lavender }}
-            >
-              <Text
-                numberOfLines={1}
-                maxFontSizeMultiplier={1.3}
-                style={{ fontSize: 13, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}
-              >
-                {levelLabel}
-              </Text>
-            </View>
-            {scheme.shortName ? (
-              <View
-                style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: softTints.amber }}
-              >
-                <Text
-                  numberOfLines={1}
-                  maxFontSizeMultiplier={1.3}
-                  style={{ fontSize: 13, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}
-                >
-                  {scheme.shortName}
-                </Text>
-              </View>
-            ) : null}
-          </View>
-          <Text
-            numberOfLines={2}
-            style={{ flexShrink: 1, fontSize: 15, lineHeight: 21, fontWeight: "700", color: colors.foreground, fontFamily: fonts.heading }}
-          >
-            {scheme.name}
-          </Text>
-          <Text
-            numberOfLines={2}
-            style={{ marginTop: 4, fontSize: 14, lineHeight: 20, fontWeight: "400", color: colors.foreground, fontFamily: fonts.body }}
-          >
-            {scheme.description}
-          </Text>
-          <View className="flex-row items-center" style={{ marginTop: 10, gap: 2 }}>
-            <Text
-              maxFontSizeMultiplier={1.4}
-              style={{ fontSize: 13, fontWeight: "700", color: colors.primaryDark, fontFamily: fonts.body }}
-            >
-              {actionLabel}
-            </Text>
-            <Feather name="chevron-right" size={15} color={colors.primaryDark} />
-          </View>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-}
 
 export default function GovernmentSchemes() {
   const { colors, fonts } = useTheme();
@@ -196,6 +108,11 @@ export default function GovernmentSchemes() {
     return cached ? cached.pagination.page < cached.pagination.pages : false;
   });
   const [loadingMore, setLoadingMore] = useState(false);
+  // Bumped by every load(): a slow answer for an older search/filter, or a
+  // "Load more" that started before the filter changed, is dropped instead of
+  // overwriting (or being appended to) the newer list.
+  const generationRef = useRef(0);
+  const loadingMoreRef = useRef(false);
 
   // Debounce the search box so we don't fire a request per keystroke.
   useEffect(() => {
@@ -218,6 +135,8 @@ export default function GovernmentSchemes() {
 
   const load = useCallback(
     async (isRefresh = false) => {
+      const generation = ++generationRef.current;
+      const current = () => generation === generationRef.current;
       const isDefaultList = !debouncedSearch && !activeCategory && level === "all";
       let hasCachedList = false;
       try {
@@ -228,6 +147,7 @@ export default function GovernmentSchemes() {
             hydrateQuery<{ categories: SchemeCategoryMeta[] }>(SCHEME_CATEGORIES_CACHE_KEY),
             hydrateQuery<{ schemes: GovernmentBenefit[] }>(SCHEMES_RECOMMENDED_CACHE_KEY),
           ]);
+          if (!current()) return;
           if (cachedList) {
             hasCachedList = true;
             setSchemes(cachedList.schemes);
@@ -264,6 +184,7 @@ export default function GovernmentSchemes() {
               })
             : Promise.resolve(null),
         ]);
+        if (!current()) return;
 
         setSchemes(listRes.schemes);
         setPage(1);
@@ -271,6 +192,7 @@ export default function GovernmentSchemes() {
         if (catRes) setCategories(catRes.categories);
         if (recRes) setRecommended(recRes.schemes);
       } catch (err) {
+        if (!current()) return;
         // A failed quiet revalidation (or pull-to-refresh over a list that's
         // already showing) keeps that list on screen with a small notice.
         if (hasCachedList || (isRefresh && schemesCountRef.current > 0)) {
@@ -280,8 +202,10 @@ export default function GovernmentSchemes() {
           setOffline(isNetworkError(err));
         }
       } finally {
-        setLoading(false);
-        setRefreshing(false);
+        if (current()) {
+          setLoading(false);
+          setRefreshing(false);
+        }
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -289,21 +213,29 @@ export default function GovernmentSchemes() {
   );
 
   const handleLoadMore = useCallback(async () => {
-    if (loadingMore || !hasMore) return;
+    if (loadingMoreRef.current || !hasMore) return;
+    const generation = generationRef.current;
+    loadingMoreRef.current = true;
     setLoadingMore(true);
     try {
       const nextPage = page + 1;
       const res = await schemesApi.list(listParams(nextPage));
-      setSchemes((prev) => [...prev, ...res.schemes]);
+      if (generation !== generationRef.current) return;
+      setSchemes((prev) => {
+        // Page boundaries shift when schemes are added; skip repeats.
+        const seen = new Set(prev.map((s) => s._id));
+        return [...prev, ...res.schemes.filter((s) => !seen.has(s._id))];
+      });
       setPage(nextPage);
       setHasMore(res.pagination.page < res.pagination.pages);
     } catch {
       // Keep the button so the user can retry; don't wipe the list.
       setHasMore(true);
     } finally {
+      loadingMoreRef.current = false;
       setLoadingMore(false);
     }
-  }, [loadingMore, hasMore, page, listParams]);
+  }, [hasMore, page, listParams]);
 
   useEffect(() => {
     if (locked) return;
@@ -448,7 +380,7 @@ export default function GovernmentSchemes() {
               className="flex-row items-center"
               style={{ gap: 8, marginBottom: 14, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 14, backgroundColor: colors.surfaceSoft }}
             >
-              <Ionicons name="cloud-offline-outline" size={16} color={colors.mutedText} />
+              <Icon set="ion" name="cloud-offline-outline" size={16} color={colors.mutedText} />
               <Text style={{ flex: 1, color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "400", fontFamily: fonts.body }}>
                 Showing saved schemes. Pull down to refresh.
               </Text>

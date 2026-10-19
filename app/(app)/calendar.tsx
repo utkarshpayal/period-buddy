@@ -2,7 +2,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { FlatList, StatusBar, StyleSheet, Text, TouchableOpacity, View, type ViewToken } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useAppState } from "../../components/AppState";
 import DayDetailsModal from "../../components/DayDetailsModal";
 import {
   MINI_HEIGHT,
@@ -11,17 +10,15 @@ import {
   MonthBlock,
   WeekdayHeader,
   CalendarLegend,
-  usePhasePalette,
 } from "../../components/CycleCalendar";
 import { useTheme } from "../../components/theme";
 import { useCycleCalendar } from "../../hooks/useCycleCalendar";
-import { cycleApi } from "../../lib/api";
-import { mapApiDayEntry, type DayStatus } from "../../lib/cycleCalendar";
+import { useDayLogActions } from "../../hooks/useDayLogActions";
+import { dayLogSubtitle, type DayStatus } from "../../lib/cycleCalendar";
 import { getDateKey } from "../../lib/format";
 import { HeaderIconButton } from "../../components/ScreenHeader";
 import { useContentWidth } from "../../lib/layout";
 import { getShadow } from "../../components/ui-tokens";
-import { alertLogNotSaved } from "../../lib/alert";
 import { useSecureScreen } from "../../lib/screenPrivacy";
 
 /**
@@ -56,10 +53,9 @@ export default function CalendarScreen() {
   const router = useRouter();
   const { colors, fonts, isDark } = useTheme();
   const width = useContentWidth();
-  const palette = usePhasePalette();
   const params = useLocalSearchParams<{ view?: string; month?: string }>();
-  const { model, entryFor, noteFor, loadYear, setRemoteEntry, removeRemoteEntry, todayKey } = useCycleCalendar();
-  const { saveDayEntry, removeDayEntry, earnTokens } = useAppState();
+  const { model, entryFor, noteFor, loadYear, isDayLoaded, setRemoteEntry, removeRemoteEntry, todayKey } = useCycleCalendar();
+  const { save, clear, logSymptoms } = useDayLogActions({ entryFor, setRemoteEntry, removeRemoteEntry });
 
   const [view, setView] = useState<View_>(params.view === "year" ? "year" : "month");
   const [focusMonth, setFocusMonth] = useState(() => parseMonthParam(params.month));
@@ -122,26 +118,6 @@ export default function CalendarScreen() {
     const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     if (view === "month") monthListRef.current?.scrollToIndex({ index: monthIndexOf(thisMonth), animated: true });
     else yearListRef.current?.scrollToIndex({ index: now.getFullYear() - FIRST_YEAR, animated: true });
-  };
-
-  /** `replace` marks a full "Save Log" (cleared fields get removed server-side). */
-  const save = (dateKey: string, entry: Parameters<typeof saveDayEntry>[1], replace = false) => {
-    saveDayEntry(dateKey, entry);
-    cycleApi
-      .saveLog({ dateKey, ...entry, replace })
-      .then((result) => {
-        setRemoteEntry(dateKey, mapApiDayEntry(result.cycleLog));
-        if (result.tokensEarned) earnTokens(result.tokensEarned);
-      })
-      .catch(alertLogNotSaved);
-  };
-
-  const clear = async (dateKey: string) => {
-    const result = await cycleApi.deleteLog(dateKey);
-    removeDayEntry(dateKey);
-    removeRemoteEntry(dateKey);
-    // Mirrors the backend taking back the +5 "new log" credit.
-    if (result.deleted) earnTokens(-5);
   };
 
   return (
@@ -224,27 +200,20 @@ export default function CalendarScreen() {
         visible={selected !== null}
         onClose={() => setSelected(null)}
         day={selected?.day}
+        dateKey={selected?.dateKey}
+        loaded={selected ? isDayLoaded(selected.dateKey) : true}
         dateLabel={selected?.date.toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" })}
-        phaseLabel={selected ? `${palette[selected.phase].label} Phase · Day ${selected.cycleDay}` : undefined}
+        phaseLabel={selected ? dayLogSubtitle(selected) : undefined}
         entry={selected ? entryFor(selected.dateKey) : undefined}
         details={selected ? (noteFor(selected.dateKey) ?? "") : undefined}
-        onSaveEntry={(entry) => {
-          if (selected) save(selected.dateKey, entry, true);
+        onSaveEntry={async (entry) => {
+          if (selected) await save(selected.dateKey, entry, true);
         }}
         onClearEntry={async () => {
           if (selected) await clear(selected.dateKey);
         }}
-        onLogSymptom={(symptom) => {
-          if (!selected) return;
-          const prev = entryFor(selected.dateKey);
-          save(selected.dateKey, {
-            energy: prev?.energy,
-            flow: prev?.flow,
-            mood: prev?.mood,
-            isIntimate: prev?.isIntimate ?? false,
-            note: prev?.note ?? "",
-            symptoms: Array.from(new Set([...(prev?.symptoms ?? []), symptom])),
-          });
+        onLogSymptom={(symptoms) => {
+          if (selected) logSymptoms(selected.dateKey, symptoms);
         }}
       />
     </SafeAreaView>

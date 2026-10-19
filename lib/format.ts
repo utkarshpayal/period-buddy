@@ -31,3 +31,25 @@ export function dateFromDayKey(value: string | Date): Date {
 export function getMonthKey(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
+
+/**
+ * "2h ago" / "just now", or with `compact` "2h" / "now" and a short date
+ * after a week (notification rows). Empty for a missing date.
+ */
+export function timeAgo(iso: string | undefined, { now = Date.now(), compact = false }: { now?: number; compact?: boolean } = {}): string {
+  if (!iso) return "";
+  const mins = Math.max(0, Math.floor((now - new Date(iso).getTime()) / 60000));
+  const hours = Math.floor(mins / 60);
+  const days = Math.floor(hours / 24);
+  if (compact) {
+    if (mins < 1) return "now";
+    if (mins < 60) return `${mins}m`;
+    if (hours < 24) return `${hours}h`;
+    if (days < 7) return `${days}d`;
+    return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  return `${days}d ago`;
+}

@@ -49,13 +49,14 @@ export const REELS_PAGE_SIZE = 10;
 export const DOUBLE_TAP_MS = 280;
 export const REEL_COMMENT_MAX = 500;
 
-const YOUTUBE_ID = /^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=|shorts\/)([^#&?]*).*/;
+// Only the id's own alphabet: it ends up inside a script in the player page.
+const YOUTUBE_ID = /^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=|shorts\/)([A-Za-z0-9_-]{11})(?:[#&?/].*)?$/;
 
 /** The 11-character id of a YouTube watch/shorts/embed/youtu.be link, else null. */
 export function getYouTubeId(url: string | null | undefined): string | null {
   if (!url) return null;
   const match = url.match(YOUTUBE_ID);
-  return match && match[2].length === 11 ? match[2] : null;
+  return match ? match[2] : null;
 }
 
 const nonNegative = (value: unknown) =>

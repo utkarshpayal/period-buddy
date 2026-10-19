@@ -1,6 +1,7 @@
 import type { DayEntry as LocalDayEntry } from "../components/AppState";
 import type { DayEntry as ApiDayEntry, Predictions } from "./api";
 import { getCyclePhase, type CyclePhase } from "./cycle";
+import { PHASE_COPY } from "./cycleCopy";
 import { dateFromDayKey, getDateKey } from "./format";
 
 /**
@@ -78,9 +79,14 @@ export type CalendarModel = {
   lateProjectionStart: Date | null;
 };
 
+/**
+ * `today` should come from `useTodayKey()` on long-lived screens, so the
+ * model rolls over at midnight instead of keeping the day it was built on.
+ */
 export function buildCalendarModel(
   predictions: Predictions | null,
   settings: { lastPeriodStartDate?: string | null; cycleLength?: number; periodLength?: number } | null,
+  today: Date = new Date(),
 ): CalendarModel {
   const cycleLength = predictions?.cycleLength ?? settings?.cycleLength ?? DEFAULT_CYCLE_LENGTH;
   const periodLength = predictions?.periodLength ?? settings?.periodLength ?? 5;
@@ -88,7 +94,7 @@ export function buildCalendarModel(
     ? dateFromDayKey(predictions.currentPeriodStartDateISO)
     : settings?.lastPeriodStartDate
       ? dateFromDayKey(settings.lastPeriodStartDate)
-      : addDays(new Date(), -13);
+      : addDays(today, -13);
 
   let periodMask: CalendarModel["periodMask"] = null;
   const startISO = predictions?.currentPeriodStartDateISO;
@@ -101,7 +107,7 @@ export function buildCalendarModel(
     }
   }
 
-  const todayStart = startOfDay(new Date());
+  const todayStart = startOfDay(today);
   const sinceStartToday = Math.round((todayStart.getTime() - startOfDay(cycleStartDate).getTime()) / MS_PER_DAY) + 1;
   return {
     cycleStartDate,
@@ -121,6 +127,8 @@ export type DayStatus = {
   cycleDay: number;
   phase: CyclePhase;
   isToday: boolean;
+  /** After today: can't be logged yet. Compared with the same `todayKey` as `isToday`. */
+  isFuture: boolean;
   isLogged: boolean;
   hasFlow: boolean;
   /** Future/today period day the user hasn't logged (dashed ring). */
@@ -156,6 +164,7 @@ export function dayStatus(date: Date, model: CalendarModel, entryFor: EntryLooku
     cycleDay,
     phase,
     isToday: dateKey === todayKey,
+    isFuture: dateKey > todayKey,
     isLogged,
     hasFlow: Boolean(entry?.flow && entry.flow !== "none"),
     isPredictedPeriod: phase === "period" && !isLogged && !isPhantomTail && d >= model.todayStart,
@@ -174,4 +183,29 @@ export function monthSlots(monthDate: Date): (Date | null)[] {
   for (let d = 1; d <= days; d += 1) slots.push(new Date(year, month, d));
   while (slots.length < 42) slots.push(null);
   return slots;
+}
+
+/** Monday-first week containing `today`, for the week strips. */
+export function weekDates(today: Date): Date[] {
+  const monday = addDays(startOfDay(today), -getMondayFirstWeekday(today));
+  return Array.from({ length: 7 }, (_, i) => addDays(monday, i));
+}
+
+/** The day-log sheet's subtitle: plain phase name (cycleCopy.ts) and the cycle day. */
+export function dayLogSubtitle(s: Pick<DayStatus, "phase" | "cycleDay">): string {
+  return `${PHASE_COPY[s.phase].title} · Day ${s.cycleDay}`;
+}
+
+/**
+ * Swaps one year's logs for a fresh fetch of that year, so a day deleted
+ * elsewhere (Calendar screen, Undo, another device) disappears instead of
+ * lingering from the earlier copy. Other years are kept.
+ */
+export function replaceYearEntries<T>(current: Record<string, T>, year: number, entries: Record<string, T>): Record<string, T> {
+  const prefix = `${year}-`;
+  const next: Record<string, T> = {};
+  for (const [key, value] of Object.entries(current)) {
+    if (!key.startsWith(prefix)) next[key] = value;
+  }
+  return Object.assign(next, entries);
 }

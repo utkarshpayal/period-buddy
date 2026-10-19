@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
 import {
@@ -14,6 +13,7 @@ import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
+import { AppModalHost } from "../../components/modals/AppModalHost";
 import { useTheme } from "../../components/theme";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
 import { SkeletonBlock } from "../../components/Skeleton";
@@ -42,6 +42,7 @@ import {
 } from "../../components/wellbeing/WellbeingUI";
 import { MedicalReviewBadge } from "../../components/MedicalReviewBadge";
 import { pickMedicalReview } from "../../lib/medicalReview";
+import { Icon } from "../../components/Icon";
 
 // --- BACKEND API LAYER SCHEMAS & CONTRACTS ---
 interface HealthIssue {
@@ -323,7 +324,7 @@ export default function HealthIssues() {
                 className="flex-row items-center"
                 style={{ gap: 8, marginBottom: 14, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 14, backgroundColor: colors.surfaceSoft }}
               >
-                <Ionicons name="cloud-offline-outline" size={16} color={colors.mutedText} />
+                <Icon set="ion" name="cloud-offline-outline" size={16} color={colors.mutedText} />
                 <Text style={{ flex: 1, color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "500", fontFamily: fonts.body }}>
                   Showing saved guides. Pull down to refresh.
                 </Text>
@@ -501,6 +502,7 @@ export default function HealthIssues() {
               </ScrollView>
             </SafeAreaView>
           )}
+          {detailModalVisible ? <AppModalHost inline /> : null}
         </Modal>
       </SafeAreaView>
     </>

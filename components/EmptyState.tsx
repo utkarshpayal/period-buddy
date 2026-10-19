@@ -2,6 +2,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
 import { Text, TouchableOpacity, View } from "react-native";
 import { useTheme } from "./theme";
+import { Icon } from "./Icon";
 
 /**
  * Shared "nothing here yet" placeholder for lists/sections that loaded fine but
@@ -34,7 +35,7 @@ export function EmptyState({
         className="h-16 w-16 items-center justify-center rounded-full"
         style={{ backgroundColor: colors.surfaceSoft ?? colors.surface }}
       >
-        <MaterialCommunityIcons name={icon} size={30} color={colors.mutedText} />
+        <Icon set="mci" name={icon} size={30} color={colors.mutedText} />
       </View>
       <Text
         className="mt-4 text-base font-bold text-center"

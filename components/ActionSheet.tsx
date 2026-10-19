@@ -4,19 +4,21 @@ import { Modal, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import PressableFeedback from "./PressableFeedback";
 import { useTheme } from "./theme";
+import { Icon } from "./Icon";
 
 export type ActionSheetItem = {
   key: string;
   label: string;
   /** One short line under the label. */
   description?: string;
-  icon: React.ComponentProps<typeof Feather>["name"];
+  /** Optional: a plain text menu reads calmer where every action is obvious. */
+  icon?: React.ComponentProps<typeof Feather>["name"];
   destructive?: boolean;
   onPress: () => void;
 };
 
 /**
- * A bottom sheet of actions (the "⋯" menu pattern): icon, label and a short
+ * A bottom sheet of actions (the "⋯" menu pattern): optional icon, label and a short
  * description per row, destructive rows in red, and Cancel. The sheet closes
  * before the action runs, so an action may open another dialog.
  */
@@ -104,6 +106,7 @@ export function ActionSheet({
                     borderTopColor: colors.border,
                   })}
                 >
+                  {item.icon ? (
                   <View
                     style={{
                       width: 38,
@@ -114,15 +117,16 @@ export function ActionSheet({
                       backgroundColor: item.destructive ? colors.dangerLight : colors.primaryLight,
                     }}
                   >
-                    <Feather name={item.icon} size={17} color={item.destructive ? colors.danger : colors.primary} />
+                    <Icon set="feather" name={item.icon} size={17} color={item.destructive ? colors.danger : colors.primary} />
                   </View>
+                  ) : null}
                   <View style={{ flex: 1 }}>
                     <Text style={{ fontSize: 15, fontWeight: "700", color: tint, fontFamily: fonts.body }}>{item.label}</Text>
                     {item.description ? (
                       <Text style={{ fontSize: 13, marginTop: 1, color: colors.mutedText, fontFamily: fonts.body }}>{item.description}</Text>
                     ) : null}
                   </View>
-                  {!item.destructive && <Feather name="chevron-right" size={18} color={colors.mutedText} />}
+                  {!item.destructive && item.icon && <Icon set="feather" name="chevron-right" size={18} color={colors.mutedText} />}
                 </PressableFeedback>
               );
             })}

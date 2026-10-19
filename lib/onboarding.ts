@@ -103,6 +103,22 @@ export function ageFrom(birth: Date, today: Date = new Date()): number {
   return age;
 }
 
+/**
+ * Whole-year age from a profile `dateOfBirth` ("YYYY-MM-DD" or an ISO time),
+ * or null if unset or unreadable. Calendar-exact (not 365.25-day years), so
+ * it's never a day off around a birthday. The date part is read as a local
+ * calendar day: `new Date("2008-10-18")` is UTC midnight, which is the
+ * previous day in timezones behind UTC. Every client age check uses this.
+ */
+export function ageFromDateOfBirth(dateOfBirth?: string | null, now: Date = new Date()): number | null {
+  if (!dateOfBirth) return null;
+  const parts = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateOfBirth);
+  const birth = parts ? new Date(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3])) : new Date(dateOfBirth);
+  if (Number.isNaN(birth.getTime())) return null;
+  const age = ageFrom(birth, now);
+  return age >= 0 && age < 130 ? age : null;
+}
+
 export type BirthdayCheck =
   | { status: "incomplete" }
   | { status: "invalid"; message: string }

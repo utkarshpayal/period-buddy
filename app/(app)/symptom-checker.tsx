@@ -1,4 +1,4 @@
-import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -24,8 +24,7 @@ import {
   screeningApi,
   type ScreeningAssessmentResponse,
   type ScreeningCondition,
-  type ScreeningQuestion,
-} from "../../lib/api";
+  type ScreeningQuestion, getFriendlyErrorMessage } from "../../lib/api";
 import {
   EMERGENCY_NUMBER,
   RED_FLAG_ITEMS,
@@ -33,6 +32,8 @@ import {
   soonRedFlags,
   triageRedFlags,
 } from "../../lib/redFlagScreen";
+import { useSecureScreen } from "../../lib/screenPrivacy";
+import { Icon } from "../../components/Icon";
 
 // "prescreen" (the "Any of these right now?" red-flag checklist) comes before
 // any questionnaire; "urgent" is the get-care card it leads to.
@@ -78,6 +79,7 @@ function getQuestionIcon(text: string): keyof typeof MaterialCommunityIcons.glyp
 }
 
 export default function SymptomCheckerScreen() {
+  useSecureScreen("symptom-checker");
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
   const softTints = getSoftTints(colors);
@@ -124,7 +126,7 @@ export default function SymptomCheckerScreen() {
       setQuestions(data.questions ?? []);
       setStep("questions");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load questions");
+      setError(getFriendlyErrorMessage(err));
     } finally {
       setLoadingQuestions(false);
     }
@@ -168,7 +170,7 @@ export default function SymptomCheckerScreen() {
       if (isFeatureLockedError(err)) {
         setPaywallVisible(true);
       } else {
-        setError(err instanceof Error ? err.message : "Failed to submit assessment");
+        setError(getFriendlyErrorMessage(err));
       }
     } finally {
       setSubmitting(false);
@@ -275,7 +277,7 @@ export default function SymptomCheckerScreen() {
                           borderRadius: 18,
                         }}
                       >
-                        <MaterialCommunityIcons
+                        <Icon set="mci"
                           name={checked ? "checkbox-marked" : "checkbox-blank-outline"}
                           size={22}
                           color={checked ? colors.danger : colors.mutedText}
@@ -322,7 +324,7 @@ export default function SymptomCheckerScreen() {
                 {triageRedFlags(redFlagPicks) === "emergency" ? (
                   <View className="border p-5 mb-5" style={{ backgroundColor: softTints.danger, borderColor: colors.danger, borderRadius: 24 }}>
                     <View className="flex-row items-center mb-2" style={{ gap: 10 }}>
-                      <MaterialCommunityIcons name="alert-circle" size={24} color={colors.danger} />
+                      <Icon set="mci" name="alert-circle" size={24} color={colors.danger} />
                       <Text className="flex-1 text-lg font-black" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
                         Please get medical care now
                       </Text>
@@ -339,7 +341,7 @@ export default function SymptomCheckerScreen() {
                       className="py-4 rounded-2xl items-center flex-row justify-center gap-2"
                       style={{ backgroundColor: colors.danger }}
                     >
-                      <Feather name="phone" size={16} color="#FFFFFF" />
+                      <Icon set="feather" name="phone" size={16} color="#FFFFFF" />
                       <Text className="text-base font-black" style={{ color: "#FFFFFF", fontFamily: fonts.body }}>
                         Call {EMERGENCY_NUMBER}
                       </Text>
@@ -353,7 +355,7 @@ export default function SymptomCheckerScreen() {
                     style={{ backgroundColor: colors.surface, borderColor: colors.warning, borderRadius: 24, ...getShadow(colors, isDark) }}
                   >
                     <View className="flex-row items-center mb-2" style={{ gap: 10 }}>
-                      <MaterialCommunityIcons name="stethoscope" size={22} color={colors.warning} />
+                      <Icon set="mci" name="stethoscope" size={22} color={colors.warning} />
                       <Text className="flex-1 text-base font-black" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
                         See a gynaecologist soon
                       </Text>
@@ -425,7 +427,7 @@ export default function SymptomCheckerScreen() {
                       style={{ backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 20, ...getShadow(colors, isDark) }}
                     >
                       <View className="w-11 h-11 rounded-xl items-center justify-center mr-3.5" style={{ backgroundColor: softTints.pink }}>
-                        <MaterialCommunityIcons name={item.icon} size={20} color={colors.primary} />
+                        <Icon set="mci" name={item.icon} size={20} color={colors.primary} />
                       </View>
                       <View className="flex-1">
                         <Text className="text-sm font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
@@ -438,7 +440,7 @@ export default function SymptomCheckerScreen() {
                       {loadingQuestions && condition === item.id ? (
                         <ActivityIndicator size="small" color={colors.primary} />
                       ) : (
-                        <Feather name="chevron-right" size={16} color={colors.mutedText} />
+                        <Icon set="feather" name="chevron-right" size={16} color={colors.mutedText} />
                       )}
                     </TouchableOpacity>
                   ))}
@@ -472,7 +474,7 @@ export default function SymptomCheckerScreen() {
                       className="items-center justify-center rounded-2xl"
                       style={{ width: 40, height: 40, backgroundColor: softTints.pink }}
                     >
-                      <MaterialCommunityIcons
+                      <Icon set="mci"
                         name={getQuestionIcon(currentQuestion.text)}
                         size={20}
                         color={colors.primary}
@@ -506,7 +508,7 @@ export default function SymptomCheckerScreen() {
                               borderColor: selected ? colors.primary : colors.border,
                             }}
                           >
-                            <MaterialCommunityIcons
+                            <Icon set="mci"
                               name={opt.icon}
                               size={18}
                               color={selected ? colors.buttonText : colors.mutedText}
@@ -536,7 +538,7 @@ export default function SymptomCheckerScreen() {
                               borderColor: selected ? colors.primary : colors.border,
                             }}
                           >
-                            <MaterialCommunityIcons
+                            <Icon set="mci"
                               name={SCALE_ICONS[value]}
                               size={18}
                               color={selected ? colors.buttonText : colors.primary}
@@ -619,7 +621,7 @@ export default function SymptomCheckerScreen() {
                     style={{ backgroundColor: softTints.danger, borderColor: colors.danger, borderRadius: 24 }}
                   >
                     <View className="flex-row items-center mb-2" style={{ gap: 10 }}>
-                      <MaterialCommunityIcons name="stethoscope" size={22} color={colors.danger} />
+                      <Icon set="mci" name="stethoscope" size={22} color={colors.danger} />
                       <Text className="flex-1 text-base font-black" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
                         Talk to a doctor about this
                       </Text>
@@ -681,7 +683,7 @@ export default function SymptomCheckerScreen() {
                     className="py-4 rounded-2xl items-center flex-row justify-center gap-2"
                     style={{ backgroundColor: colors.primary }}
                   >
-                    <Feather name="share" size={15} color={colors.buttonText} />
+                    <Icon set="feather" name="share" size={15} color={colors.buttonText} />
                     <Text className="text-sm font-black" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
                       Save / share for doctor visit
                     </Text>

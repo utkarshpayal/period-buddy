@@ -1,9 +1,9 @@
-import { Feather } from "@expo/vector-icons";
 import React from "react";
 import { ActivityIndicator, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useTheme } from "../theme";
 import { getSoftTints } from "../ui-tokens";
 import type { CouponPreview } from "../../lib/api";
+import { Icon } from "../Icon";
 
 /**
  * Coupon code input, shared by PaywallModal and the My Subscription pricing
@@ -38,7 +38,7 @@ export function CouponField({
         className="flex-row items-center rounded-2xl px-4 py-3"
         style={{ backgroundColor: softTints.emerald }}
       >
-        <Feather name="tag" size={16} color={colors.success} />
+        <Icon set="feather" name="tag" size={16} color={colors.success} />
         <View className="flex-1 ml-2.5">
           <Text className="text-xs font-black" style={{ color: colors.success, fontFamily: fonts.heading }}>
             {preview.code} applied
@@ -49,8 +49,8 @@ export function CouponField({
               : `₹${preview.discountAmount} off — now ₹${preview.finalAmount}`}
           </Text>
         </View>
-        <TouchableOpacity onPress={onRemove} activeOpacity={0.7} className="p-1.5">
-          <Feather name="x" size={16} color={colors.mutedText} />
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Remove coupon" onPress={onRemove} activeOpacity={0.7} className="p-1.5">
+          <Icon set="feather" name="x" size={16} color={colors.mutedText} />
         </TouchableOpacity>
       </View>
     );
@@ -62,7 +62,7 @@ export function CouponField({
         className="flex-row items-center rounded-2xl px-3.5"
         style={{ backgroundColor: colors.input }}
       >
-        <Feather name="tag" size={15} color={colors.mutedText} />
+        <Icon set="feather" name="tag" size={15} color={colors.mutedText} />
         <TextInput
           value={code}
           onChangeText={(v) => onChangeCode(v.toUpperCase())}

@@ -18,6 +18,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getFriendlyErrorMessage, supportApi, type SupportCategoryId, type SupportTicketMeta } from "../lib/api";
 import { MESSAGE_MAX, SUBJECT_MAX, SUPPORT_CATEGORIES, validateTicketForm } from "../lib/support";
 import { useTheme } from "./theme";
+import { AppLockCover } from "./AppLockScreen";
+import { Icon } from "./Icon";
 
 /** What "Attach app info" sends: no identifiers, just enough to reproduce a bug. */
 function collectAppInfo(): SupportTicketMeta {
@@ -151,7 +153,7 @@ export function SupportTicketSheet({
               className="h-9 w-9 rounded-full items-center justify-center"
               style={{ backgroundColor: colors.surfaceSoft }}
             >
-              <Ionicons name="close" size={18} color={colors.foreground} />
+              <Icon set="ion" name="close" size={18} color={colors.foreground} />
             </TouchableOpacity>
           </View>
 
@@ -161,7 +163,7 @@ export function SupportTicketSheet({
                 className="items-center justify-center"
                 style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: colors.successLight }}
               >
-                <Ionicons name="checkmark-circle" size={40} color={colors.success} />
+                <Icon set="ion" name="checkmark-circle" size={40} color={colors.success} />
               </View>
               <Text
                 className="mt-4 text-center"
@@ -210,7 +212,7 @@ export function SupportTicketSheet({
                 className="flex-row items-center self-start mb-5"
                 style={{ gap: 6 }}
               >
-                <Ionicons name="file-tray-full-outline" size={16} color={colors.primary} />
+                <Icon set="ion" name="file-tray-full-outline" size={16} color={colors.primary} />
                 <Text style={{ color: colors.primary, fontSize: 14, fontWeight: "700", fontFamily: fonts.body }}>My tickets</Text>
               </TouchableOpacity>
 
@@ -237,7 +239,7 @@ export function SupportTicketSheet({
                         backgroundColor: selected ? colors.primaryLight : colors.surface,
                       }}
                     >
-                      <Ionicons
+                      <Icon set="ion"
                         name={c.icon as React.ComponentProps<typeof Ionicons>["name"]}
                         size={16}
                         color={selected ? colors.primary : colors.mutedText}
@@ -327,6 +329,7 @@ export function SupportTicketSheet({
           )}
         </View>
       </KeyboardAvoidingView>
+      <AppLockCover />
     </Modal>
   );
 }

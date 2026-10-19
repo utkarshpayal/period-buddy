@@ -1,6 +1,5 @@
-import { Feather, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   RefreshControl,
@@ -10,7 +9,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useDataRefresh } from "../../hooks/useDataRefresh";
+import { usePaginatedList } from "../../hooks/usePaginatedList";
 import { EmptyState } from "../../components/EmptyState";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
 import { LoadMoreButton } from "../../components/LoadMoreButton";
@@ -22,7 +21,6 @@ import { alert } from "../../lib/alert";
 import { formatShortDate } from "../../lib/format";
 import {
   getFriendlyErrorMessage,
-  isNetworkError,
   schemeApplicationsApi,
   type SchemeApplication,
   type SchemeApplicationStatus,
@@ -33,74 +31,41 @@ import {
   applicationDisplayName,
   schemeSlugOf,
 } from "../../lib/schemeHelpers";
+import { useSecureScreen } from "../../lib/screenPrivacy";
+import { Icon } from "../../components/Icon";
 
 const PAGE_SIZE = 20;
 
 export default function SchemeApplications() {
+  useSecureScreen("scheme-applications");
   const { colors, fonts, isDark } = useTheme();
   const router = useRouter();
   const softTints = getSoftTints(colors);
 
-  const [applications, setApplications] = useState<SchemeApplication[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [offline, setOffline] = useState(false);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-  const load = useCallback(async (isRefresh = false) => {
-    try {
-      if (isRefresh) setRefreshing(true);
-      else setLoading(true);
-      setError(null);
-      setOffline(false);
-      const res = await schemeApplicationsApi.list({ page: 1, limit: PAGE_SIZE });
-      setApplications(res.applications);
-      setPage(1);
-      setHasMore(res.pagination.page < res.pagination.pages);
-    } catch (err) {
-      setError(getFriendlyErrorMessage(err));
-      setOffline(isNetworkError(err));
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  // Picks up an application saved from a scheme detail screen opened on top.
-  useDataRefresh(["schemeApplications"], async () => {
-    const res = await schemeApplicationsApi.list({ page: 1, limit: PAGE_SIZE });
-    setApplications(res.applications);
-    setPage(1);
-    setHasMore(res.pagination.page < res.pagination.pages);
-    setError(null);
-  });
-
-  const handleLoadMore = useCallback(async () => {
-    if (loadingMore || !hasMore) return;
-    setLoadingMore(true);
-    try {
-      const nextPage = page + 1;
-      const res = await schemeApplicationsApi.list({
-        page: nextPage,
-        limit: PAGE_SIZE,
-      });
-      setApplications((prev) => [...prev, ...res.applications]);
-      setPage(nextPage);
-      setHasMore(res.pagination.page < res.pagination.pages);
-    } catch {
-      setHasMore(true);
-    } finally {
-      setLoadingMore(false);
-    }
-  }, [loadingMore, hasMore, page]);
+  // A refresh (an application saved from a scheme screen, or this screen's
+  // own withdraw) re-fetches the pages already shown instead of collapsing
+  // the list back to page 1, and a stale "Load more" is dropped.
+  const {
+    items: applications,
+    setItems: setApplications,
+    loading,
+    refreshing,
+    error,
+    offline,
+    hasMore,
+    loadingMore,
+    loadMore: handleLoadMore,
+    reload: load,
+  } = usePaginatedList(
+    async (page) => {
+      const res = await schemeApplicationsApi.list({ page, limit: PAGE_SIZE });
+      return { items: res.applications, hasMore: res.pagination.page < res.pagination.pages };
+    },
+    [],
+    { refreshOn: ["schemeApplications"] },
+  );
 
   // Users can only withdraw their own application — approval/decline is an
   // admin action handled in the admin portal, never self-served here.
@@ -118,13 +83,13 @@ export default function SchemeApplications() {
     } finally {
       setUpdatingId(null);
     }
-  }, []);
+  }, [setApplications]);
 
   const confirmWithdraw = useCallback(
     (app: SchemeApplication) => {
       alert(
         "Withdraw application?",
-        `${applicationDisplayName(app)} will be marked as withdrawn You can't undo this.`,
+        `${applicationDisplayName(app)} will be marked as withdrawn. You can't undo this.`,
         [
           { text: "Withdraw", style: "destructive", onPress: () => withdraw(app) },
           { text: "Cancel", style: "cancel" },
@@ -206,7 +171,7 @@ export default function SchemeApplications() {
                           className="items-center justify-center"
                           style={{ width: 42, height: 42, borderRadius: 14, backgroundColor: softTints.pink }}
                         >
-                          <Ionicons
+                          <Icon set="ion"
                             name="document-attach-outline"
                             size={19}
                             color={colors.primaryDark}
@@ -227,7 +192,7 @@ export default function SchemeApplications() {
                           </Text>
                         </View>
                         {slug ? (
-                          <Feather name="chevron-right" size={18} color={colors.mutedText} style={{ marginTop: 2 }} />
+                          <Icon set="feather" name="chevron-right" size={18} color={colors.mutedText} style={{ marginTop: 2 }} />
                         ) : null}
                       </View>
 
@@ -279,7 +244,7 @@ export default function SchemeApplications() {
                             <ActivityIndicator size="small" color={colors.danger} />
                           ) : (
                             <>
-                              <Ionicons
+                              <Icon set="ion"
                                 name="close-circle-outline"
                                 size={18}
                                 color={colors.danger}

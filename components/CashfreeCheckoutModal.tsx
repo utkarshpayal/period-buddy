@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { ActivityIndicator, Linking, Modal, View } from "react-native";
 import { WebView } from "react-native-webview";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -35,9 +35,34 @@ type Props = {
  * UPI (intent + collect), cards, netbanking, and wallets automatically — no
  * separate UPI wiring needed here, same as Razorpay's default checkout.
  */
+/** The page's postMessage, checked: anything else is ignored rather than trusted. */
+function parseCheckoutMessage(data: string): { type: "success" } | { type: "failed"; error?: unknown } | { type: "dismiss" } | null {
+  try {
+    const message = JSON.parse(data) as { type?: unknown; error?: unknown };
+    if (message?.type === "success" || message?.type === "dismiss") return { type: message.type };
+    if (message?.type === "failed") return { type: "failed", error: message.error };
+  } catch {
+    // not ours
+  }
+  return null;
+}
+
 export function CashfreeCheckoutModal({ visible, mode, orderId, paymentSessionId, onResult }: Props) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+
+  // The return-URL intercept, the page's postMessage and Back can each report
+  // the same checkout; only the first may reach the caller, or a booking is
+  // confirmed (and alerted) twice.
+  const settledRef = useRef(false);
+  useEffect(() => {
+    settledRef.current = false;
+  }, [visible, orderId]);
+  const deliver = (result: CashfreeResult) => {
+    if (settledRef.current) return;
+    settledRef.current = true;
+    onResult(result);
+  };
 
   const html = useMemo(() => {
     return `<!DOCTYPE html>
@@ -94,7 +119,7 @@ export function CashfreeCheckoutModal({ visible, mode, orderId, paymentSessionId
     const { url } = request;
     if (!url) return true;
     if (url.includes("/api/payments/return") && url.includes(orderId)) {
-      onResult({ type: "success", orderId });
+      deliver({ type: "success", orderId });
       return false;
     }
     if (UPI_APP_SCHEME.test(url)) {
@@ -125,7 +150,7 @@ export function CashfreeCheckoutModal({ visible, mode, orderId, paymentSessionId
   if (!visible) return null;
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={() => onResult({ type: "dismiss" })}>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={() => deliver({ type: "dismiss" })}>
       <View
         style={{
           flex: 1,
@@ -139,11 +164,10 @@ export function CashfreeCheckoutModal({ visible, mode, orderId, paymentSessionId
           source={{ html }}
           onShouldStartLoadWithRequest={handleShouldStartLoad}
           onMessage={(event) => {
-            try {
-              onResult(JSON.parse(event.nativeEvent.data));
-            } catch {
-              onResult({ type: "dismiss" });
-            }
+            const message = parseCheckoutMessage(event.nativeEvent.data);
+            if (!message) return;
+            // The order id is ours, never the page's.
+            deliver(message.type === "success" ? { type: "success", orderId } : message);
           }}
           startInLoadingState
           renderLoading={() => (

@@ -1,7 +1,7 @@
-import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { TextInput, TouchableOpacity, View, type StyleProp, type ViewStyle } from "react-native";
 import { useTheme } from "./theme";
+import { Icon } from "./Icon";
 
 /** 48px search field with a labelled clear button, shared by content screens. */
 export function SearchBar({
@@ -36,7 +36,7 @@ export function SearchBar({
         style,
       ]}
     >
-      <Ionicons name="search" size={18} color={colors.mutedText} />
+      <Icon set="ion" name="search" size={18} color={colors.mutedText} />
       <TextInput
         value={value}
         onChangeText={onChangeText}
@@ -57,7 +57,7 @@ export function SearchBar({
           hitSlop={6}
           style={{ width: 36, height: 36, alignItems: "center", justifyContent: "center" }}
         >
-          <Ionicons name="close-circle" size={18} color={colors.mutedText} />
+          <Icon set="ion" name="close-circle" size={18} color={colors.mutedText} />
         </TouchableOpacity>
       ) : null}
     </View>

@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { Text, View, type ViewStyle } from "react-native";
+import { Icon } from "./Icon";
 
 export type StatCardVariant = "tile" | "tile-stack" | "pill" | "pill-outline";
 
@@ -53,7 +54,7 @@ export default function StatCard({
           className="items-center justify-center"
           style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: iconBg }}
         >
-          <Ionicons name={icon} size={20} color={iconColor} />
+          <Icon set="ion" name={icon} size={20} color={iconColor} />
         </View>
         <View className="flex-1" style={{ minWidth: 0 }}>
           <Text
@@ -92,7 +93,7 @@ export default function StatCard({
           className="items-center justify-center mb-2"
           style={{ width: 40, height: 40, borderRadius: 13, backgroundColor: iconBg }}
         >
-          <Ionicons name={icon} size={18} color={iconColor} />
+          <Icon set="ion" name={icon} size={18} color={iconColor} />
         </View>
         <Text
           style={{ fontSize: 18, lineHeight: 24, fontWeight: "700", color: valueColor, fontFamily: valueFontFamily }}
@@ -129,7 +130,7 @@ export default function StatCard({
         ...containerStyle,
       }}
     >
-      <Ionicons name={icon} size={12} color={iconColor} style={{ marginRight: 5 }} />
+      <Icon set="ion" name={icon} size={12} color={iconColor} style={{ marginRight: 5 }} />
       <Text
         style={{
           fontSize: 12.5,

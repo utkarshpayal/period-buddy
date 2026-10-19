@@ -26,7 +26,7 @@ let youtubeApiLoadPromise: Promise<void> | null = null;
 /** Loads the YouTube IFrame API once per web session. */
 function loadYouTubeIframeApi(): Promise<void> {
   if (youtubeApiLoadPromise) return youtubeApiLoadPromise;
-  youtubeApiLoadPromise = new Promise((resolve) => {
+  youtubeApiLoadPromise = new Promise((resolve, reject) => {
     if (window.YT?.Player) {
       resolve();
       return;
@@ -40,6 +40,12 @@ function loadYouTubeIframeApi(): Promise<void> {
       const tag = document.createElement("script");
       tag.id = "youtube-iframe-api";
       tag.src = "https://www.youtube.com/iframe_api";
+      // A failed load (offline) is forgotten, so the next reel tries again.
+      tag.onerror = () => {
+        tag.remove();
+        youtubeApiLoadPromise = null;
+        reject(new Error("YouTube player failed to load"));
+      };
       document.body.appendChild(tag);
     }
   });
@@ -71,8 +77,8 @@ function playerHtml(videoId: string, muted: boolean, shouldPlay: boolean) {
     <script>
       function onYouTubeIframeAPIReady() {
         window.__ytPlayer = new YT.Player('player', {
-          videoId: '${videoId}',
-          playerVars: { autoplay: ${shouldPlay ? 1 : 0}, controls: 0, loop: 1, playlist: '${videoId}', playsinline: 1, modestbranding: 1, rel: 0, mute: ${muted ? 1 : 0} },
+          videoId: ${JSON.stringify(videoId)},
+          playerVars: { autoplay: ${shouldPlay ? 1 : 0}, controls: 0, loop: 1, playlist: ${JSON.stringify(videoId)}, playsinline: 1, modestbranding: 1, rel: 0, mute: ${muted ? 1 : 0} },
           events: {
             onReady: function (event) { if (window.__nuraShouldPlay) event.target.playVideo(); },
             onStateChange: function (event) {
@@ -126,6 +132,8 @@ export const YouTubeReel = memo(function YouTubeReel({
           onStateChange: (event: { data: number }) => onPlayingChange(event.data === 1),
         },
       });
+    }).catch(() => {
+      // Offline: the thumbnail stays; this reel tries again when it's next shown.
     });
     return () => {
       cancelled = true;

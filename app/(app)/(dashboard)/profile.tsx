@@ -1,9 +1,10 @@
-import { Feather, Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { invalidateQueries } from "../../../lib/queryCache";
 import { useFocusEffect, useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Modal,
+  Platform,
   RefreshControl,
   ScrollView,
   StatusBar,
@@ -17,9 +18,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../../components/auth-context";
 import { useGenZMode } from "../../../components/genz-mode";
 import { alert } from "../../../lib/alert";
+import { AppModalHost } from "../../../components/modals/AppModalHost";
 import { ThemeToggle, useTheme } from "../../../components/theme";
 import { getShadow, getSoftTints } from "../../../components/ui-tokens";
-import { authApi, genzApi, type BadgesSummary, type DashboardSummary } from "../../../lib/api";
+import { authApi, genzApi, getFriendlyErrorMessage, type BadgesSummary, type DashboardSummary } from "../../../lib/api";
 import { EmptyState } from "../../../components/EmptyState";
 import { Loader } from "../../../components/Loader";
 import {
@@ -37,6 +39,7 @@ import { useDataRefresh } from "../../../hooks/useDataRefresh";
 import { SectionHeader, TabHeader } from "../../../components/ScreenHeader";
 import { ColumnLabel } from "../../../components/ColumnLabel";
 import { SupportTicketSheet } from "../../../components/SupportTicketSheet";
+import { Icon } from "../../../components/Icon";
 
 // Rotated across earned badge cards, like the hub tiles' per-feature colours.
 const BADGE_TINTS = ["primary", "secondary", "accent", "warning", "sky", "success"] as const;
@@ -62,6 +65,18 @@ export default function Profile() {
     useState(false);
   const [badges, setBadges] = useState<BadgesSummary | null>(null);
   const [badgesError, setBadgesError] = useState(false);
+  // "See all" waits for the sheet to finish closing: pushing a screen while a
+  // pageSheet is still sliding away can drop the navigation on iOS.
+  const openBadgesAfterClose = useRef(false);
+  const onAchievementsDismissed = () => {
+    if (!openBadgesAfterClose.current) return;
+    openBadgesAfterClose.current = false;
+    router.push("/badges");
+  };
+  useEffect(() => {
+    if (!achievementsModalVisible && Platform.OS !== "ios") onAchievementsDismissed();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [achievementsModalVisible]);
   const [supportModalVisible, setSupportModalVisible] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
@@ -101,7 +116,7 @@ export default function Profile() {
         }
       })
       .catch((err) => {
-        console.log("Profile refresh skipped or failed:", err);
+        console.warn("Profile refresh skipped or failed:", err);
       });
 
     return () => {
@@ -159,7 +174,7 @@ export default function Profile() {
       setLocal(previousValue);
       alert(
         "Couldn't save preference",
-        error instanceof Error ? error.message : "Please try again.",
+        getFriendlyErrorMessage(error),
       );
     } finally {
       setSavingPreference(null);
@@ -174,13 +189,16 @@ export default function Profile() {
       const summary = await authApi.getDashboard();
       setDashboard(summary);
     } catch (err) {
-      console.log("Dashboard summary refresh skipped or failed:", err);
+      console.warn("Dashboard summary refresh skipped or failed:", err);
     }
   }, []);
 
   React.useEffect(() => {
     loadDashboard();
   }, [loadDashboard]);
+
+  // A tab stays mounted: catch up on logs saved elsewhere (tracker, Home).
+  useDataRefresh(["dashboard", "cycle"], loadDashboard);
 
   const onRefresh = React.useCallback(async () => {
     setRefreshing(true);
@@ -201,7 +219,7 @@ export default function Profile() {
       setIsLoggingOut(true);
       await authApi.logoutAlias(await getCurrentPushTokenQuietlyAsync());
     } catch (networkError) {
-      console.log("Server verification skipped during exit:", networkError);
+      console.warn("Server verification skipped during exit:", networkError);
     } finally {
       await signOut();
       router.replace("/login");
@@ -261,12 +279,12 @@ export default function Profile() {
     <View key={row.label}>
       <TouchableOpacity activeOpacity={0.6} onPress={row.onPress} accessibilityRole="button" className="flex-row items-center" style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
         <View className="items-center justify-center rounded-full" style={{ width: 36, height: 36, backgroundColor: row.tint, marginRight: 14 }}>
-          <Ionicons name={row.icon} size={18} color={row.color} />
+          <Icon set="ion" name={row.icon} size={18} color={row.color} />
         </View>
         <Text numberOfLines={1} className="flex-1" style={{ color: colors.foreground, fontSize: 15, fontWeight: "600", fontFamily: fonts.body, marginRight: 8 }}>
           {row.label}
         </Text>
-        {right ?? <Feather name="chevron-right" size={18} color={colors.mutedText} />}
+        {right ?? <Icon set="feather" name="chevron-right" size={18} color={colors.mutedText} />}
       </TouchableOpacity>
       {!last ? divider : null}
     </View>
@@ -283,7 +301,7 @@ export default function Profile() {
         className="items-center justify-center rounded-full"
         style={{ width: 32, height: 32, backgroundColor: colors.surface }}
       >
-        <Feather name="x" size={17} color={colors.foreground} />
+        <Icon set="feather" name="x" size={17} color={colors.foreground} />
       </TouchableOpacity>
     </View>
   );
@@ -315,7 +333,7 @@ export default function Profile() {
           className="flex-row items-center rounded-full"
           style={{ marginTop: 12, gap: 6, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}
         >
-          <Feather name="edit-2" size={13} color={colors.foreground} />
+          <Icon set="feather" name="edit-2" size={13} color={colors.foreground} />
           <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}>Edit profile</Text>
         </TouchableOpacity>
       </View>
@@ -331,7 +349,7 @@ export default function Profile() {
         style={{ marginHorizontal: 24, marginTop: 18, padding: 14, gap: 12, backgroundColor: colors.primaryLight }}
       >
         <View className="items-center justify-center rounded-xl" style={{ width: 38, height: 38, backgroundColor: colors.surface }}>
-          <Ionicons name={!user?.profilePicture ? "camera-outline" : "call-outline"} size={18} color={colors.primary} />
+          <Icon set="ion" name={!user?.profilePicture ? "camera-outline" : "call-outline"} size={18} color={colors.primary} />
         </View>
         <View className="flex-1">
           <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "800", fontFamily: fonts.body }}>Complete your profile</Text>
@@ -343,7 +361,7 @@ export default function Profile() {
                 : "Add a phone number for check-in calls."}
           </Text>
         </View>
-        <Feather name="chevron-right" size={18} color={colors.mutedText} />
+        <Icon set="feather" name="chevron-right" size={18} color={colors.mutedText} />
       </TouchableOpacity>
       ) : null,
     // Stats — same flat style as the Tracker's
@@ -362,7 +380,7 @@ export default function Profile() {
             style={{ backgroundColor: colors.surface, paddingVertical: 14, paddingHorizontal: 6 }}
           >
             <View className="flex-row items-center" style={{ gap: 5, maxWidth: "100%" }}>
-              <Ionicons name={m.icon} size={15} color={m.color} />
+              <Icon set="ion" name={m.icon} size={15} color={m.color} />
               {/* Big numbers shrink to fit instead of pushing the column wider. */}
               <Text
                 numberOfLines={1}
@@ -410,7 +428,7 @@ export default function Profile() {
               onPress: () => setActiveMenuId(settingsOpen ? null : "settings"),
             },
             !settingsOpen,
-            <Feather name={settingsOpen ? "chevron-up" : "chevron-down"} size={18} color={colors.mutedText} />,
+            <Icon set="feather" name={settingsOpen ? "chevron-up" : "chevron-down"} size={18} color={colors.mutedText} />,
           )}
           {settingsOpen
             ? preferenceRows.map((p, i) => (
@@ -455,7 +473,7 @@ export default function Profile() {
         className="flex-row items-center justify-center"
         style={{ ...card, marginTop: 24, paddingVertical: 15, gap: 8 }}
       >
-        <Feather name="log-out" size={16} color={colors.danger} />
+        <Icon set="feather" name="log-out" size={16} color={colors.danger} />
         <Text style={{ color: colors.danger, fontSize: 15, fontWeight: "700", fontFamily: fonts.body }}>
           {isLoggingOut ? "Logging out…" : "Log out"}
         </Text>
@@ -483,7 +501,13 @@ export default function Profile() {
       </SafeAreaView>
 
       {/* Achievements */}
-      <Modal visible={achievementsModalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setAchievementsModalVisible(false)}>
+      <Modal
+        visible={achievementsModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setAchievementsModalVisible(false)}
+        onDismiss={onAchievementsDismissed}
+      >
         {/* Android ignores pageSheet and renders fullscreen, so SafeAreaView keeps the header clear. */}
         <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background, paddingHorizontal: 24, paddingTop: 20 }}>
           {sheetHeader("Your achievements", () => setAchievementsModalVisible(false))}
@@ -528,8 +552,8 @@ export default function Profile() {
           </ScrollView>
           <TouchableOpacity
             onPress={() => {
+              openBadgesAfterClose.current = true;
               setAchievementsModalVisible(false);
-              router.push("/badges");
             }}
             activeOpacity={0.85}
             className="items-center justify-center rounded-full mt-5"
@@ -538,6 +562,7 @@ export default function Profile() {
             <Text style={{ color: colors.primary, fontSize: 14.5, fontWeight: "800", fontFamily: fonts.body }}>See all streaks & badges</Text>
           </TouchableOpacity>
         </SafeAreaView>
+        {achievementsModalVisible ? <AppModalHost inline /> : null}
       </Modal>
 
       {/* Help & support: raises a ticket (components/SupportTicketSheet.tsx) */}

@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect } from "react";
 import { Dimensions, Modal, Text, TouchableOpacity, View } from "react-native";
@@ -12,6 +11,8 @@ import Animated, {
 import { SafeAreaView } from "react-native-safe-area-context";
 import type { ThemeColors } from "./theme";
 import { VoiceOrb } from "./VoiceOrb";
+import { AppLockCover } from "./AppLockScreen";
+import { Icon } from "./Icon";
 
 export type VoiceStatus = "idle" | "listening" | "processing" | "thinking" | "speaking";
 
@@ -118,7 +119,7 @@ export function VoiceModeOverlay({
               className="flex-row items-center gap-1.5 px-3 py-1.5 rounded-full border"
               style={{ borderColor: "rgba(255,255,255,0.18)", backgroundColor: "rgba(255,255,255,0.06)" }}
             >
-              <Feather name="globe" size={12} color={ORB_TINT} />
+              <Icon set="feather" name="globe" size={12} color={ORB_TINT} />
               <Text className="text-xs font-black tracking-wide" style={{ color: ORB_TINT, fontFamily: fonts.body }}>
                 {languageLabel}
               </Text>
@@ -162,7 +163,7 @@ export function VoiceModeOverlay({
 
             {errorMessage ? (
               <View className="mt-3 flex-row items-center gap-1.5 px-10">
-                <Feather name="alert-circle" size={13} color={ERROR_TINT} />
+                <Icon set="feather" name="alert-circle" size={13} color={ERROR_TINT} />
                 <Text
                   numberOfLines={2}
                   className="flex-1 text-center text-[13px] font-semibold leading-4"
@@ -210,11 +211,12 @@ export function VoiceModeOverlay({
               className="w-14 h-14 rounded-full items-center justify-center"
               style={{ backgroundColor: "#fff" }}
             >
-              <Feather name="x" size={22} color="#150910" />
+              <Icon set="feather" name="x" size={22} color="#150910" />
             </TouchableOpacity>
           </View>
         </SafeAreaView>
       </LinearGradient>
+      <AppLockCover />
     </Modal>
   );
 }

@@ -4,14 +4,20 @@ import { getWebSocketUrl } from "../lib/api";
 export type RealtimeMessage = Record<string, any>;
 type MessageHandler = (data: RealtimeMessage) => void;
 
+type ConnectionHandler = (open: boolean) => void;
+
 type SocketManager = {
   connecting: boolean;
+  connectionListeners: Set<ConnectionHandler>;
+  /** Bumped by `reopen`, so a URL lookup started for an older attempt is dropped. */
+  generation: number;
   isDisconnected: boolean;
   listeners: Set<MessageHandler>;
+  /** The URL (which carries the session token) the current socket was opened with. */
+  openedUrl: string | null;
   reconnectAttempts: number;
   reconnectTimeout: ReturnType<typeof setTimeout> | null;
   roomRefCounts: Map<string, number>;
-  sendQueue: string[];
   socket: WebSocket | null;
 };
 
@@ -28,25 +34,42 @@ function getManager(): SocketManager {
   if (!manager) {
     manager = {
       connecting: false,
+      connectionListeners: new Set(),
+      generation: 0,
       isDisconnected: false,
       listeners: new Set(),
+      openedUrl: null,
       reconnectAttempts: 0,
       reconnectTimeout: null,
       roomRefCounts: new Map(),
-      sendQueue: [],
       socket: null,
     };
   }
   return manager;
 }
 
-function sendRaw(m: SocketManager, payload: Record<string, unknown>) {
-  const json = JSON.stringify(payload);
-  if (m.socket && m.socket.readyState === WebSocket.OPEN) {
-    m.socket.send(json);
-  } else {
-    m.sendQueue.push(json);
+// Nothing is queued while the socket is down: rooms are re-joined from
+// `roomRefCounts` on every open, and a consumer's own payload (a presence ping,
+// say) is worthless minutes later, so replaying it on reconnect only delivers
+// stale signals. Returns whether the payload went out.
+function sendRaw(m: SocketManager, payload: Record<string, unknown>): boolean {
+  if (!m.socket || m.socket.readyState !== WebSocket.OPEN) return false;
+  try {
+    m.socket.send(JSON.stringify(payload));
+    return true;
+  } catch {
+    return false;
   }
+}
+
+function notifyConnection(m: SocketManager, open: boolean) {
+  m.connectionListeners.forEach((listener) => {
+    try {
+      listener(open);
+    } catch (err) {
+      console.error("Error in realtime WebSocket connection handler:", err);
+    }
+  });
 }
 
 function scheduleReconnect(m: SocketManager) {
@@ -64,9 +87,11 @@ function connect(m: SocketManager) {
   if (m.socket && m.socket.readyState === WebSocket.OPEN) return;
 
   m.connecting = true;
+  const generation = m.generation;
 
   getWebSocketUrl()
     .then((wsUrl) => {
+      if (generation !== m.generation) return;
       if (m.isDisconnected) {
         m.connecting = false;
         return;
@@ -74,9 +99,13 @@ function connect(m: SocketManager) {
 
       const socket = new WebSocket(wsUrl);
       m.socket = socket;
+      m.openedUrl = wsUrl;
 
+      // Every handler checks `m.socket === socket`: after an account switch
+      // (`reconnectRealtimeSocket`) the old socket's late events must not
+      // touch the new connection's state.
       socket.onopen = () => {
-        if (m.isDisconnected) return;
+        if (m.isDisconnected || m.socket !== socket) return;
         m.connecting = false;
         m.reconnectAttempts = 0;
         if (__DEV__) console.log("Realtime WebSocket connected");
@@ -84,15 +113,11 @@ function connect(m: SocketManager) {
         for (const room of m.roomRefCounts.keys()) {
           sendRaw(m, { room, type: "join" });
         }
-
-        while (m.sendQueue.length > 0) {
-          const queued = m.sendQueue.shift();
-          if (queued) socket.send(queued);
-        }
+        notifyConnection(m, true);
       };
 
       socket.onmessage = (event) => {
-        if (m.isDisconnected) return;
+        if (m.isDisconnected || m.socket !== socket) return;
         let data: RealtimeMessage;
         try {
           data = JSON.parse(event.data);
@@ -116,18 +141,60 @@ function connect(m: SocketManager) {
       };
 
       socket.onclose = () => {
+        if (m.socket !== socket) return;
         m.connecting = false;
-        if (m.socket === socket) m.socket = null;
+        m.socket = null;
+        m.openedUrl = null;
         if (m.isDisconnected) return;
+        notifyConnection(m, false);
         if (__DEV__) console.log("Realtime WebSocket closed, retrying with backoff…");
         scheduleReconnect(m);
       };
     })
     .catch((err) => {
+      if (generation !== m.generation) return;
       m.connecting = false;
       console.warn("Failed to get WebSocket URL, retrying with backoff…", err);
       scheduleReconnect(m);
     });
+}
+
+/** Drops the current connection (without backoff) and opens a fresh one. */
+function reopen(m: SocketManager) {
+  if (m.reconnectTimeout) clearTimeout(m.reconnectTimeout);
+  m.reconnectTimeout = null;
+  const old = m.socket;
+  m.generation += 1;
+  m.socket = null;
+  m.openedUrl = null;
+  m.connecting = false;
+  m.reconnectAttempts = 0;
+  if (old) {
+    old.close();
+    notifyConnection(m, false);
+  }
+  connect(m);
+}
+
+/**
+ * The socket authenticates once, with the token in its URL. When the session
+ * token changes (sign-out → sign-in as someone else) while a consumer stays
+ * mounted, the open socket would keep acting as the old account, so room
+ * joins for the new one go out on it. Re-checks the URL and reopens if it
+ * moved on. AuthProvider should call this right after `setSessionToken`;
+ * every hook mount also runs it as a fallback.
+ */
+export async function reconnectRealtimeSocketIfAuthChanged(): Promise<void> {
+  const m = manager;
+  if (!m || m.isDisconnected || !m.openedUrl) return;
+  const opened = m.openedUrl;
+  let url: string;
+  try {
+    url = await getWebSocketUrl();
+  } catch {
+    return;
+  }
+  if (manager === m && m.openedUrl === opened && url !== opened) reopen(m);
 }
 
 function retainRoom(m: SocketManager, room: string) {
@@ -147,7 +214,7 @@ function releaseRoom(m: SocketManager, room: string) {
 }
 
 function teardownIfIdle(m: SocketManager) {
-  if (m.listeners.size > 0 || m.roomRefCounts.size > 0) return;
+  if (m.listeners.size > 0 || m.roomRefCounts.size > 0 || m.connectionListeners.size > 0) return;
 
   m.isDisconnected = true;
   if (m.reconnectTimeout) clearTimeout(m.reconnectTimeout);
@@ -156,6 +223,7 @@ function teardownIfIdle(m: SocketManager) {
     m.socket.close();
     m.socket = null;
   }
+  m.openedUrl = null;
   if (manager === m) manager = null;
 }
 
@@ -170,13 +238,22 @@ export type UseRealtimeSocketOptions = {
    * shares the connection.
    */
   onMessage?: MessageHandler;
+  /**
+   * Called with `true` each time the shared socket (re)opens — after this
+   * caller's rooms were re-joined — and right away if it's already open; with
+   * `false` when it drops. Use it to refetch what was missed while offline,
+   * or to stop trusting presence.
+   */
+  onConnectionChange?: ConnectionHandler;
   /** Rooms to join for as long as this hook is mounted with `enabled: true`. */
   rooms: string[];
 };
 
-export function useRealtimeSocket({ enabled = true, onMessage, rooms }: UseRealtimeSocketOptions) {
+export function useRealtimeSocket({ enabled = true, onMessage, onConnectionChange, rooms }: UseRealtimeSocketOptions) {
   const onMessageRef = useRef(onMessage);
   onMessageRef.current = onMessage;
+  const onConnectionChangeRef = useRef(onConnectionChange);
+  onConnectionChangeRef.current = onConnectionChange;
 
   const roomsKey = rooms.join(",");
 
@@ -187,12 +264,20 @@ export function useRealtimeSocket({ enabled = true, onMessage, rooms }: UseRealt
     m.isDisconnected = false;
 
     const listener: MessageHandler = (data) => onMessageRef.current?.(data);
+    const connectionListener: ConnectionHandler = (open) => onConnectionChangeRef.current?.(open);
     m.listeners.add(listener);
+    m.connectionListeners.add(connectionListener);
     rooms.forEach((room) => retainRoom(m, room));
-    connect(m);
+    if (m.socket?.readyState === WebSocket.OPEN) {
+      connectionListener(true);
+      reconnectRealtimeSocketIfAuthChanged();
+    } else {
+      connect(m);
+    }
 
     return () => {
       m.listeners.delete(listener);
+      m.connectionListeners.delete(connectionListener);
       rooms.forEach((room) => releaseRoom(m, room));
       teardownIfIdle(m);
     };
@@ -201,9 +286,8 @@ export function useRealtimeSocket({ enabled = true, onMessage, rooms }: UseRealt
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, roomsKey]);
 
-  const send = useCallback((payload: Record<string, unknown>) => {
-    sendRaw(getManager(), payload);
-  }, []);
+  /** Sends only over an open socket (nothing is queued); returns whether it went out. */
+  const send = useCallback((payload: Record<string, unknown>) => (manager ? sendRaw(manager, payload) : false), []);
 
   return { send };
 }

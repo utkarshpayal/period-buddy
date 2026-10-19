@@ -31,9 +31,9 @@ function mergeUnique<T>(first: T[], rest: T[], getKey: (item: T) => string) {
  *
  * - `reload()` / pull-to-refresh start over from page 1.
  * - A failed `loadMore` keeps the list and `hasMore`, so the button can retry.
- * - A background refresh (`refreshOn`) re-fetches page 1 and merges it over
- *   the top, keeping pages the user already expanded instead of collapsing
- *   the list back to one page.
+ * - A background refresh (`refreshOn`) re-fetches every page already shown
+ *   and replaces the list, so items deleted elsewhere disappear without
+ *   collapsing the list back to one page.
  */
 export function usePaginatedList<T>(
   fetchPage: (page: number) => Promise<PageResult<T>>,
@@ -111,11 +111,26 @@ export function usePaginatedList<T>(
 
   useDataRefresh(options.refreshOn ?? [], async () => {
     const generation = generationRef.current;
+    const pages = pageRef.current;
     try {
-      const result = await fetchRef(1);
-      if (generation !== generationRef.current) return;
-      setItems((prev) => mergeUnique(result.items, prev, getKey));
-      if (pageRef.current === 1) setHasMore(result.hasMore);
+      // Merging page 1 over the old list would keep items deleted on another
+      // screen or device (tapping one opens a 404), so rebuild pages 1..N.
+      let next: T[] = [];
+      let more = false;
+      let loaded = 0;
+      while (loaded < pages) {
+        const result = await fetchRef(loaded + 1);
+        if (generation !== generationRef.current) return;
+        loaded += 1;
+        next = mergeUnique(next, result.items, getKey);
+        more = result.hasMore;
+        if (!more) break;
+      }
+      // A loadMore that landed meanwhile would be wiped; skip this refresh.
+      if (pageRef.current !== pages) return;
+      pageRef.current = loaded;
+      setItems(next);
+      setHasMore(more);
       setError(null);
       setOffline(false);
     } catch {

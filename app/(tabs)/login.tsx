@@ -3,9 +3,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
+  Linking,
   StatusBar,
   StyleSheet,
   Text,
@@ -30,6 +28,10 @@ import { connectPartnerAndResolveRoute, loginUser } from "../../lib/auth";
 import type { AuthUser } from "../../lib/api";
 import { alert } from "../../lib/alert";
 import { getScreenGradient, getShadow } from "../../components/ui-tokens";
+import { getFriendlyErrorMessage } from "../../lib/api";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
+
+const SUPPORT_EMAIL = "hello@thenura.care";
 
 export default function Login() {
   const router = useRouter();
@@ -57,11 +59,24 @@ export default function Login() {
     ]).start();
   }, [fadeAnim, slideAnim]);
 
+  // The backend has no password-reset endpoint yet, so this must not claim
+  // an email was sent: point to support (who can reset it) or Google sign-in.
   function handlePasswordReset() {
-    setErrorMessage(
-      email.trim()
-        ? `Instructions sent to ${email.trim().toLowerCase()}.`
-        : "Enter your email first to reset password.",
+    const address = email.trim().toLowerCase();
+    const subject = encodeURIComponent("Password reset");
+    const body = encodeURIComponent(`Please help me reset the password for ${address || "my account"}.`);
+    alert(
+      "Forgot password?",
+      `Email us at ${SUPPORT_EMAIL} from the address you signed up with and we'll help you reset it. If you signed up with Google, use "Continue with Google" instead.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Email support",
+          onPress: () => {
+            Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`).catch(() => {});
+          },
+        },
+      ],
     );
   }
 
@@ -83,6 +98,9 @@ export default function Login() {
       ...(user ?? (fallbackEmail ? { email: fallbackEmail } : {})),
       partnerRole,
     } as AuthUser);
+    // Same as signup: drop the welcome/login screens underneath, so Back
+    // can't return to them after signing in.
+    if (router.canDismiss()) router.dismissAll();
     router.replace(destination);
   }
 
@@ -94,7 +112,7 @@ export default function Login() {
     } catch (error) {
       setIsGoogleBusy(false);
       setErrorMessage(
-        error instanceof Error ? error.message : "Unable to complete Google sign-in.",
+        getFriendlyErrorMessage(error),
       );
     }
   }
@@ -134,7 +152,7 @@ export default function Login() {
       await finishSignIn(user, normalizedEmail);
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : "Unable to login right now.",
+        getFriendlyErrorMessage(error),
       );
     } finally {
       setIsSubmitting(false);
@@ -150,15 +168,12 @@ export default function Login() {
       />
 
       <SafeAreaView className="flex-1">
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        <View
           className="flex-1"
-          keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
         >
           <AuthTopBar />
 
-          <ScrollView
-            automaticallyAdjustKeyboardInsets
+          <KeyboardAwareScrollView bottomOffset={24}
             contentContainerStyle={{
               alignItems: "center",
               flexGrow: 1,
@@ -318,8 +333,8 @@ export default function Login() {
                 </TouchableOpacity>
               </Link>
             </Animated.View>
-          </ScrollView>
-        </KeyboardAvoidingView>
+          </KeyboardAwareScrollView>
+        </View>
       </SafeAreaView>
 
       {/* While credentials are verified and the partner role is resolved,

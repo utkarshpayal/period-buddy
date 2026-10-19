@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -21,6 +20,7 @@ import { Loader } from "../components/Loader";
 import { ThemeToggle, useTheme, type ThemeColors } from "../components/theme";
 import { getScreenGradient, getShadow } from "../components/ui-tokens";
 import { useContentWidth } from "../lib/layout";
+import { Icon } from "../components/Icon";
 
 type Slide = {
   key: string;
@@ -89,7 +89,11 @@ export default function Index() {
     return () => clearTimeout(timer);
   }, [index, dragging, reduceMotion, isFocused, isAuthenticated, contentWidth]);
 
+  // Only while focused: after signing in on login/signup (pushed on top of
+  // this screen), that screen routes by the resolved partner role itself, and
+  // a redirect from here would race it to the wrong place.
   useEffect(() => {
+    if (!isFocused) return;
     if (isAuthenticated && !hasNavigated.current) {
       hasNavigated.current = true;
       const timer = setTimeout(() => {
@@ -101,7 +105,7 @@ export default function Index() {
     } else if (!isAuthenticated) {
       hasNavigated.current = false;
     }
-  }, [isAuthenticated, router, user?.partnerRole]);
+  }, [isAuthenticated, isFocused, router, user?.partnerRole]);
 
   // onScroll (not onMomentumScrollEnd) so the dots follow the swipe live.
   function onScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
@@ -261,7 +265,7 @@ export default function Index() {
               className="flex-row justify-center items-center"
               style={({ pressed }) => ({ paddingVertical: 6, opacity: pressed ? 0.6 : 1 })}
             >
-              <Ionicons name="heart-outline" size={14} color={colors.mutedText} style={{ marginRight: 5 }} />
+              <Icon set="ion" name="heart-outline" size={14} color={colors.mutedText} style={{ marginRight: 5 }} />
               <Text style={{ color: colors.mutedText, fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}>
                 Joining a partner? Use your invite code
               </Text>
@@ -323,7 +327,7 @@ function SlideArt({ art, colors, isDark }: { art: Slide["art"]; colors: ThemeCol
         }}
       >
         {spec.icon ? (
-          <Ionicons name={spec.icon} size={36} color={spec.fg} />
+          <Icon set="ion" name={spec.icon} size={36} color={spec.fg} />
         ) : (
           <Image
             source={require("../assets/images/brand/logo-mark.png")}

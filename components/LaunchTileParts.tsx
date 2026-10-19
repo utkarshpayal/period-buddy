@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React from "react";
 import { Text, View } from "react-native";
@@ -7,6 +6,7 @@ import type { HubTile } from "../lib/appConfig";
 import { openTileSheet } from "../lib/launchGuard";
 import { runTapAction } from "../lib/tapAction";
 import { trackUse } from "../lib/usage";
+import { Icon } from "./Icon";
 
 /**
  * Shared pieces for drawing an App CMS tile in its launch state (The-Nura-CMS
@@ -75,7 +75,7 @@ export function PauseDot({ size = 16, offset = -4, ring }: { size?: number; offs
         justifyContent: "center",
       }}
     >
-      <Ionicons name="pause" size={size * 0.45} color={colors.buttonText} />
+      <Icon set="ion" name="pause" size={size * 0.45} color={colors.buttonText} />
     </View>
   );
 }

@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { ScrollView, Text, TouchableOpacity, type StyleProp, type ViewStyle } from "react-native";
 import { useTheme } from "./theme";
+import { Icon } from "./Icon";
 
 export type FilterChipOption<K extends string> = {
   key: K;
@@ -60,7 +61,7 @@ export function FilterChips<K extends string>({
               backgroundColor: on ? colors.primary : colors.surface,
             }}
           >
-            {option.icon ? <Ionicons name={option.icon} size={15} color={on ? colors.buttonText : colors.mutedText} /> : null}
+            {option.icon ? <Icon set="ion" name={option.icon} size={15} color={on ? colors.buttonText : colors.mutedText} /> : null}
             <Text
               numberOfLines={1}
               maxFontSizeMultiplier={1.3}

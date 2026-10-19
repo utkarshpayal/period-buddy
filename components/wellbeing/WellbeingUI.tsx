@@ -4,6 +4,7 @@ import { Linking, Text, TouchableOpacity, View, type StyleProp, type ViewStyle }
 import { SkeletonBlock } from "../Skeleton";
 import { useTheme, type ThemeColors } from "../theme";
 import { getShadow } from "../ui-tokens";
+import { Icon } from "../Icon";
 
 /**
  * Shared building blocks for the wellbeing screens (health-issues, hygiene,
@@ -44,7 +45,7 @@ type IconFamily = "ion" | "mci" | "feather";
  * first (what the CMS uses), then MaterialCommunityIcons, then Feather, so a
  * name from any of them still draws instead of a "?" glyph.
  */
-export function resolveIcon(name: string | undefined, fallback = "sparkles-outline"): { family: IconFamily; name: string } {
+export function resolveIcon(name: string | undefined, fallback = "leaf-outline"): { family: IconFamily; name: string } {
   if (name) {
     if (name in Ionicons.glyphMap) return { family: "ion", name };
     if (name in MaterialCommunityIcons.glyphMap) return { family: "mci", name };
@@ -55,9 +56,9 @@ export function resolveIcon(name: string | undefined, fallback = "sparkles-outli
 
 export function WellbeingGlyph({ name, size, color, fallback }: { name: string | undefined; size: number; color: string; fallback?: string }) {
   const icon = resolveIcon(name, fallback);
-  if (icon.family === "mci") return <MaterialCommunityIcons name={icon.name as any} size={size} color={color} />;
-  if (icon.family === "feather") return <Feather name={icon.name as any} size={size - 2} color={color} />;
-  return <Ionicons name={icon.name as any} size={size} color={color} />;
+  if (icon.family === "mci") return <Icon set="mci" name={icon.name as any} size={size} color={color} />;
+  if (icon.family === "feather") return <Icon set="feather" name={icon.name as any} size={size - 2} color={color} />;
+  return <Icon set="ion" name={icon.name as any} size={size} color={color} />;
 }
 
 /** Round, tinted icon badge used for every wellbeing row/card. */
@@ -254,9 +255,9 @@ export function ArticleRow({
       </View>
       <View style={{ justifyContent: "center" }}>
         {selected ? (
-          <Ionicons name="checkmark-circle" size={20} color={tone.fg} />
+          <Icon set="ion" name="checkmark-circle" size={20} color={tone.fg} />
         ) : (
-          <Ionicons name="chevron-forward" size={18} color={colors.mutedText} />
+          <Icon set="ion" name="chevron-forward" size={18} color={colors.mutedText} />
         )}
       </View>
     </TouchableOpacity>
@@ -304,7 +305,7 @@ export function KeyPointList({ points, tone }: { points: string[]; tone?: Wellbe
           style={{ gap: 12, paddingVertical: 14, borderTopWidth: idx === 0 ? 0 : 1, borderTopColor: colors.border }}
         >
           <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: check.bg, alignItems: "center", justifyContent: "center", marginTop: 1 }}>
-            <Ionicons name="checkmark" size={14} color={check.fg} />
+            <Icon set="ion" name="checkmark" size={14} color={check.fg} />
           </View>
           <Text style={{ flex: 1, color: colors.foreground, fontSize: 15, lineHeight: 23, fontWeight: "400", fontFamily: fonts.body }}>{point}</Text>
         </View>
@@ -342,7 +343,7 @@ export function MediaButtons({ videoUrl, audioUrl, style }: { videoUrl?: string;
       className="flex-1 flex-row items-center justify-center"
       style={{ height: 48, borderRadius: 24, gap: 8, backgroundColor: colors.primaryLight }}
     >
-      <Ionicons name={icon} size={18} color={colors.primaryDark} />
+      <Icon set="ion" name={icon} size={18} color={colors.primaryDark} />
       <Text maxFontSizeMultiplier={1.3} style={{ color: colors.primaryDark, fontSize: 15, fontWeight: "700", fontFamily: fonts.body }}>{label}</Text>
     </TouchableOpacity>
   );
@@ -379,7 +380,7 @@ export function ConsultNudge({ title, body, onPress, style }: { title: string; b
         className="flex-row items-center justify-center"
         style={{ marginTop: 14, height: 48, borderRadius: 16, backgroundColor: colors.primary, gap: 8 }}
       >
-        <Ionicons name="chatbubbles-outline" size={17} color={colors.buttonText} />
+        <Icon set="ion" name="chatbubbles-outline" size={17} color={colors.buttonText} />
         <Text maxFontSizeMultiplier={1.3} style={{ color: colors.buttonText, fontSize: 15, fontWeight: "700", fontFamily: fonts.body }}>Talk to a gynaecologist</Text>
       </TouchableOpacity>
     </WellbeingCard>
@@ -391,7 +392,7 @@ export function PrivacyNote({ text, style }: { text: string; style?: StyleProp<V
   const { colors, fonts } = useTheme();
   return (
     <View className="flex-row items-start" style={[{ gap: 10, paddingHorizontal: 4 }, style]}>
-      <Ionicons name="lock-closed-outline" size={15} color={colors.mutedText} style={{ marginTop: 2 }} />
+      <Icon set="ion" name="lock-closed-outline" size={15} color={colors.mutedText} style={{ marginTop: 2 }} />
       <Text style={{ flex: 1, color: colors.mutedText, fontSize: 13, lineHeight: 19, fontWeight: "400", fontFamily: fonts.body }}>{text}</Text>
     </View>
   );
@@ -493,7 +494,7 @@ export function DetailSheetHeader({
         hitSlop={4}
         style={{ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
       >
-        <Ionicons name="close" size={20} color={colors.foreground} />
+        <Icon set="ion" name="close" size={20} color={colors.foreground} />
       </TouchableOpacity>
     </View>
   );
@@ -525,7 +526,7 @@ export function DoctorCallout({
       ]}
     >
       <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" }}>
-        <Ionicons name="alert-circle-outline" size={19} color={colors.danger} />
+        <Icon set="ion" name="alert-circle-outline" size={19} color={colors.danger} />
       </View>
       <View className="flex-1" style={{ minWidth: 0 }}>
         <Text style={{ color: colors.foreground, fontSize: 15, lineHeight: 21, fontWeight: "700", fontFamily: fonts.heading }}>{title}</Text>

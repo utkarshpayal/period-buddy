@@ -1,10 +1,11 @@
-import { Feather } from "@expo/vector-icons";
 import React from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../theme";
 import { PaymentTrustFooter } from "./PaymentTrustFooter";
 import type { CouponPreview } from "../../lib/api";
+import { AppLockCover } from "../AppLockScreen";
+import { Icon } from "../Icon";
 
 /**
  * "Confirm your purchase" step shown between tapping Buy and the checkout UI
@@ -52,8 +53,8 @@ export function PurchaseConfirmSheet({
               <Text className="text-lg font-bold" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
                 Confirm your purchase
               </Text>
-              <TouchableOpacity onPress={onClose} activeOpacity={0.7} className="p-1" disabled={confirming}>
-                <Feather name="x" size={20} color={colors.mutedText} />
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} activeOpacity={0.7} className="p-1" disabled={confirming}>
+                <Icon set="feather" name="x" size={20} color={colors.mutedText} />
               </TouchableOpacity>
             </View>
 
@@ -126,6 +127,7 @@ export function PurchaseConfirmSheet({
           </View>
         </KeyboardAvoidingView>
       </View>
+      <AppLockCover />
     </Modal>
   );
 }

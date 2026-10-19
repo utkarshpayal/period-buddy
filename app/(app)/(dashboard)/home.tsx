@@ -29,6 +29,7 @@ import {
   type Predictions,
 } from "../../../lib/api";
 import { getCyclePhase } from "../../../lib/cycle";
+import { addDays } from "../../../lib/cycleCalendar";
 import { HomeSectionKey, describeHub, hubTilesFor, sectionText, shownSections } from "../../../lib/appConfig";
 import { useViewer } from "../../../hooks/useViewer";
 import { PromoPopup } from "../../../components/PromoPopup";
@@ -45,6 +46,8 @@ import { EmptyState } from "../../../components/EmptyState";
 import { buildCurrentWeekStrip } from "../../../lib/weekStrip";
 import { dateFromDayKey } from "../../../lib/format";
 import { useTodayKey } from "../../../hooks/useTodayKey";
+import { useSecureScreen } from "../../../lib/screenPrivacy";
+import { Icon } from "../../../components/Icon";
 
 // The Cycle length card is narrower than Cycle health, so both peek in.
 const TREND_CARD_WIDTH = 200;
@@ -75,12 +78,6 @@ const PHASE_WATERMARK_ICONS: Record<string, React.ComponentProps<typeof Ionicons
   luteal: "moon",
 };
 
-function addDays(date: Date, days: number) {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
-}
-
 // Only the unread total is needed for the bell's dot — ask for a single item
 // and read the server's count (falls back to scanning what came back on a
 // backend without pagination, which ignores `limit` and sends the newest 50).
@@ -103,6 +100,7 @@ function compactRange(range: string): string {
 }
 
 export default function Home() {
+  useSecureScreen("home");
   const { colors, isDark, fonts } = useTheme();
   const { enabled: genZModeEnabled } = useGenZMode();
   const insightsLabel = useGenZLabel("Insights");
@@ -148,10 +146,9 @@ export default function Home() {
     // hero card / insights skeleton open.
     const predictionsTask = cycleApi
       .getPredictions()
-      .then(
-        (value) => setPredictions(value),
-        () => setPredictions(null),
-      )
+      // A failed refresh keeps the last predictions: dropping them made the
+      // hero fall back to made-up numbers.
+      .then(setPredictions, () => {})
       .finally(() => setHomeLoaded(true));
     const notificationsTask = fetchHasUnread().then(setHasUnreadNotifications, () => {});
     await Promise.all([predictionsTask, notificationsTask]);
@@ -191,7 +188,7 @@ export default function Home() {
   const cycleDay = Math.max(
     predictions?.currentCycleDay ??
     dashboard?.predictions?.currentCycleDay ??
-    (loggedDays || 1),
+    1,
     1,
   );
   const expectedEndDate =
@@ -441,7 +438,7 @@ export default function Home() {
             elevation: 6,
           }}
         >
-          <Ionicons
+          <Icon set="ion"
             name={PHASE_WATERMARK_ICONS[phaseKey] ?? "water"}
             size={170}
             color="#fff"
@@ -485,7 +482,7 @@ export default function Home() {
                 alignItems: "center", justifyContent: "center",
               }}
             >
-              <Ionicons name={periodLoggedToday ? "checkmark" : "water"} size={18} color="#fff" />
+              <Icon set="ion" name={periodLoggedToday ? "checkmark" : "water"} size={18} color="#fff" />
             </TouchableOpacity>
           </View>
           {/* Dates, not "6 day window": what people plan around. No fertile
@@ -559,7 +556,7 @@ export default function Home() {
                   : getShadow(colors, isDark)),
               }}
             >
-              <Ionicons
+              <Icon set="ion"
                 name={action.icon as any}
                 size={24}
                 color={action.primary ? colors.buttonText : colors.primary}
@@ -763,7 +760,7 @@ export default function Home() {
               justifyContent: "center",
             }}
           >
-            <Ionicons name="happy-outline" size={22} color={colors.primaryDark} />
+            <Icon set="ion" name="happy-outline" size={22} color={colors.primaryDark} />
           </View>
           <View className="flex-1">
             <Text

@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { getShadow } from "./ui-tokens";
 import { ThemeToggle, useTheme } from "./theme";
+import { Icon } from "./Icon";
 
 /** Back button + theme toggle row shown above the auth card. */
 export function AuthTopBar() {
@@ -33,7 +34,7 @@ export function AuthTopBar() {
           borderColor: colors.border,
         }}
       >
-        <Ionicons name="chevron-back" size={18} color={colors.foreground} />
+        <Icon set="ion" name="chevron-back" size={18} color={colors.foreground} />
       </TouchableOpacity>
       <ThemeToggle />
     </View>
@@ -90,7 +91,7 @@ export const AuthField = forwardRef<TextInput, AuthFieldProps>(function AuthFiel
         paddingHorizontal: 14,
       }}
     >
-      <Ionicons
+      <Icon set="ion"
         name={icon}
         size={17}
         color={isFocused ? colors.primary : colors.mutedText}
@@ -121,7 +122,7 @@ export const AuthField = forwardRef<TextInput, AuthFieldProps>(function AuthFiel
           hitSlop={8}
           onPress={() => setIsSecure((value) => !value)}
         >
-          <Ionicons
+          <Icon set="ion"
             name={isSecure ? "eye-outline" : "eye-off-outline"}
             size={17}
             color={colors.mutedText}
@@ -209,7 +210,7 @@ export function AuthErrorBanner({ message }: { message: string }) {
       className="mb-5 flex-row items-center gap-2 rounded-xl border px-3.5 py-3"
       style={{ backgroundColor: colors.dangerLight, borderColor: colors.danger }}
     >
-      <Ionicons name="alert-circle" size={15} color={colors.danger} />
+      <Icon set="ion" name="alert-circle" size={15} color={colors.danger} />
       <Text
         className="flex-1 text-xs font-bold"
         style={{ color: colors.danger, fontFamily: fonts.body }}

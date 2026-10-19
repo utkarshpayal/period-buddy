@@ -60,11 +60,15 @@ export function HomeLayoutProvider({ children }: { children: React.ReactNode }) 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Saves run one after another, so an older one can't land after a newer one.
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
+  // The account signed in right now. A queued save for a different one
+  // (signed out or switched since) must not go out under the new token.
+  const userIdRef = useRef(userId);
+  userIdRef.current = userId;
 
   const send = useCallback((id: string, layout: HomeLayout, seq: number) => {
     saveQueue.current = saveQueue.current.then(async () => {
       // A newer edit has been made; its own save sends it.
-      if (seq !== editSeq.current) return;
+      if (seq !== editSeq.current || id !== userIdRef.current) return;
       try {
         await authApi.saveHomeLayout(layout);
         if (seq === editSeq.current) writeCache(id, { layout, dirty: false });
@@ -107,6 +111,17 @@ export function HomeLayoutProvider({ children }: { children: React.ReactNode }) 
       cancelled = true;
     };
   }, [userId, send]);
+
+  // Unmounting (sign-out) drops a pending save; the edit stays dirty in that
+  // account's cache and goes out on its next sign-in.
+  useEffect(
+    () => () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      editSeq.current += 1;
+      userIdRef.current = null;
+    },
+    [],
+  );
 
   const setLayout = useCallback(
     (layout: HomeLayout) => {

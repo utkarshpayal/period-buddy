@@ -1,4 +1,3 @@
-import { Feather, Ionicons } from "@expo/vector-icons";
 import React, { useMemo, useState } from "react";
 import { LayoutAnimation, RefreshControl, ScrollView, StatusBar, Text, TouchableOpacity, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
@@ -17,6 +16,8 @@ import { cycleApi, type SymptomPrediction } from "../../lib/api";
 import { getCyclePhase, type CyclePhase } from "../../lib/cycle";
 import { dateFromDayKey, formatShortDate } from "../../lib/format";
 import { SAMPLE_SYMPTOM_PREDICTIONS, sampleNextCycleStart } from "../../lib/symptomDemo";
+import { useSecureScreen } from "../../lib/screenPrivacy";
+import { Icon } from "../../components/Icon";
 
 const PHASE_ORDER: CyclePhase[] = ["period", "follicular", "ovulation", "luteal"];
 
@@ -94,6 +95,7 @@ export default function SymptomPredictionsScreen() {
 }
 
 function SymptomPredictionsContent() {
+  useSecureScreen("symptom-predictions");
   const { colors, isDark, fonts } = useTheme();
 
   const { data, loading, refreshing, error, offline, reload } = useAsyncLoad<ScreenData>(
@@ -153,6 +155,15 @@ function SymptomPredictionsContent() {
     map.forEach((list) => list.sort((a, b) => b.likelihood - a.likelihood));
     return map;
   }, [predictions]);
+
+  // Stable props for the chart, so a scrub (which re-renders this screen)
+  // doesn't rebuild every series and path in it.
+  const chartPhases = useMemo(() => PHASE_ORDER.filter((p) => byPhase.has(p)), [byPhase]);
+  const chartPhaseLabels = useMemo(() => Object.fromEntries(PHASE_ORDER.map((p) => [p, STAGES[p].chart])), []);
+  const chartPhaseColors = useMemo(
+    () => Object.fromEntries(PHASE_ORDER.map((p) => [p, stageColors[p].solid])),
+    [stageColors],
+  );
 
   const [chartOpen, setChartOpen] = useState(false);
   const [chartPhase, setChartPhase] = useState<string | null>(null);
@@ -247,7 +258,7 @@ function SymptomPredictionsContent() {
                     </Text>
                     {data?.nextCycleStart && daysAway != null && daysAway > 0 ? (
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 14 }}>
-                        <Ionicons name="calendar-outline" size={15} color={colors.mutedText} />
+                        <Icon set="ion" name="calendar-outline" size={15} color={colors.mutedText} />
                         <Text style={{ fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}>
                           Expected around {formatShortDate(dateFromDayKey(data.nextCycleStart))}
                         </Text>
@@ -339,7 +350,7 @@ function SymptomPredictionsContent() {
                                       backgroundColor: stageColors[phase].soft,
                                     }}
                                   >
-                                    <Ionicons name={SYMPTOM_ICONS.get(item.symptom) ?? "ellipse-outline"} size={16} color={colors.foreground} />
+                                    <Icon set="ion" name={SYMPTOM_ICONS.get(item.symptom) ?? "ellipse-outline"} size={16} color={colors.foreground} />
                                   </View>
                                   <View style={{ flex: 1, minWidth: 0 }}>
                                     <Text numberOfLines={1} style={{ fontSize: 15, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>
@@ -386,7 +397,7 @@ function SymptomPredictionsContent() {
                     style={{ ...card, flexDirection: "row", alignItems: "center", gap: 12, padding: 16, marginBottom: chartOpen ? 12 : 0 }}
                   >
                     <View style={{ width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceSoft }}>
-                      <Feather name="bar-chart-2" size={16} color={colors.foreground} />
+                      <Icon set="feather" name="bar-chart-2" size={16} color={colors.foreground} />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={{ fontSize: 15, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>
@@ -394,14 +405,14 @@ function SymptomPredictionsContent() {
                       </Text>
                       <Text style={{ marginTop: 1, fontSize: 12.5, color: colors.mutedText, fontFamily: fonts.body }}>Compare symptoms across your cycle</Text>
                     </View>
-                    <Feather name={chartOpen ? "chevron-up" : "chevron-down"} size={18} color={colors.mutedText} />
+                    <Icon set="feather" name={chartOpen ? "chevron-up" : "chevron-down"} size={18} color={colors.mutedText} />
                   </TouchableOpacity>
                   {chartOpen ? (
                     <SymptomTrendChart
                       predictions={predictions}
-                      phases={PHASE_ORDER.filter((p) => byPhase.has(p))}
-                      phaseLabels={Object.fromEntries(PHASE_ORDER.map((p) => [p, STAGES[p].chart]))}
-                      phaseColors={Object.fromEntries(PHASE_ORDER.map((p) => [p, stageColors[p].solid]))}
+                      phases={chartPhases}
+                      phaseLabels={chartPhaseLabels}
+                      phaseColors={chartPhaseColors}
                       selectedPhase={chartPhase ?? currentPhase}
                       onSelectPhase={setChartPhase}
                       sample={data?.sample}
@@ -419,7 +430,7 @@ function SymptomPredictionsContent() {
                       : "Every time you log a symptom, we note where you were in your cycle. The more you log, the more accurate this gets."}
                   </Text>
                   <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
-                    <Feather name="info" size={14} color={colors.mutedText} style={{ marginTop: 2 }} />
+                    <Icon set="feather" name="info" size={14} color={colors.mutedText} style={{ marginTop: 2 }} />
                     <Text style={{ flex: 1, fontSize: 13, lineHeight: 18, color: colors.mutedText, fontFamily: fonts.body }}>
                       This comes only from your own logs and isn&apos;t a diagnosis. If something feels new, severe or worrying, talk to a doctor.
                     </Text>

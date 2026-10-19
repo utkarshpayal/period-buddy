@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -11,6 +10,9 @@ import {
 } from "react-native";
 import { resendOtp, verifyOtp } from "../lib/auth";
 import { useTheme } from "./theme";
+import { AppLockCover } from "./AppLockScreen";
+import { getFriendlyErrorMessage } from "../lib/api";
+import { Icon } from "./Icon";
 
 const OTP_LENGTH = 6;
 const OTP_VALIDITY_SECONDS = 10 * 60; // 10 minutes, mirrors backend OTP_EXPIRY_MINUTES
@@ -29,30 +31,42 @@ function formatTime(totalSeconds: number) {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
+/** Whole seconds from now until `deadline` (ms), never negative. */
+const secondsUntil = (deadline: number) => Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+
 export function OtpModal({ email, onClose, onVerified, visible }: OtpModalProps) {
   const { colors, fonts } = useTheme();
   const [digits, setDigits] = useState<string[]>(Array(OTP_LENGTH).fill(""));
   const [errorMessage, setErrorMessage] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
   const [isResending, setIsResending] = useState(false);
-  const [secondsLeft, setSecondsLeft] = useState(OTP_VALIDITY_SECONDS);
-  const [resendCooldown, setResendCooldown] = useState(RESEND_COOLDOWN_SECONDS);
+  // Deadlines, not counters: JS timers stop while the app is in the
+  // background (the user checking their mail), so a decrementing count would
+  // still show a code as valid after the server has expired it.
+  const [expiresAt, setExpiresAt] = useState(() => Date.now() + OTP_VALIDITY_SECONDS * 1000);
+  const [resendAt, setResendAt] = useState(() => Date.now() + RESEND_COOLDOWN_SECONDS * 1000);
+  const [, setTick] = useState(0);
+  const secondsLeft = secondsUntil(expiresAt);
+  const resendCooldown = secondsUntil(resendAt);
   const inputRefs = useRef<(TextInput | null)[]>([]);
+  // A ref, so a double tap (or the last digit's submit) verifies once.
+  const verifyingRef = useRef(false);
+
+  const restartTimers = () => {
+    setExpiresAt(Date.now() + OTP_VALIDITY_SECONDS * 1000);
+    setResendAt(Date.now() + RESEND_COOLDOWN_SECONDS * 1000);
+  };
 
   useEffect(() => {
     if (!visible) return;
     setDigits(Array(OTP_LENGTH).fill(""));
     setErrorMessage("");
-    setSecondsLeft(OTP_VALIDITY_SECONDS);
-    setResendCooldown(RESEND_COOLDOWN_SECONDS);
+    restartTimers();
   }, [visible]);
 
   useEffect(() => {
     if (!visible) return;
-    const interval = setInterval(() => {
-      setSecondsLeft((value) => Math.max(0, value - 1));
-      setResendCooldown((value) => Math.max(0, value - 1));
-    }, 1000);
+    const interval = setInterval(() => setTick((t) => t + 1), 1000);
     return () => clearInterval(interval);
   }, [visible]);
 
@@ -93,6 +107,7 @@ export function OtpModal({ email, onClose, onVerified, visible }: OtpModalProps)
   }
 
   async function handleVerify() {
+    if (verifyingRef.current) return;
     const code = digits.join("");
     if (code.length !== OTP_LENGTH) {
       setErrorMessage("Enter the full 6-digit code.");
@@ -103,6 +118,7 @@ export function OtpModal({ email, onClose, onVerified, visible }: OtpModalProps)
       return;
     }
 
+    verifyingRef.current = true;
     try {
       setIsVerifying(true);
       setErrorMessage("");
@@ -114,9 +130,10 @@ export function OtpModal({ email, onClose, onVerified, visible }: OtpModalProps)
       onVerified({ token: response.token, user: response.data });
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : "Unable to verify the code right now.",
+        getFriendlyErrorMessage(error),
       );
     } finally {
+      verifyingRef.current = false;
       setIsVerifying(false);
     }
   }
@@ -129,12 +146,11 @@ export function OtpModal({ email, onClose, onVerified, visible }: OtpModalProps)
       setErrorMessage("");
       await resendOtp({ email });
       setDigits(Array(OTP_LENGTH).fill(""));
-      setSecondsLeft(OTP_VALIDITY_SECONDS);
-      setResendCooldown(RESEND_COOLDOWN_SECONDS);
+      restartTimers();
       inputRefs.current[0]?.focus();
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : "Unable to resend the code right now.",
+        getFriendlyErrorMessage(error),
       );
     } finally {
       setIsResending(false);
@@ -173,8 +189,8 @@ export function OtpModal({ email, onClose, onVerified, visible }: OtpModalProps)
                 <Text style={{ color: colors.foreground }}>{email}</Text>
               </Text>
             </View>
-            <TouchableOpacity onPress={onClose} className="p-1">
-              <Ionicons name="close" size={20} color={colors.mutedText} />
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} className="p-1">
+              <Icon set="ion" name="close" size={20} color={colors.mutedText} />
             </TouchableOpacity>
           </View>
 
@@ -268,6 +284,7 @@ export function OtpModal({ email, onClose, onVerified, visible }: OtpModalProps)
           </View>
         </View>
       </KeyboardAvoidingView>
+      <AppLockCover />
     </Modal>
   );
 }

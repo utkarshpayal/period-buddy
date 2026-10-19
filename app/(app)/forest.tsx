@@ -47,6 +47,8 @@ import {
 } from "../../lib/forestView";
 import Svg, { Path } from "react-native-svg";
 import { LinearGradient } from "expo-linear-gradient";
+import { useSecureScreen } from "../../lib/screenPrivacy";
+import { Icon } from "../../components/Icon";
 
 // Your Forest: one tree grows from a seed to full bloom as you do three
 // small tasks a day (log your day, finish a habit, water the tree). Each
@@ -309,6 +311,7 @@ function ForestSkeleton() {
 }
 
 export default function Forest() {
+  useSecureScreen("forest");
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
   const { user } = useAuth();
@@ -362,8 +365,22 @@ export default function Forest() {
   const [target, setTarget] = useState(0);
   const [tweenMs, setTweenMs] = useState(2200);
   const last = useRef<{ stageIndex: number; treesGrown: number } | null>(null);
+  // Growth-animation steps, replaced by the next status; the toast's own timer
+  // is separate so a new status never leaves a toast stuck on screen.
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
-  useEffect(() => () => timers.current.forEach(clearTimeout), []);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      timers.current.forEach(clearTimeout);
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    },
+    [],
+  );
+  // Load, background refresh and watering can overlap: each takes a number
+  // when it starts and an answer older than the one on screen is dropped,
+  // so the water tick doesn't vanish and the tree doesn't shrink back.
+  const statusSeq = useRef(0);
+  const appliedSeq = useRef(0);
 
   const habitatRef = useRef<HabitatHandle>(null);
   const statusRef = useRef<ForestStatus | null>(null);
@@ -372,12 +389,22 @@ export default function Forest() {
 
   const growth = status ? (status.growth ?? legacyGrowth(status, getDateKey(new Date()))) : null;
 
-  const applyStatus = useCallback((next: ForestStatus) => {
+  const showToast = useCallback((message: string) => {
+    setToast(message);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 3200);
+  }, []);
+
+  /** `seq` from statusSeq when the request started; a stale answer is ignored. */
+  const applyStatus = useCallback((next: ForestStatus, seq: number) => {
+    if (seq < appliedSeq.current) return;
+    appliedSeq.current = seq;
+    timers.current.forEach(clearTimeout);
+    timers.current = [];
     const later = (fn: () => void, ms: number) => timers.current.push(setTimeout(fn, ms));
     const celebrate = (message: string) => {
       setCelebrateKey((k) => k + 1);
-      setToast(message);
-      later(() => setToast(null), 3200);
+      showToast(message);
     };
     const g = next.growth ?? legacyGrowth(next, getDateKey(new Date()));
     const prev = last.current;
@@ -403,17 +430,12 @@ export default function Forest() {
     if (prev && g.stageIndex > prev.stageIndex) {
       later(() => celebrate(`Your tree is now a ${STAGE_LABEL[g.stage].toLowerCase()}`), 1000);
     }
-  }, []);
+  }, [showToast]);
 
   // A watering made offline that hasn't synced yet stays ticked on screen.
   const withQueued = useCallback((next: ForestStatus, queued: string[]) => {
     const today = getDateKey(new Date());
     return queued.includes(today) ? withOfflineWater(next, today) : next;
-  }, []);
-
-  const showToast = useCallback((message: string) => {
-    setToast(message);
-    timers.current.push(setTimeout(() => setToast(null), 3200));
   }, []);
 
   // Stale-while-revalidate: the saved copy (if any) draws at once, the server's
@@ -424,6 +446,7 @@ export default function Forest() {
     if (loadingRef.current) return;
     loadingRef.current = true;
     setSyncing(true);
+    const seq = ++statusSeq.current;
     const today = getDateKey(new Date());
     try {
       // Throws when offline, so an offline open doesn't wait for a second timeout.
@@ -432,7 +455,7 @@ export default function Forest() {
       const fresh = flushed ?? (await withTimeout(forestApi.getStatus(today, { timeoutMs: STATUS_TIMEOUT_MS }), WATCHDOG_MS));
       const queued = userId ? await queuedWaterings(userId) : [];
       liveRef.current = true;
-      applyStatus(withQueued(fresh, queued));
+      applyStatus(withQueued(fresh, queued), seq);
       if (userId) writeForestCache(userId, fresh);
       setSync({ live: true, offline: false, savedAt: Date.now(), pending: queued.length });
       setLoadError(null);
@@ -458,11 +481,13 @@ export default function Forest() {
   useEffect(() => {
     let cancelled = false;
     if (userId) {
+      // Numbered before load() below, so the server's answer always wins.
+      const seq = ++statusSeq.current;
       Promise.all([readForestCache(userId), queuedWaterings(userId)])
         .then(([cached, queued]) => {
           // The server already answered, or nothing saved: nothing to show early.
           if (cancelled || !cached || liveRef.current) return;
-          applyStatus(withQueued(rollCachedDay(cached.status, getDateKey(new Date())), queued));
+          applyStatus(withQueued(rollCachedDay(cached.status, getDateKey(new Date())), queued), seq);
           setSync((s) => ({ ...s, live: false, savedAt: cached.savedAt, pending: queued.length }));
           setLoadError(null);
           setHasLoaded(true);
@@ -495,16 +520,11 @@ export default function Forest() {
   }, [focused, sync.offline, sync.pending, load]);
 
   // Logging your day or ticking a habit elsewhere grows the tree when you come back.
+  // Goes through load() so queued offline waterings are sent first and stay
+  // ticked; load() keeps what's on screen if it fails.
   useDataRefresh(["forest", "cycle", "habits"], async ({ whileFocused }) => {
     if (whileFocused && Date.now() - ownWriteAt.current < 5000) return;
-    try {
-      const fresh = await forestApi.getStatus(getDateKey(new Date()), { timeoutMs: STATUS_TIMEOUT_MS });
-      applyStatus(fresh);
-      if (userId) writeForestCache(userId, fresh);
-      setSync((s) => ({ ...s, live: true, offline: false, savedAt: Date.now() }));
-    } catch {
-      // Quiet refresh.
-    }
+    await load();
   });
 
   const onRefresh = useCallback(async () => {
@@ -520,6 +540,7 @@ export default function Forest() {
     if (watering) return;
     setWatering(true);
     setWaterKey((k) => k + 1);
+    const seq = ++statusSeq.current;
     const today = getDateKey(new Date());
     ownWriteAt.current = Date.now();
     try {
@@ -528,22 +549,27 @@ export default function Forest() {
         new Promise((resolve) => setTimeout(resolve, 900)), // let the drops land first
       ]);
       liveRef.current = true;
-      applyStatus(result.status);
+      applyStatus(result.status, seq);
       if (userId) writeForestCache(userId, result.status);
       setSync((s) => ({ ...s, live: true, offline: false, savedAt: Date.now() }));
     } catch (error) {
       const current = statusRef.current;
       if (isNetworkError(error) && userId && current) {
         // Offline: keep it on the phone and send it once we're back online.
-        await queueWatering(userId, today);
+        try {
+          await queueWatering(userId, today);
+        } catch {
+          alert("Couldn't water your tree", "You're offline and it couldn't be saved on this phone. Please try again.");
+          return;
+        }
         const next = withOfflineWater(current, today);
-        applyStatus(next);
+        applyStatus(next, ++statusSeq.current);
         patchForestMemory(userId, next);
-        const queued = await queuedWaterings(userId);
+        const queued = await queuedWaterings(userId).catch(() => [today]);
         setSync((s) => ({ ...s, live: false, offline: true, pending: queued.length }));
         showToast("Watered. It'll sync when you're back online");
       } else {
-        alert("Couldn't water your tree", error instanceof Error ? error.message : "Please try again.");
+        alert("Couldn't water your tree", getFriendlyErrorMessage(error));
       }
     } finally {
       setWatering(false);
@@ -604,7 +630,7 @@ export default function Forest() {
                 activeOpacity={0.85}
                 style={{ marginTop: 20, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 22, height: 46, borderRadius: 23, backgroundColor: colors.primary }}
               >
-                <Ionicons name="refresh" size={16} color={colors.buttonText} />
+                <Icon set="ion" name="refresh" size={16} color={colors.buttonText} />
                 <Text style={{ color: colors.buttonText, fontSize: 14.5, fontWeight: "800", fontFamily: fonts.body }}>Try again</Text>
               </TouchableOpacity>
             </View>
@@ -618,7 +644,7 @@ export default function Forest() {
               accessibilityLiveRegion="polite"
               style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginBottom: 10 }}
             >
-              <Ionicons name={sync.offline ? "cloud-offline-outline" : "sync-outline"} size={13} color={colors.mutedText} />
+              <Icon set="ion" name={sync.offline ? "cloud-offline-outline" : "sync-outline"} size={13} color={colors.mutedText} />
               <Text numberOfLines={1} style={{ flexShrink: 1, color: colors.mutedText, fontSize: 13, fontWeight: "600", fontFamily: fonts.body }}>
                 {syncLine}
               </Text>
@@ -665,14 +691,14 @@ export default function Forest() {
                       activeOpacity={0.8}
                       style={[{ width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" }, chip]}
                     >
-                      <Ionicons name="play" size={15} color="#1F3B24" />
+                      <Icon set="ion" name="play" size={15} color="#1F3B24" />
                     </TouchableOpacity>
                     <View
                       accessible
                       accessibilityLabel={`${growth?.treesGrown ?? 0} trees grown`}
                       style={[{ flexDirection: "row", alignItems: "center", gap: 5, height: 36, paddingHorizontal: 12, borderRadius: 18 }, chip]}
                     >
-                      <Ionicons name="leaf" size={14} color="#2E7D32" />
+                      <Icon set="ion" name="leaf" size={14} color="#2E7D32" />
                       <Text style={{ color: "#1F3B24", fontSize: 14, fontWeight: "800", fontFamily: fonts.body }}>{growth?.treesGrown ?? 0}</Text>
                     </View>
                   </View>
@@ -685,7 +711,7 @@ export default function Forest() {
                     style={{ position: "absolute", left: 0, right: 0, bottom: 16, alignItems: "center" }}
                   >
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 18, backgroundColor: "rgba(20,32,24,0.62)" }}>
-                      <Ionicons name="hand-left-outline" size={14} color="#FFFFFF" />
+                      <Icon set="ion" name="hand-left-outline" size={14} color="#FFFFFF" />
                       <Text style={{ color: "#FFFFFF", fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}>Drag to look around · tap your tree</Text>
                     </View>
                   </Animated.View>
@@ -701,7 +727,7 @@ export default function Forest() {
                       accessibilityLiveRegion="polite"
                       style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, backgroundColor: "rgba(31,59,36,0.92)" }}
                     >
-                      <Ionicons name="leaf" size={15} color="#A5D6A7" />
+                      <Icon set="ion" name="leaf" size={15} color="#A5D6A7" />
                       <Text style={{ color: "#FFFFFF", fontSize: 14, fontWeight: "700", fontFamily: fonts.body }}>{toast}</Text>
                     </View>
                   </Animated.View>
@@ -800,7 +826,7 @@ export default function Forest() {
                         backgroundColor: done ? colors.success : isWater ? colors.skyLight : colors.input,
                       }}
                     >
-                      <Ionicons name={done ? "checkmark" : task.icon} size={19} color={done ? "#FFFFFF" : isWater ? colors.sky : colors.foreground} />
+                      <Icon set="ion" name={done ? "checkmark" : task.icon} size={19} color={done ? "#FFFFFF" : isWater ? colors.sky : colors.foreground} />
                     </View>
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <Text
@@ -836,13 +862,13 @@ export default function Forest() {
                           opacity: watering ? 0.6 : 1,
                         }}
                       >
-                        <Ionicons name="water" size={14} color={colors.buttonText} />
+                        <Icon set="ion" name="water" size={14} color={colors.buttonText} />
                         <Text style={{ color: colors.buttonText, fontSize: 13.5, fontWeight: "800", fontFamily: fonts.body }}>
                           {watering ? "Watering" : "Water"}
                         </Text>
                       </View>
                     ) : (
-                      <Ionicons name="chevron-forward" size={18} color={colors.mutedText} />
+                      <Icon set="ion" name="chevron-forward" size={18} color={colors.mutedText} />
                     )}
                   </TouchableOpacity>
                 </View>
@@ -858,7 +884,7 @@ export default function Forest() {
                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                     <View style={{ width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: streak ? colors.warningLight : colors.surfaceSoft }}>
-                      <Ionicons name="flame" size={17} color={streak ? colors.warning : colors.mutedText} />
+                      <Icon set="ion" name="flame" size={17} color={streak ? colors.warning : colors.mutedText} />
                     </View>
                     <View>
                       <Text style={{ color: colors.foreground, fontSize: 15, fontWeight: "800", fontFamily: fonts.heading }}>

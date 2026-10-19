@@ -1,4 +1,3 @@
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
@@ -11,6 +10,7 @@ import { LOCKED_OPACITY, PauseDot, TilePill, isLocked, launchSuffix, useTilePres
 import { getHeroGradient, getShadow } from "./ui-tokens";
 import { HubTile, groupTiles } from "../lib/appConfig";
 import { trackUse } from "../lib/usage";
+import { Icon } from "./Icon";
 
 /**
  * Hub tiles in the looks the hub screens use (lib/hubLayout.ts decides
@@ -83,11 +83,11 @@ function GridTile({ feature }: { feature: HubTile }) {
       {/* The whole card is the button; only a link that leaves the app gets a mark. */}
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
         <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" }}>
-          <Ionicons name={feature.icon as any} size={22} color={color} style={{ opacity: dim }} />
+          <Icon set="ion" name={feature.icon as any} size={22} color={color} style={{ opacity: dim }} />
           {feature.launch.access === "paused" ? <PauseDot /> : null}
         </View>
         {!soon && isExternal(feature) && !isLocked(feature) ? (
-          <Ionicons name="open-outline" size={16} color={colors.mutedText} accessibilityLabel="Opens outside the app" />
+          <Icon set="ion" name="open-outline" size={16} color={colors.mutedText} accessibilityLabel="Opens outside the app" />
         ) : null}
       </View>
       <View style={{ gap: 2 }}>
@@ -192,7 +192,7 @@ function BookHero({ tile }: { tile: HubTile }) {
       >
         <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
           <View style={{ width: 52, height: 52, borderRadius: 16, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center" }}>
-            <MaterialCommunityIcons name="doctor" size={28} color={roseOnWhite} />
+            <Icon set="mci" name="doctor" size={28} color={roseOnWhite} />
           </View>
           <View style={{ flex: 1, gap: 2 }}>
             <Text numberOfLines={2} maxFontSizeMultiplier={1.4} style={{ fontSize: 17, lineHeight: 24, fontWeight: "700", color: "#FFFFFF", fontFamily: fonts.heading }}>
@@ -216,7 +216,7 @@ function BookHero({ tile }: { tile: HubTile }) {
               key={label}
               style={{ flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "rgba(255,255,255,0.18)", borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 }}
             >
-              <Ionicons name={icon} size={13} color="#FFFFFF" />
+              <Icon set="ion" name={icon} size={13} color="#FFFFFF" />
               <Text maxFontSizeMultiplier={1.3} style={{ fontSize: 12, fontWeight: "600", color: "#FFFFFF", fontFamily: fonts.body }}>
                 {label}
               </Text>
@@ -230,11 +230,11 @@ function BookHero({ tile }: { tile: HubTile }) {
           accessibilityLabel={`${title}, book a call`}
           style={{ height: 48, borderRadius: 14, backgroundColor: "#FFFFFF", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 }}
         >
-          <Ionicons name="calendar-outline" size={18} color={roseOnWhite} />
+          <Icon set="ion" name="calendar-outline" size={18} color={roseOnWhite} />
           <Text maxFontSizeMultiplier={1.3} style={{ fontSize: 15, fontWeight: "700", color: roseOnWhite, fontFamily: fonts.body }}>
             Book a call
           </Text>
-          <Ionicons name="arrow-forward" size={16} color={roseOnWhite} />
+          <Icon set="ion" name="arrow-forward" size={16} color={roseOnWhite} />
         </TouchableOpacity>
       </LinearGradient>
     </View>
@@ -275,7 +275,7 @@ function AskHero({ tile }: { tile: HubTile }) {
               {tile.description}
             </Text>
           </View>
-          <Ionicons name="chevron-forward" size={18} color={colors.mutedText} />
+          <Icon set="ion" name="chevron-forward" size={18} color={colors.mutedText} />
         </TouchableOpacity>
         <View
           style={{
@@ -309,7 +309,7 @@ function AskHero({ tile }: { tile: HubTile }) {
             accessibilityLabel="Send"
             style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" }}
           >
-            <Ionicons name="arrow-up" size={18} color={colors.buttonText} />
+            <Icon set="ion" name="arrow-up" size={18} color={colors.buttonText} />
           </TouchableOpacity>
         </View>
     </View>

@@ -255,7 +255,7 @@ export const FEATURE_REGISTRY: FeatureDefinition[] = [
   // Wellness & Support
   // ?new=1 always starts a fresh chat — qa.tsx redirects a bare push to the
   // chat-history list instead (see docs/fixes.md 2.3).
-  { key: "nuraAi", title: "Nura AI", description: "Ask privately, anytime", icon: "sparkles-outline", route: "/(app)/qa", placement: "wellness_hub", size: "large", colorKey: "info" },
+  { key: "nuraAi", title: "Nura AI", description: "Ask privately, anytime", icon: "chatbubble-ellipses-outline", route: "/(app)/qa", placement: "wellness_hub", size: "large", colorKey: "info" },
   { key: "healthConcerns", title: "Health Concerns", description: "Irregularities & symptoms", icon: "medkit-outline", route: "/(app)/health-issues", placement: "wellness_hub", size: "large", colorKey: "warning" },
   { key: "hygiene", title: "Hygiene & Care", description: "Product guidance & comfort", icon: "water-outline", route: "/(app)/hygiene", placement: "wellness_hub", size: "small", colorKey: "accent" },
   { key: "sexualWellbeing", title: "Sexual Wellbeing", description: "Consent, intimacy & safety", icon: "heart-circle-outline", route: "/(app)/sexual-wellbeing", placement: "wellness_hub", size: "small", colorKey: "secondary" },

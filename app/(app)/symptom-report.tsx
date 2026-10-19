@@ -1,4 +1,4 @@
-import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
 import { RefreshControl, ScrollView, StatusBar, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -12,6 +12,7 @@ import { useAsyncLoad } from "../../hooks/useAsyncLoad";
 import { reportApi, type HealthReportCycleStats, type ReportCountItem } from "../../lib/api";
 import { getDateKey } from "../../lib/format";
 import { useSecureScreen } from "../../lib/screenPrivacy";
+import { Icon } from "../../components/Icon";
 
 const RANGE_DAYS = 90;
 
@@ -104,7 +105,7 @@ function SectionCard({
     >
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 16 }}>
         <View style={{ width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: iconBg }}>
-          <MaterialCommunityIcons name={icon} size={19} color={iconColor} />
+          <Icon set="mci" name={icon} size={19} color={iconColor} />
         </View>
         <Text style={{ color: colors.foreground, fontSize: 16, fontWeight: "800", fontFamily: fonts.heading }}>
           {title}
@@ -174,7 +175,7 @@ export default function SymptomReportScreen() {
                     marginBottom: 18,
                   }}
                 >
-                  <Feather name="calendar" size={16} color={colors.primary} />
+                  <Icon set="feather" name="calendar" size={16} color={colors.primary} />
                   <Text style={{ flex: 1, color: colors.foreground, fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}>
                     Last {RANGE_DAYS} days · {data.daysLogged} day{data.daysLogged === 1 ? "" : "s"} logged ·{" "}
                     {data.periodDays} period day{data.periodDays === 1 ? "" : "s"}
@@ -287,7 +288,7 @@ export default function SymptomReportScreen() {
                     marginTop: 6,
                   }}
                 >
-                  <Feather name="info" size={14} color={colors.mutedText} style={{ marginTop: 1 }} />
+                  <Icon set="feather" name="info" size={14} color={colors.mutedText} style={{ marginTop: 1 }} />
                   <Text style={{ flex: 1, color: colors.mutedText, fontSize: 12.5, lineHeight: 16, fontFamily: fonts.body }}>
                     A summary of what you&apos;ve logged — educational only, not a diagnosis. For a
                     shareable clinical summary, use Download doctor report on the Graphs & Reports screen.

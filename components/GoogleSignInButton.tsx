@@ -7,6 +7,7 @@ import { ActivityIndicator, Text, TouchableOpacity, View, Platform } from "react
 import { googleAuth } from "../lib/auth";
 import type { AuthUser } from "../lib/api";
 import { useTheme } from "./theme";
+import { getFriendlyErrorMessage } from "../lib/api";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -148,7 +149,7 @@ export function GoogleSignInButton({
       onSuccess({ token: authResult.token, user: authResult.data });
     } catch (error) {
       onError(
-        error instanceof Error ? error.message : "Unable to complete Google sign-in.",
+        getFriendlyErrorMessage(error),
       );
     } finally {
       setIsExchanging(false);

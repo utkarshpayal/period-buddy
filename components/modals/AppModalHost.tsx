@@ -1,10 +1,11 @@
-import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
 import { Modal, Pressable, Text, TouchableOpacity, View } from "react-native";
 import { openAppSettings, registerModalListener } from "../../lib/modal-host";
+import { AppLockCover } from "../AppLockScreen";
 import { LaunchSheet } from "../LaunchSheet";
 import { useTheme } from "../theme";
 import type { ModalButtonSpec, ModalIconName, ModalRequest, ModalVariant } from "./types";
+import { Icon } from "../Icon";
 
 const VARIANT_ICON: Record<ModalVariant, ModalIconName> = {
   default: "information-circle",
@@ -22,7 +23,9 @@ const VARIANT_ICON: Record<ModalVariant, ModalIconName> = {
  * component that renders its own <Modal> mounts `<AppModalHost inline />`
  * as that modal's last child, so alerts raised while it's open draw inside
  * it. The root host is a separate Modal and would end up behind it (web) or
- * fail to present at all (iOS).
+ * fail to present at all (iOS). An inline host also covers its Modal with the
+ * App Lock screen while the app is locked (AppLockCover), since that Modal
+ * draws above the root lock.
  */
 export function AppModalHost({ inline = false }: { inline?: boolean }) {
   const { colors, fonts } = useTheme();
@@ -65,7 +68,17 @@ export function AppModalHost({ inline = false }: { inline?: boolean }) {
   }
 
   // Launch sheets are a bottom sheet with their own layout and state.
-  if (request?.kind === "launch") return <LaunchSheet key={request.id} request={request} onClose={close} />;
+  if (request?.kind === "launch") {
+    const sheet = <LaunchSheet key={request.id} request={request} onClose={close} />;
+    return inline ? (
+      <>
+        <AppLockCover />
+        {sheet}
+      </>
+    ) : (
+      sheet
+    );
+  }
 
   const variant: ModalVariant = request ? (request.kind === "permission" ? "permission" : request.variant) : "default";
   const accent = variantColors(colors, variant);
@@ -142,7 +155,7 @@ export function AppModalHost({ inline = false }: { inline?: boolean }) {
             width: 52,
           }}
         >
-          <Ionicons name={icon} size={26} color={accent.fg} />
+          <Icon set="ion" name={icon} size={26} color={accent.fg} />
         </View>
 
         <Text
@@ -229,7 +242,16 @@ export function AppModalHost({ inline = false }: { inline?: boolean }) {
     </View>
   );
 
-  if (inline) return request ? dialog : null;
+  if (inline) {
+    // The cover goes first so the lock screen's own "Can't unlock?" dialog
+    // (raised to the newest host, i.e. this one) still draws above it.
+    return (
+      <>
+        <AppLockCover />
+        {request ? dialog : null}
+      </>
+    );
+  }
 
   return (
     <Modal transparent animationType="fade" visible={Boolean(request)} onRequestClose={handleRequestClose}>

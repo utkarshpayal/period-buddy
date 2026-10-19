@@ -4,6 +4,7 @@ import React from "react";
 import { Text, TouchableOpacity, View, type StyleProp, type ViewStyle } from "react-native";
 import { useTheme } from "./theme";
 import { getShadow } from "./ui-tokens";
+import { Icon } from "./Icon";
 
 // Shared page chrome. Everything here copies Home's header (dashboard
 // home.tsx): 24px gutter, 44px round surface buttons with the soft shadow,
@@ -50,7 +51,7 @@ export function HeaderIconButton({
         ...getShadow(colors, isDark),
       }}
     >
-      <Ionicons name={icon} size={20} color={color ?? (active ? colors.primary : colors.foreground)} />
+      <Icon set="ion" name={icon} size={20} color={color ?? (active ? colors.primary : colors.foreground)} />
     </TouchableOpacity>
   );
 }
@@ -168,7 +169,7 @@ export function SectionHeader({
           accessibilityLabel={actionLabel}
         >
           <Text style={{ fontSize: 13, fontWeight: "600", color: colors.primaryDark, fontFamily: fonts.body }}>{actionLabel}</Text>
-          <Ionicons name="chevron-forward" size={16} color={colors.primaryDark} />
+          <Icon set="ion" name="chevron-forward" size={16} color={colors.primaryDark} />
         </TouchableOpacity>
       ) : null}
     </View>

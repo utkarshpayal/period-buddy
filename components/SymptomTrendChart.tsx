@@ -1,4 +1,3 @@
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { PanResponder, Pressable, ScrollView, Text, View, type LayoutChangeEvent } from "react-native";
 import Animated, { Easing, FadeIn, useAnimatedProps, useReducedMotion, useSharedValue, withTiming } from "react-native-reanimated";
@@ -6,6 +5,7 @@ import Svg, { Circle, Defs, G, Line, LinearGradient, Path, Rect, Stop, Text as S
 import type { SymptomPrediction } from "../lib/api";
 import { useTheme } from "./theme";
 import { getShadow } from "./ui-tokens";
+import { Icon } from "./Icon";
 
 /**
  * Symptom likelihood across the cycle's phases (symptom-predictions.tsx).
@@ -114,7 +114,8 @@ type Series = {
   peakIndex: number;
 };
 
-export function SymptomTrendChart({
+/** Memoised: the screen re-renders on every scrub, the chart only when its props change. */
+export const SymptomTrendChart = React.memo(function SymptomTrendChart({
   predictions,
   phases,
   phaseLabels,
@@ -165,6 +166,8 @@ export function SymptomTrendChart({
   useEffect(() => {
     setPicked((prev) => {
       const still = prev.filter((p) => allSeries.some((s) => s.symptom === p.symptom));
+      // Same picks: keep the old array so nothing downstream re-renders.
+      if (still.length === prev.length && still.length > 0) return prev;
       if (still.length > 0) return still;
       return allSeries.slice(0, MAX_SERIES).map((s, slot) => ({ symptom: s.symptom, slot }));
     });
@@ -208,6 +211,9 @@ export function SymptomTrendChart({
   const reveal = useSharedValue(reduceMotion ? 1 : 0);
   const crossX = useSharedValue(0);
   const plottedKey = plotted.map((p) => `${p.symptom}:${p.slot}`).join("|");
+  // Replays the draw-in only when the numbers change, not on every refetch
+  // that returns the same data.
+  const dataKey = allSeries.map((s) => `${s.symptom}=${s.values.join(",")}`).join("|");
   useEffect(() => {
     if (width === 0 || view !== "chart") return;
     if (reduceMotion) {
@@ -220,7 +226,7 @@ export function SymptomTrendChart({
       easing: Easing.out(Easing.cubic),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [width, view, plottedKey, predictions]);
+  }, [width, view, plottedKey, dataKey]);
   useEffect(() => {
     if (activeIndex < 0 || colW === 0) return;
     const target = PAD.left + colW * (activeIndex + 0.5);
@@ -357,7 +363,7 @@ export function SymptomTrendChart({
                   ...(on ? getShadow(colors, isDark) : null),
                 }}
               >
-                <MaterialCommunityIcons
+                <Icon set="mci"
                   name={v === "chart" ? "chart-bell-curve-cumulative" : "table"}
                   size={16}
                   color={on ? colors.foreground : colors.mutedText}
@@ -387,7 +393,7 @@ export function SymptomTrendChart({
             backgroundColor: colors.surfaceSoft,
           }}
         >
-          <MaterialCommunityIcons name="chart-line-variant" size={28} color={colors.mutedText} />
+          <Icon set="mci" name="chart-line-variant" size={28} color={colors.mutedText} />
           <Text
             style={{
               marginTop: 8,
@@ -735,7 +741,7 @@ export function SymptomTrendChart({
       )}
     </View>
   );
-}
+});
 
 /** Symptom × phase grid; cell tint = likelihood (one hue, light → dark). */
 function HeatTable({

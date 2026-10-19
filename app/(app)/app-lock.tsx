@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import React, { useState } from "react";
 import { ScrollView, StatusBar, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -7,6 +6,7 @@ import { alert } from "../../lib/alert";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { useTheme } from "../../components/theme";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
+import { Icon } from "../../components/Icon";
 
 export default function AppLockSettings() {
   const { colors, isDark, fonts } = useTheme();
@@ -17,8 +17,14 @@ export default function AppLockSettings() {
 
   const handleEnable = async () => {
     setIsVerifying(true);
-    const result = await enableLock();
-    setIsVerifying(false);
+    let result: Awaited<ReturnType<typeof enableLock>>;
+    try {
+      result = await enableLock();
+    } catch {
+      result = { success: false };
+    } finally {
+      setIsVerifying(false);
+    }
     if (!result.success) {
       alert("Couldn't turn on App Lock", result.error ?? "Please try again.");
       return;
@@ -62,7 +68,7 @@ export default function AppLockSettings() {
                 ...getShadow(colors, isDark),
               }}
             >
-              <Ionicons
+              <Icon set="ion"
                 name={isEnabled ? "shield-checkmark" : "shield-outline"}
                 size={28}
                 color={isEnabled ? colors.success : colors.primary}
@@ -78,7 +84,7 @@ export default function AppLockSettings() {
                 borderColor: isEnabled ? colors.successLight : colors.border,
               }}
             >
-              <Ionicons
+              <Icon set="ion"
                 name={isEnabled ? "lock-closed" : "lock-open-outline"}
                 size={18}
                 color={isEnabled ? colors.success : colors.mutedText}
@@ -114,7 +120,7 @@ export default function AppLockSettings() {
                   }}
                 >
                   <View className="p-2.5 rounded-xl" style={{ backgroundColor: softTints.pink }}>
-                    <Ionicons name="lock-closed-outline" size={18} color={colors.primary} />
+                    <Icon set="ion" name="lock-closed-outline" size={18} color={colors.primary} />
                   </View>
                   <View className="flex-1">
                     <Text
@@ -130,7 +136,7 @@ export default function AppLockSettings() {
                       Uses your device&apos;s {deviceLockLabel} — no separate pattern to set up
                     </Text>
                   </View>
-                  <Ionicons name="chevron-forward" size={16} color={colors.mutedText} />
+                  <Icon set="ion" name="chevron-forward" size={16} color={colors.mutedText} />
                 </TouchableOpacity>
               )}
 

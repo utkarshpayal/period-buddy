@@ -1,19 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../components/auth-context";
 import { subscriptionApi, type MySubscription } from "../lib/api";
-import { subscribeDataChange } from "../lib/data-sync";
+import { peekQuery, subscribeQuery } from "../lib/queryCache";
 import { useDataRefresh } from "./useDataRefresh";
 
-// Mirrors useUserStats.ts's cache: consumed by ~13 stack screens, each of
-// which would otherwise refetch GET /api/subscriptions/me on every visit.
-const SUBSCRIPTION_CACHE_TTL_MS = 60_000;
-let subscriptionCache: { data: MySubscription; fetchedAt: number } | null = null;
-
-// A purchase / free unlock must be visible to the next screen that mounts,
-// not hidden behind the 60s cache.
-subscribeDataChange((topics) => {
-  if (topics.has("subscription")) subscriptionCache = null;
-});
+// subscriptionApi.getMe is cached in lib/queryCache under this key (~13
+// screens mount this hook), which also clears it on sign-out and marks it
+// stale after a purchase.
+const CACHE_KEY = "subscription:me";
 
 export type SubscriptionAccess = {
   /** False while the admin has the whole system switched off — every
@@ -37,32 +31,49 @@ export type SubscriptionAccess = {
  * it, and render LockedFeatureCard/open PaywallModal when it's false — but
  * every gated backend route also enforces this independently via a 402, so
  * a screen that skips this hook still degrades safely (see
- * isFeatureLockedError in lib/api.ts).
+ * isFeatureLockedError in lib/api/client.ts).
  */
 export function useSubscriptionAccess(): SubscriptionAccess {
   const { isAuthenticated } = useAuth();
-  const [summary, setSummary] = useState<MySubscription | null>(subscriptionCache?.data ?? null);
-  const [isLoading, setIsLoading] = useState(!subscriptionCache);
+  const [summary, setSummary] = useState<MySubscription | null>(() =>
+    isAuthenticated ? (peekQuery<MySubscription>(CACHE_KEY) ?? null) : null,
+  );
+  const [isLoading, setIsLoading] = useState(() => isAuthenticated && peekQuery(CACHE_KEY) === undefined);
 
-  const refresh = useCallback(async () => {
-    if (!isAuthenticated) {
-      subscriptionCache = null;
-      setSummary(null);
-      setIsLoading(false);
-      return null;
-    }
-    try {
-      const result = await subscriptionApi.getMe();
-      subscriptionCache = { data: result, fetchedAt: Date.now() };
-      setSummary(result);
-      return result;
-    } catch {
-      setSummary(null);
-      return null;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [isAuthenticated]);
+  // Any instance's fetch (or a purchase screen's) updates every mounted gate.
+  useEffect(
+    () =>
+      subscribeQuery(CACHE_KEY, (value) => {
+        setSummary(value as MySubscription);
+        setIsLoading(false);
+      }),
+    [],
+  );
+
+  const load = useCallback(
+    async (force: boolean) => {
+      if (!isAuthenticated) {
+        setSummary(null);
+        setIsLoading(false);
+        return null;
+      }
+      try {
+        const result = await subscriptionApi.getMe({ force });
+        setSummary(result);
+        return result;
+      } catch {
+        // Unknown entitlements never block (hasAccess is optimistic); the
+        // backend's 402 still guards every gated route.
+        if (!force) setSummary(null);
+        return null;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [isAuthenticated],
+  );
+
+  const refresh = useCallback(() => load(true), [load]);
 
   // Every mounted gate (FeatureGate, action-level checks on screens under
   // the current one) picks up a purchase made anywhere, e.g. in a
@@ -70,44 +81,27 @@ export function useSubscriptionAccess(): SubscriptionAccess {
   // entitlements if the refetch fails.
   useDataRefresh(["subscription"], async () => {
     if (!isAuthenticated) return;
-    try {
-      const result = await subscriptionApi.getMe();
-      subscriptionCache = { data: result, fetchedAt: Date.now() };
-      setSummary(result);
-    } catch {
-      // keep existing entitlements
-    }
+    await subscriptionApi.getMe().then(setSummary, () => {});
   });
 
   useEffect(() => {
+    let isMounted = true;
     if (!isAuthenticated) {
-      // Logging out invalidates the cache so a new sign-in never briefly
-      // shows the previous account's cached entitlements.
-      subscriptionCache = null;
       setSummary(null);
       setIsLoading(false);
       return;
     }
-
-    const isFresh = subscriptionCache && Date.now() - subscriptionCache.fetchedAt < SUBSCRIPTION_CACHE_TTL_MS;
-    if (isFresh) {
-      setIsLoading(false);
-      return;
-    }
-
-    let isMounted = true;
-    (async () => {
-      try {
-        const result = await subscriptionApi.getMe();
-        if (!isMounted) return;
-        subscriptionCache = { data: result, fetchedAt: Date.now() };
-        setSummary(result);
-      } catch {
-        if (isMounted) setSummary(null);
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
-    })();
+    // Served from the cache while fresh; a shared request otherwise.
+    subscriptionApi.getMe().then(
+      (result) => {
+        if (isMounted) setSummary(result);
+      },
+      () => {
+        if (isMounted && peekQuery(CACHE_KEY) === undefined) setSummary(null);
+      },
+    ).finally(() => {
+      if (isMounted) setIsLoading(false);
+    });
     return () => {
       isMounted = false;
     };

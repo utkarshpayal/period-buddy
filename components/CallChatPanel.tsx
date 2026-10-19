@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -14,6 +13,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { type CallChat } from "../lib/jitsiCall";
 import { formatTime } from "../lib/consultationFormat";
 import { useTheme } from "./theme";
+import { Icon } from "./Icon";
 
 const MAX_LENGTH = 2000;
 
@@ -76,7 +76,7 @@ export function CallChatPanel({
             className="p-2 rounded-full"
             style={{ backgroundColor: colors.surfaceSoft }}
           >
-            <Feather name="chevron-down" size={20} color={colors.foreground} />
+            <Icon set="feather" name="chevron-down" size={20} color={colors.foreground} />
           </TouchableOpacity>
         </View>
 
@@ -133,7 +133,7 @@ export function CallChatPanel({
               className="h-11 w-11 rounded-full items-center justify-center"
               style={{ backgroundColor: colors.primary, opacity: draft.trim() && !chat.sending ? 1 : 0.5 }}
             >
-              {chat.sending ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Feather name="send" size={18} color="#FFFFFF" />}
+              {chat.sending ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Icon set="feather" name="send" size={18} color="#FFFFFF" />}
             </TouchableOpacity>
           </View>
         ) : (

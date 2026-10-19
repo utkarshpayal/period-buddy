@@ -1,8 +1,9 @@
-import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Modal, PanResponder, Pressable, Text, TouchableOpacity, View } from "react-native";
 import Animated, { FadeIn, FadeInLeft, FadeInRight, ZoomIn } from "react-native-reanimated";
 import { useTheme } from "./theme";
+import { AppLockCover } from "./AppLockScreen";
+import { Icon } from "./Icon";
 
 const WEEKDAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
 const MONTH_LABELS = [
@@ -162,7 +163,7 @@ export function CalendarModal({
         opacity: enabled ? 1 : 0.35,
       }}
     >
-      <Ionicons name={icon} size={18} color={colors.foreground} />
+      <Icon set="ion" name={icon} size={18} color={colors.foreground} />
     </TouchableOpacity>
   );
 
@@ -235,7 +236,7 @@ export function CalendarModal({
                 <Text style={{ fontSize: 17, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
                   {mode === "days" ? `${MONTH_LABELS[viewedMonth]} ${viewedYear}` : String(viewedYear)}
                 </Text>
-                <Ionicons name={mode === "days" ? "chevron-down" : "chevron-up"} size={16} color={colors.mutedText} />
+                <Icon set="ion" name={mode === "days" ? "chevron-down" : "chevron-up"} size={16} color={colors.mutedText} />
               </TouchableOpacity>
               <View style={{ flexDirection: "row", gap: 8 }}>
                 {mode === "days" ? (
@@ -405,6 +406,7 @@ export function CalendarModal({
           </View>
         </Animated.View>
       </View>
+      <AppLockCover />
     </Modal>
   );
 }

@@ -1,4 +1,3 @@
-import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
 import { Image, Modal, Pressable, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -7,6 +6,7 @@ import { ColumnLabel } from "../ColumnLabel";
 import { MedicalReviewBadge } from "../MedicalReviewBadge";
 import { useTheme } from "../theme";
 import { getShadow } from "../ui-tokens";
+import { Icon } from "../Icon";
 
 /** Creator profile (page sheet): stats from the loaded reels, follow, their videos. */
 export function CreatorSheet({
@@ -48,7 +48,7 @@ export function CreatorSheet({
                 onPress={onClose}
                 style={{ backgroundColor: colors.surface, borderColor: colors.border }}
               >
-                <Feather name="x" size={18} color={colors.foreground} />
+                <Icon set="feather" name="x" size={18} color={colors.foreground} />
               </TouchableOpacity>
             </View>
 
@@ -57,7 +57,7 @@ export function CreatorSheet({
                 <Image source={{ uri: creator.creatorAvatar }} className="h-28 w-28 rounded-full bg-neutral-200" />
               ) : (
                 <View className="h-28 w-28 items-center justify-center rounded-full" style={{ backgroundColor: colors.primaryLight }}>
-                  <Feather name="user" size={44} color={colors.primary} />
+                  <Icon set="feather" name="user" size={44} color={colors.primary} />
                 </View>
               )}
               <View className="mt-4 flex-row items-center" style={{ gap: 6 }}>
@@ -68,7 +68,7 @@ export function CreatorSheet({
                 >
                   {creator.creatorName}
                 </Text>
-                {creator.verified ? <MaterialCommunityIcons name="shield-check" size={18} color={colors.success} /> : null}
+                {creator.verified ? <Icon set="mci" name="shield-check" size={18} color={colors.success} /> : null}
               </View>
               <Text className="mt-1 text-xs font-bold uppercase tracking-wider" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                 {creator.category} creator
@@ -82,7 +82,7 @@ export function CreatorSheet({
                   className="flex-1 items-center rounded-2xl border p-4"
                   style={{ backgroundColor: colors.surface, borderColor: colors.border }}
                 >
-                  <Ionicons name={metric.icon} size={18} color={colors.primary} />
+                  <Icon set="ion" name={metric.icon} size={18} color={colors.primary} />
                   <Text className="mt-2 text-base font-black" style={{ color: colors.foreground, fontFamily: fonts.mono }}>
                     {metric.value}
                   </Text>
@@ -180,7 +180,7 @@ export function PollPanel({
     >
       <View className="mb-4 flex-row items-center justify-between">
         <View className="flex-row items-center" style={{ gap: 6 }}>
-          <MaterialCommunityIcons name="vote-outline" size={16} color={colors.primary} />
+          <Icon set="mci" name="vote-outline" size={16} color={colors.primary} />
           <Text className="text-[11.5px] font-black uppercase tracking-widest" style={{ color: colors.primary, fontFamily: fonts.body }}>
             Next topic poll
           </Text>
@@ -193,7 +193,7 @@ export function PollPanel({
           hitSlop={8}
           style={{ backgroundColor: colors.surfaceSoft }}
         >
-          <Feather name="x" size={16} color={colors.foreground} />
+          <Icon set="feather" name="x" size={16} color={colors.foreground} />
         </TouchableOpacity>
       </View>
 
@@ -309,13 +309,13 @@ export function FeedPicker({
                 >
                   <View className="flex-row items-center" style={{ gap: 8 }}>
                     {option.id === "saved" ? (
-                      <Ionicons name="bookmark-outline" size={15} color={selected ? colors.primary : colors.foreground} />
+                      <Icon set="ion" name="bookmark-outline" size={15} color={selected ? colors.primary : colors.foreground} />
                     ) : null}
                     <Text className="text-sm font-bold" style={{ color: selected ? colors.primary : colors.foreground, fontFamily: fonts.body }}>
                       {option.label}
                     </Text>
                   </View>
-                  {selected ? <Feather name="check" size={16} color={colors.primary} /> : null}
+                  {selected ? <Icon set="feather" name="check" size={16} color={colors.primary} /> : null}
                 </TouchableOpacity>
               );
             })}

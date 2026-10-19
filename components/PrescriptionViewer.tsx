@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Modal, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -9,6 +8,7 @@ import { cleanupTempFiles } from "../lib/tempFiles";
 import { AppModalHost } from "./modals/AppModalHost";
 import { PrescriptionDocumentView } from "./PrescriptionDocumentView";
 import { useTheme } from "./theme";
+import { Icon } from "./Icon";
 
 type Busy = "download" | "print" | null;
 
@@ -69,7 +69,7 @@ export function PrescriptionViewer({
       <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
         <View className="flex-row items-center px-5 pt-5 pb-3 gap-3">
           <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: colors.primaryLight }}>
-            <Feather name="file-text" size={18} color={colors.primary} />
+            <Icon set="feather" name="file-text" size={18} color={colors.primary} />
           </View>
           <View className="flex-1">
             <Text className="text-lg font-black" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
@@ -86,7 +86,7 @@ export function PrescriptionViewer({
             className="p-2 rounded-full"
             style={{ backgroundColor: colors.border }}
           >
-            <Feather name="x" size={18} color={colors.foreground} />
+            <Icon set="feather" name="x" size={18} color={colors.foreground} />
           </TouchableOpacity>
         </View>
 
@@ -95,7 +95,7 @@ export function PrescriptionViewer({
             <PrescriptionDocumentView html={doc.html} />
           ) : error ? (
             <View className="flex-1 items-center justify-center gap-3 px-8" style={{ backgroundColor: colors.surfaceSoft }}>
-              <Feather name="alert-circle" size={26} color={colors.mutedText} />
+              <Icon set="feather" name="alert-circle" size={26} color={colors.mutedText} />
               <Text className="text-center text-sm" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                 {error}
               </Text>
@@ -130,7 +130,7 @@ export function PrescriptionViewer({
             className="flex-1 flex-row items-center justify-center gap-2 rounded-full py-3.5"
             style={{ backgroundColor: colors.primary, opacity: !doc || (busy && busy !== "download") ? 0.6 : 1 }}
           >
-            {busy === "download" ? <ActivityIndicator size="small" color={colors.buttonText} /> : <Feather name="download" size={16} color={colors.buttonText} />}
+            {busy === "download" ? <ActivityIndicator size="small" color={colors.buttonText} /> : <Icon set="feather" name="download" size={16} color={colors.buttonText} />}
             <Text className="text-sm font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
               {busy === "download" ? "Preparing…" : "Download PDF"}
             </Text>
@@ -144,7 +144,7 @@ export function PrescriptionViewer({
             className="flex-1 flex-row items-center justify-center gap-2 rounded-full py-3.5 border"
             style={{ borderColor: colors.primary, opacity: !doc || (busy && busy !== "print") ? 0.6 : 1 }}
           >
-            {busy === "print" ? <ActivityIndicator size="small" color={colors.primary} /> : <Feather name="printer" size={16} color={colors.primary} />}
+            {busy === "print" ? <ActivityIndicator size="small" color={colors.primary} /> : <Icon set="feather" name="printer" size={16} color={colors.primary} />}
             <Text className="text-sm font-bold" style={{ color: colors.primary, fontFamily: fonts.body }}>
               Print
             </Text>

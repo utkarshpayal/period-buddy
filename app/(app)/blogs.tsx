@@ -1,8 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
-import {
-  type AudioPlayer,
-  createAudioPlayer,
-} from "expo-audio";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -15,7 +10,6 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useAppState } from "../../components/AppState";
 import { ArticleReader } from "../../components/content/ArticleReader";
 import { MediaTile, type MediaTone } from "../../components/content/MediaTile";
 import { EmptyState } from "../../components/EmptyState";
@@ -39,12 +33,13 @@ import {
   type Language,
   type LanguageCode,
 } from "../../lib/api";
-import { resolveAudioUri } from "../../lib/audio";
+import { useSpokenReply } from "../../hooks/useSpokenReply";
 import { SUPPORTED_LANGUAGES } from "../../lib/languages";
 import { useContentWidth } from "../../lib/layout";
 import { fetchQuery, hydrateQuery, peekQuery } from "../../lib/queryCache";
 import { createReadTimer, formatReadDuration } from "../../lib/readTimer";
 import { shareWithAppLink } from "../../lib/share";
+import { Icon } from "../../components/Icon";
 
 // One article or video as this screen shows it (feed items, bookmarks and
 // deep-linked articles all map into this).
@@ -84,7 +79,7 @@ function toneFor(item: Pick<ContentItem, "type" | "category">, colors: ThemeColo
     case "lifestyle":
       return { bg: colors.successLight, fg: colors.success, icon: "leaf-outline" };
     case "beauty":
-      return { bg: colors.accentLight, fg: colors.accentText, icon: "sparkles-outline" };
+      return { bg: colors.accentLight, fg: colors.accentText, icon: "flower-outline" };
     default:
       return { bg: colors.skyLight, fg: colors.sky, icon: "book-outline" };
   }
@@ -147,6 +142,8 @@ type FeedResponse = Awaited<ReturnType<typeof blogsApi.getFeed>>;
 const DEFAULT_FEED_CACHE_KEY = "blogs:feed:type=all:category=all:p1";
 const FEED_CACHE = { staleMs: 5 * 60_000, persist: true, topics: ["blogs" as const] };
 const PAGE_SIZE = 10;
+// useSpokenReply id for the article being read aloud.
+const ARTICLE_SPEECH_ID = "article";
 const GUTTER = 24;
 const GRID_GAP = 12;
 
@@ -156,8 +153,9 @@ export default function Blogs() {
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
   const contentWidth = useContentWidth();
-  const { slug: deepLinkedSlug } = useLocalSearchParams<{ slug?: string }>();
-  const { earnTokens } = useAppState();
+  // `openedAt` changes on every tap of a link (app/_layout.tsx), so the same
+  // article link opens again while this screen is mounted.
+  const { slug: deepLinkedSlug, openedAt } = useLocalSearchParams<{ slug?: string; openedAt?: string }>();
 
   // Filters
   const [selectedType, setSelectedType] = useState<"all" | "blog" | "reel">("all");
@@ -251,8 +249,10 @@ export default function Blogs() {
   const [translating, setTranslating] = useState(false);
   const [translated, setTranslated] = useState<{ content: string; title: string } | null>(null);
   const translateRequestId = useRef(0);
-  const [isSynthesizing, setIsSynthesizing] = useState(false);
-  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  // Read aloud in sentence chunks; stops when the reader closes or the screen goes.
+  const spoken = useSpokenReply(language);
+  const isPlayingAudio = spoken.playingId === ARTICLE_SPEECH_ID;
+  const isSynthesizing = spoken.preparingId === ARTICLE_SPEECH_ID;
 
   // Listening to the article counts as reading it, without touching the screen.
   useEffect(() => {
@@ -261,7 +261,6 @@ export default function Blogs() {
     const id = setInterval(() => readTimerRef.current?.activity(), 20_000);
     return () => clearInterval(id);
   }, [isPlayingAudio]);
-  const playerRef = useRef<AudioPlayer | null>(null);
 
   // Search goes to the server once typing pauses; meanwhile the loaded
   // list is filtered on the phone so results react at once.
@@ -397,7 +396,6 @@ export default function Blogs() {
       .catch(() => {});
     return () => {
       isMounted = false;
-      playerRef.current?.release();
     };
   }, []);
 
@@ -420,7 +418,7 @@ export default function Blogs() {
       isMounted = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only meant to fire once for the initial deep link, not re-run when handleOpenItem is redefined each render
-  }, [deepLinkedSlug]);
+  }, [deepLinkedSlug, openedAt]);
 
   async function handleLoadMore() {
     if (loadingMore || !hasMore) return;
@@ -481,7 +479,6 @@ export default function Blogs() {
       else next.add(id);
       return next;
     });
-    if (!wasBookmarked) earnTokens(2);
 
     try {
       const result = await blogsApi.toggleBookmark(id);
@@ -509,14 +506,10 @@ export default function Blogs() {
     }
   }
 
-  function stopAudio() {
-    playerRef.current?.pause();
-    setIsPlayingAudio(false);
-  }
+  const stopAudio = spoken.stop;
 
   /** Videos play in the Reels screen; articles open in the reader. */
   async function handleOpenItem(item: ContentItem, preloaded?: Blog) {
-    earnTokens(1);
     if (item.type === "reel") {
       router.push({ pathname: "/(app)/reels", params: { reelId: item.id } });
       return;
@@ -538,13 +531,16 @@ export default function Blogs() {
     if (preloaded || !item.slug) return;
 
     setArticleLoading(true);
+    // A slow answer for an article that was closed (or swapped for another)
+    // must not land in the one being read.
+    const stillOpen = () => readBlogIdRef.current === item.id;
     try {
       const blog = await blogsApi.getBlogBySlug(item.slug);
-      setFullBlog(blog);
+      if (stillOpen()) setFullBlog(blog);
     } catch {
-      setFullBlog(null);
+      if (stillOpen()) setFullBlog(null);
     } finally {
-      setArticleLoading(false);
+      if (stillOpen()) setArticleLoading(false);
     }
   }
 
@@ -582,41 +578,20 @@ export default function Blogs() {
     } catch (error) {
       if (requestId !== translateRequestId.current) return;
       setLanguage(previous);
-      alert("Couldn't translate", error instanceof Error ? error.message : "Please try again.");
+      alert("Couldn't translate", getFriendlyErrorMessage(error));
     } finally {
       if (requestId === translateRequestId.current) setTranslating(false);
     }
   }
 
-  async function handleListen() {
-    if (isPlayingAudio) {
+  function handleListen() {
+    if (isPlayingAudio || isSynthesizing) {
       stopAudio();
       return;
     }
-
     const text = translated?.content || fullBlog?.content || selectedItem?.summary;
     if (!text) return;
-
-    playerRef.current?.pause();
-    playerRef.current?.release();
-    playerRef.current = null;
-
-    setIsSynthesizing(true);
-    try {
-      const { audioBase64, audioCodec } = await speechApi.synthesize({ languageCode: language, text });
-      const uri = await resolveAudioUri(audioBase64, audioCodec);
-      const player = createAudioPlayer({ uri });
-      playerRef.current = player;
-      player.addListener("playbackStatusUpdate", (status) => {
-        if (status.didJustFinish) setIsPlayingAudio(false);
-      });
-      player.play();
-      setIsPlayingAudio(true);
-    } catch (error) {
-      alert("Couldn't play audio", error instanceof Error ? error.message : "Please try again.");
-    } finally {
-      setIsSynthesizing(false);
-    }
+    spoken.speak(ARTICLE_SPEECH_ID, text).catch((error: unknown) => alert("Couldn't play audio", getFriendlyErrorMessage(error)));
   }
 
   async function handleShareContent(item: ContentItem) {
@@ -625,7 +600,6 @@ export default function Blogs() {
         `Read "${item.title}" on Nura.`,
         item.slug ? `blogs?slug=${encodeURIComponent(item.slug)}` : "blogs",
       );
-      earnTokens(3);
     } catch {
       alert("Couldn't share", "Unable to open the share sheet right now.");
     }
@@ -772,7 +746,7 @@ export default function Blogs() {
             backgroundColor: colors.surfaceSoft,
           }}
         >
-          <Ionicons name="cloud-offline-outline" size={16} color={colors.mutedText} />
+          <Icon set="ion" name="cloud-offline-outline" size={16} color={colors.mutedText} />
           <Text style={{ flex: 1, color: colors.mutedText, fontSize: 13, lineHeight: 18, fontFamily: fonts.body }}>
             Showing articles from your last visit. Pull down to refresh.
           </Text>

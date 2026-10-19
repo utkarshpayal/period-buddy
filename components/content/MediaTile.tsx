@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import { Image, Text, TouchableOpacity, View, type StyleProp, type ViewStyle } from "react-native";
 import { useTheme } from "../theme";
 import { getShadow } from "../ui-tokens";
+import { Icon } from "../Icon";
 
 type IconName = React.ComponentProps<typeof Ionicons>["name"];
 
@@ -26,20 +27,21 @@ export function MediaCover({
   iconSize?: number;
   children?: React.ReactNode;
 }) {
-  const [failed, setFailed] = useState(false);
-  const showImage = Boolean(imageUrl) && !failed;
+  // Remembers which URL failed, so a recycled tile with a new image tries again.
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const showImage = Boolean(imageUrl) && failedUrl !== imageUrl;
   return (
     <View style={{ width: "100%", aspectRatio, backgroundColor: tone.bg, alignItems: "center", justifyContent: "center" }}>
       {showImage ? (
         <Image
           source={{ uri: imageUrl! }}
           resizeMode="cover"
-          onError={() => setFailed(true)}
+          onError={() => setFailedUrl(imageUrl ?? null)}
           style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
           accessibilityIgnoresInvertColors
         />
       ) : (
-        <Ionicons name={tone.icon} size={iconSize} color={tone.fg} />
+        <Icon set="ion" name={tone.icon} size={iconSize} color={tone.fg} />
       )}
       {children}
     </View>
@@ -63,7 +65,7 @@ function VideoBadges({ duration, large }: { duration?: string | null; large?: bo
           backgroundColor: "rgba(0,0,0,0.5)",
         }}
       >
-        <Ionicons name="play" size={large ? 22 : 16} color="#FFFFFF" style={{ marginLeft: 2 }} />
+        <Icon set="ion" name="play" size={large ? 22 : 16} color="#FFFFFF" style={{ marginLeft: 2 }} />
       </View>
       {duration ? (
         <View
@@ -112,7 +114,7 @@ function SaveButton({ saved, onPress }: { saved: boolean; onPress: () => void })
         borderColor: colors.border,
       }}
     >
-      <Ionicons name={saved ? "bookmark" : "bookmark-outline"} size={17} color={saved ? colors.primaryDark : colors.foreground} />
+      <Icon set="ion" name={saved ? "bookmark" : "bookmark-outline"} size={17} color={saved ? colors.primaryDark : colors.foreground} />
     </TouchableOpacity>
   );
 }

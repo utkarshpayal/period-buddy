@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, {
   createContext,
@@ -9,6 +8,7 @@ import React, {
 } from "react";
 import { TouchableOpacity, View } from "react-native";
 import { useAppConfig } from "./app-config";
+import { Icon } from "./Icon";
 
 type ThemeMode = "light" | "dark";
 
@@ -229,6 +229,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
           setMode(storedMode);
         }
       })
+      // Unreadable storage: keep the default theme rather than an unhandled rejection.
+      .catch(() => {})
       .finally(() => {
         if (isMounted) setHasHydrated(true);
       });
@@ -289,7 +291,7 @@ export function ThemeToggle() {
       />
 
       <View className="flex-1 items-center justify-center z-10">
-        <Ionicons
+        <Icon set="ion"
           name="sunny"
           size={16}
           color={!isDark ? colors.buttonText : colors.mutedText}
@@ -297,7 +299,7 @@ export function ThemeToggle() {
       </View>
 
       <View className="flex-1 items-center justify-center z-10">
-        <Ionicons
+        <Icon set="ion"
           name="moon"
           size={16}
           color={isDark ? colors.buttonText : colors.mutedText}

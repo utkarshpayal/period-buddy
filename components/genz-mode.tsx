@@ -83,6 +83,7 @@ export function GenZModeProvider({ children }: { children: React.ReactNode }) {
       .then((stored) => {
         if (isMounted && stored === "true") setEnabledState(true);
       })
+      .catch(() => {})
       .finally(() => {
         if (isMounted) setHasHydrated(true);
       });

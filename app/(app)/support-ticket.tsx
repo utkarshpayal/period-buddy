@@ -1,10 +1,7 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams } from "expo-router";
 import React, { useRef, useState } from "react";
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
   RefreshControl,
   ScrollView,
   StatusBar,
@@ -22,6 +19,8 @@ import { useAsyncLoad } from "../../hooks/useAsyncLoad";
 import { getFriendlyErrorMessage, supportApi, type SupportTicket } from "../../lib/api";
 import { useSecureScreen } from "../../lib/screenPrivacy";
 import { REPLY_MAX, ticketTimeLabel } from "../../lib/support";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import { Icon } from "../../components/Icon";
 
 /** One support ticket: the original message, the reply thread and a composer. */
 export default function SupportTicketScreen() {
@@ -101,7 +100,7 @@ export default function SupportTicketScreen() {
 
       <LoadingErrorState loading={loading && !ticket} error={ticket ? null : error} offline={offline} onRetry={() => reload()}>
         {ticket ? (
-          <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          <KeyboardAvoidingView className="flex-1" behavior="padding">
             <ScrollView
               ref={scrollRef}
               className="flex-1"
@@ -122,7 +121,7 @@ export default function SupportTicketScreen() {
                 <Text style={{ color: colors.foreground, fontSize: 17, fontWeight: "700", fontFamily: fonts.heading }}>{ticket.subject}</Text>
                 {ticket.meta ? (
                   <View className="flex-row items-center" style={{ gap: 6 }}>
-                    <Ionicons name="phone-portrait-outline" size={14} color={colors.mutedText} />
+                    <Icon set="ion" name="phone-portrait-outline" size={14} color={colors.mutedText} />
                     <Text numberOfLines={1} style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body, flexShrink: 1 }}>
                       App info attached
                       {ticket.meta.appVersion ? ` · v${ticket.meta.appVersion}` : ""}
@@ -183,7 +182,7 @@ export default function SupportTicketScreen() {
                       opacity: !draft.trim() || sending ? 0.5 : 1,
                     }}
                   >
-                    {sending ? <ActivityIndicator color={colors.buttonText} /> : <Ionicons name="send" size={18} color={colors.buttonText} />}
+                    {sending ? <ActivityIndicator color={colors.buttonText} /> : <Icon set="ion" name="send" size={18} color={colors.buttonText} />}
                   </TouchableOpacity>
                 </View>
               </View>

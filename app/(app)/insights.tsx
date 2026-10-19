@@ -13,6 +13,8 @@ import { useAsyncLoad } from "../../hooks/useAsyncLoad";
 import { insightsApi } from "../../lib/api";
 import type { CyclePhase } from "../../lib/cycle";
 import { isCyclePhase, PHASE_COPY } from "../../lib/cycleCopy";
+import { useSecureScreen } from "../../lib/screenPrivacy";
+import { Icon } from "../../components/Icon";
 
 type DailyInsights = Awaited<ReturnType<typeof insightsApi.getDaily>>;
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
@@ -38,7 +40,7 @@ function useCardStyle() {
 function TintIcon({ name, color, bg, size = 36 }: { name: IconName; color: string; bg: string; size?: number }) {
   return (
     <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: bg, alignItems: "center", justifyContent: "center" }}>
-      <MaterialCommunityIcons name={name} size={Math.round(size * 0.5)} color={color} />
+      <Icon set="mci" name={name} size={Math.round(size * 0.5)} color={color} />
     </View>
   );
 }
@@ -101,7 +103,7 @@ function SuggestionGroup({
       </View>
       {items.map((item, idx) => (
         <View key={`${item}-${idx}`} style={{ flexDirection: "row", alignItems: "flex-start", gap: 10, paddingTop: 8 }}>
-          <MaterialCommunityIcons name="circle-medium" size={18} color={color} style={{ marginTop: 2 }} />
+          <Icon set="mci" name="circle-medium" size={18} color={color} style={{ marginTop: 2 }} />
           <Text style={{ flex: 1, fontSize: 15, lineHeight: 22, fontWeight: "400", color: colors.foreground, fontFamily: fonts.body }}>
             {item}
           </Text>
@@ -146,6 +148,7 @@ function InsightsSkeleton() {
 }
 
 export default function DailyInsightsScreen() {
+  useSecureScreen("insights");
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
   const card = useCardStyle();

@@ -1,7 +1,6 @@
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, RefreshControl, ScrollView, StatusBar, Text, TextInput, TouchableOpacity, View } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { ActivityIndicator, RefreshControl, StatusBar, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader, SectionHeader } from "../../components/ScreenHeader";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
@@ -12,11 +11,13 @@ import { getHeroGradient, getShadow } from "../../components/ui-tokens";
 import { IconCircle } from "../../components/wellbeing/WellbeingUI";
 import { CashfreeCheckoutModal } from "../../components/CashfreeCheckoutModal";
 import { PaymentSheet } from "../../components/PaymentSheet";
+import { CYCLE_SUFFIX } from "../../components/subscription/billing";
 import { PaymentTrustFooter } from "../../components/subscription/PaymentTrustFooter";
 import { PurchaseConfirmSheet } from "../../components/subscription/PurchaseConfirmSheet";
 import { PurchaseResultPanel } from "../../components/subscription/PurchaseResultPanel";
 import { usePaymentCheckout } from "../../hooks/usePaymentCheckout";
 import { useDataRefresh } from "../../hooks/useDataRefresh";
+import { alert } from "../../lib/alert";
 import { formatShortDate } from "../../lib/format";
 import {
   getFriendlyErrorMessage,
@@ -28,12 +29,8 @@ import {
   type SubscriptionFeature,
   type SubscriptionPlan,
 } from "../../lib/api";
-
-const CYCLE_SUFFIX: Record<BillingCycle, string> = {
-  monthly: "/mo",
-  yearly: "/yr",
-  one_time: " once",
-};
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
+import { Icon } from "../../components/Icon";
 
 const PERIOD_LABEL: Record<BillingCycle, string> = {
   monthly: "per month",
@@ -91,8 +88,19 @@ export default function SubscriptionScreen() {
     recheckPending,
   } = usePaymentCheckout();
 
-  const load = useCallback(async () => {
-    setError(null);
+  const hasDataRef = useRef(false);
+  // Only the newest load may write (pull-to-refresh, a purchase and a
+  // background refresh can overlap).
+  const loadSeq = useRef(0);
+
+  /**
+   * Fetches the whole page. `quiet`: a background refresh, so a failure keeps
+   * what's on screen. Otherwise an error replaces the page only when there is
+   * nothing to show yet; with data on screen it's an alert instead.
+   */
+  const load = useCallback(async (quiet = false) => {
+    const seq = ++loadSeq.current;
+    if (!quiet) setError(null);
     try {
       const [meResult, plansResult, featuresResult, historyResult] = await Promise.all([
         subscriptionApi.getMe(),
@@ -100,41 +108,35 @@ export default function SubscriptionScreen() {
         subscriptionApi.getFeatures(),
         subscriptionApi.getHistory(),
       ]);
+      if (seq !== loadSeq.current) return;
+      hasDataRef.current = true;
       setMe(meResult);
       setPlans(plansResult);
       setFeatures(featuresResult);
       setHistory(historyResult);
+      setError(null);
     } catch (err) {
-      setError(getFriendlyErrorMessage(err));
+      if (seq !== loadSeq.current || quiet) return;
+      if (hasDataRef.current) alert("Couldn't refresh", getFriendlyErrorMessage(err));
+      else setError(getFriendlyErrorMessage(err));
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (seq === loadSeq.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, []);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
   // Purchases made elsewhere (a PaywallModal) update plans/history here too.
-  // Quiet: a failure keeps the current page instead of an error state.
-  useDataRefresh(["subscription"], async () => {
-    const [meResult, plansResult, featuresResult, historyResult] = await Promise.all([
-      subscriptionApi.getMe(),
-      subscriptionApi.getPlans(),
-      subscriptionApi.getFeatures(),
-      subscriptionApi.getHistory(),
-    ]);
-    setMe(meResult);
-    setPlans(plansResult);
-    setFeatures(featuresResult);
-    setHistory(historyResult);
-    setError(null);
-  });
+  useDataRefresh(["subscription"], () => load(true));
 
   const handleRefresh = () => {
     setRefreshing(true);
-    load();
+    void load();
   };
 
   const isUnlocked = (key: string) =>
@@ -143,39 +145,54 @@ export default function SubscriptionScreen() {
   // Opening the confirm sheet previews the coupon (if one was typed) against
   // this specific item — the same preview-then-apply flow PaywallModal uses,
   // instead of blindly carrying an unvalidated code into checkout (docs/fixes.md 6.3).
+  // A preview for the sheet that's no longer open (closed, or another item
+  // opened since) must not land on the current one and be sent with it.
+  const previewSeq = useRef(0);
+
   async function openConfirm(target: ConfirmTarget) {
+    const seq = ++previewSeq.current;
     setConfirmTarget(target);
     setCouponPreview(null);
     setCouponPreviewError(null);
     const code = couponCode.trim();
-    if (!code) return;
+    if (!code) {
+      setPreviewingCoupon(false);
+      return;
+    }
     setPreviewingCoupon(true);
     try {
       const preview = await subscriptionApi.applyCoupon({ code, ...target.payload });
-      setCouponPreview(preview);
+      if (seq === previewSeq.current) setCouponPreview(preview);
     } catch (err) {
-      setCouponPreviewError(getFriendlyErrorMessage(err));
+      if (seq === previewSeq.current) setCouponPreviewError(getFriendlyErrorMessage(err));
     } finally {
-      setPreviewingCoupon(false);
+      if (seq === previewSeq.current) setPreviewingCoupon(false);
     }
   }
 
+  function closeConfirm() {
+    previewSeq.current += 1;
+    setPreviewingCoupon(false);
+    setConfirmTarget(null);
+  }
+
   async function handleConfirmPurchase() {
-    if (!confirmTarget) return;
+    // Wait for the coupon check, or the purchase would go out without it.
+    if (!confirmTarget || previewingCoupon) return;
     const outcome = await startPurchase(confirmTarget.key, confirmTarget.payload, {
       couponCode: couponPreview ? couponCode.trim() : undefined,
       title: confirmTarget.label,
     });
-    setConfirmTarget(null);
+    closeConfirm();
     if (outcome?.free) {
       setCouponCode("");
-      load();
+      void load();
     }
   }
 
   function handleResultDone() {
     setPurchaseResult(null);
-    load();
+    void load();
   }
 
   const entitlementLabel = (e: Entitlement) => {
@@ -274,7 +291,7 @@ export default function SubscriptionScreen() {
         <LoadingErrorState
           loading={loading}
           error={error}
-          onRetry={load}
+          onRetry={() => void load()}
           loadingLabel="Loading your subscription…"
           skeleton={
             <View style={{ paddingHorizontal: 24, paddingTop: 12, gap: 14 }}>
@@ -295,9 +312,9 @@ export default function SubscriptionScreen() {
             />
           ) : (
           <View className="flex-1">
-          <ScrollView
+          <KeyboardAwareScrollView
+            bottomOffset={24}
             showsVerticalScrollIndicator={false}
-            automaticallyAdjustKeyboardInsets
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 12, paddingBottom: selectedPlan ? 140 : 48 }}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
@@ -311,7 +328,7 @@ export default function SubscriptionScreen() {
             >
               <View className="flex-row items-center" style={{ gap: 14 }}>
                 <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: "rgba(255,255,255,0.22)", alignItems: "center", justifyContent: "center" }}>
-                  <MaterialCommunityIcons name={pricingOff ? "gift-outline" : activeEntitlements.length > 0 ? "crown-outline" : "star-four-points-outline"} size={24} color="#FFFFFF" />
+                  <Icon set="mci" name={pricingOff ? "gift-outline" : activeEntitlements.length > 0 ? "crown-outline" : "star-outline"} size={24} color="#FFFFFF" />
                 </View>
                 <View className="flex-1">
                   <Text style={{ color: "rgba(255,255,255,0.85)", fontSize: 11.5, fontWeight: "800", letterSpacing: 0.8, textTransform: "uppercase", fontFamily: fonts.body }}>
@@ -332,7 +349,7 @@ export default function SubscriptionScreen() {
                       className="flex-row items-center"
                       style={{ gap: 10, paddingVertical: 10, borderTopWidth: i === 0 ? 0 : 1, borderTopColor: "rgba(255,255,255,0.18)" }}
                     >
-                      <Ionicons name="checkmark-circle" size={17} color="#FFFFFF" />
+                      <Icon set="ion" name="checkmark-circle" size={17} color="#FFFFFF" />
                       <Text numberOfLines={1} style={{ flex: 1, color: "#FFFFFF", fontSize: 14, fontWeight: "700", fontFamily: fonts.body }}>
                         {entitlementLabel(e)}
                       </Text>
@@ -381,7 +398,7 @@ export default function SubscriptionScreen() {
                             className="flex-row items-center"
                             style={{ position: "absolute", top: -11, left: 18, gap: 4, paddingHorizontal: 10, height: 22, borderRadius: 11, backgroundColor: colors.primary }}
                           >
-                            <Ionicons name="star" size={11} color={colors.buttonText} />
+                            <Icon set="ion" name="star" size={11} color={colors.buttonText} />
                             <Text numberOfLines={1} style={{ color: colors.buttonText, fontSize: 11.5, fontWeight: "800", letterSpacing: 0.4, textTransform: "uppercase", fontFamily: fonts.body }}>
                               {plan.badge || "Recommended"}
                             </Text>
@@ -408,11 +425,11 @@ export default function SubscriptionScreen() {
                           </View>
                           {unlocked ? (
                             <View className="flex-row items-center" style={{ gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: colors.successLight }}>
-                              <Ionicons name="checkmark-circle" size={14} color={colors.success} />
+                              <Icon set="ion" name="checkmark-circle" size={14} color={colors.success} />
                               <Text style={{ color: colors.success, fontSize: 12.5, fontWeight: "800", fontFamily: fonts.body }}>Current</Text>
                             </View>
                           ) : (
-                            <Ionicons name={isSelected ? "radio-button-on" : "radio-button-off"} size={24} color={isSelected ? colors.primary : colors.mutedText} />
+                            <Icon set="ion" name={isSelected ? "radio-button-on" : "radio-button-off"} size={24} color={isSelected ? colors.primary : colors.mutedText} />
                           )}
                         </View>
 
@@ -436,7 +453,7 @@ export default function SubscriptionScreen() {
                             {shown.map((key) => (
                               <View key={key} className="flex-row items-center" style={{ gap: 10 }}>
                                 <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: colors.successLight, alignItems: "center", justifyContent: "center" }}>
-                                  <Ionicons name="checkmark" size={13} color={colors.success} />
+                                  <Icon set="ion" name="checkmark" size={13} color={colors.success} />
                                 </View>
                                 <Text numberOfLines={1} style={{ flex: 1, color: colors.foreground, fontSize: 14, fontFamily: fonts.body }}>
                                   {featureName(key)}
@@ -471,7 +488,7 @@ export default function SubscriptionScreen() {
                   }}
                 >
                   <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: colors.goldLight, alignItems: "center", justifyContent: "center" }}>
-                    <Ionicons name="pricetag-outline" size={16} color={colors.gold} />
+                    <Icon set="ion" name="pricetag-outline" size={16} color={colors.gold} />
                   </View>
                   <TextInput
                     value={couponCode}
@@ -485,7 +502,7 @@ export default function SubscriptionScreen() {
                   />
                   {couponCode ? (
                     <TouchableOpacity onPress={() => setCouponCode("")} hitSlop={8} accessibilityRole="button" accessibilityLabel="Clear coupon">
-                      <Ionicons name="close-circle" size={18} color={colors.mutedText} />
+                      <Icon set="ion" name="close-circle" size={18} color={colors.mutedText} />
                     </TouchableOpacity>
                   ) : null}
                 </View>
@@ -528,7 +545,7 @@ export default function SubscriptionScreen() {
                         </View>
                         {unlocked ? (
                           <View className="flex-row items-center" style={{ gap: 4 }}>
-                            <Ionicons name="checkmark-circle" size={16} color={colors.success} />
+                            <Icon set="ion" name="checkmark-circle" size={16} color={colors.success} />
                             <Text style={{ color: colors.success, fontSize: 13, fontWeight: "800", fontFamily: fonts.body }}>Unlocked</Text>
                           </View>
                         ) : (
@@ -597,7 +614,7 @@ export default function SubscriptionScreen() {
             )}
 
             <PaymentTrustFooter />
-          </ScrollView>
+          </KeyboardAwareScrollView>
 
           {/* Sticky CTA for the selected plan */}
           {selectedPlan ? (
@@ -663,7 +680,7 @@ export default function SubscriptionScreen() {
         }
         confirming={confirmTarget !== null && purchasingKey === confirmTarget.key}
         onConfirm={handleConfirmPurchase}
-        onClose={() => setConfirmTarget(null)}
+        onClose={closeConfirm}
       />
 
       {/* checkout is only ever set from startPurchase's non-free branch,

@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import Animated, {
@@ -9,6 +8,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { NuraAvatar } from "./NuraAvatar";
 import { useTheme } from "./theme";
+import { Icon } from "./Icon";
 
 /**
  * Shared bottom-tab item for both the dashboard and partner-view tab bars
@@ -57,7 +57,6 @@ export function TabBarItem({
         <View
           style={{
             borderRadius: 16,
-            overflow: "hidden",
             paddingHorizontal: 18,
             paddingVertical: 6,
             alignItems: "center",
@@ -73,15 +72,23 @@ export function TabBarItem({
               pillStyle,
             ]}
           />
-          <Ionicons
-            name={(focused ? iconFocused : iconUnfocused) as never}
-            size={20}
-            color={focused ? colors.primary : colors.mutedText}
-          />
+          {/* Its own layer above the highlight: on Android an animated
+              (opacity/scale) sibling can otherwise draw over the SVG icon. */}
+          <View style={{ zIndex: 1, elevation: 1 }} pointerEvents="none">
+            <Icon
+              set="ion"
+              name={focused ? iconFocused : iconUnfocused}
+              size={21}
+              strokeWidth={focused ? 2.4 : 2}
+              color={focused ? colors.primary : colors.mutedText}
+            />
+          </View>
           {showBadge && (
             <View
               style={{
                 position: "absolute",
+                zIndex: 2,
+                elevation: 2,
                 top: 3,
                 right: 12,
                 width: 6,

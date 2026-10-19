@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -34,6 +33,7 @@ import {
 } from "../../components/wellbeing/WellbeingUI";
 import { MedicalReviewBadge } from "../../components/MedicalReviewBadge";
 import { pickMedicalReview } from "../../lib/medicalReview";
+import { Icon } from "../../components/Icon";
 
 type HygieneCategory = "products" | "daily" | "activities" | "prevention" | "more";
 
@@ -44,7 +44,7 @@ const TOPICS: Record<HygieneCategory, { label: string; icon: string; tone: Wellb
   daily: { label: "Daily care", icon: "flower-outline", tone: "mint" },
   activities: { label: "Activities", icon: "swim", tone: "sky" },
   prevention: { label: "Prevention", icon: "shield-checkmark-outline", tone: "lavender" },
-  more: { label: "More tips", icon: "sparkles-outline", tone: "amber" },
+  more: { label: "More tips", icon: "bulb-outline", tone: "amber" },
 };
 
 const MAIN_TOPICS = ["products", "daily", "activities", "prevention"] as const;
@@ -275,7 +275,7 @@ export default function Hygiene() {
       >
         <View className="flex-row items-start justify-between">
           <IconCircle icon={items[0]?.icon} fallback={topic.icon} tone={tone} size={42} solid={isSelected} />
-          {isSelected ? <Ionicons name="checkmark-circle" size={20} color={tone.fg} /> : null}
+          {isSelected ? <Icon set="ion" name="checkmark-circle" size={20} color={tone.fg} /> : null}
         </View>
         <Text
           numberOfLines={1}
@@ -320,7 +320,7 @@ export default function Hygiene() {
               className="flex-row items-center"
               style={{ gap: 8, marginBottom: 14, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 14, backgroundColor: colors.surfaceSoft }}
             >
-              <Ionicons name="cloud-offline-outline" size={16} color={colors.mutedText} />
+              <Icon set="ion" name="cloud-offline-outline" size={16} color={colors.mutedText} />
               <Text style={{ flex: 1, color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "500", fontFamily: fonts.body }}>
                 Showing saved tips. Pull down to refresh.
               </Text>

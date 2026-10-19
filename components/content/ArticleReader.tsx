@@ -1,5 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View, type ScrollViewProps } from "react-native";
 import Animated, { FadeInDown, FadeOutDown, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import Markdown from "react-native-markdown-display";
@@ -11,6 +10,7 @@ import { HeaderIconButton } from "../ScreenHeader";
 import { SkeletonBlock } from "../Skeleton";
 import { useTheme } from "../theme";
 import { MediaCover, type MediaTone } from "./MediaTile";
+import { Icon } from "../Icon";
 
 const GUTTER = 24;
 
@@ -103,7 +103,8 @@ export function ArticleReader(props: ArticleReaderProps) {
     scrollProps?.onScroll?.(e);
   };
 
-  const markdownStyles = {
+  // Stable between renders: a new object makes Markdown re-parse the whole article.
+  const markdownStyles = useMemo(() => ({
     body: { color: colors.foreground, fontFamily: fonts.body, fontSize: 16, lineHeight: 26, fontWeight: "400" as const },
     paragraph: { marginTop: 0, marginBottom: 14 },
     heading1: { color: colors.foreground, fontFamily: fonts.heading, fontSize: 22, lineHeight: 29, fontWeight: "800" as const, marginTop: 24, marginBottom: 10 },
@@ -131,7 +132,7 @@ export function ArticleReader(props: ArticleReaderProps) {
     code_inline: { backgroundColor: colors.surfaceSoft, color: colors.foreground, borderRadius: 4, paddingHorizontal: 4 },
     table: { borderColor: colors.border },
     tr: { borderColor: colors.border },
-  };
+  }), [colors, fonts]);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -153,9 +154,9 @@ export function ArticleReader(props: ArticleReaderProps) {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 32 }}
+        scrollEventThrottle={16}
         {...scrollProps}
         onScroll={onScroll}
-        scrollEventThrottle={16}
       >
         <View style={{ paddingHorizontal: GUTTER, paddingTop: 4 }}>
           <View style={{ borderRadius: 24, overflow: "hidden", borderWidth: 1, borderColor: colors.border }}>
@@ -193,7 +194,7 @@ export function ArticleReader(props: ArticleReaderProps) {
 
           {translated ? (
             <View className="flex-row items-center flex-wrap" style={{ marginTop: 16, gap: 6 }}>
-              <Ionicons name="language-outline" size={16} color={colors.mutedText} />
+              <Icon set="ion" name="language-outline" size={16} color={colors.mutedText} />
               <Text style={{ color: colors.mutedText, fontSize: 13, fontWeight: "500", fontFamily: fonts.body }}>
                 Showing {languageLabel}
               </Text>
@@ -290,7 +291,7 @@ export function ArticleReader(props: ArticleReaderProps) {
             {preparingAudio ? (
               <ActivityIndicator size="small" color={colors.buttonText} />
             ) : (
-              <Ionicons name={listening ? "stop" : "play"} size={18} color={listening ? colors.primaryDark : colors.buttonText} />
+              <Icon set="ion" name={listening ? "stop" : "play"} size={18} color={listening ? colors.primaryDark : colors.buttonText} />
             )}
             <Text
               numberOfLines={1}
@@ -323,12 +324,12 @@ export function ArticleReader(props: ArticleReaderProps) {
               {translating ? (
                 <ActivityIndicator size="small" color={colors.primary} />
               ) : (
-                <Ionicons name="language-outline" size={18} color={colors.foreground} />
+                <Icon set="ion" name="language-outline" size={18} color={colors.foreground} />
               )}
               <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={{ maxWidth: 96, fontSize: 14, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>
                 {translating ? "Translating…" : languageLabel}
               </Text>
-              <Ionicons name={languagesOpen ? "chevron-down" : "chevron-up"} size={16} color={colors.mutedText} />
+              <Icon set="ion" name={languagesOpen ? "chevron-down" : "chevron-up"} size={16} color={colors.mutedText} />
             </TouchableOpacity>
           ) : null}
         </View>

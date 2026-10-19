@@ -144,3 +144,9 @@ test("comment pages are appended without repeats", () => {
   assert.equal(appendComments(list, [row("2")]), list);
   assert.deepEqual(appendComments(list, [row("2"), row("3")]).map((c) => c.id), ["1", "2", "3"]);
 });
+
+test("getYouTubeId rejects ids with characters a real id can't have", () => {
+  assert.equal(getYouTubeId("https://youtu.be/abc'};alert(1)//"), null);
+  assert.equal(getYouTubeId("https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=10"), "dQw4w9WgXcQ");
+  assert.equal(getYouTubeId("https://youtu.be/dQw4w9WgXcQ"), "dQw4w9WgXcQ");
+});
