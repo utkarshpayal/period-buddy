@@ -191,7 +191,7 @@
       "router": {},
       "apiBaseUrls": {
         "prod": "https://www.backend.thenura.care",
-        "stage": "https://www.stage.backend.thenura.care"
+        "stage": "https://stage.backend.thenura.care"
       },
       "googleClientIds": {
         "web": "729251216529-95q69sjt3nh6tl6m0ak0ieoq8dbtjuqr.apps.googleusercontent.com",
