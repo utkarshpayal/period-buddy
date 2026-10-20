@@ -193,7 +193,8 @@ export function BottomSheet({
       <GestureDetector gesture={pan}>
         <View
           accessible={false}
-          style={{ alignItems: "center", justifyContent: "center", height: 22, marginBottom: 2 }}
+          // Full width even when the sheet centres its content, so the whole top edge drags.
+          style={{ alignSelf: "stretch", alignItems: "center", justifyContent: "center", height: 22, marginBottom: 2 }}
         >
           <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border }} />
         </View>
