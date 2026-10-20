@@ -83,6 +83,7 @@ export function DoctorProfileSheet({
       <View className="flex-1" style={{ backgroundColor: colors.background }}>
         <View className="flex-row justify-end px-4" style={{ paddingTop: Math.max(12, insets.top) }}>
           <TouchableOpacity
+            hitSlop={6}
             onPress={onClose}
             accessibilityLabel="Close profile"
             className="h-9 w-9 rounded-full items-center justify-center"

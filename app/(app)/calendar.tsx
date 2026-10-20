@@ -133,6 +133,7 @@ export default function CalendarScreen() {
               const active = view === v;
               return (
                 <TouchableOpacity
+                  hitSlop={{ top: 8, bottom: 8 }}
                   key={v}
                   onPress={() => setView(v)}
                   accessibilityRole="tab"

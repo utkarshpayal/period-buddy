@@ -80,6 +80,7 @@ export function RateSessionSheet({
         >
           <View className="flex-row justify-end">
             <TouchableOpacity
+              hitSlop={6}
               onPress={onClose}
               accessibilityLabel="Close"
               className="h-9 w-9 rounded-full items-center justify-center"
@@ -136,6 +137,7 @@ export function RateSessionSheet({
           <TextInput
             value={comment}
             onChangeText={(t) => setComment(t.slice(0, COMMENT_MAX))}
+            accessibilityLabel="Feedback, optional"
             placeholder="Anything you'd like to share? (optional)"
             placeholderTextColor={colors.mutedText}
             multiline

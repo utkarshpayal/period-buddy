@@ -66,6 +66,7 @@ export function CouponField({
         <TextInput
           value={code}
           onChangeText={(v) => onChangeCode(v.toUpperCase())}
+          accessibilityLabel="Coupon code"
           placeholder="Have a coupon code?"
           placeholderTextColor={colors.mutedText}
           autoCapitalize="characters"

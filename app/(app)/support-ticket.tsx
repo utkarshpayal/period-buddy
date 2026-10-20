@@ -152,6 +152,7 @@ export default function SupportTicketScreen() {
                   <TextInput
                     value={draft}
                     onChangeText={(t) => setDraft(t.slice(0, REPLY_MAX))}
+                    accessibilityLabel="Reply to support"
                     placeholder={ticket.status === "resolved" ? "Still need help? Reply to reopen" : "Write a reply"}
                     placeholderTextColor={colors.mutedText}
                     multiline

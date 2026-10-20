@@ -91,7 +91,8 @@ function BannerCard({ banner, width, onDismiss }: { banner: PromoBanner; width: 
   const close = banner.dismissible ? (
     <TouchableOpacity
       onPress={onDismiss}
-      hitSlop={10}
+      // 22px dot + 13px on each side = 48dp tap area (Android minimum).
+      hitSlop={13}
       accessibilityRole="button"
       accessibilityLabel="Hide this banner"
       style={{

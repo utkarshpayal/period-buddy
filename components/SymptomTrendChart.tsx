@@ -352,7 +352,7 @@ export const SymptomTrendChart = React.memo(function SymptomTrendChart({
                 accessibilityRole="tab"
                 accessibilityState={{ selected: on }}
                 accessibilityLabel={v === "chart" ? "Chart view" : "Table view"}
-                hitSlop={4}
+                hitSlop={{ top: 10, bottom: 10 }}
                 style={{
                   width: 34,
                   height: 28,
@@ -484,6 +484,7 @@ export const SymptomTrendChart = React.memo(function SymptomTrendChart({
           const pick = plotted.find((p) => p.symptom === s.symptom);
           return (
             <Pressable
+              hitSlop={{ top: 7, bottom: 7 }}
               key={s.symptom}
               onPress={() => togglePick(s.symptom)}
               accessibilityRole="checkbox"

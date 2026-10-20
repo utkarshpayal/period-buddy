@@ -248,6 +248,7 @@ export default function Predictions() {
                       : "A few days late is common. Stress, illness, travel or a change in routine can delay ovulation. If there's any chance you could be pregnant, a home test is reliable from the day your period was due."}
                 </Text>
                 <TouchableOpacity
+                  hitSlop={4}
                   onPress={() => router.push({ pathname: "/(app)/(dashboard)/tracker", params: { log: "today", focus: "flow" } })}
                   activeOpacity={0.85}
                   accessibilityRole="button"

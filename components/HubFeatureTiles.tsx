@@ -303,6 +303,7 @@ function AskHero({ tile }: { tile: HubTile }) {
             style={{ flex: 1, minWidth: 0, fontSize: 14, color: colors.foreground, fontFamily: fonts.body, paddingVertical: 0 }}
           />
           <TouchableOpacity
+            hitSlop={6}
             onPress={send}
             activeOpacity={0.8}
             accessibilityRole="button"

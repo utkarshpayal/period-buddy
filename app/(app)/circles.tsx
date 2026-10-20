@@ -169,6 +169,7 @@ function InviteCode({ code, onShare }: { code: string; onShare: () => void }) {
         {code}
       </Text>
       <TouchableOpacity
+        hitSlop={5}
         onPress={onShare}
         accessibilityRole="button"
         accessibilityLabel="Share invite"
@@ -474,6 +475,7 @@ function VibeRow({
 
   const chip = (e: string, count: number | undefined, mine: boolean | undefined) => (
     <TouchableOpacity
+      hitSlop={{ top: 10, bottom: 10 }}
       key={e}
       onPress={() => {
         setPicking(false);
@@ -527,7 +529,7 @@ function VibeRow({
             }) : used.map((r) => chip(r.emoji, r.count, r.mine))}
             <TouchableOpacity
               onPress={() => setPicking((p) => !p)}
-              hitSlop={6}
+              hitSlop={10}
               accessibilityRole="button"
               accessibilityLabel={picking ? "Close reactions" : "Add a reaction"}
               className="items-center justify-center rounded-full"

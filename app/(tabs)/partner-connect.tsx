@@ -102,7 +102,7 @@ export default function PartnerConnect() {
                 end={{ x: 1, y: 1 }}
                 style={{ flex: 1, alignItems: "center", justifyContent: "center" }}
               >
-                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Go back"
+                <TouchableOpacity hitSlop={5} accessibilityRole="button" accessibilityLabel="Go back"
                   onPress={() => router.back()}
                   activeOpacity={0.7}
                   className="absolute left-4 items-center justify-center rounded-full"
@@ -210,6 +210,7 @@ export default function PartnerConnect() {
                     }}
                     onFocus={() => setCodeFocused(true)}
                     onBlur={() => setCodeFocused(false)}
+                    accessibilityLabel="Invite code"
                     placeholder="Invite code"
                     placeholderTextColor={colors.mutedText}
                     returnKeyType="done"

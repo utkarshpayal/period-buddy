@@ -13,7 +13,12 @@ export function PostAttachmentView({ attachment }: { attachment: CommunityAttach
   if (attachment.type === "image") {
     return (
       <>
-        <Pressable onPress={() => setFullscreenVisible(true)}>
+        <Pressable
+          onPress={() => setFullscreenVisible(true)}
+          accessibilityRole="imagebutton"
+          accessibilityLabel="Photo"
+          accessibilityHint="Opens it full screen"
+        >
           <Image
             source={{ uri: attachment.url }}
             className="mt-4 w-full rounded-2xl"
@@ -193,7 +198,7 @@ function PostAudioAttachment({ url }: { url: string }) {
       className="mt-4 flex-row items-center gap-3 rounded-2xl px-4 py-3"
       style={{ backgroundColor: colors.surfaceSoft }}
     >
-      <TouchableOpacity accessibilityRole="button" accessibilityLabel={status.playing ? "Pause" : "Play"}
+      <TouchableOpacity hitSlop={6} accessibilityRole="button" accessibilityLabel={status.playing ? "Pause" : "Play"}
         activeOpacity={0.85}
         onPress={togglePlayback}
         className="w-9 h-9 rounded-full items-center justify-center"

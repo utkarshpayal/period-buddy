@@ -219,7 +219,7 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
           <Text className="text-lg font-bold" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
             Unlock Premium
           </Text>
-          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close"
+          <TouchableOpacity hitSlop={6} accessibilityRole="button" accessibilityLabel="Close"
             onPress={handleClose}
             activeOpacity={0.7}
             className="h-9 w-9 items-center justify-center rounded-full"

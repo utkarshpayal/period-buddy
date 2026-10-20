@@ -922,6 +922,7 @@ function BuddyNomination() {
                         <Text style={{ fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}>Video call</Text>
                       </View>
                       <TouchableOpacity
+                        hitSlop={{ top: 4, bottom: 4 }}
                         onPress={() => setIncomingCallFrom(null)}
                         accessibilityRole="button"
                         accessibilityLabel="Not now"
@@ -930,6 +931,7 @@ function BuddyNomination() {
                         <Text style={{ fontSize: 13, fontWeight: "700", color: colors.mutedText, fontFamily: fonts.body }}>Not now</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
+                        hitSlop={{ top: 4, bottom: 4 }}
                         onPress={() => {
                           setIncomingCallFrom(null);
                           setBuddyCall({ key: `buddy-${activeBuddyData.id}-${Date.now()}`, peerName: activeBuddyData.name });

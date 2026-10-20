@@ -189,7 +189,7 @@ export function OtpModal({ email, onClose, onVerified, visible }: OtpModalProps)
                 <Text style={{ color: colors.foreground }}>{email}</Text>
               </Text>
             </View>
-            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} className="p-1">
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} hitSlop={10} className="p-1">
               <Icon set="ion" name="close" size={20} color={colors.mutedText} />
             </TouchableOpacity>
           </View>
@@ -201,6 +201,10 @@ export function OtpModal({ email, onClose, onVerified, visible }: OtpModalProps)
                 ref={(ref) => {
                   inputRefs.current[index] = ref;
                 }}
+                accessibilityLabel={`Code digit ${index + 1} of ${digits.length}`}
+                // Lets iOS offer the code from Mail/Messages above the keyboard.
+                textContentType={index === 0 ? "oneTimeCode" : undefined}
+                autoComplete={index === 0 ? "one-time-code" : "off"}
                 keyboardType="number-pad"
                 maxLength={OTP_LENGTH}
                 onChangeText={(text) => handleChangeDigit(text, index)}

@@ -222,6 +222,7 @@ export function ChoiceChips<T extends string>({
     const on = value === option.value;
     return (
       <TouchableOpacity
+        hitSlop={{ top: 6, bottom: 6 }}
         key={option.value}
         onPress={() => onChange(option.value)}
         activeOpacity={0.8}

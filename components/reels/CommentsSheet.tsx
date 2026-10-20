@@ -376,6 +376,7 @@ export function CommentsSheet({
               ) : null}
             </View>
             <TouchableOpacity
+              hitSlop={4}
               accessibilityRole="button"
               accessibilityLabel="Post comment"
               disabled={!text.trim() || sending}

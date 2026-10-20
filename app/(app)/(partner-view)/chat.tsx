@@ -194,6 +194,7 @@ export default function PartnerViewChat() {
                 <TextInput
                   value={typedMessage}
                   onChangeText={setTypedMessage}
+                  accessibilityLabel="Message"
                   placeholder="Message..."
                   placeholderTextColor={colors.mutedText}
                   onSubmitEditing={handleSendMessage}
@@ -205,6 +206,7 @@ export default function PartnerViewChat() {
                   }}
                 />
                 <TouchableOpacity
+                  hitSlop={6}
                   disabled={!typedMessage.trim()}
                   onPress={handleSendMessage}
                   accessibilityRole="button"

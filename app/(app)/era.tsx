@@ -278,6 +278,7 @@ export default function EraScreen() {
                       const done = inCategory.filter((t) => tried.has(t.key)).length;
                       return (
                         <TouchableOpacity
+                          hitSlop={{ top: 6, bottom: 6 }}
                           key={c.key}
                           onPress={() => setCategory(c.key)}
                           activeOpacity={0.85}

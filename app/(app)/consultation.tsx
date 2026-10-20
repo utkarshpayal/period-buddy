@@ -369,6 +369,7 @@ export default function ConsultationScreen() {
                 const active = listTab === key;
                 return (
                   <TouchableOpacity
+                    hitSlop={{ top: 4, bottom: 4 }}
                     key={key}
                     onPress={() => setListTab(key)}
                     activeOpacity={0.85}

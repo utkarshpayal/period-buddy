@@ -1002,6 +1002,7 @@ export default function DayDetailsModal({
                   value={weightText}
                   onChangeText={setWeightText}
                   keyboardType="numeric"
+                  accessibilityLabel="Weight in kilograms"
                   placeholder="e.g. 60.5"
                   placeholderTextColor={colors.mutedText}
                   style={{
@@ -1024,6 +1025,7 @@ export default function DayDetailsModal({
                   value={tempText}
                   onChangeText={setTempText}
                   keyboardType="numeric"
+                  accessibilityLabel="Body temperature in degrees Celsius"
                   placeholder="e.g. 36.6"
                   placeholderTextColor={colors.mutedText}
                   style={{
@@ -1048,6 +1050,7 @@ export default function DayDetailsModal({
                 const isSelected = stressLevel === level;
                 return (
                   <TouchableOpacity
+                    hitSlop={{ top: 7, bottom: 7 }}
                     key={level}
                     onPress={() => setStressLevel(isSelected ? undefined : level)}
                     style={{
@@ -1080,6 +1083,7 @@ export default function DayDetailsModal({
             <TextInput
               value={medText}
               onChangeText={setMedText}
+              accessibilityLabel="Medicines taken"
               placeholder="e.g. Ibuprofen, Vitamins (comma separated)"
               placeholderTextColor={colors.mutedText}
               style={{
@@ -1137,6 +1141,7 @@ export default function DayDetailsModal({
               onChangeText={setNoteText}
               multiline
               numberOfLines={4}
+              accessibilityLabel="Notes for this day"
               placeholder="Describe symptoms, mood, medicine, or anything you noticed..."
               placeholderTextColor={colors.mutedText}
               style={{

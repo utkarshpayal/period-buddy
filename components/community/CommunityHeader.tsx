@@ -53,6 +53,7 @@ export function CommunityHeader({
           </Text>
         </View>
         <TouchableOpacity
+          hitSlop={6}
           activeOpacity={0.8}
           accessibilityRole="button"
           accessibilityLabel={searchVisible ? "Close search" : "Search posts"}

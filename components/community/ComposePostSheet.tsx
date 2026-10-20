@@ -264,6 +264,7 @@ export function ComposePostSheet({
             <TextInput
               multiline
               autoFocus
+              accessibilityLabel="Post text"
               placeholder="What's on your mind? Share your cycle update anonymously..."
               placeholderTextColor={colors.mutedText}
               value={newPostContent}
@@ -445,6 +446,7 @@ export function ComposePostSheet({
                 {pollOptions.map((option, index) => (
                   <View key={index} className="flex-row items-center gap-2">
                     <TextInput
+                      accessibilityLabel={`Poll option ${index + 1}`}
                       placeholder={`Option ${index + 1}`}
                       placeholderTextColor={colors.mutedText}
                       value={option}

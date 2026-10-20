@@ -214,7 +214,7 @@ export function CalendarModal({
                   onPress={pickToday}
                   accessibilityRole="button"
                   accessibilityLabel="Pick today"
-                  hitSlop={6}
+                  hitSlop={9}
                   style={{ marginLeft: 12, paddingHorizontal: 12, height: 30, borderRadius: 15, justifyContent: "center", backgroundColor: colors.surface }}
                 >
                   <Text style={{ fontSize: 13, fontWeight: "700", color: colors.primaryDark, fontFamily: fonts.body }}>Today</Text>

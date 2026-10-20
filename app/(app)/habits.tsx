@@ -261,14 +261,17 @@ export default function Habits() {
                         >
                           {habit.title}
                         </Text>
-                        <Text
-                          className="text-xs font-bold mt-0.5"
-                          numberOfLines={1}
-                          ellipsizeMode="tail"
-                          style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                        >
-                          🔥 {habit.streak} day streak · +{habit.rewardPoints ?? habit.tokens} pts
-                        </Text>
+                        <View className="flex-row items-center mt-0.5" style={{ gap: 4 }}>
+                          <Icon set="ion" name="flame" size={13} color={colors.warning} />
+                          <Text
+                            className="text-xs font-bold"
+                            numberOfLines={1}
+                            ellipsizeMode="tail"
+                            style={{ color: colors.mutedText, fontFamily: fonts.body, flexShrink: 1 }}
+                          >
+                            {habit.streak} day streak · +{habit.rewardPoints ?? habit.tokens} pts
+                          </Text>
+                        </View>
                       </View>
 
                       {/* Checkmark toggle */}

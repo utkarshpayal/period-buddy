@@ -65,6 +65,7 @@ export function OverviewHeader({
         {/* Primary-tinted (stronger once something's unread) so the bell
             reads as its own control next to the quiet streak pill. */}
         <TouchableOpacity
+          hitSlop={4}
           onPress={onOpenNotifications}
           accessibilityRole="button"
           accessibilityLabel="Notifications"

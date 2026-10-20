@@ -304,6 +304,7 @@ export function CommunityCommentsSheet({
 
             <View className="px-4 pt-2 pb-1 flex-row items-center gap-3">
               <TextInput
+                accessibilityLabel="Reply"
                 placeholder="Post your reply..."
                 placeholderTextColor={colors.mutedText}
                 value={newCommentContent}

@@ -196,7 +196,7 @@ export default function CommunityScreen() {
         try {
           await communityApi.deleteComment(postId, commentId);
         } catch {
-          alert("Error", "Could not delete comment. Please try again.");
+          alert("Couldn't delete comment", "Please check your connection and try again.");
           // Resync just this post (comments + count) in place, instead of
           // refetching page 1 of the feed, which would collapse loaded pages.
           try {
@@ -363,7 +363,7 @@ export default function CommunityScreen() {
     try {
       await communityApi.deletePost(postId);
     } catch {
-      alert("Error", "Could not delete post. Please try again.");
+      alert("Couldn't delete post", "Please check your connection and try again.");
       // Put it back where it was rather than reloading the whole feed.
       if (removed) {
         setPosts((current) => {

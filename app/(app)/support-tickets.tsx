@@ -84,6 +84,7 @@ export default function SupportTicketsScreen() {
           const selected = filter === f.id;
           return (
             <TouchableOpacity
+              hitSlop={{ top: 6, bottom: 6 }}
               key={f.id}
               onPress={() => setFilter(f.id)}
               activeOpacity={0.8}

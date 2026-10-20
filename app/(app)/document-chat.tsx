@@ -298,7 +298,7 @@ export default function DocumentChatScreen() {
                   onPress={() => setContextTitle(null)}
                   accessibilityRole="button"
                   accessibilityLabel="Ask about all documents instead"
-                  hitSlop={6}
+                  hitSlop={10}
                   style={{ width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceSoft }}
                 >
                   <Icon set="ion" name="close" size={14} color={colors.mutedText} />

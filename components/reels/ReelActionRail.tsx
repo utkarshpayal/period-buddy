@@ -85,7 +85,7 @@ export const ReelActionRail = memo(function ReelActionRail({
           <TouchableOpacity
             accessibilityRole="button"
             accessibilityLabel={`Follow ${reel.creatorName}`}
-            hitSlop={8}
+            hitSlop={12}
             onPress={onFollow}
             className="-mt-3 h-6 w-6 items-center justify-center rounded-full border-2 border-white"
             style={{ backgroundColor: colors.primary }}

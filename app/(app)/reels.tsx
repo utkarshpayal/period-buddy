@@ -341,7 +341,7 @@ export default function Reels() {
     try {
       await shareWithAppLink(`Watch "${reel.title}" by ${reel.creatorName} on Nura.`, `reels?reelId=${encodeURIComponent(reel.id)}`);
     } catch {
-      alert("Error", "Unable to open the share sheet right now.");
+      alert("Couldn't share", "The share sheet didn't open. Please try again.");
     }
   }, []);
 
@@ -579,6 +579,7 @@ export default function Reels() {
         style={{ top: insets.top + 6, gap: 12 }}
       >
         <TouchableOpacity
+          hitSlop={4}
           activeOpacity={0.78}
           accessibilityRole="button"
           accessibilityLabel="Go back"

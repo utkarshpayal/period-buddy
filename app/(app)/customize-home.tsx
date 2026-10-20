@@ -150,7 +150,7 @@ export default function CustomizeHome() {
     <TouchableOpacity
       onPress={onPress}
       disabled={disabled}
-      hitSlop={6}
+      hitSlop={9}
       accessibilityRole="button"
       accessibilityLabel={a11y}
       accessibilityState={{ disabled }}
@@ -335,6 +335,7 @@ export default function CustomizeHome() {
               const on = (style.icon ?? original?.icon ?? tile.icon) === icon;
               return (
                 <TouchableOpacity
+                  hitSlop={{ top: 6, bottom: 6 }}
                   key={icon}
                   onPress={() => set({ icon: i === 0 ? null : icon })}
                   accessibilityRole="radio"

@@ -331,12 +331,15 @@ export default function PartnerViewOverview() {
               {/* "How to support today" tip */}
               {hasCare && data?.careSuggestions?.suggestions?.[0] && (
                 <SectionCard compact>
-                  <Text
-                    className="text-[13.5px] font-black mb-1.5"
-                    style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                  >
-                    💡 How to support today
-                  </Text>
+                  <View className="flex-row items-center mb-1.5" style={{ gap: 6 }}>
+                    <Icon set="ion" name="bulb-outline" size={16} color={colors.primaryDark} />
+                    <Text
+                      className="text-[13.5px] font-black"
+                      style={{ color: colors.foreground, fontFamily: fonts.heading }}
+                    >
+                      How to support today
+                    </Text>
+                  </View>
                   <Text
                     className="text-xs font-semibold leading-5"
                     style={{ color: colors.mutedText, fontFamily: fonts.body }}
@@ -540,12 +543,12 @@ export default function PartnerViewOverview() {
                     <View className="border-t pt-4" style={{ borderColor: colors.border, gap: 16 }}>
                       {data.careSuggestions.dos && data.careSuggestions.dos.length > 0 && (
                         <View>
-                          <Text
-                            className="text-xs font-bold mb-2 flex-row items-center gap-1"
-                            style={{ color: colors.success, fontFamily: fonts.heading }}
-                          >
-                            👍 Do&apos;s for support
-                          </Text>
+                          <View className="flex-row items-center mb-2" style={{ gap: 6 }}>
+                            <Icon set="ion" name="thumbs-up-outline" size={14} color={colors.success} />
+                            <Text className="text-xs font-bold" style={{ color: colors.success, fontFamily: fonts.heading }}>
+                              Do&apos;s for support
+                            </Text>
+                          </View>
                           <View style={{ gap: 6 }}>
                             {data.careSuggestions.dos.map((item, idx) => (
                               <View key={idx} className="flex-row items-start gap-2">
@@ -569,12 +572,12 @@ export default function PartnerViewOverview() {
 
                       {data.careSuggestions.donts && data.careSuggestions.donts.length > 0 && (
                         <View>
-                          <Text
-                            className="text-xs font-bold mb-2 flex-row items-center gap-1"
-                            style={{ color: colors.danger, fontFamily: fonts.heading }}
-                          >
-                            ⚠️ Don&apos;ts to keep in mind
-                          </Text>
+                          <View className="flex-row items-center mb-2" style={{ gap: 6 }}>
+                            <Icon set="ion" name="warning-outline" size={14} color={colors.danger} />
+                            <Text className="text-xs font-bold" style={{ color: colors.danger, fontFamily: fonts.heading }}>
+                              Don&apos;ts to keep in mind
+                            </Text>
+                          </View>
                           <View style={{ gap: 6 }}>
                             {data.careSuggestions.donts.map((item, idx) => (
                               <View key={idx} className="flex-row items-start gap-2">

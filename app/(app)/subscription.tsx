@@ -550,6 +550,7 @@ export default function SubscriptionScreen() {
                           </View>
                         ) : (
                           <TouchableOpacity
+                            hitSlop={6}
                             onPress={() =>
                               openConfirm({
                                 key: feature.key,

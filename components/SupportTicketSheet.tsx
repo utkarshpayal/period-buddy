@@ -148,6 +148,7 @@ export function SupportTicketSheet({
               Help & support
             </Text>
             <TouchableOpacity
+              hitSlop={6}
               onPress={onClose}
               accessibilityLabel="Close"
               className="h-9 w-9 rounded-full items-center justify-center"
@@ -222,6 +223,7 @@ export function SupportTicketSheet({
                   const selected = category === c.id;
                   return (
                     <TouchableOpacity
+                      hitSlop={{ top: 5, bottom: 5 }}
                       key={c.id}
                       onPress={() => {
                         setCategory(c.id);
@@ -264,6 +266,7 @@ export function SupportTicketSheet({
               <TextInput
                 value={subject}
                 onChangeText={(t) => setSubject(t.slice(0, SUBJECT_MAX))}
+                accessibilityLabel="Subject"
                 placeholder="e.g. Can't log my period"
                 placeholderTextColor={colors.mutedText}
                 returnKeyType="next"
@@ -275,6 +278,7 @@ export function SupportTicketSheet({
               <TextInput
                 value={message}
                 onChangeText={(t) => setMessage(t.slice(0, MESSAGE_MAX))}
+                accessibilityLabel="Describe the issue"
                 placeholder="Describe the issue. What did you expect, and what happened?"
                 placeholderTextColor={colors.mutedText}
                 multiline

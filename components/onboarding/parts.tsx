@@ -351,6 +351,7 @@ export function MonthCalendar({ selectedKey, onSelect, highlightLength, minDate,
           return (
             <View key={key} style={{ width: `${100 / 7}%`, height: 42, alignItems: "center", justifyContent: "center" }}>
               <Pressable
+                hitSlop={5}
                 accessibilityRole="button"
                 accessibilityLabel={date.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}
                 accessibilityState={{ disabled, selected: isStart }}

@@ -685,6 +685,7 @@ export default function Forest() {
                   </View>
                   <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 6 }}>
                     <TouchableOpacity
+                      hitSlop={6}
                       onPress={() => habitatRef.current?.replay(4200)}
                       accessibilityRole="button"
                       accessibilityLabel="Watch your tree grow"

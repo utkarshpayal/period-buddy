@@ -666,6 +666,7 @@ export default function Partner() {
             }}
           >
             <TextInput
+              accessibilityLabel="Private message to your partner"
               placeholder="Send a private message..."
               placeholderTextColor={colors.mutedText}
               value={typedMessage}

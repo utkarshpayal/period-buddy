@@ -33,6 +33,7 @@ export function SuggestionChips({
     >
       {questions.map((question) => (
         <TouchableOpacity
+          hitSlop={{ top: 5, bottom: 5 }}
           key={question}
           activeOpacity={0.8}
           disabled={disabled}

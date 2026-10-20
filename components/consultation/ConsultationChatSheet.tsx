@@ -258,6 +258,7 @@ export function ConsultationChatSheet({
                 returnKeyType="send"
               />
               <TouchableOpacity
+                hitSlop={4}
                 disabled={!typed.trim() || sending}
                 onPress={send}
                 accessibilityRole="button"

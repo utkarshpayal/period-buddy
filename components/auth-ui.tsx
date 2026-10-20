@@ -22,6 +22,7 @@ export function AuthTopBar() {
   return (
     <View className="flex-row items-center justify-between px-5 pt-1 pb-3">
       <TouchableOpacity
+        hitSlop={5}
         accessibilityLabel="Go back"
         accessibilityRole="button"
         activeOpacity={0.85}
@@ -98,6 +99,10 @@ export const AuthField = forwardRef<TextInput, AuthFieldProps>(function AuthFiel
         style={{ marginRight: 10 }}
       />
       <TextInput
+        // Screen readers announce only the typed value once a field is filled,
+        // so the placeholder doubles as the field's name unless one is passed.
+        accessibilityLabel={typeof inputProps.placeholder === "string" ? inputProps.placeholder : undefined}
+        {...inputProps}
         ref={ref}
         placeholderTextColor={colors.mutedText}
         secureTextEntry={isPassword ? isSecure : undefined}
@@ -114,12 +119,12 @@ export const AuthField = forwardRef<TextInput, AuthFieldProps>(function AuthFiel
           setIsFocused(false);
           inputProps.onBlur?.(e);
         }}
-        {...inputProps}
       />
       {isPassword ? (
         <TouchableOpacity
+          accessibilityRole="button"
           accessibilityLabel={isSecure ? "Show password" : "Hide password"}
-          hitSlop={8}
+          hitSlop={15}
           onPress={() => setIsSecure((value) => !value)}
         >
           <Icon set="ion"

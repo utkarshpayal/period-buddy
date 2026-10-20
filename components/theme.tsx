@@ -159,11 +159,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             surface: "#FFFFFF",
             surfaceSoft: "#FCF5F7",
             surfaceStrong: "#F3DEE6",
-            primary: "#D63F72",
-            // Text-safe rose (links, small labels on white).
-            primaryDark: "#C2386A",
+            // ~4.5:1 on the blush background and under white button text
+            // (WCAG AA for normal-size text).
+            primary: "#D22E66",
+            // Text-safe rose: ~4.5:1 even on primaryLight tints (chips, badges).
+            primaryDark: "#C32A5D",
             primaryLight: "#FCE3EC",
-            secondary: "#8A6BDB",          // lavender
+            secondary: "#7550D5",          // lavender
             secondaryLight: "#EFE9FA",
             accent: "#9FD8C9",             // mint
             accentLight: "#E5F4EC",
@@ -175,16 +177,18 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             // Soft line for cards and outlined buttons; still visible as an
             // input outline on the blush background.
             border: "#EADCE2",
-            button: "#D63F72",
+            button: "#D22E66",
             buttonText: "#FFFFFF",
             text: "#241A20",
             // ~5.6:1 on white: clears WCAG AA for the 400+ places it's used
             // as helper text and placeholders.
             mutedText: "#75666D",
             input: "#FCF5F7",
-            success: "#2F8558",
+            // success/warning/sky/lavender (and their mint/gold aliases) clear
+            // 4.5:1 as text on background, surface and their own Light tints.
+            success: "#2B7A51",
             successLight: "#E5F4EC",
-            warning: "#B5681B",
+            warning: "#A15D18",
             warningLight: "#FDF0DD",
             danger: "#B03A56",
             dangerLight: "#FADCE1",
@@ -192,13 +196,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             infoLight: "#EFE9FA",
             rose: "#E8618F",
             roseLight: "#FCE3EC",
-            lavender: "#8A6BDB",
+            lavender: "#7550D5",
             lavenderLight: "#EFE9FA",
-            mint: "#2F8558",
+            mint: "#2B7A51",
             mintLight: "#E5F4EC",
-            sky: "#4A78C2",
+            sky: "#3D6BB5",
             skyLight: "#E6EEFA",
-            gold: "#B5681B",
+            gold: "#A15D18",
             goldLight: "#FDF0DD",
             shadow: "rgba(60, 20, 40, 1)",
             overlay: "rgba(36, 26, 32, 0.4)",
@@ -268,6 +272,7 @@ export function ThemeToggle() {
 
   return (
     <TouchableOpacity
+      hitSlop={5}
       accessibilityLabel={`Switch to ${isDark ? "light" : "dark"} theme`}
       accessibilityRole="button"
       activeOpacity={0.9}
