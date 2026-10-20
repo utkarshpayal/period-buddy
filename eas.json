@@ -5,7 +5,7 @@
   "build": {
     "base": {
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://www.backend.thenura.care",
+        "EXPO_PUBLIC_APP_ENV": "stage",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "729251216529-95q69sjt3nh6tl6m0ak0ieoq8dbtjuqr.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "729251216529-k8ej20e55d5onqv028lt132k62ms76rd.apps.googleusercontent.com",
         "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "729251216529-uckp51hhjo159m3pt4jbrfinap5s3trn.apps.googleusercontent.com",
@@ -45,6 +45,9 @@
     },
     "production": {
       "extends": "base",
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "prod"
+      },
       "autoIncrement": true,
       "credentialsSource": "local"
     }

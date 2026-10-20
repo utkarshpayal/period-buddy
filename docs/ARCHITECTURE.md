@@ -105,7 +105,7 @@ invited; its role has to be changed in the database.
   profile, theme, cached app config, cosmetic preferences.
 - **Config:** `app.json` is the source of truth. The API URL and the Google
   OAuth client IDs come from `EXPO_PUBLIC_*` env vars, falling back to
-  `app.json` → `extra` (`apiBaseUrl`, `googleClientIds`).
+  `app.json` → `extra` (`apiBaseUrls`, `googleClientIds`).
 
 ## The API (`period-buddy-be`)
 

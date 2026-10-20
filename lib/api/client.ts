@@ -8,10 +8,17 @@ import type { AuthUser } from "./auth";
 
 const LOCAL_DEV_API_PORT = "5000";
 const envApiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
-// Production API from app.json's `extra.apiBaseUrl`, for release builds made
-// without EXPO_PUBLIC_API_BASE_URL.
-const configApiBaseUrl =
-  (Constants.expoConfig?.extra?.apiBaseUrl as string | undefined)?.trim() || "https://www.backend.thenura.care";
+// Backend URLs per environment, from app.json's `extra.apiBaseUrls`.
+const configApiBaseUrls = Constants.expoConfig?.extra?.apiBaseUrls as { prod?: string; stage?: string } | undefined;
+const API_BASE_URLS = {
+  prod: configApiBaseUrls?.prod?.trim() || "https://www.backend.thenura.care",
+  stage: configApiBaseUrls?.stage?.trim() || "https://stage.backend.thenura.care",
+};
+// The prod/stage toggle: EXPO_PUBLIC_APP_ENV=prod|stage (in .env or eas.json).
+// Unset means prod for release builds and the local backend in __DEV__.
+const envAppEnv = process.env.EXPO_PUBLIC_APP_ENV?.trim().toLowerCase();
+export const APP_ENV: "prod" | "stage" | undefined =
+  envAppEnv === "stage" || envAppEnv === "prod" ? envAppEnv : undefined;
 
 function getLocalDevApiBaseUrl() {
   // The browser runs on this machine, so the local backend is on localhost
@@ -39,7 +46,8 @@ function getLocalDevApiBaseUrl() {
 }
 
 export const API_BASE_URL = (
-  envApiBaseUrl || (__DEV__ ? getLocalDevApiBaseUrl() : configApiBaseUrl)
+  envApiBaseUrl ||
+  (APP_ENV ? API_BASE_URLS[APP_ENV] : __DEV__ ? getLocalDevApiBaseUrl() : API_BASE_URLS.prod)
 ).replace(/\/+$/, "");
 export const WS_BASE_URL = API_BASE_URL.replace(/^http/, "ws");
 /** The installed app's version (app.json `version`), e.g. "1.0.0". */

@@ -134,7 +134,8 @@ npx expo start           # press w for web, a for Android, i for iOS
 
 | Variable | What it's for |
 |---|---|
-| `EXPO_PUBLIC_API_BASE_URL` | Which backend to use. On a phone, `localhost` is the phone itself, so use `http://<your computer's LAN IP>:5000` for a local backend, or leave it out: in `__DEV__` without it, `lib/api/` derives the host from the Expo dev server's own address on port 5000. A release build without it uses `app.json` → `extra.apiBaseUrl` (`https://www.backend.thenura.care`). |
+| `EXPO_PUBLIC_API_BASE_URL` | Which backend to use. On a phone, `localhost` is the phone itself, so use `http://<your computer's LAN IP>:5000` for a local backend, or leave it out: in `__DEV__` without it, `lib/api/` derives the host from the Expo dev server's own address on port 5000. Overrides `EXPO_PUBLIC_APP_ENV`. |
+| `EXPO_PUBLIC_APP_ENV` | `prod` or `stage`: picks the backend from `app.json` → `extra.apiBaseUrls`. Unset: prod in a release build, the local backend in `__DEV__`. |
 | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` / `_IOS_CLIENT_ID` / `_ANDROID_CLIENT_ID` / `_EXPO_CLIENT_ID` | Google sign-in OAuth client IDs; must match the backend's `GOOGLE_*_CLIENT_ID`. Optional: without them the app uses `app.json` → `extra.googleClientIds` (the real, public IDs; also in `.env.example` and `eas.json`). |
 
 Two native config files (tracked in git; EAS builds use them) are needed for push notifications /
