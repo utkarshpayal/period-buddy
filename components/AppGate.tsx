@@ -2,7 +2,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import * as WebBrowser from "expo-web-browser";
 import React, { useEffect, useRef, useState } from "react";
-import { Animated, BackHandler, Easing, Image, Linking, Pressable, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { Animated, BackHandler, Easing, Linking, Pressable, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { Image } from "expo-image";
 import { useReducedMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppConfig } from "./app-config";
@@ -105,7 +106,7 @@ function AppIconBadge({ icon, tint }: { icon: keyof typeof Ionicons.glyphMap; ti
           ...getShadow(colors, isDark),
         }}
       >
-        <Image source={APP_ICON} style={{ width: "100%", height: "100%" }} resizeMode="cover" accessibilityIgnoresInvertColors />
+        <Image source={APP_ICON} style={{ width: "100%", height: "100%" }} contentFit="cover" accessibilityIgnoresInvertColors />
       </View>
       <View
         style={{

@@ -1,8 +1,10 @@
 import React, { memo } from "react";
-import { Image, Text, TouchableOpacity, View } from "react-native";
+import { Text, TouchableOpacity, View } from "react-native";
+import { Image } from "expo-image";
 import { formatCount, type ReelItem } from "../../lib/reels";
 import { useTheme } from "../theme";
 import { Icon } from "../Icon";
+import { motion } from "../motion";
 
 const SHADOW = { textShadowColor: "rgba(0,0,0,0.45)", textShadowRadius: 6 } as const;
 
@@ -74,7 +76,7 @@ export const ReelActionRail = memo(function ReelActionRail({
           onPress={onOpenCreator}
         >
           {reel.creatorAvatar ? (
-            <Image source={{ uri: reel.creatorAvatar }} className="h-12 w-12 rounded-full border-2 border-white bg-neutral-300" />
+            <Image transition={motion.duration.base} source={{ uri: reel.creatorAvatar }} className="h-12 w-12 rounded-full border-2 border-white bg-neutral-300" />
           ) : (
             <View className="h-12 w-12 items-center justify-center rounded-full border-2 border-white bg-white/25">
               <Icon set="feather" name="user" size={22} color="white" />

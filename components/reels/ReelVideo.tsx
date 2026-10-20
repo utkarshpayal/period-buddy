@@ -1,9 +1,11 @@
 import { useEvent } from "expo";
 import { useVideoPlayer, VideoView } from "expo-video";
 import React, { memo, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Image, Platform, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Platform, Text, TouchableOpacity, View } from "react-native";
+import { Image } from "expo-image";
 import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import { Icon } from "../Icon";
+import { motion } from "../motion";
 
 const FILL = { position: "absolute", top: 0, right: 0, bottom: 0, left: 0 } as const;
 
@@ -145,7 +147,7 @@ export const ReelVideo = memo(function ReelVideo({
       />
 
       {!firstFrame && thumbnailUrl ? (
-        <Image source={{ uri: thumbnailUrl }} resizeMode="cover" style={FILL} />
+        <Image transition={motion.duration.base} source={{ uri: thumbnailUrl }} contentFit="cover" style={FILL} />
       ) : null}
 
       {loading ? (

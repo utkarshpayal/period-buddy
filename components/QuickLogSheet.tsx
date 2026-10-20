@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { DayEntry } from "./AppState";
 import { flowOptions, symptomOptions, type LogOption } from "./logOptions";
@@ -8,7 +8,7 @@ import { useTheme } from "./theme";
 import { getLogCategoryTints, MOOD_OPTIONS, type LogCategoryTint } from "./ui-tokens";
 import { isPeriodFlow, type DayLogPatch } from "../hooks/useTodayLog";
 import { useSecureScreen } from "../lib/screenPrivacy";
-import { AppLockCover } from "./AppLockScreen";
+import { BottomSheet } from "./BottomSheet";
 import { Icon } from "./Icon";
 
 export type QuickLogKind = "flow" | "symptoms" | "mood";
@@ -65,13 +65,7 @@ export function QuickLogSheet({
   onDismissedRef.current = onDismissed;
 
   useEffect(() => {
-    if (kind) {
-      setShownKind(kind);
-      return;
-    }
-    // iOS reports the end of the slide-out through `onDismiss`; elsewhere the
-    // next modal can open straight away.
-    if (Platform.OS !== "ios") onDismissedRef.current?.();
+    if (kind) setShownKind(kind);
   }, [kind]);
 
   useEffect(() => {
@@ -141,188 +135,165 @@ export function QuickLogSheet({
   };
 
   return (
-    <Modal
+    <BottomSheet
       visible={kind !== null}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
-      onDismiss={() => onDismissedRef.current?.()}
-      statusBarTranslucent
+      onClose={onClose}
+      onDismissed={() => onDismissedRef.current?.()}
+      style={{ paddingTop: 4, paddingHorizontal: 24, paddingBottom: Math.max(20, insets.bottom + 12), maxHeight: "85%" }}
     >
-      <View style={{ flex: 1, justifyContent: "flex-end" }}>
-        <Pressable
+
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+        <View style={{ width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center", backgroundColor: tint.light }}>
+          <Icon set="ion" name={copy.icon} size={20} color={tint.color} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 18, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>{copy.title}</Text>
+          <Text style={{ fontSize: 13, color: colors.mutedText, fontFamily: fonts.body, marginTop: 1 }}>
+            {dateLabel} · {copy.hint}
+          </Text>
+        </View>
+        <TouchableOpacity
           onPress={onClose}
           accessibilityLabel="Close"
-          style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0, backgroundColor: "rgba(0,0,0,0.45)" }}
-        />
-        <View
-          style={{
-            backgroundColor: colors.background,
-            borderTopLeftRadius: 28,
-            borderTopRightRadius: 28,
-            paddingTop: 10,
-            paddingHorizontal: 24,
-            paddingBottom: Math.max(20, insets.bottom + 12),
-            maxHeight: "85%",
-          }}
+          hitSlop={8}
+          style={{ width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceSoft }}
         >
-          <View style={{ alignSelf: "center", width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: 14 }} />
-
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-            <View style={{ width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center", backgroundColor: tint.light }}>
-              <Icon set="ion" name={copy.icon} size={20} color={tint.color} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 18, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>{copy.title}</Text>
-              <Text style={{ fontSize: 13, color: colors.mutedText, fontFamily: fonts.body, marginTop: 1 }}>
-                {dateLabel} · {copy.hint}
-              </Text>
-            </View>
-            <TouchableOpacity
-              onPress={onClose}
-              accessibilityLabel="Close"
-              hitSlop={8}
-              style={{ width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceSoft }}
-            >
-              <Icon set="ion" name="close" size={18} color={colors.foreground} />
-            </TouchableOpacity>
-          </View>
-
-          {sheetKind === "flow" ? (
-            <>
-              <View style={{ flexDirection: "row", gap: 10, marginTop: 20 }}>
-                {flowOptions
-                  .filter((o) => o.value !== "none")
-                  .map((o) => {
-                    const on = picks[0] === o.value;
-                    return (
-                      <TouchableOpacity
-                        key={o.value}
-                        onPress={() => saveFlow(o.value)}
-                        disabled={saving}
-                        activeOpacity={0.85}
-                        accessibilityRole="radio"
-                        accessibilityState={{ selected: on, disabled: saving }}
-                        accessibilityLabel={`${o.label} flow`}
-                        style={{
-                          flex: 1,
-                          alignItems: "center",
-                          gap: 8,
-                          paddingVertical: 14,
-                          borderRadius: 18,
-                          borderWidth: on ? 1.5 : 1,
-                          borderColor: on ? tint.color : colors.border,
-                          backgroundColor: on ? tint.light : colors.surface,
-                        }}
-                      >
-                        <View style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: on ? tint.fill : tint.light }}>
-                          {saving && on ? (
-                            <ActivityIndicator size="small" color={colors.buttonText} />
-                          ) : (
-                            <Icon set="ion" name={o.icon} size={19} color={on ? colors.buttonText : tint.color} />
-                          )}
-                        </View>
-                        <Text
-                          numberOfLines={1}
-                          adjustsFontSizeToFit
-                          minimumFontScale={0.8}
-                          maxFontSizeMultiplier={1.3}
-                          style={{ fontSize: 13, fontWeight: "800", color: on ? tint.color : colors.foreground, fontFamily: fonts.body, paddingHorizontal: 4 }}
-                        >
-                          {o.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-              </View>
-              {isPeriodFlow(entry?.flow) ? (
-                <TouchableOpacity
-                  onPress={() => saveFlow("none")}
-                  disabled={saving}
-                  accessibilityRole="button"
-                  style={{ alignSelf: "center", paddingVertical: 12, marginTop: 8 }}
-                >
-                  <Text style={{ fontSize: 13.5, fontWeight: "700", color: colors.mutedText, fontFamily: fonts.body }}>Not on my period today</Text>
-                </TouchableOpacity>
-              ) : (
-                <View style={{ height: 12 }} />
-              )}
-            </>
-          ) : (
-            <>
-              {/* Shrinks to fit so Save stays on screen on small phones. */}
-              <ScrollView style={{ marginTop: 18, flexGrow: 0, flexShrink: 1 }} contentContainerStyle={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }} showsVerticalScrollIndicator={false}>
-                {options.map((o) => {
-                  const on = picks.includes(o.value);
-                  return (
-                    <TouchableOpacity
-                      key={o.value}
-                      onPress={() => toggle(o.value)}
-                      activeOpacity={0.85}
-                      accessibilityRole="checkbox"
-                      accessibilityState={{ checked: on }}
-                      accessibilityLabel={o.label}
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 8,
-                        paddingLeft: 6,
-                        paddingRight: 12,
-                        paddingVertical: 6,
-                        borderRadius: 30,
-                        borderWidth: on ? 1.5 : 1,
-                        borderColor: on ? tint.color : colors.border,
-                        backgroundColor: on ? tint.light : colors.input,
-                      }}
-                    >
-                      <View style={{ width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: on ? tint.fill : tint.light }}>
-                        <Icon set="ion" name={on ? "checkmark" : o.icon} size={15} color={on ? colors.buttonText : tint.color} />
-                      </View>
-                      <Text style={{ fontSize: 13.5, fontWeight: on ? "800" : "700", color: on ? tint.color : colors.foreground, fontFamily: fonts.body }}>
-                        {o.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-
-              <TouchableOpacity
-                onPress={save}
-                disabled={!changed || saving}
-                activeOpacity={0.85}
-                accessibilityRole="button"
-                accessibilityState={{ disabled: !changed || saving }}
-                style={{
-                  marginTop: 20,
-                  height: 52,
-                  borderRadius: 26,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  backgroundColor: colors.primary,
-                  opacity: !changed || saving ? 0.5 : 1,
-                }}
-              >
-                {saving ? (
-                  <ActivityIndicator color={colors.buttonText} />
-                ) : (
-                  <Text style={{ fontSize: 15, fontWeight: "800", color: colors.buttonText, fontFamily: fonts.body }}>Save</Text>
-                )}
-              </TouchableOpacity>
-            </>
-          )}
-          <TouchableOpacity
-            onPress={() => void openFullLog()}
-            disabled={saving}
-            accessibilityRole="button"
-            accessibilityHint={changed && sheetKind !== "flow" ? "Saves your picks first" : undefined}
-            style={{ alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 4, paddingVertical: 12, marginTop: 2 }}
-          >
-            <Text style={{ fontSize: 13.5, fontWeight: "700", color: colors.primary, fontFamily: fonts.body }}>All details for today</Text>
-            <Icon set="ion" name="chevron-forward" size={14} color={colors.primary} />
-          </TouchableOpacity>
-        </View>
+          <Icon set="ion" name="close" size={18} color={colors.foreground} />
+        </TouchableOpacity>
       </View>
-      <AppLockCover />
-    </Modal>
+
+      {sheetKind === "flow" ? (
+        <>
+          <View style={{ flexDirection: "row", gap: 10, marginTop: 20 }}>
+            {flowOptions
+              .filter((o) => o.value !== "none")
+              .map((o) => {
+                const on = picks[0] === o.value;
+                return (
+                  <TouchableOpacity
+                    key={o.value}
+                    onPress={() => saveFlow(o.value)}
+                    disabled={saving}
+                    activeOpacity={0.85}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: on, disabled: saving }}
+                    accessibilityLabel={`${o.label} flow`}
+                    style={{
+                      flex: 1,
+                      alignItems: "center",
+                      gap: 8,
+                      paddingVertical: 14,
+                      borderRadius: 18,
+                      borderWidth: on ? 1.5 : 1,
+                      borderColor: on ? tint.color : colors.border,
+                      backgroundColor: on ? tint.light : colors.surface,
+                    }}
+                  >
+                    <View style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: on ? tint.fill : tint.light }}>
+                      {saving && on ? (
+                        <ActivityIndicator size="small" color={colors.buttonText} />
+                      ) : (
+                        <Icon set="ion" name={o.icon} size={19} color={on ? colors.buttonText : tint.color} />
+                      )}
+                    </View>
+                    <Text
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.8}
+                      maxFontSizeMultiplier={1.3}
+                      style={{ fontSize: 13, fontWeight: "800", color: on ? tint.color : colors.foreground, fontFamily: fonts.body, paddingHorizontal: 4 }}
+                    >
+                      {o.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+          </View>
+          {isPeriodFlow(entry?.flow) ? (
+            <TouchableOpacity
+              onPress={() => saveFlow("none")}
+              disabled={saving}
+              accessibilityRole="button"
+              style={{ alignSelf: "center", paddingVertical: 12, marginTop: 8 }}
+            >
+              <Text style={{ fontSize: 13.5, fontWeight: "700", color: colors.mutedText, fontFamily: fonts.body }}>Not on my period today</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={{ height: 12 }} />
+          )}
+        </>
+      ) : (
+        <>
+          {/* Shrinks to fit so Save stays on screen on small phones. */}
+          <ScrollView style={{ marginTop: 18, flexGrow: 0, flexShrink: 1 }} contentContainerStyle={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }} showsVerticalScrollIndicator={false}>
+            {options.map((o) => {
+              const on = picks.includes(o.value);
+              return (
+                <TouchableOpacity
+                  key={o.value}
+                  onPress={() => toggle(o.value)}
+                  activeOpacity={0.85}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: on }}
+                  accessibilityLabel={o.label}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 8,
+                    paddingLeft: 6,
+                    paddingRight: 12,
+                    paddingVertical: 6,
+                    borderRadius: 30,
+                    borderWidth: on ? 1.5 : 1,
+                    borderColor: on ? tint.color : colors.border,
+                    backgroundColor: on ? tint.light : colors.input,
+                  }}
+                >
+                  <View style={{ width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: on ? tint.fill : tint.light }}>
+                    <Icon set="ion" name={on ? "checkmark" : o.icon} size={15} color={on ? colors.buttonText : tint.color} />
+                  </View>
+                  <Text style={{ fontSize: 13.5, fontWeight: on ? "800" : "700", color: on ? tint.color : colors.foreground, fontFamily: fonts.body }}>
+                    {o.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          <TouchableOpacity
+            onPress={save}
+            disabled={!changed || saving}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: !changed || saving }}
+            style={{
+              marginTop: 20,
+              height: 52,
+              borderRadius: 26,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: colors.primary,
+              opacity: !changed || saving ? 0.5 : 1,
+            }}
+          >
+            {saving ? (
+              <ActivityIndicator color={colors.buttonText} />
+            ) : (
+              <Text style={{ fontSize: 15, fontWeight: "800", color: colors.buttonText, fontFamily: fonts.body }}>Save</Text>
+            )}
+          </TouchableOpacity>
+        </>
+      )}
+      <TouchableOpacity
+        onPress={() => void openFullLog()}
+        disabled={saving}
+        accessibilityRole="button"
+        accessibilityHint={changed && sheetKind !== "flow" ? "Saves your picks first" : undefined}
+        style={{ alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 4, paddingVertical: 12, marginTop: 2 }}
+      >
+        <Text style={{ fontSize: 13.5, fontWeight: "700", color: colors.primary, fontFamily: fonts.body }}>All details for today</Text>
+        <Icon set="ion" name="chevron-forward" size={14} color={colors.primary} />
+      </TouchableOpacity>
+    </BottomSheet>
   );
 }

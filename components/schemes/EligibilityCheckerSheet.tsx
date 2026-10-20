@@ -1,9 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
   ScrollView,
   Text,
   TextInput,
@@ -14,6 +11,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { AuthUser } from "../../lib/api";
 import { ageFromDateOfBirth } from "../../lib/onboarding";
 import { canonicalStateName } from "../../lib/schemeHelpers";
+import { BottomSheet } from "../BottomSheet";
 import { AppModalHost } from "../modals/AppModalHost";
 import { useTheme } from "../theme";
 import { StatePicker } from "./StatePicker";
@@ -67,142 +65,130 @@ export function EligibilityCheckerSheet({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        className="flex-1 justify-end"
-        style={{ backgroundColor: colors.overlay }}
-      >
-        <View
+    <BottomSheet
+      visible={visible}
+      onClose={onClose}
+      avoidKeyboard
+      androidKeyboardBehavior="height"
+      style={{ paddingHorizontal: 24, paddingTop: 4, maxHeight: "92%", paddingBottom: Math.max(insets.bottom, 12) + 16 }}
+      // The checker's alerts draw on top of the sheet, not behind it.
+      overlay={visible ? <AppModalHost inline /> : null}
+    >
+      <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <View className="flex-row items-center justify-between" style={{ gap: 12 }}>
+          <Text
+            accessibilityRole="header"
+            style={{ flexShrink: 1, fontSize: 18, fontWeight: "700", color: colors.foreground, fontFamily: fonts.heading }}
+          >
+            Check if you may be eligible
+          </Text>
+          <TouchableOpacity
+            onPress={onClose}
+            accessibilityRole="button"
+            accessibilityLabel="Close"
+            className="items-center justify-center"
+            style={{ width: 44, height: 44, borderRadius: 22, marginRight: -10 }}
+          >
+            <Icon set="ion" name="close" size={24} color={colors.foreground} />
+          </TouchableOpacity>
+        </View>
+        <Text style={{ marginBottom: 18, fontSize: 14, lineHeight: 20, fontWeight: "400", color: colors.foreground, fontFamily: fonts.body }}>
+          Answer a few questions for a better guess. Only the scheme office can confirm it.
+        </Text>
+
+        {/* Age */}
+        <Text style={{ marginBottom: 8, fontSize: 14, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>
+          Your age
+        </Text>
+        <TextInput
+          value={ageInput}
+          onChangeText={(t) => setAgeInput(t.replace(/[^0-9]/g, ""))}
+          keyboardType="number-pad"
+          placeholder="e.g. 24"
+          placeholderTextColor={colors.mutedText}
+          accessibilityLabel="Your age"
+          maxLength={3}
+          maxFontSizeMultiplier={1.4}
           style={{
-            borderTopLeftRadius: 28,
-            borderTopRightRadius: 28,
-            paddingHorizontal: 24,
-            paddingTop: 16,
-            maxHeight: "92%",
-            backgroundColor: colors.background,
-            paddingBottom: Math.max(insets.bottom, 12) + 16,
+            height: 48,
+            borderRadius: 16,
+            borderWidth: 1,
+            borderColor: colors.border,
+            paddingHorizontal: 14,
+            marginBottom: 18,
+            fontSize: 15,
+            backgroundColor: colors.surface,
+            color: colors.foreground,
+            fontFamily: fonts.body,
           }}
-        >
-          <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-            <View className="flex-row items-center justify-between" style={{ gap: 12 }}>
-              <Text
-                accessibilityRole="header"
-                style={{ flexShrink: 1, fontSize: 18, fontWeight: "700", color: colors.foreground, fontFamily: fonts.heading }}
-              >
-                Check if you may be eligible
-              </Text>
+        />
+
+        {/* Pregnant */}
+        <Text style={{ marginBottom: 8, fontSize: 14, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>
+          Are you pregnant right now?
+        </Text>
+        <View className="flex-row" style={{ gap: 10, marginBottom: 18 }}>
+          {[
+            { label: "Yes", value: true },
+            { label: "No", value: false },
+          ].map((opt) => {
+            const active = pregnantInput === opt.value;
+            return (
               <TouchableOpacity
-                onPress={onClose}
+                key={opt.label}
+                activeOpacity={0.8}
+                onPress={() => setPregnantInput(active ? null : opt.value)}
                 accessibilityRole="button"
-                accessibilityLabel="Close"
-                className="items-center justify-center"
-                style={{ width: 44, height: 44, borderRadius: 22, marginRight: -10 }}
+                accessibilityLabel={opt.label}
+                accessibilityState={{ selected: active }}
+                className="flex-1 items-center justify-center"
+                style={{
+                  height: 48,
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  borderColor: active ? colors.primary : colors.border,
+                  backgroundColor: active ? colors.primary : colors.surface,
+                }}
               >
-                <Icon set="ion" name="close" size={24} color={colors.foreground} />
-              </TouchableOpacity>
-            </View>
-            <Text style={{ marginBottom: 18, fontSize: 14, lineHeight: 20, fontWeight: "400", color: colors.foreground, fontFamily: fonts.body }}>
-              Answer a few questions for a better guess. Only the scheme office can confirm it.
-            </Text>
-
-            {/* Age */}
-            <Text style={{ marginBottom: 8, fontSize: 14, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>
-              Your age
-            </Text>
-            <TextInput
-              value={ageInput}
-              onChangeText={(t) => setAgeInput(t.replace(/[^0-9]/g, ""))}
-              keyboardType="number-pad"
-              placeholder="e.g. 24"
-              placeholderTextColor={colors.mutedText}
-              accessibilityLabel="Your age"
-              maxLength={3}
-              maxFontSizeMultiplier={1.4}
-              style={{
-                height: 48,
-                borderRadius: 16,
-                borderWidth: 1,
-                borderColor: colors.border,
-                paddingHorizontal: 14,
-                marginBottom: 18,
-                fontSize: 15,
-                backgroundColor: colors.surface,
-                color: colors.foreground,
-                fontFamily: fonts.body,
-              }}
-            />
-
-            {/* Pregnant */}
-            <Text style={{ marginBottom: 8, fontSize: 14, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>
-              Are you pregnant right now?
-            </Text>
-            <View className="flex-row" style={{ gap: 10, marginBottom: 18 }}>
-              {[
-                { label: "Yes", value: true },
-                { label: "No", value: false },
-              ].map((opt) => {
-                const active = pregnantInput === opt.value;
-                return (
-                  <TouchableOpacity
-                    key={opt.label}
-                    activeOpacity={0.8}
-                    onPress={() => setPregnantInput(active ? null : opt.value)}
-                    accessibilityRole="button"
-                    accessibilityLabel={opt.label}
-                    accessibilityState={{ selected: active }}
-                    className="flex-1 items-center justify-center"
-                    style={{
-                      height: 48,
-                      borderRadius: 16,
-                      borderWidth: 1,
-                      borderColor: active ? colors.primary : colors.border,
-                      backgroundColor: active ? colors.primary : colors.surface,
-                    }}
-                  >
-                    <Text
-                      maxFontSizeMultiplier={1.3}
-                      style={{ fontSize: 15, fontWeight: "700", color: active ? colors.buttonText : colors.foreground, fontFamily: fonts.body }}
-                    >
-                      {opt.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {/* State picker */}
-            <Text style={{ marginBottom: 8, fontSize: 14, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>
-              Your state or UT
-            </Text>
-            <StatePicker value={stateInput} onChange={setStateInput} open={statePickerOpen} onOpenChange={setStatePickerOpen} />
-
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={submit}
-              disabled={checking}
-              accessibilityRole="button"
-              accessibilityLabel="See my result"
-              accessibilityState={{ disabled: checking, busy: checking }}
-              className="items-center justify-center"
-              style={{ marginTop: 22, height: 48, borderRadius: 16, backgroundColor: colors.primary }}
-            >
-              {checking ? (
-                <ActivityIndicator size="small" color={colors.buttonText} />
-              ) : (
                 <Text
                   maxFontSizeMultiplier={1.3}
-                  style={{ fontSize: 15, fontWeight: "700", color: colors.buttonText, fontFamily: fonts.heading }}
+                  style={{ fontSize: 15, fontWeight: "700", color: active ? colors.buttonText : colors.foreground, fontFamily: fonts.body }}
                 >
-                  See my result
+                  {opt.label}
                 </Text>
-              )}
-            </TouchableOpacity>
-          </ScrollView>
+              </TouchableOpacity>
+            );
+          })}
         </View>
-      </KeyboardAvoidingView>
-      {/* The checker's alerts draw on top of the sheet, not behind it. */}
-      {visible ? <AppModalHost inline /> : null}
-    </Modal>
+
+        {/* State picker */}
+        <Text style={{ marginBottom: 8, fontSize: 14, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>
+          Your state or UT
+        </Text>
+        <StatePicker value={stateInput} onChange={setStateInput} open={statePickerOpen} onOpenChange={setStatePickerOpen} />
+
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={submit}
+          disabled={checking}
+          accessibilityRole="button"
+          accessibilityLabel="See my result"
+          accessibilityState={{ disabled: checking, busy: checking }}
+          className="items-center justify-center"
+          style={{ marginTop: 22, height: 48, borderRadius: 16, backgroundColor: colors.primary }}
+        >
+          {checking ? (
+            <ActivityIndicator size="small" color={colors.buttonText} />
+          ) : (
+            <Text
+              maxFontSizeMultiplier={1.3}
+              style={{ fontSize: 15, fontWeight: "700", color: colors.buttonText, fontFamily: fonts.heading }}
+            >
+              See my result
+            </Text>
+          )}
+        </TouchableOpacity>
+      </ScrollView>
+    </BottomSheet>
   );
 }

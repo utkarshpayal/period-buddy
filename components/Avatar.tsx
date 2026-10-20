@@ -1,5 +1,7 @@
 import React from "react";
-import { Image, Text, View, type ViewStyle } from "react-native";
+import { Text, View, type ViewStyle } from "react-native";
+import { Image } from "expo-image";
+import { motion } from "./motion";
 
 type AvatarProps = {
   uri?: string;
@@ -73,10 +75,11 @@ export default function Avatar({
       >
         {showImage ? (
           <Image
+            transition={motion.duration.base}
             source={{ uri }}
             onError={() => setFailedUri(uri ?? null)}
             style={{ width: "100%", height: "100%" }}
-            resizeMode="cover"
+            contentFit="cover"
           />
         ) : (
           <Text

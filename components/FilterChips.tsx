@@ -3,6 +3,7 @@ import React from "react";
 import { ScrollView, Text, TouchableOpacity, type StyleProp, type ViewStyle } from "react-native";
 import { useTheme } from "./theme";
 import { Icon } from "./Icon";
+import { haptics } from "../lib/haptics";
 
 export type FilterChipOption<K extends string> = {
   key: K;
@@ -43,7 +44,10 @@ export function FilterChips<K extends string>({
         return (
           <TouchableOpacity
             key={option.key}
-            onPress={() => onChange(option.key)}
+            onPress={() => {
+              if (option.key !== value) haptics.select();
+              onChange(option.key);
+            }}
             activeOpacity={0.8}
             hitSlop={{ top: 4, bottom: 4 }}
             accessibilityRole="button"

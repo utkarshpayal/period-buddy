@@ -1,6 +1,7 @@
 import { LinearGradient } from "expo-linear-gradient";
 import React, { memo, useCallback, useEffect, useRef, useState } from "react";
-import { Image, Pressable, View, type GestureResponderEvent } from "react-native";
+import { Pressable, View, type GestureResponderEvent } from "react-native";
+import { Image } from "expo-image";
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { DOUBLE_TAP_MS, hasPoll, REEL_POLL_AFTER_MS, REEL_POLL_RESULTS_MS, REEL_VIEW_AFTER_MS, type ReelItem } from "../../lib/reels";
 import { ReelActionRail } from "./ReelActionRail";
@@ -9,6 +10,7 @@ import { ReelOverlay } from "./ReelOverlay";
 import { PollPanel } from "./ReelSheets";
 import { ReelVideo } from "./ReelVideo";
 import { YouTubeReel } from "./YouTubeReel";
+import { motion } from "../motion";
 
 const FILL = { position: "absolute", top: 0, right: 0, bottom: 0, left: 0 } as const;
 
@@ -190,7 +192,7 @@ export const ReelPage = memo(function ReelPage({
         isActive ? (
           <YouTubeReel videoId={reel.youtubeId} shouldPlay={shouldPlay} muted={muted} onPlayingChange={handlePlayingChange} />
         ) : reel.thumbnailUrl ? (
-          <Image source={{ uri: reel.thumbnailUrl }} resizeMode="cover" style={FILL} />
+          <Image transition={motion.duration.base} source={{ uri: reel.thumbnailUrl }} contentFit="cover" style={FILL} />
         ) : null
       ) : mountPlayer && reel.videoUrl ? (
         <ReelVideo
@@ -206,7 +208,7 @@ export const ReelPage = memo(function ReelPage({
           onEnded={handleEnded}
         />
       ) : reel.thumbnailUrl ? (
-        <Image source={{ uri: reel.thumbnailUrl }} resizeMode="cover" style={FILL} />
+        <Image transition={motion.duration.base} source={{ uri: reel.thumbnailUrl }} contentFit="cover" style={FILL} />
       ) : null}
 
       {/* Gesture layer: tap = mute, double tap = like, hold = pause. */}

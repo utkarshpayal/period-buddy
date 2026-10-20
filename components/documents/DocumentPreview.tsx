@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Image, Linking, Modal, Platform, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Linking, Modal, Platform, Text, TouchableOpacity, View } from "react-native";
+import { Image } from "expo-image";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
@@ -18,6 +19,7 @@ import {
   openPdfOnDevice,
 } from "./documentMeta";
 import { Icon } from "../Icon";
+import { motion } from "../motion";
 
 /**
  * Full-screen document viewer. `ready` turns true once the fresh signed
@@ -171,11 +173,12 @@ function ImageViewer({ uri }: { uri: string }) {
       {failed ? (
         <ViewerNotice text="Couldn't load this image. Check your connection and try again." />
       ) : (
-        <Animated.View entering={FadeIn.duration(250)} style={{ flex: 1, opacity: loaded ? 1 : 0 }}>
+        <Animated.View entering={FadeIn.duration(motion.duration.base)} style={{ flex: 1, opacity: loaded ? 1 : 0 }}>
           <Image
+            cachePolicy="memory"
             source={{ uri }}
             style={{ flex: 1 }}
-            resizeMode="contain"
+            contentFit="contain"
             onLoad={() => setLoaded(true)}
             onError={() => setFailed(true)}
             accessibilityIgnoresInvertColors
@@ -214,7 +217,7 @@ function ViewerNotice({
 }) {
   const { colors, fonts } = useTheme();
   return (
-    <Animated.View entering={FadeIn.duration(220)} style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 14, paddingHorizontal: 32 }}>
+    <Animated.View entering={FadeIn.duration(motion.duration.base)} style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 14, paddingHorizontal: 32 }}>
       <Text style={{ textAlign: "center", fontSize: 13, lineHeight: 19, color: colors.mutedText, fontFamily: fonts.body }}>{text}</Text>
       {actionLabel && onAction ? (
         <TouchableOpacity

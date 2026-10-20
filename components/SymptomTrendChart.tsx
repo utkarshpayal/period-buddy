@@ -6,6 +6,7 @@ import type { SymptomPrediction } from "../lib/api";
 import { useTheme } from "./theme";
 import { getShadow } from "./ui-tokens";
 import { Icon } from "./Icon";
+import { motion } from "./motion";
 
 /**
  * Symptom likelihood across the cycle's phases (symptom-predictions.tsx).
@@ -521,7 +522,7 @@ export const SymptomTrendChart = React.memo(function SymptomTrendChart({
       </ScrollView>
 
       {view === "chart" ? (
-        <Animated.View entering={FadeIn.duration(200)}>
+        <Animated.View entering={FadeIn.duration(motion.duration.base)}>
           <View onLayout={onLayout} style={{ marginTop: 14, height: CHART_HEIGHT }}>
             {width > 0 ? (
               <>
@@ -688,7 +689,7 @@ export const SymptomTrendChart = React.memo(function SymptomTrendChart({
               }}
             >
               {plotted.map(({ symptom, slot, series }) => (
-                <Animated.View key={`${symptom}-${activeIndex}`} entering={FadeIn.duration(160)} style={{ flex: 1, minWidth: 0 }}>
+                <Animated.View key={`${symptom}-${activeIndex}`} entering={FadeIn.duration(motion.duration.fast)} style={{ flex: 1, minWidth: 0 }}>
                   <Text
                     style={{
                       fontSize: 20,
@@ -736,7 +737,7 @@ export const SymptomTrendChart = React.memo(function SymptomTrendChart({
           </Text>
         </Animated.View>
       ) : (
-        <Animated.View entering={FadeIn.duration(200)} style={{ marginTop: 14 }}>
+        <Animated.View entering={FadeIn.duration(motion.duration.base)} style={{ marginTop: 14 }}>
           <HeatTable series={allSeries} phases={phases} phaseLabels={phaseLabels} activeIndex={activeIndex} />
         </Animated.View>
       )}

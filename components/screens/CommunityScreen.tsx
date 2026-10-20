@@ -24,6 +24,9 @@ import { LoadMoreButton } from "../LoadMoreButton";
 import { SkeletonPostList } from "../Skeleton";
 import { PaywallModal } from "../subscription/PaywallModal";
 import { Icon } from "../Icon";
+import Animated from "react-native-reanimated";
+import { listEntering } from "../motion";
+import { haptics } from "../../lib/haptics";
 
 // How long the paywall's slide-down takes before compose may present: iOS
 // can't present one Modal while another is still dismissing.
@@ -249,6 +252,7 @@ export default function CommunityScreen() {
     async (post: Post) => {
       if (likingRef.current.has(post.id)) return;
       likingRef.current.add(post.id);
+      haptics.tap();
       const wasLiked = likedIdsRef.current.has(post.id);
       const setLiked = (liked: boolean) =>
         setLikedPostIds((current) => {
@@ -287,6 +291,7 @@ export default function CommunityScreen() {
         votingRef.current.has(post.id)
       )
         return;
+      haptics.tap();
       votingRef.current.add(post.id);
       setVotingPollIds((current) => new Set(current).add(post.id));
       try {
@@ -401,25 +406,28 @@ export default function CommunityScreen() {
 
   const renderPost = useCallback(
     ({ item: post, index }: { item: Post; index: number }) => (
-      <PostRow
-        post={post}
-        isFirst={index === 0}
-        isLiked={likedPostIds.has(post.id)}
-        isSaved={savedPosts.has(post.id)}
-        isReported={reportedPosts.has(post.id)}
-        isExpanded={expandedPostIds.has(post.id)}
-        isVoting={votingPollIds.has(post.id)}
-        hasUnreadComments={unreadCommentPostIds.has(post.id)}
-        activeTag={post.tags.length > 0 ? activeTag : null}
-        readOnly={!canPost}
-        onOpenOptions={openOptions}
-        onToggleLike={toggleLike}
-        onOpenComments={openCommentsSheet}
-        onShare={shareCommunityPost}
-        onToggleExpanded={toggleExpandedPost}
-        onTagPress={setActiveTag}
-        onVote={handleVotePoll}
-      />
+      // First screenful fades up on load; rows scrolled into view later just appear.
+      <Animated.View entering={index < 8 ? listEntering(index) : undefined}>
+        <PostRow
+          post={post}
+          isFirst={index === 0}
+          isLiked={likedPostIds.has(post.id)}
+          isSaved={savedPosts.has(post.id)}
+          isReported={reportedPosts.has(post.id)}
+          isExpanded={expandedPostIds.has(post.id)}
+          isVoting={votingPollIds.has(post.id)}
+          hasUnreadComments={unreadCommentPostIds.has(post.id)}
+          activeTag={post.tags.length > 0 ? activeTag : null}
+          readOnly={!canPost}
+          onOpenOptions={openOptions}
+          onToggleLike={toggleLike}
+          onOpenComments={openCommentsSheet}
+          onShare={shareCommunityPost}
+          onToggleExpanded={toggleExpandedPost}
+          onTagPress={setActiveTag}
+          onVote={handleVotePoll}
+        />
+      </Animated.View>
     ),
     [
       likedPostIds,

@@ -13,6 +13,7 @@ import {
 import { formatINR, formatSessionWhen } from "../lib/consultationFormat";
 import { doctorNameOf } from "../lib/consultationModel";
 import { isPaymentDeclined, isPendingVerify } from "../lib/paymentVerify";
+import { haptics } from "../lib/haptics";
 
 // Waits between verify retries when the payment went through but the first
 // confirmation call failed (verify is idempotent, so retrying is safe).
@@ -152,6 +153,7 @@ export function useConsultationBooking({
         try {
           const result = await consultationApi.verifyPayment({ consultationId, orderId });
           if (!isPendingVerify(result)) {
+            haptics.success();
             upsertConsultation(result);
             schedule(() => openChat(result), SHEET_DISMISS_MS);
             return;
@@ -165,6 +167,7 @@ export function useConsultationBooking({
           }
         } catch (err) {
           if (isPaymentDeclined(err)) {
+            haptics.error();
             alert(
               reportedPaid ? "Payment failed" : "Payment not completed",
               "Your payment didn't go through, so nothing was booked. Please try again.",

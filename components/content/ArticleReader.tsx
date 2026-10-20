@@ -11,6 +11,7 @@ import { SkeletonBlock } from "../Skeleton";
 import { useTheme } from "../theme";
 import { MediaCover, type MediaTone } from "./MediaTile";
 import { Icon } from "../Icon";
+import { motion } from "../motion";
 
 const GUTTER = 24;
 
@@ -245,7 +246,7 @@ export function ArticleReader(props: ArticleReaderProps) {
       {/* Pinned bottom bar: Listen + language, always in reach */}
       <View style={{ borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.background }}>
         {languagesOpen && languages.length > 1 ? (
-          <Animated.View entering={FadeInDown.duration(180)} exiting={FadeOutDown.duration(140)} style={{ paddingTop: 12 }}>
+          <Animated.View entering={FadeInDown.duration(motion.duration.fast)} exiting={FadeOutDown.duration(motion.duration.fast)} style={{ paddingTop: 12 }}>
             <View className="flex-row items-center" style={{ paddingHorizontal: GUTTER, marginBottom: 10, gap: 8 }}>
               <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "700", fontFamily: fonts.body }}>Read in</Text>
               {translated && !translating ? (

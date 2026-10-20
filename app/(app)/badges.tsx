@@ -16,6 +16,7 @@ import { useAsyncLoad } from "../../hooks/useAsyncLoad";
 import { genzApi, type Badge } from "../../lib/api";
 import { shareViewAsImage } from "../../lib/genz";
 import { Icon } from "../../components/Icon";
+import { CelebrationBurst } from "../../components/celebrations/Lottie";
 
 /**
  * Streaks & Badges — the logging streak with its next milestone, and every
@@ -213,6 +214,11 @@ export default function BadgesScreen() {
                         </View>
                       </View>
                       <View className="items-center justify-center rounded-full" style={{ width: 72, height: 72, backgroundColor: "rgba(255,255,255,0.2)" }}>
+                        {streak.current > 0 ? (
+                          <View pointerEvents="none" style={{ position: "absolute", top: -24, left: -24 }}>
+                            <CelebrationBurst size={120} />
+                          </View>
+                        ) : null}
                         <Text style={{ fontSize: 38 }}>{streak.current > 0 ? "🔥" : "🌱"}</Text>
                       </View>
                     </View>

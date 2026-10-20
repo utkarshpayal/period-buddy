@@ -4,6 +4,7 @@ import { alertLogNotSaved } from "../lib/alert";
 import { cycleApi } from "../lib/api";
 import { mapApiDayEntry } from "../lib/cycleCalendar";
 import { withSymptoms } from "../lib/dayLog";
+import { haptics } from "../lib/haptics";
 
 
 type Remote = {
@@ -37,7 +38,9 @@ export function useDayLogActions({ entryFor, setRemoteEntry, removeRemoteEntry }
       try {
         const result = await cycleApi.saveLog({ dateKey, ...entry, replace });
         setRemoteEntry(dateKey, mapApiDayEntry(result.cycleLog));
+        haptics.success();
       } catch (err) {
+        haptics.error();
         if (previousOverlay) {
           const { updatedAt: _updatedAt, ...rest } = previousOverlay;
           saveDayEntry(dateKey, rest);

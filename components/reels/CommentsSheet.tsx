@@ -3,10 +3,6 @@ import {
   ActivityIndicator,
   FlatList,
   Image,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
   Text,
   TextInput,
   TouchableOpacity,
@@ -19,6 +15,7 @@ import { getFriendlyErrorMessage, isNetworkError, reelsApi, type ReelComment } f
 import { appendComments, formatCommentAge, REEL_COMMENT_MAX } from "../../lib/reels";
 import { useAuth } from "../auth-context";
 import { EmptyState } from "../EmptyState";
+import { BottomSheet } from "../BottomSheet";
 import { AppModalHost } from "../modals/AppModalHost";
 import { useTheme } from "../theme";
 import { Icon } from "../Icon";
@@ -297,99 +294,89 @@ export function CommentsSheet({
   const remaining = REEL_COMMENT_MAX - text.length;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
-        <Pressable accessibilityLabel="Close comments" style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.35)" }} onPress={onClose} />
-        <View
-          style={{
-            height: Math.round(height * 0.68),
-            backgroundColor: colors.surface,
-            borderTopLeftRadius: 24,
-            borderTopRightRadius: 24,
-            paddingBottom: insets.bottom,
-          }}
-        >
-          <View className="items-center pt-2">
-            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border }} />
-          </View>
-          <View className="flex-row items-center justify-between px-5 pb-2 pt-3">
-            <View style={{ width: 28 }} />
-            <Text style={{ color: colors.foreground, fontFamily: fonts.heading, fontWeight: "700", fontSize: 16 }}>
-              Comments{count > 0 ? ` · ${count}` : ""}
-            </Text>
-            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close comments" hitSlop={10} onPress={onClose}>
-              <Icon set="feather" name="x" size={22} color={colors.foreground} />
-            </TouchableOpacity>
-          </View>
-          <View style={{ height: 1, backgroundColor: colors.border }} />
+    <BottomSheet
+      visible={visible}
+      onClose={onClose}
+      avoidKeyboard
+      backdropLabel="Close comments"
+      style={{ height: Math.round(height * 0.68), backgroundColor: colors.surface, paddingBottom: insets.bottom }}
+      overlay={visible ? <AppModalHost inline /> : null}
+    >
+      <View className="flex-row items-center justify-between px-5 pb-2 pt-3">
+        <View style={{ width: 28 }} />
+        <Text style={{ color: colors.foreground, fontFamily: fonts.heading, fontWeight: "700", fontSize: 16 }}>
+          Comments{count > 0 ? ` · ${count}` : ""}
+        </Text>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Close comments" hitSlop={10} onPress={onClose}>
+          <Icon set="feather" name="x" size={22} color={colors.foreground} />
+        </TouchableOpacity>
+      </View>
+      <View style={{ height: 1, backgroundColor: colors.border }} />
 
-          {loading && comments.length === 0 ? (
-            <View className="flex-1 items-center justify-center">
-              <ActivityIndicator color={colors.primary} />
-            </View>
-          ) : error && comments.length === 0 ? (
-            <EmptyState
-              compact
-              icon={error.offline ? "wifi-off" : "alert-circle-outline"}
-              title={error.offline ? "You're offline" : "Couldn't load comments"}
-              message={error.message}
-              actionLabel="Try again"
-              onAction={loadFirst}
-            />
-          ) : (
-            <FlatList
-              data={comments}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => <CommentRow comment={item} onDelete={handleDelete} onReport={handleReport} />}
-              onEndReached={loadMore}
-              onEndReachedThreshold={0.5}
-              keyboardShouldPersistTaps="handled"
-              contentContainerStyle={comments.length === 0 ? { flexGrow: 1 } : { paddingVertical: 6 }}
-              ListEmptyComponent={
-                <EmptyState compact icon="comment-outline" title="No comments yet" message="Start the conversation." />
-              }
-              ListFooterComponent={loadingMore ? <ActivityIndicator style={{ marginVertical: 12 }} color={colors.primary} /> : null}
-            />
-          )}
-
-          <View style={{ height: 1, backgroundColor: colors.border }} />
-          <View className="flex-row items-end px-4 py-2.5" style={{ gap: 10 }}>
-            <Avatar uri={user?.profilePicture || null} name={user?.firstName || "You"} size={32} />
-            <View
-              className="flex-1 flex-row items-end rounded-3xl border px-4"
-              style={{ borderColor: colors.border, backgroundColor: colors.input, minHeight: 40 }}
-            >
-              <TextInput
-                value={text}
-                onChangeText={setText}
-                placeholder="Add a comment…"
-                placeholderTextColor={colors.mutedText}
-                maxLength={REEL_COMMENT_MAX}
-                multiline
-                accessibilityLabel="Write a comment"
-                style={{ flex: 1, color: colors.foreground, fontFamily: fonts.body, fontSize: 14, maxHeight: 100, paddingVertical: 10 }}
-              />
-              {remaining <= 50 ? (
-                <Text style={{ color: remaining <= 10 ? colors.danger : colors.mutedText, fontFamily: fonts.mono, fontSize: 12, paddingBottom: 11, marginLeft: 6 }}>
-                  {remaining}
-                </Text>
-              ) : null}
-            </View>
-            <TouchableOpacity
-              hitSlop={4}
-              accessibilityRole="button"
-              accessibilityLabel="Post comment"
-              disabled={!text.trim() || sending}
-              onPress={send}
-              className="h-10 w-10 items-center justify-center rounded-full"
-              style={{ backgroundColor: text.trim() ? colors.primary : colors.surfaceSoft }}
-            >
-              <Icon set="ion" name="arrow-up" size={20} color={text.trim() ? colors.buttonText : colors.mutedText} />
-            </TouchableOpacity>
-          </View>
+      {loading && comments.length === 0 ? (
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator color={colors.primary} />
         </View>
-      </KeyboardAvoidingView>
-      {visible ? <AppModalHost inline /> : null}
-    </Modal>
+      ) : error && comments.length === 0 ? (
+        <EmptyState
+          compact
+          icon={error.offline ? "wifi-off" : "alert-circle-outline"}
+          title={error.offline ? "You're offline" : "Couldn't load comments"}
+          message={error.message}
+          actionLabel="Try again"
+          onAction={loadFirst}
+        />
+      ) : (
+        <FlatList
+          data={comments}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => <CommentRow comment={item} onDelete={handleDelete} onReport={handleReport} />}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.5}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={comments.length === 0 ? { flexGrow: 1 } : { paddingVertical: 6 }}
+          ListEmptyComponent={
+            <EmptyState compact icon="comment-outline" title="No comments yet" message="Start the conversation." />
+          }
+          ListFooterComponent={loadingMore ? <ActivityIndicator style={{ marginVertical: 12 }} color={colors.primary} /> : null}
+        />
+      )}
+
+      <View style={{ height: 1, backgroundColor: colors.border }} />
+      <View className="flex-row items-end px-4 py-2.5" style={{ gap: 10 }}>
+        <Avatar uri={user?.profilePicture || null} name={user?.firstName || "You"} size={32} />
+        <View
+          className="flex-1 flex-row items-end rounded-3xl border px-4"
+          style={{ borderColor: colors.border, backgroundColor: colors.input, minHeight: 40 }}
+        >
+          <TextInput
+            value={text}
+            onChangeText={setText}
+            placeholder="Add a comment…"
+            placeholderTextColor={colors.mutedText}
+            maxLength={REEL_COMMENT_MAX}
+            multiline
+            accessibilityLabel="Write a comment"
+            style={{ flex: 1, color: colors.foreground, fontFamily: fonts.body, fontSize: 14, maxHeight: 100, paddingVertical: 10 }}
+          />
+          {remaining <= 50 ? (
+            <Text style={{ color: remaining <= 10 ? colors.danger : colors.mutedText, fontFamily: fonts.mono, fontSize: 12, paddingBottom: 11, marginLeft: 6 }}>
+              {remaining}
+            </Text>
+          ) : null}
+        </View>
+        <TouchableOpacity
+          hitSlop={4}
+          accessibilityRole="button"
+          accessibilityLabel="Post comment"
+          disabled={!text.trim() || sending}
+          onPress={send}
+          className="h-10 w-10 items-center justify-center rounded-full"
+          style={{ backgroundColor: text.trim() ? colors.primary : colors.surfaceSoft }}
+        >
+          <Icon set="ion" name="arrow-up" size={20} color={text.trim() ? colors.buttonText : colors.mutedText} />
+        </TouchableOpacity>
+      </View>
+    </BottomSheet>
   );
 }

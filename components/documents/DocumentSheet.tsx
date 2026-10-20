@@ -7,6 +7,7 @@ import { documentsLayout } from "./documentMeta";
 import { useContentWidth } from "../../lib/layout";
 import { useTheme } from "../theme";
 import { Icon } from "../Icon";
+import { motion } from "../motion";
 
 /**
  * Bottom sheet used by the Documents feature (upload, summarize, doctor
@@ -52,7 +53,7 @@ export function DocumentSheet({
           style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0, backgroundColor: colors.overlay }}
         />
         <Animated.View
-          entering={SlideInDown.duration(300)}
+          entering={SlideInDown.duration(motion.duration.slow)}
           accessibilityViewIsModal
           style={{
             // Dark: lift the sheet off the dimmed page (surface + hairline edge).

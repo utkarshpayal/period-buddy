@@ -48,6 +48,9 @@ import { dateFromDayKey } from "../../../lib/format";
 import { useTodayKey } from "../../../hooks/useTodayKey";
 import { useSecureScreen } from "../../../lib/screenPrivacy";
 import { Icon } from "../../../components/Icon";
+import { PressableScale } from "../../../components/PressableScale";
+import Animated from "react-native-reanimated";
+import { listEntering } from "../../../components/motion";
 
 // The Cycle length card is narrower than Cycle health, so both peek in.
 const TREND_CARD_WIDTH = 200;
@@ -534,14 +537,12 @@ export default function Home() {
             };
           })
           .map((action) => (
-          <TouchableOpacity
+          <PressableScale
             key={action.key}
             accessibilityLabel={action.count ? `${action.label}, ${action.count} logged today` : action.label}
             accessibilityRole="button"
-            activeOpacity={0.8}
             onPress={() => onQuickAction(action.key)}
-            className="items-center"
-            style={{ flex: 1, maxWidth: 110, paddingHorizontal: 3 }}
+            style={{ alignItems: "center", flex: 1, maxWidth: 110, paddingHorizontal: 3 }}
           >
             <View
               style={{
@@ -585,7 +586,7 @@ export default function Home() {
             <ColumnLabel lineHeight={18} style={{ fontSize: 13, fontWeight: "500", color: colors.foreground, fontFamily: fonts.body, marginTop: 10 }}>
               {genZLabel(action.label, genZModeEnabled)}
             </ColumnLabel>
-          </TouchableOpacity>
+          </PressableScale>
         ))}
       </View>
       </>
@@ -817,8 +818,12 @@ export default function Home() {
               <SkeletonBlock width="100%" height={150} radius={24} />
             </View>
           ) : (
-            shownHome.map((section) => (
-              <React.Fragment key={section.key}>{homeSections[section.key]}</React.Fragment>
+            // Sections fade up in order once the layout is known; later
+            // refreshes keep the same keys, so they don't animate again.
+            shownHome.map((section, i) => (
+              <Animated.View key={section.key} entering={listEntering(i, 6)}>
+                {homeSections[section.key]}
+              </Animated.View>
             ))
           )}
           {homeLayoutReady && shownHome.every((s) => s.key.startsWith("promo_")) ? (

@@ -40,6 +40,8 @@ import { fetchQuery, hydrateQuery, peekQuery } from "../../lib/queryCache";
 import { createReadTimer, formatReadDuration } from "../../lib/readTimer";
 import { shareWithAppLink } from "../../lib/share";
 import { Icon } from "../../components/Icon";
+import Animated from "react-native-reanimated";
+import { listEntering } from "../../components/motion";
 
 // One article or video as this screen shows it (feed items, bookmarks and
 // deep-linked articles all map into this).
@@ -777,7 +779,11 @@ export default function Blogs() {
           keyExtractor={(item) => `${item.type}:${item.id}`}
           numColumns={2}
           columnWrapperStyle={{ paddingHorizontal: GUTTER, gap: GRID_GAP }}
-          renderItem={({ item }) => <View style={{ marginBottom: GRID_GAP }}>{renderTile(item)}</View>}
+          renderItem={({ item, index }) => (
+            <Animated.View entering={index < 8 ? listEntering(index) : undefined} style={{ marginBottom: GRID_GAP }}>
+              {renderTile(item)}
+            </Animated.View>
+          )}
           ListHeaderComponent={listHeader}
           ListEmptyComponent={visibleItems.length === 0 ? emptyNode : null}
           ListFooterComponent={

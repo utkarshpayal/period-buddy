@@ -1,5 +1,6 @@
 import React from "react";
-import { Image, View, type StyleProp, type ViewStyle } from "react-native";
+import { View, type StyleProp, type ViewStyle } from "react-native";
+import { Image } from "expo-image";
 import { useTheme } from "./theme";
 
 const AVATAR_SOURCE = require("../assets/images/illustrations/nura-avatar.png");
@@ -20,7 +21,7 @@ export function NuraAvatar({ size, style }: { size: number; style?: StyleProp<Vi
         style,
       ]}
     >
-      <Image source={AVATAR_SOURCE} style={{ width, height: width * ASPECT, marginTop: size * 0.07 }} resizeMode="contain" />
+      <Image source={AVATAR_SOURCE} style={{ width, height: width * ASPECT, marginTop: size * 0.07 }} contentFit="contain" />
     </View>
   );
 }

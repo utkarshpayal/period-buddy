@@ -35,6 +35,7 @@ import { BirthdayInput } from "../BirthdayInput";
 import { Chip, MonthCalendar, NumberStepper, OptionCard, PrimaryButton, ProgressBar, TextButton } from "./parts";
 import { KeyboardAwareScrollView, KeyboardStickyView } from "react-native-keyboard-controller";
 import { Icon } from "../Icon";
+import { motion } from "../motion";
 
 export type OnboardingValues = {
   cycleLength: number;
@@ -281,7 +282,7 @@ export function OnboardingFlow({ userId, firstName, onSubmit, onFinish }: Onboar
                 />
 
                 {showRanges ? (
-                  <Animated.View entering={FadeInDown.duration(220)} style={{ marginTop: 20 }}>
+                  <Animated.View entering={FadeInDown.duration(motion.duration.base)} style={{ marginTop: 20 }}>
                     <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "800", fontFamily: fonts.body, marginBottom: 10 }}>
                       Roughly when was it?
                     </Text>
@@ -368,7 +369,7 @@ export function OnboardingFlow({ userId, firstName, onSubmit, onFinish }: Onboar
         <View style={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 12, gap: 6 }}>
           {errorMessage ? (
             <Animated.View
-              entering={FadeIn.duration(180)}
+              entering={FadeIn.duration(motion.duration.fast)}
               style={{
                 flexDirection: "row",
                 alignItems: "center",
@@ -484,7 +485,7 @@ function ReadyStep({ name, lastPeriodStartDate, cycleLength, periodLength, isEst
         </View>
       </Animated.View>
 
-      <Animated.View entering={FadeInDown.delay(120).duration(320)} style={{ alignItems: "center", marginTop: 22 }}>
+      <Animated.View entering={FadeInDown.delay(120).duration(motion.duration.slow)} style={{ alignItems: "center", marginTop: 22 }}>
         <Text
           accessibilityRole="header"
           style={{ color: colors.foreground, fontSize: 27, lineHeight: 34, fontWeight: "800", textAlign: "center", fontFamily: fonts.heading }}
@@ -496,7 +497,7 @@ function ReadyStep({ name, lastPeriodStartDate, cycleLength, periodLength, isEst
         </Text>
       </Animated.View>
 
-      <Animated.View entering={FadeInDown.delay(220).duration(320)} style={{ alignSelf: "stretch", marginTop: 24, gap: 12 }}>
+      <Animated.View entering={FadeInDown.delay(220).duration(motion.duration.slow)} style={{ alignSelf: "stretch", marginTop: 24, gap: 12 }}>
         <View style={{ backgroundColor: colors.surface, borderRadius: 22, padding: 18, borderWidth: 1, borderColor: colors.border }}>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
             <Text style={{ color: colors.mutedText, fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}>

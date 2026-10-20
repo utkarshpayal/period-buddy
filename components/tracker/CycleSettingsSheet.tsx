@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Modal, Pressable, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native";
+import { BottomSheet } from "../BottomSheet";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { cycleApi, getFriendlyErrorMessage, type CycleSettings } from "../../lib/api";
 import { addDays, DEFAULT_CYCLE_LENGTH } from "../../lib/cycleCalendar";
@@ -269,262 +270,239 @@ export function CycleSettingsSheet({
   }
 
   return (
-    <Modal
-      animationType="slide"
-      transparent
+    <BottomSheet
       visible={visible}
-      onRequestClose={() => onClose()}
+      onClose={() => onClose()}
+      backdropLabel="Close cycle settings"
+      style={{ maxHeight: "88%", backgroundColor: colors.surface, borderWidth: 1 }}
+      overlay={visible ? <AppModalHost inline /> : null}
     >
-      <View className="flex-1 justify-end">
-        <Pressable
-          accessibilityLabel="Close cycle settings"
-          className="absolute inset-0"
-          onPress={() => onClose()}
-          style={{ backgroundColor: colors.overlay }}
-        />
 
-        <View
-          className="max-h-[88%] overflow-hidden rounded-t-[28px] border"
-          style={{
-            backgroundColor: colors.surface,
-            borderColor: colors.border,
-          }}
-        >
-          <View className="items-center pt-3">
-            <View
-              className="h-1 w-12 rounded-full"
-              style={{ backgroundColor: colors.border }}
-            />
-          </View>
-
-          <ScrollView
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ padding: 24, paddingBottom: Math.max(insets.bottom, 12) + 20 }}
-          >
-            <View className="flex-row items-start justify-between gap-4">
-              <View className="flex-1">
-                <Text
-                  className="text-[12px] font-black uppercase tracking-widest"
-                  style={{ color: colors.primary, fontFamily: fonts.body }}
-                >
-                  Cycle Settings
-                </Text>
-                <Text
-                  className="mt-1 text-2xl font-black tracking-tight"
-                  style={{
-                    color: colors.foreground,
-                    fontFamily: fonts.heading,
-                  }}
-                >
-                  Set your baseline
-                </Text>
-              </View>
-
-              <TouchableOpacity
-                accessibilityLabel="Close cycle settings"
-                onPress={() => onClose()}
-                className="rounded-full border p-2"
-                style={{
-                  backgroundColor: colors.input,
-                  borderColor: colors.border,
-                }}
-              >
-                <Icon set="feather" name="x" size={16} color={colors.foreground} />
-              </TouchableOpacity>
-            </View>
-
-            <View className="mt-6" style={{ gap: 18 }}>
-              {/* Cycle Information */}
-              <SettingsSectionCard title="Cycle Information">
-                <View style={{ gap: 16 }}>
-                  <View className="flex-row items-center justify-between gap-3">
-                    <View className="flex-1">
-                      <Text
-                        className="text-xs font-bold"
-                        style={{
-                          color: colors.foreground,
-                          fontFamily: fonts.body,
-                        }}
-                      >
-                        Cycle length
-                      </Text>
-                    </View>
-                    <PillStepper
-                      max={45}
-                      min={20}
-                      onChange={setCycleLengthInput}
-                      suffix="days"
-                      value={cycleLengthInput}
-                    />
-                  </View>
-
-                  <View className="flex-row items-center justify-between gap-3">
-                    <View className="flex-1">
-                      <Text
-                        className="text-xs font-bold"
-                        style={{
-                          color: colors.foreground,
-                          fontFamily: fonts.body,
-                        }}
-                      >
-                        Period length
-                      </Text>
-                    </View>
-                    <PillStepper
-                      max={10}
-                      min={1}
-                      onChange={setPeriodLengthInput}
-                      suffix="days"
-                      value={periodLengthInput}
-                    />
-                  </View>
-                </View>
-              </SettingsSectionCard>
-
-              {/* Last Period */}
-              <SettingsSectionCard title="Last period started">
-                <MonthCalendar
-                  selectedKey={lastPeriodStartDate}
-                  highlightLength={Number.parseInt(periodLengthInput, 10) || 5}
-                  minDate={addDays(new Date(), -365)}
-                  maxDate={new Date()}
-                  onSelect={(dateKey) => {
-                    setSettingsError("");
-                    setLastPeriodStartDate(dateKey);
-                  }}
-                />
-              </SettingsSectionCard>
-
-              {/* Tracking Goal */}
-              <SettingsSectionCard title="Tracking Goal">
-                <View className="flex-row flex-wrap gap-2">
-                  {TRACKING_GOALS.map((goal) => {
-                    const isSelected = trackingGoal === goal.id;
-                    return (
-                      <TouchableOpacity
-                        key={goal.id}
-                        activeOpacity={0.8}
-                        onPress={() => setTrackingGoal(goal.id)}
-                        className="rounded-full px-3.5 py-2"
-                        style={{
-                          backgroundColor: isSelected
-                            ? colors.primary
-                            : colors.surface,
-                        }}
-                      >
-                        <Text
-                          className="text-xs font-black"
-                          style={{
-                            color: isSelected
-                              ? colors.buttonText
-                              : colors.foreground,
-                            fontFamily: fonts.body,
-                          }}
-                        >
-                          {goal.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </SettingsSectionCard>
-
-              {/* Notifications */}
-              <SettingsSectionCard title="Notifications">
-                <View style={{ gap: 16 }}>
-                  <SettingsToggleRow
-                    label="Period reminders"
-                    onValueChange={setRemindersEnabled}
-                    value={remindersEnabled}
-                  />
-
-                  {remindersEnabled ? (
-                    <View
-                      className="flex-row items-center justify-between rounded-2xl px-4 py-3"
-                      style={{ backgroundColor: colors.surface }}
-                    >
-                      <Text
-                        className="text-xs font-bold"
-                        style={{
-                          color: colors.foreground,
-                          fontFamily: fonts.body,
-                        }}
-                      >
-                        Remind me before
-                      </Text>
-                      <PillStepper
-                        max={10}
-                        min={0}
-                        onChange={setReminderDaysBeforeInput}
-                        size="sm"
-                        suffix="days"
-                        value={reminderDaysBeforeInput}
-                      />
-                    </View>
-                  ) : null}
-
-                  <SettingsToggleRow
-                    label="Ovulation reminders"
-                    onValueChange={setOvulationReminder}
-                    value={ovulationReminder}
-                  />
-
-                  <SettingsToggleRow
-                    label="Fertility window reminders"
-                    onValueChange={setFertilityReminder}
-                    value={fertilityReminder}
-                  />
-
-                  {/* Pregnancy Mode — kept here, below Fertility reminders */}
-                  <SettingsToggleRow
-                    description="Pauses period and fertility reminders."
-                    label="Pregnancy Mode"
-                    onValueChange={setPregnancyMode}
-                    value={pregnancyMode}
-                  />
-                </View>
-              </SettingsSectionCard>
-            </View>
-
-            {settingsError ? (
-              <View
-                className="mt-5 rounded-2xl px-4 py-3"
-                style={{ backgroundColor: colors.dangerLight }}
-              >
-                <Text
-                  className="text-center text-xs font-bold"
-                  style={{ color: colors.danger, fontFamily: fonts.body }}
-                >
-                  {settingsError}
-                </Text>
-              </View>
-            ) : null}
-
-            <TouchableOpacity
-              activeOpacity={0.9}
-              className="mt-6 rounded-full py-4 flex-row items-center justify-center gap-2"
-              disabled={settingsSaving}
-              onPress={save}
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ padding: 24, paddingBottom: Math.max(insets.bottom, 12) + 20 }}
+      >
+        <View className="flex-row items-start justify-between gap-4">
+          <View className="flex-1">
+            <Text
+              className="text-[12px] font-black uppercase tracking-widest"
+              style={{ color: colors.primary, fontFamily: fonts.body }}
+            >
+              Cycle Settings
+            </Text>
+            <Text
+              className="mt-1 text-2xl font-black tracking-tight"
               style={{
-                backgroundColor: colors.primary,
-                opacity: settingsSaving ? 0.7 : 1,
+                color: colors.foreground,
+                fontFamily: fonts.heading,
               }}
             >
-              {settingsSaving ? (
-                <ActivityIndicator size="small" color={colors.buttonText} />
-              ) : null}
-              <Text
-                className="text-sm font-black"
-                style={{ color: colors.buttonText, fontFamily: fonts.body }}
-              >
-                {settingsSaving ? "Saving Settings" : "Save Cycle Settings"}
-              </Text>
-            </TouchableOpacity>
-          </ScrollView>
+              Set your baseline
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            accessibilityLabel="Close cycle settings"
+            onPress={() => onClose()}
+            className="rounded-full border p-2"
+            style={{
+              backgroundColor: colors.input,
+              borderColor: colors.border,
+            }}
+          >
+            <Icon set="feather" name="x" size={16} color={colors.foreground} />
+          </TouchableOpacity>
         </View>
-      </View>
-      {visible ? <AppModalHost inline /> : null}
-    </Modal>
+
+        <View className="mt-6" style={{ gap: 18 }}>
+          {/* Cycle Information */}
+          <SettingsSectionCard title="Cycle Information">
+            <View style={{ gap: 16 }}>
+              <View className="flex-row items-center justify-between gap-3">
+                <View className="flex-1">
+                  <Text
+                    className="text-xs font-bold"
+                    style={{
+                      color: colors.foreground,
+                      fontFamily: fonts.body,
+                    }}
+                  >
+                    Cycle length
+                  </Text>
+                </View>
+                <PillStepper
+                  max={45}
+                  min={20}
+                  onChange={setCycleLengthInput}
+                  suffix="days"
+                  value={cycleLengthInput}
+                />
+              </View>
+
+              <View className="flex-row items-center justify-between gap-3">
+                <View className="flex-1">
+                  <Text
+                    className="text-xs font-bold"
+                    style={{
+                      color: colors.foreground,
+                      fontFamily: fonts.body,
+                    }}
+                  >
+                    Period length
+                  </Text>
+                </View>
+                <PillStepper
+                  max={10}
+                  min={1}
+                  onChange={setPeriodLengthInput}
+                  suffix="days"
+                  value={periodLengthInput}
+                />
+              </View>
+            </View>
+          </SettingsSectionCard>
+
+          {/* Last Period */}
+          <SettingsSectionCard title="Last period started">
+            <MonthCalendar
+              selectedKey={lastPeriodStartDate}
+              highlightLength={Number.parseInt(periodLengthInput, 10) || 5}
+              minDate={addDays(new Date(), -365)}
+              maxDate={new Date()}
+              onSelect={(dateKey) => {
+                setSettingsError("");
+                setLastPeriodStartDate(dateKey);
+              }}
+            />
+          </SettingsSectionCard>
+
+          {/* Tracking Goal */}
+          <SettingsSectionCard title="Tracking Goal">
+            <View className="flex-row flex-wrap gap-2">
+              {TRACKING_GOALS.map((goal) => {
+                const isSelected = trackingGoal === goal.id;
+                return (
+                  <TouchableOpacity
+                    key={goal.id}
+                    activeOpacity={0.8}
+                    onPress={() => setTrackingGoal(goal.id)}
+                    className="rounded-full px-3.5 py-2"
+                    style={{
+                      backgroundColor: isSelected
+                        ? colors.primary
+                        : colors.surface,
+                    }}
+                  >
+                    <Text
+                      className="text-xs font-black"
+                      style={{
+                        color: isSelected
+                          ? colors.buttonText
+                          : colors.foreground,
+                        fontFamily: fonts.body,
+                      }}
+                    >
+                      {goal.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </SettingsSectionCard>
+
+          {/* Notifications */}
+          <SettingsSectionCard title="Notifications">
+            <View style={{ gap: 16 }}>
+              <SettingsToggleRow
+                label="Period reminders"
+                onValueChange={setRemindersEnabled}
+                value={remindersEnabled}
+              />
+
+              {remindersEnabled ? (
+                <View
+                  className="flex-row items-center justify-between rounded-2xl px-4 py-3"
+                  style={{ backgroundColor: colors.surface }}
+                >
+                  <Text
+                    className="text-xs font-bold"
+                    style={{
+                      color: colors.foreground,
+                      fontFamily: fonts.body,
+                    }}
+                  >
+                    Remind me before
+                  </Text>
+                  <PillStepper
+                    max={10}
+                    min={0}
+                    onChange={setReminderDaysBeforeInput}
+                    size="sm"
+                    suffix="days"
+                    value={reminderDaysBeforeInput}
+                  />
+                </View>
+              ) : null}
+
+              <SettingsToggleRow
+                label="Ovulation reminders"
+                onValueChange={setOvulationReminder}
+                value={ovulationReminder}
+              />
+
+              <SettingsToggleRow
+                label="Fertility window reminders"
+                onValueChange={setFertilityReminder}
+                value={fertilityReminder}
+              />
+
+              {/* Pregnancy Mode — kept here, below Fertility reminders */}
+              <SettingsToggleRow
+                description="Pauses period and fertility reminders."
+                label="Pregnancy Mode"
+                onValueChange={setPregnancyMode}
+                value={pregnancyMode}
+              />
+            </View>
+          </SettingsSectionCard>
+        </View>
+
+        {settingsError ? (
+          <View
+            className="mt-5 rounded-2xl px-4 py-3"
+            style={{ backgroundColor: colors.dangerLight }}
+          >
+            <Text
+              className="text-center text-xs font-bold"
+              style={{ color: colors.danger, fontFamily: fonts.body }}
+            >
+              {settingsError}
+            </Text>
+          </View>
+        ) : null}
+
+        <TouchableOpacity
+          activeOpacity={0.9}
+          className="mt-6 rounded-full py-4 flex-row items-center justify-center gap-2"
+          disabled={settingsSaving}
+          onPress={save}
+          style={{
+            backgroundColor: colors.primary,
+            opacity: settingsSaving ? 0.7 : 1,
+          }}
+        >
+          {settingsSaving ? (
+            <ActivityIndicator size="small" color={colors.buttonText} />
+          ) : null}
+          <Text
+            className="text-sm font-black"
+            style={{ color: colors.buttonText, fontFamily: fonts.body }}
+          >
+            {settingsSaving ? "Saving Settings" : "Save Cycle Settings"}
+          </Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </BottomSheet>
   );
 }

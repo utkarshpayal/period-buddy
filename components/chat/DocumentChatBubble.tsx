@@ -7,6 +7,7 @@ import { NuraAvatar } from "../NuraAvatar";
 import { useTheme } from "../theme";
 import { getShadow } from "../ui-tokens";
 import { Icon } from "../Icon";
+import { motion } from "../motion";
 
 function formatTime(dateString: string) {
   return new Date(dateString).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
@@ -60,7 +61,7 @@ export const DocumentChatBubble = memo(function DocumentChatBubble({
           {dayLabel(message.createdAt)}
         </Text>
       ) : null}
-      <Animated.View entering={animate ? FadeInUp.duration(260) : undefined}>
+      <Animated.View entering={animate ? FadeInUp.duration(motion.duration.base) : undefined}>
         {isAssistant ? (
           <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 8, maxWidth: "92%" }}>
             <DocumentAssistantMark />

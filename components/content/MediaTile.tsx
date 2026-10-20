@@ -1,9 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import React, { useState } from "react";
-import { Image, Text, TouchableOpacity, View, type StyleProp, type ViewStyle } from "react-native";
+import { Text, TouchableOpacity, View, type StyleProp, type ViewStyle } from "react-native";
+import { Image } from "expo-image";
 import { useTheme } from "../theme";
 import { getShadow } from "../ui-tokens";
 import { Icon } from "../Icon";
+import { PressableScale } from "../PressableScale";
+import { motion } from "../motion";
 
 type IconName = React.ComponentProps<typeof Ionicons>["name"];
 
@@ -34,8 +37,9 @@ export function MediaCover({
     <View style={{ width: "100%", aspectRatio, backgroundColor: tone.bg, alignItems: "center", justifyContent: "center" }}>
       {showImage ? (
         <Image
+          transition={motion.duration.base}
           source={{ uri: imageUrl! }}
-          resizeMode="cover"
+          contentFit="cover"
           onError={() => setFailedUrl(imageUrl ?? null)}
           style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
           accessibilityIgnoresInvertColors
@@ -167,9 +171,8 @@ export function MediaTile({
 
   return (
     <View style={[{ width, borderRadius: 24, backgroundColor: colors.surface, ...getShadow(colors, isDark) }, style]}>
-      <TouchableOpacity
+      <PressableScale
         onPress={onPress}
-        activeOpacity={0.88}
         accessibilityRole="button"
         accessibilityLabel={`${isVideo ? "Video" : "Article"}: ${title}. ${meta}`}
         accessibilityHint={isVideo ? "Plays the video" : "Opens the article"}
@@ -215,7 +218,7 @@ export function MediaTile({
             {meta}
           </Text>
         </View>
-      </TouchableOpacity>
+      </PressableScale>
 
       {/* Sibling of the card's touchable, so it isn't a nested button. */}
       {onToggleSave && saved !== undefined ? <SaveButton saved={saved} onPress={onToggleSave} /> : null}

@@ -37,6 +37,7 @@ import {
 } from "../../lib/reels";
 import { shareWithAppLink } from "../../lib/share";
 import { Icon } from "../../components/Icon";
+import { haptics } from "../../lib/haptics";
 
 const MUTE_KEY = "period-buddy.reels.muted";
 const SKELETON_TINT = { backgroundColor: "rgba(255,255,255,0.14)" };
@@ -257,6 +258,7 @@ export default function Reels() {
   const setLike = useCallback(async (id: string, liked: boolean) => {
     const current = reelsRef.current.find((reel) => reel.id === id);
     if (!current || current.isLiked === liked) return;
+    haptics.tap();
     const before = { isLiked: current.isLiked, likeCount: current.likeCount };
     const seq = (likeSeqRef.current.get(id) ?? 0) + 1;
     likeSeqRef.current.set(id, seq);
@@ -364,6 +366,7 @@ export default function Reels() {
     async (reelId: string, optionId: string) => {
       const current = reelsRef.current.find((reel) => reel.id === reelId);
       if (!current || current.votedOptionId) return;
+      haptics.tap();
       const before = { votedOptionId: current.votedOptionId, pollOptions: current.pollOptions };
       setReels((list) =>
         updateReel(list, reelId, (reel) => ({

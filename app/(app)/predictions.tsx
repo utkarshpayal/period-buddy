@@ -14,6 +14,7 @@ import { addDays } from "../../lib/cycleCalendar";
 import { dateFromDayKey } from "../../lib/format";
 import { useSecureScreen } from "../../lib/screenPrivacy";
 import { Icon } from "../../components/Icon";
+import { motion } from "../../components/motion";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -233,7 +234,7 @@ export default function Predictions() {
 
             {/* 1. Next period */}
             {view.isLate ? (
-              <Animated.View entering={FadeInDown.duration(320)} style={{ ...card, padding: 20, marginBottom: 16, backgroundColor: stageColors.period.soft, borderColor: isDark ? colors.border : "transparent" }}>
+              <Animated.View entering={FadeInDown.duration(motion.duration.slow)} style={{ ...card, padding: 20, marginBottom: 16, backgroundColor: stageColors.period.soft, borderColor: isDark ? colors.border : "transparent" }}>
                 <Text style={{ fontSize: 13, fontWeight: "700", color: colors.mutedText, fontFamily: fonts.body }}>
                   {`Was due ${fmtLong(view.nextPeriod)}`}
                 </Text>
@@ -259,7 +260,7 @@ export default function Predictions() {
               </Animated.View>
             ) : null}
 
-            <Animated.View entering={FadeInDown.duration(320)} style={{ ...card, padding: 20 }}>
+            <Animated.View entering={FadeInDown.duration(motion.duration.slow)} style={{ ...card, padding: 20 }}>
               <Text style={{ fontSize: 13, fontWeight: "700", color: colors.mutedText, fontFamily: fonts.body }}>
                 {view.isLate ? "Where you are in this cycle" : "Your next period"}
               </Text>

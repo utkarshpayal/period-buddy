@@ -34,6 +34,7 @@ import { isAiConsentRequired } from "../../lib/qaFallback";
 import { useSecureScreen } from "../../lib/screenPrivacy";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { Icon } from "../../components/Icon";
+import { motion } from "../../components/motion";
 
 /** One-tap questions: about the document opened from Documents, or general ones. */
 function suggestionsFor(docTitle: string | null) {
@@ -274,7 +275,7 @@ export default function DocumentChatScreen() {
           <View className="px-6 pb-2 pt-1 flex-row">
             <Animated.View
               key={contextTitle ?? "all"}
-              entering={FadeIn.duration(200)}
+              entering={FadeIn.duration(motion.duration.base)}
               style={{
                 flexDirection: "row",
                 alignItems: "center",
@@ -322,7 +323,7 @@ export default function DocumentChatScreen() {
             {messages.length === 0 && !isReplying ? (
               <View className="flex-1">
                 <Animated.View
-                  entering={FadeInUp.duration(280)}
+                  entering={FadeInUp.duration(motion.duration.base)}
                   style={{ alignItems: "center", paddingHorizontal: 36, paddingTop: 32, paddingBottom: 8 }}
                 >
                   <NuraAvatar size={64} />
@@ -343,7 +344,7 @@ export default function DocumentChatScreen() {
                 // The list is inverted, so its header sits under the newest message.
                 ListHeaderComponent={
                   isReplying ? (
-                    <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(120)}>
+                    <Animated.View entering={FadeIn.duration(motion.duration.base)} exiting={FadeOut.duration(motion.duration.fast)}>
                       <TypingRow avatar={<DocumentAssistantMark />} />
                     </Animated.View>
                   ) : null
@@ -361,7 +362,7 @@ export default function DocumentChatScreen() {
 
           {/* Suggested questions */}
           {showSuggestions ? (
-            <Animated.View entering={FadeInUp.duration(220)} exiting={FadeOut.duration(150)}>
+            <Animated.View entering={FadeInUp.duration(motion.duration.base)} exiting={FadeOut.duration(motion.duration.fast)}>
               <SuggestionChips questions={suggestions} onPick={(question) => void handleSend(question)} variant="soft" contentContainerStyle={{ paddingBottom: 8 }} />
             </Animated.View>
           ) : null}

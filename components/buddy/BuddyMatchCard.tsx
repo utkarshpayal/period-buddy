@@ -7,6 +7,7 @@ import PressableFeedback from "../PressableFeedback";
 import { useTheme, type ThemeColors } from "../theme";
 import { getShadow } from "../ui-tokens";
 import { Icon } from "../Icon";
+import { motion } from "../motion";
 
 /** Solid + pale colour per cycle phase (same family the tracker uses). */
 export function phaseTint(phase: BuddyPhaseKey, colors: ThemeColors) {
@@ -67,7 +68,7 @@ export function BuddyMatchCard({
 
   return (
     <Animated.View
-      entering={reduceMotion ? undefined : FadeInDown.delay(Math.min(index, 8) * 45).duration(320)}
+      entering={reduceMotion ? undefined : FadeInDown.delay(Math.min(index, 8) * 45).duration(motion.duration.slow)}
       layout={reduceMotion ? undefined : LinearTransition.duration(200)}
     >
       <PressableFeedback

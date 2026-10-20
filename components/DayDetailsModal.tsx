@@ -2,10 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Modal,
   Platform,
-  Pressable,
   ScrollView,
   Switch,
   Text,
@@ -20,6 +17,7 @@ import { alert } from "../lib/alert";
 import { getFriendlyErrorMessage } from "../lib/api";
 import { addedSymptoms, parseDecimal } from "../lib/dayLog";
 import type { LogFocus } from "../lib/logFocus";
+import { BottomSheet } from "./BottomSheet";
 import { AppModalHost } from "./modals/AppModalHost";
 import { useTheme } from "./theme";
 import { useSecureScreen } from "../lib/screenPrivacy";
@@ -620,471 +618,359 @@ export default function DayDetailsModal({
   }
 
   return (
-    <Modal
-      animationType="slide"
-      transparent
+    <BottomSheet
       visible={visible}
-      onRequestClose={() => confirmDiscardIfDirty(onClose)}
+      // May ask "discard changes?" first, so the sheet stays up behind the prompt.
+      onClose={() => confirmDiscardIfDirty(onClose)}
+      animateOutBeforeClose={false}
+      avoidKeyboard
+      androidKeyboardBehavior="height"
+      keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
+      backdropLabel="Close day details"
+      style={{ backgroundColor: colors.surface, borderWidth: 1, maxHeight: "86%", ...getShadow(colors, isDark) }}
+      // Alerts raised while the sheet is open (discard, save errors) draw
+      // inside it; the root host's Modal would sit behind this one. Only
+      // while visible, so it never takes alerts from the rest of the app.
+      overlay={visible ? <AppModalHost inline /> : null}
     >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
-        style={{ flex: 1, justifyContent: "flex-end" }}
-      >
-        <Pressable
-          accessibilityLabel="Close day details"
-          onPress={() => confirmDiscardIfDirty(onClose)}
-          style={{
-            backgroundColor: colors.overlay,
-            bottom: 0,
-            left: 0,
-            position: "absolute",
-            right: 0,
-            top: 0,
-          }}
-        />
 
+      <ScrollView
+        ref={scrollRef}
+        automaticallyAdjustKeyboardInsets
+        keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{
+          padding: 20,
+          paddingBottom: 24,
+        }}
+      >
         <View
           style={{
-            backgroundColor: colors.surface,
-            borderColor: colors.border,
-            borderTopLeftRadius: 28,
-            borderTopRightRadius: 28,
-            borderWidth: 1,
-            maxHeight: "86%",
-            overflow: "hidden",
-            ...getShadow(colors, isDark),
+            alignItems: "center",
+            flexDirection: "row",
+            justifyContent: "space-between",
           }}
         >
-          <View style={{ alignItems: "center", paddingTop: 12 }}>
-            <View
-              style={{
-                backgroundColor: colors.border,
-                borderRadius: 3,
-                height: 4,
-                width: 44,
-              }}
-            />
-          </View>
-
-          <ScrollView
-            ref={scrollRef}
-            automaticallyAdjustKeyboardInsets
-            keyboardDismissMode="on-drag"
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{
-              padding: 20,
-              paddingBottom: 24,
+          <Text
+            style={{
+              color: colors.foreground,
+              flex: 1,
+              fontSize: 18,
+              fontWeight: "700",
+              fontFamily: fonts.heading,
             }}
           >
-            <View
-              style={{
-                alignItems: "center",
-                flexDirection: "row",
-                justifyContent: "space-between",
-              }}
-            >
-              <Text
-                style={{
-                  color: colors.foreground,
-                  flex: 1,
-                  fontSize: 18,
-                  fontWeight: "700",
-                  fontFamily: fonts.heading,
-                }}
-              >
-                {dateLabel ?? `Day ${day}`}
-              </Text>
+            {dateLabel ?? `Day ${day}`}
+          </Text>
 
-              <TouchableOpacity
-                onPress={() => confirmDiscardIfDirty(onClose)}
-                accessibilityRole="button"
-                accessibilityLabel="Close day details"
-                hitSlop={8}
-                style={{ padding: 8, margin: -8 }}
-              >
-                <Icon set="ion" name="close" size={22} color={colors.mutedText} />
-              </TouchableOpacity>
-            </View>
+          <TouchableOpacity
+            onPress={() => confirmDiscardIfDirty(onClose)}
+            accessibilityRole="button"
+            accessibilityLabel="Close day details"
+            hitSlop={8}
+            style={{ padding: 8, margin: -8 }}
+          >
+            <Icon set="ion" name="close" size={22} color={colors.mutedText} />
+          </TouchableOpacity>
+        </View>
 
-            <Text
-              style={{ color: colors.mutedText, marginTop: 8, lineHeight: 20, fontFamily: fonts.body }}
-            >
-              {phaseLabel
-                ? `${phaseLabel} — log what changed today`
-                : "Log what changed today"}
-            </Text>
+        <Text
+          style={{ color: colors.mutedText, marginTop: 8, lineHeight: 20, fontFamily: fonts.body }}
+        >
+          {phaseLabel
+            ? `${phaseLabel} — log what changed today`
+            : "Log what changed today"}
+        </Text>
 
-            {/* Menstrual flow */}
-            <View onLayout={(e) => recordSection("flow", e.nativeEvent.layout.y)}>
-              <SectionTitle title="Menstrual flow" icon="water" tint={tints.flow} />
-              <View style={styles.optionWrap}>
-                {flowOptions
-                  .filter((flow) => flow.value !== "none")
-                  .map((flow) =>
-                    renderOption({
-                      ...flow,
-                      isSelected: selectedFlow === flow.value,
-                      onPress: () =>
-                        setSelectedFlow((current) =>
-                          current === flow.value ? undefined : flow.value,
-                        ),
-                      selectionMode: "single",
-                      tint: tints.flow,
-                    }),
-                  )}
-                {renderOption({
-                  ...bloodClotOption,
-                  isSelected: selectedSymptoms.includes(bloodClotOption.value),
-                  onPress: () => toggleSymptom(bloodClotOption.value),
+        {/* Menstrual flow */}
+        <View onLayout={(e) => recordSection("flow", e.nativeEvent.layout.y)}>
+          <SectionTitle title="Menstrual flow" icon="water" tint={tints.flow} />
+          <View style={styles.optionWrap}>
+            {flowOptions
+              .filter((flow) => flow.value !== "none")
+              .map((flow) =>
+                renderOption({
+                  ...flow,
+                  isSelected: selectedFlow === flow.value,
+                  onPress: () =>
+                    setSelectedFlow((current) =>
+                      current === flow.value ? undefined : flow.value,
+                    ),
+                  selectionMode: "single",
                   tint: tints.flow,
-                })}
-              </View>
-            </View>
-
-            {/* Ovulation symptoms */}
-            <SectionTitle title="Ovulation symptoms" icon="analytics-outline" tint={tints.ovulation} />
-            <View style={styles.optionWrap}>
-              {ovulationOptions.map((option) =>
-                renderOption({
-                  ...option,
-                  isSelected: selectedSymptoms.includes(option.value),
-                  onPress: () => toggleSymptom(option.value),
-                  tint: tints.ovulation,
                 }),
               )}
-            </View>
+            {renderOption({
+              ...bloodClotOption,
+              isSelected: selectedSymptoms.includes(bloodClotOption.value),
+              onPress: () => toggleSymptom(bloodClotOption.value),
+              tint: tints.flow,
+            })}
+          </View>
+        </View>
 
-            {/* Sex and sex drive */}
-            <SectionTitle title="Sex and sex drive" icon="heart-outline" tint={tints.sex} />
-            <View style={styles.optionWrap}>
-              {sexOptions.map((option) =>
-                renderOption({
-                  ...option,
-                  isSelected: selectedSymptoms.includes(option.value),
-                  onPress: () => toggleSymptom(option.value),
-                  tint: tints.sex,
-                }),
-              )}
-            </View>
+        {/* Ovulation symptoms */}
+        <SectionTitle title="Ovulation symptoms" icon="analytics-outline" tint={tints.ovulation} />
+        <View style={styles.optionWrap}>
+          {ovulationOptions.map((option) =>
+            renderOption({
+              ...option,
+              isSelected: selectedSymptoms.includes(option.value),
+              onPress: () => toggleSymptom(option.value),
+              tint: tints.ovulation,
+            }),
+          )}
+        </View>
 
-            {/* Mood */}
-            <View onLayout={(e) => recordSection("mood", e.nativeEvent.layout.y)}>
-              <SectionTitle title="Mood" icon="happy-outline" tint={tints.mood} />
-              <View style={styles.optionWrap}>
-                {moodOptions.map((mood) =>
-                  renderOption({
-                    ...mood,
-                    isSelected: selectedMoods.includes(mood.value),
-                    onPress: () => toggleInArray(setSelectedMoods, mood.value),
-                    tint: tints.mood,
-                  }),
-                )}
-              </View>
-            </View>
+        {/* Sex and sex drive */}
+        <SectionTitle title="Sex and sex drive" icon="heart-outline" tint={tints.sex} />
+        <View style={styles.optionWrap}>
+          {sexOptions.map((option) =>
+            renderOption({
+              ...option,
+              isSelected: selectedSymptoms.includes(option.value),
+              onPress: () => toggleSymptom(option.value),
+              tint: tints.sex,
+            }),
+          )}
+        </View>
 
-            {/* Physical symptoms */}
-            <View onLayout={(e) => recordSection("symptoms", e.nativeEvent.layout.y)}>
-              <SectionTitle title="Physical symptoms" icon="pulse-outline" tint={tints.symptoms} />
-              <View style={styles.optionWrap}>
-                {symptomOptions.map((symptom) =>
-                  renderOption({
-                    ...symptom,
-                    isSelected: selectedSymptoms.includes(symptom.value),
-                    onPress: () => toggleSymptom(symptom.value),
-                    tint: tints.symptoms,
-                  }),
-                )}
-              </View>
-            </View>
+        {/* Mood */}
+        <View onLayout={(e) => recordSection("mood", e.nativeEvent.layout.y)}>
+          <SectionTitle title="Mood" icon="happy-outline" tint={tints.mood} />
+          <View style={styles.optionWrap}>
+            {moodOptions.map((mood) =>
+              renderOption({
+                ...mood,
+                isSelected: selectedMoods.includes(mood.value),
+                onPress: () => toggleInArray(setSelectedMoods, mood.value),
+                tint: tints.mood,
+              }),
+            )}
+          </View>
+        </View>
 
-            {/* Vaginal discharge */}
-            <SectionTitle title="Vaginal discharge" onY={(y) => recordSection("discharge", y)} icon="water-outline" tint={tints.discharge} />
-            <View style={styles.optionWrap}>
-              {dischargeOptions.map((option) =>
-                renderOption({
-                  ...option,
-                  isSelected: selectedDischarge === option.value,
-                  onPress: () =>
-                    setSelectedDischarge((current) =>
-                      current === option.value ? undefined : option.value,
-                    ),
-                  selectionMode: "single",
-                  tint: tints.discharge,
-                }),
-              )}
-              {extraDischargeOptions.map((option) =>
-                renderOption({
-                  ...option,
-                  isSelected: selectedSymptoms.includes(option.value),
-                  onPress: () => toggleSymptom(option.value),
-                  tint: tints.discharge,
-                }),
-              )}
-            </View>
+        {/* Physical symptoms */}
+        <View onLayout={(e) => recordSection("symptoms", e.nativeEvent.layout.y)}>
+          <SectionTitle title="Physical symptoms" icon="pulse-outline" tint={tints.symptoms} />
+          <View style={styles.optionWrap}>
+            {symptomOptions.map((symptom) =>
+              renderOption({
+                ...symptom,
+                isSelected: selectedSymptoms.includes(symptom.value),
+                onPress: () => toggleSymptom(symptom.value),
+                tint: tints.symptoms,
+              }),
+            )}
+          </View>
+        </View>
 
-            {/* Digestion and stool */}
-            <SectionTitle title="Digestion and stool" onY={(y) => recordSection("digestion", y)} icon="nutrition-outline" tint={tints.digestion} />
-            <View style={styles.optionWrap}>
-              {renderOption({
-                ...nauseaOption,
-                isSelected: selectedSymptoms.includes(nauseaOption.value),
-                onPress: () => toggleSymptom(nauseaOption.value),
+        {/* Vaginal discharge */}
+        <SectionTitle title="Vaginal discharge" onY={(y) => recordSection("discharge", y)} icon="water-outline" tint={tints.discharge} />
+        <View style={styles.optionWrap}>
+          {dischargeOptions.map((option) =>
+            renderOption({
+              ...option,
+              isSelected: selectedDischarge === option.value,
+              onPress: () =>
+                setSelectedDischarge((current) =>
+                  current === option.value ? undefined : option.value,
+                ),
+              selectionMode: "single",
+              tint: tints.discharge,
+            }),
+          )}
+          {extraDischargeOptions.map((option) =>
+            renderOption({
+              ...option,
+              isSelected: selectedSymptoms.includes(option.value),
+              onPress: () => toggleSymptom(option.value),
+              tint: tints.discharge,
+            }),
+          )}
+        </View>
+
+        {/* Digestion and stool */}
+        <SectionTitle title="Digestion and stool" onY={(y) => recordSection("digestion", y)} icon="nutrition-outline" tint={tints.digestion} />
+        <View style={styles.optionWrap}>
+          {renderOption({
+            ...nauseaOption,
+            isSelected: selectedSymptoms.includes(nauseaOption.value),
+            onPress: () => toggleSymptom(nauseaOption.value),
+            tint: tints.digestion,
+          })}
+          {digestionOptions
+            .filter((option) => option.value !== "normal")
+            .map((option) =>
+              renderOption({
+                ...option,
+                isSelected: selectedDigestions.includes(option.value),
+                onPress: () => toggleInArray(setSelectedDigestions, option.value),
                 tint: tints.digestion,
-              })}
-              {digestionOptions
-                .filter((option) => option.value !== "normal")
-                .map((option) =>
-                  renderOption({
-                    ...option,
-                    isSelected: selectedDigestions.includes(option.value),
-                    onPress: () => toggleInArray(setSelectedDigestions, option.value),
-                    tint: tints.digestion,
-                  }),
-                )}
-            </View>
+              }),
+            )}
+        </View>
 
-            {/* Pregnancy test */}
-            <SectionTitle title="Pregnancy test" icon="flask-outline" tint={tints.pregnancy} />
-            <View style={styles.optionWrap}>
-              {pregnancyTestOptions.map((option) =>
-                renderOption({
-                  ...option,
-                  isSelected: selectedSymptoms.includes(option.value),
-                  onPress: () => toggleSymptom(option.value),
-                  tint: tints.pregnancy,
-                }),
-              )}
-            </View>
+        {/* Pregnancy test */}
+        <SectionTitle title="Pregnancy test" icon="flask-outline" tint={tints.pregnancy} />
+        <View style={styles.optionWrap}>
+          {pregnancyTestOptions.map((option) =>
+            renderOption({
+              ...option,
+              isSelected: selectedSymptoms.includes(option.value),
+              onPress: () => toggleSymptom(option.value),
+              tint: tints.pregnancy,
+            }),
+          )}
+        </View>
 
-            {/* Physical activity */}
-            <SectionTitle title="Physical activity" onY={(y) => recordSection("activity", y)} icon="fitness-outline" tint={tints.activity} />
-            <View style={styles.optionWrap}>
-              {exerciseOptions.map((option) =>
-                renderOption({
-                  ...option,
-                  isSelected: selectedExercise.includes(option.value),
-                  onPress: () => toggleExercise(option.value),
-                  tint: tints.activity,
-                }),
-              )}
-            </View>
+        {/* Physical activity */}
+        <SectionTitle title="Physical activity" onY={(y) => recordSection("activity", y)} icon="fitness-outline" tint={tints.activity} />
+        <View style={styles.optionWrap}>
+          {exerciseOptions.map((option) =>
+            renderOption({
+              ...option,
+              isSelected: selectedExercise.includes(option.value),
+              onPress: () => toggleExercise(option.value),
+              tint: tints.activity,
+            }),
+          )}
+        </View>
 
-            <SectionTitle title="Energy" onY={(y) => recordSection("energy", y)} icon="battery-half-outline" tint={tints.energy} />
-            <View style={styles.optionWrap}>
-              {energyOptions.map((energy) =>
-                renderOption({
-                  ...energy,
-                  isSelected: selectedEnergy === energy.value,
-                  onPress: () =>
-                    setSelectedEnergy((current) =>
-                      current === energy.value ? undefined : energy.value,
-                    ),
-                  selectionMode: "single",
-                  tint: tints.energy,
-                }),
-              )}
-            </View>
+        <SectionTitle title="Energy" onY={(y) => recordSection("energy", y)} icon="battery-half-outline" tint={tints.energy} />
+        <View style={styles.optionWrap}>
+          {energyOptions.map((energy) =>
+            renderOption({
+              ...energy,
+              isSelected: selectedEnergy === energy.value,
+              onPress: () =>
+                setSelectedEnergy((current) =>
+                  current === energy.value ? undefined : energy.value,
+                ),
+              selectionMode: "single",
+              tint: tints.energy,
+            }),
+          )}
+        </View>
 
-            <SectionTitle title="Skin" onY={(y) => recordSection("skin", y)} icon="happy-outline" tint={tints.skin} />
-            <View style={styles.optionWrap}>
-              {skinOptions.map((option) =>
-                renderOption({
-                  ...option,
-                  isSelected: selectedSkins.includes(option.value),
-                  onPress: () => toggleInArray(setSelectedSkins, option.value),
-                  tint: tints.skin,
-                }),
-              )}
-            </View>
+        <SectionTitle title="Skin" onY={(y) => recordSection("skin", y)} icon="happy-outline" tint={tints.skin} />
+        <View style={styles.optionWrap}>
+          {skinOptions.map((option) =>
+            renderOption({
+              ...option,
+              isSelected: selectedSkins.includes(option.value),
+              onPress: () => toggleInArray(setSelectedSkins, option.value),
+              tint: tints.skin,
+            }),
+          )}
+        </View>
 
-            <SectionTitle title="Sleep Hours" onY={(y) => recordSection("sleep", y)} icon="bed-outline" />
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 10 }}>
-              <TouchableOpacity
-                onPress={() => setSleepHours((h) => Math.max(0, (h ?? 8) - 1))}
-                accessibilityRole="button"
-                accessibilityLabel="Decrease sleep hours"
-                hitSlop={6}
-                style={{
-                  backgroundColor: colors.input,
-                  borderColor: colors.border,
-                  borderWidth: 1,
-                  borderRadius: 12,
-                  width: 40,
-                  height: 40,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "bold", fontFamily: fonts.body }}>-</Text>
-              </TouchableOpacity>
-              <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "700", fontFamily: fonts.mono }}>
-                {sleepHours !== undefined ? `${sleepHours} hrs` : "Not logged"}
-              </Text>
-              <TouchableOpacity
-                onPress={() => setSleepHours((h) => Math.min(24, (h ?? 8) + 1))}
-                accessibilityRole="button"
-                accessibilityLabel="Increase sleep hours"
-                hitSlop={6}
-                style={{
-                  backgroundColor: colors.input,
-                  borderColor: colors.border,
-                  borderWidth: 1,
-                  borderRadius: 12,
-                  width: 40,
-                  height: 40,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "bold", fontFamily: fonts.body }}>+</Text>
-              </TouchableOpacity>
-              {sleepHours !== undefined && (
-                <TouchableOpacity onPress={() => setSleepHours(undefined)} style={{ marginLeft: "auto" }}>
-                  <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body }}>Clear</Text>
-                </TouchableOpacity>
-              )}
-            </View>
+        <SectionTitle title="Sleep Hours" onY={(y) => recordSection("sleep", y)} icon="bed-outline" />
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 10 }}>
+          <TouchableOpacity
+            onPress={() => setSleepHours((h) => Math.max(0, (h ?? 8) - 1))}
+            accessibilityRole="button"
+            accessibilityLabel="Decrease sleep hours"
+            hitSlop={6}
+            style={{
+              backgroundColor: colors.input,
+              borderColor: colors.border,
+              borderWidth: 1,
+              borderRadius: 12,
+              width: 40,
+              height: 40,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "bold", fontFamily: fonts.body }}>-</Text>
+          </TouchableOpacity>
+          <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "700", fontFamily: fonts.mono }}>
+            {sleepHours !== undefined ? `${sleepHours} hrs` : "Not logged"}
+          </Text>
+          <TouchableOpacity
+            onPress={() => setSleepHours((h) => Math.min(24, (h ?? 8) + 1))}
+            accessibilityRole="button"
+            accessibilityLabel="Increase sleep hours"
+            hitSlop={6}
+            style={{
+              backgroundColor: colors.input,
+              borderColor: colors.border,
+              borderWidth: 1,
+              borderRadius: 12,
+              width: 40,
+              height: 40,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "bold", fontFamily: fonts.body }}>+</Text>
+          </TouchableOpacity>
+          {sleepHours !== undefined && (
+            <TouchableOpacity onPress={() => setSleepHours(undefined)} style={{ marginLeft: "auto" }}>
+              <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body }}>Clear</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
-            <SectionTitle title="Water Intake" onY={(y) => recordSection("water", y)} icon="beaker-outline" />
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 10 }}>
-              <TouchableOpacity
-                onPress={() => setWaterIntake((w) => Math.max(0, (w ?? 250) - 250))}
-                accessibilityRole="button"
-                accessibilityLabel="Decrease water intake"
-                hitSlop={6}
-                style={{
-                  backgroundColor: colors.input,
-                  borderColor: colors.border,
-                  borderWidth: 1,
-                  borderRadius: 12,
-                  width: 40,
-                  height: 40,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "bold", fontFamily: fonts.body }}>-</Text>
-              </TouchableOpacity>
-              <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "700", fontFamily: fonts.mono }}>
-                {waterIntake !== undefined ? `${waterIntake} ml` : "Not logged"}
-              </Text>
-              <TouchableOpacity
-                onPress={() => setWaterIntake((w) => Math.min(8000, (w ?? 0) + 250))}
-                accessibilityRole="button"
-                accessibilityLabel="Increase water intake"
-                hitSlop={6}
-                style={{
-                  backgroundColor: colors.input,
-                  borderColor: colors.border,
-                  borderWidth: 1,
-                  borderRadius: 12,
-                  width: 40,
-                  height: 40,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "bold", fontFamily: fonts.body }}>+</Text>
-              </TouchableOpacity>
-              {waterIntake !== undefined && (
-                <TouchableOpacity onPress={() => setWaterIntake(undefined)} style={{ marginLeft: "auto" }}>
-                  <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body }}>Clear</Text>
-                </TouchableOpacity>
-              )}
-            </View>
+        <SectionTitle title="Water Intake" onY={(y) => recordSection("water", y)} icon="beaker-outline" />
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginTop: 10 }}>
+          <TouchableOpacity
+            onPress={() => setWaterIntake((w) => Math.max(0, (w ?? 250) - 250))}
+            accessibilityRole="button"
+            accessibilityLabel="Decrease water intake"
+            hitSlop={6}
+            style={{
+              backgroundColor: colors.input,
+              borderColor: colors.border,
+              borderWidth: 1,
+              borderRadius: 12,
+              width: 40,
+              height: 40,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "bold", fontFamily: fonts.body }}>-</Text>
+          </TouchableOpacity>
+          <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "700", fontFamily: fonts.mono }}>
+            {waterIntake !== undefined ? `${waterIntake} ml` : "Not logged"}
+          </Text>
+          <TouchableOpacity
+            onPress={() => setWaterIntake((w) => Math.min(8000, (w ?? 0) + 250))}
+            accessibilityRole="button"
+            accessibilityLabel="Increase water intake"
+            hitSlop={6}
+            style={{
+              backgroundColor: colors.input,
+              borderColor: colors.border,
+              borderWidth: 1,
+              borderRadius: 12,
+              width: 40,
+              height: 40,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "bold", fontFamily: fonts.body }}>+</Text>
+          </TouchableOpacity>
+          {waterIntake !== undefined && (
+            <TouchableOpacity onPress={() => setWaterIntake(undefined)} style={{ marginLeft: "auto" }}>
+              <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body }}>Clear</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
-            <View style={{ flexDirection: "row", gap: 16, marginTop: 18 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: colors.foreground, fontWeight: "700", fontSize: 14, fontFamily: fonts.body }}>Weight (kg)</Text>
-                <TextInput
-                  value={weightText}
-                  onChangeText={setWeightText}
-                  keyboardType="numeric"
-                  accessibilityLabel="Weight in kilograms"
-                  placeholder="e.g. 60.5"
-                  placeholderTextColor={colors.mutedText}
-                  style={{
-                    backgroundColor: colors.input,
-                    borderColor: colors.border,
-                    borderRadius: 12,
-                    borderWidth: 1,
-                    color: colors.foreground,
-                    marginTop: 8,
-                    paddingHorizontal: 12,
-                    paddingVertical: 10,
-                    fontSize: 13,
-                    fontFamily: fonts.body,
-                  }}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: colors.foreground, fontWeight: "700", fontSize: 14, fontFamily: fonts.body }}>BBT Temp (°C)</Text>
-                <TextInput
-                  value={tempText}
-                  onChangeText={setTempText}
-                  keyboardType="numeric"
-                  accessibilityLabel="Body temperature in degrees Celsius"
-                  placeholder="e.g. 36.6"
-                  placeholderTextColor={colors.mutedText}
-                  style={{
-                    backgroundColor: colors.input,
-                    borderColor: colors.border,
-                    borderRadius: 12,
-                    borderWidth: 1,
-                    color: colors.foreground,
-                    marginTop: 8,
-                    paddingHorizontal: 12,
-                    paddingVertical: 10,
-                    fontSize: 13,
-                    fontFamily: fonts.body,
-                  }}
-                />
-              </View>
-            </View>
-
-            <SectionTitle title="Stress Level (1 - 10)" onY={(y) => recordSection("stress", y)} icon="pulse" />
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, marginTop: 10 }}>
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((level) => {
-                const isSelected = stressLevel === level;
-                return (
-                  <TouchableOpacity
-                    hitSlop={{ top: 7, bottom: 7 }}
-                    key={level}
-                    onPress={() => setStressLevel(isSelected ? undefined : level)}
-                    style={{
-                      width: 34,
-                      height: 34,
-                      borderRadius: 17,
-                      alignItems: "center",
-                      justifyContent: "center",
-                      borderWidth: 1,
-                      borderColor: isSelected ? "transparent" : colors.border,
-                      backgroundColor: isSelected ? colors.primary : colors.input,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        color: isSelected ? colors.buttonText : colors.foreground,
-                        fontSize: 12,
-                        fontWeight: "bold",
-                        fontFamily: fonts.mono,
-                      }}
-                    >
-                      {level}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-
-            <SectionTitle title="Medications" onY={(y) => recordSection("medications", y)} icon="medkit-outline" />
+        <View style={{ flexDirection: "row", gap: 16, marginTop: 18 }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: colors.foreground, fontWeight: "700", fontSize: 14, fontFamily: fonts.body }}>Weight (kg)</Text>
             <TextInput
-              value={medText}
-              onChangeText={setMedText}
-              accessibilityLabel="Medicines taken"
-              placeholder="e.g. Ibuprofen, Vitamins (comma separated)"
+              value={weightText}
+              onChangeText={setWeightText}
+              keyboardType="numeric"
+              accessibilityLabel="Weight in kilograms"
+              placeholder="e.g. 60.5"
               placeholderTextColor={colors.mutedText}
               style={{
                 backgroundColor: colors.input,
@@ -1092,57 +978,22 @@ export default function DayDetailsModal({
                 borderRadius: 12,
                 borderWidth: 1,
                 color: colors.foreground,
-                marginTop: 10,
+                marginTop: 8,
                 paddingHorizontal: 12,
                 paddingVertical: 10,
                 fontSize: 13,
                 fontFamily: fonts.body,
               }}
             />
-
-            <SectionTitle title="Intimate day" icon="heart-outline" />
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "space-between",
-                marginTop: 10,
-                padding: 12,
-                borderRadius: 12,
-                borderWidth: 1,
-                borderColor: colors.border,
-                backgroundColor: colors.input,
-              }}
-            >
-              <Text
-                style={{
-                  flex: 1,
-                  color: colors.mutedText,
-                  fontSize: 12.5,
-                  lineHeight: 16,
-                  marginRight: 12,
-                  fontFamily: fonts.body,
-                }}
-              >
-                Tag today as intimate. Only this tag (not your other notes) is
-                ever shown to a partner, and only if you&apos;ve turned on
-                Intimacy Notes sharing.
-              </Text>
-              <Switch
-                value={isIntimate}
-                onValueChange={setIsIntimate}
-                trackColor={{ true: colors.primary }}
-              />
-            </View>
-
-            <SectionTitle title="Notes" onY={(y) => recordSection("notes", y)} icon="document-text-outline" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: colors.foreground, fontWeight: "700", fontSize: 14, fontFamily: fonts.body }}>BBT Temp (°C)</Text>
             <TextInput
-              value={noteText}
-              onChangeText={setNoteText}
-              multiline
-              numberOfLines={4}
-              accessibilityLabel="Notes for this day"
-              placeholder="Describe symptoms, mood, medicine, or anything you noticed..."
+              value={tempText}
+              onChangeText={setTempText}
+              keyboardType="numeric"
+              accessibilityLabel="Body temperature in degrees Celsius"
+              placeholder="e.g. 36.6"
               placeholderTextColor={colors.mutedText}
               style={{
                 backgroundColor: colors.input,
@@ -1150,116 +1001,226 @@ export default function DayDetailsModal({
                 borderRadius: 12,
                 borderWidth: 1,
                 color: colors.foreground,
-                marginTop: 10,
-                minHeight: 96,
-                padding: 12,
-                textAlignVertical: "top",
+                marginTop: 8,
+                paddingHorizontal: 12,
+                paddingVertical: 10,
+                fontSize: 13,
                 fontFamily: fonts.body,
               }}
             />
-          </ScrollView>
+          </View>
+        </View>
 
-          <View
-            style={{
-              borderTopColor: colors.border,
-              borderTopWidth: 1,
-              flexDirection: "row",
-              gap: 8,
-              padding: 16,
-              paddingBottom: entry && onClearEntry ? 16 : Math.max(16, insets.bottom + 10),
-            }}
-          >
-            <TouchableOpacity
-              onPress={handleSave}
-              activeOpacity={0.8}
-              disabled={isSaving || !loaded}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: isSaving || !loaded, busy: isSaving || !loaded }}
-              style={{
-                flex: 1,
-                borderRadius: 12,
-                overflow: "hidden",
-                backgroundColor: colors.primary,
-                opacity: isSaving || !loaded ? 0.75 : 1,
-                paddingHorizontal: 16,
-                paddingVertical: 13,
-              }}
-            >
-              {isSaving || !loaded ? (
-                <ActivityIndicator color={colors.buttonText} />
-              ) : (
-                <Text
-                  style={{
-                    color: colors.buttonText,
-                    fontWeight: "700",
-                    textAlign: "center",
-                    fontFamily: fonts.body,
-                  }}
-                >
-                  Save Log
-                </Text>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={handleLog}
-              disabled={isSaving || !loaded}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: isSaving || !loaded }}
-              style={{
-                backgroundColor: colors.input,
-                borderColor: colors.border,
-                borderRadius: 12,
-                borderWidth: 1,
-                flex: 1,
-                opacity: isSaving || !loaded ? 0.6 : 1,
-                paddingHorizontal: 16,
-                paddingVertical: 13,
-              }}
-            >
-              <Text
+        <SectionTitle title="Stress Level (1 - 10)" onY={(y) => recordSection("stress", y)} icon="pulse" />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, marginTop: 10 }}>
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((level) => {
+            const isSelected = stressLevel === level;
+            return (
+              <TouchableOpacity
+                hitSlop={{ top: 7, bottom: 7 }}
+                key={level}
+                onPress={() => setStressLevel(isSelected ? undefined : level)}
                 style={{
-                  color: colors.foreground,
-                  fontWeight: "700",
-                  textAlign: "center",
-                  fontFamily: fonts.body,
+                  width: 34,
+                  height: 34,
+                  borderRadius: 17,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderWidth: 1,
+                  borderColor: isSelected ? "transparent" : colors.border,
+                  backgroundColor: isSelected ? colors.primary : colors.input,
                 }}
               >
-                Quick Log
-              </Text>
-            </TouchableOpacity>
-          </View>
+                <Text
+                  style={{
+                    color: isSelected ? colors.buttonText : colors.foreground,
+                    fontSize: 12,
+                    fontWeight: "bold",
+                    fontFamily: fonts.mono,
+                  }}
+                >
+                  {level}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
 
-          {entry && onClearEntry ? (
-            <TouchableOpacity
-              onPress={handleClear}
-              disabled={isSaving}
-              accessibilityRole="button"
-              accessibilityLabel="Clear this day's log"
-              hitSlop={6}
+        <SectionTitle title="Medications" onY={(y) => recordSection("medications", y)} icon="medkit-outline" />
+        <TextInput
+          value={medText}
+          onChangeText={setMedText}
+          accessibilityLabel="Medicines taken"
+          placeholder="e.g. Ibuprofen, Vitamins (comma separated)"
+          placeholderTextColor={colors.mutedText}
+          style={{
+            backgroundColor: colors.input,
+            borderColor: colors.border,
+            borderRadius: 12,
+            borderWidth: 1,
+            color: colors.foreground,
+            marginTop: 10,
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            fontSize: 13,
+            fontFamily: fonts.body,
+          }}
+        />
+
+        <SectionTitle title="Intimate day" icon="heart-outline" />
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginTop: 10,
+            padding: 12,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: colors.border,
+            backgroundColor: colors.input,
+          }}
+        >
+          <Text
+            style={{
+              flex: 1,
+              color: colors.mutedText,
+              fontSize: 12.5,
+              lineHeight: 16,
+              marginRight: 12,
+              fontFamily: fonts.body,
+            }}
+          >
+            Tag today as intimate. Only this tag (not your other notes) is
+            ever shown to a partner, and only if you&apos;ve turned on
+            Intimacy Notes sharing.
+          </Text>
+          <Switch
+            value={isIntimate}
+            onValueChange={setIsIntimate}
+            trackColor={{ true: colors.primary }}
+          />
+        </View>
+
+        <SectionTitle title="Notes" onY={(y) => recordSection("notes", y)} icon="document-text-outline" />
+        <TextInput
+          value={noteText}
+          onChangeText={setNoteText}
+          multiline
+          numberOfLines={4}
+          accessibilityLabel="Notes for this day"
+          placeholder="Describe symptoms, mood, medicine, or anything you noticed..."
+          placeholderTextColor={colors.mutedText}
+          style={{
+            backgroundColor: colors.input,
+            borderColor: colors.border,
+            borderRadius: 12,
+            borderWidth: 1,
+            color: colors.foreground,
+            marginTop: 10,
+            minHeight: 96,
+            padding: 12,
+            textAlignVertical: "top",
+            fontFamily: fonts.body,
+          }}
+        />
+      </ScrollView>
+
+      <View
+        style={{
+          borderTopColor: colors.border,
+          borderTopWidth: 1,
+          flexDirection: "row",
+          gap: 8,
+          padding: 16,
+          paddingBottom: entry && onClearEntry ? 16 : Math.max(16, insets.bottom + 10),
+        }}
+      >
+        <TouchableOpacity
+          onPress={handleSave}
+          activeOpacity={0.8}
+          disabled={isSaving || !loaded}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: isSaving || !loaded, busy: isSaving || !loaded }}
+          style={{
+            flex: 1,
+            borderRadius: 12,
+            overflow: "hidden",
+            backgroundColor: colors.primary,
+            opacity: isSaving || !loaded ? 0.75 : 1,
+            paddingHorizontal: 16,
+            paddingVertical: 13,
+          }}
+        >
+          {isSaving || !loaded ? (
+            <ActivityIndicator color={colors.buttonText} />
+          ) : (
+            <Text
               style={{
-                alignSelf: "center",
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 6,
-                marginTop: -6,
-                marginBottom: Math.max(12, insets.bottom),
-                opacity: isSaving ? 0.6 : 1,
+                color: colors.buttonText,
+                fontWeight: "700",
+                textAlign: "center",
+                fontFamily: fonts.body,
               }}
             >
-              <Icon set="ion" name="trash-outline" size={15} color={colors.mutedText} />
-              <Text style={{ color: colors.mutedText, fontSize: 13, fontWeight: "600", fontFamily: fonts.body }}>
-                Clear this day&apos;s log
-              </Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
-      </KeyboardAvoidingView>
-      {/* Alerts raised while the sheet is open (discard, save errors) draw
-          inside it; the root host's Modal would sit behind this one. Only
-          while visible, so it never takes alerts from the rest of the app. */}
-      {visible ? <AppModalHost inline /> : null}
-    </Modal>
+              Save Log
+            </Text>
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={handleLog}
+          disabled={isSaving || !loaded}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: isSaving || !loaded }}
+          style={{
+            backgroundColor: colors.input,
+            borderColor: colors.border,
+            borderRadius: 12,
+            borderWidth: 1,
+            flex: 1,
+            opacity: isSaving || !loaded ? 0.6 : 1,
+            paddingHorizontal: 16,
+            paddingVertical: 13,
+          }}
+        >
+          <Text
+            style={{
+              color: colors.foreground,
+              fontWeight: "700",
+              textAlign: "center",
+              fontFamily: fonts.body,
+            }}
+          >
+            Quick Log
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {entry && onClearEntry ? (
+        <TouchableOpacity
+          onPress={handleClear}
+          disabled={isSaving}
+          accessibilityRole="button"
+          accessibilityLabel="Clear this day's log"
+          hitSlop={6}
+          style={{
+            alignSelf: "center",
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 6,
+            marginTop: -6,
+            marginBottom: Math.max(12, insets.bottom),
+            opacity: isSaving ? 0.6 : 1,
+          }}
+        >
+          <Icon set="ion" name="trash-outline" size={15} color={colors.mutedText} />
+          <Text style={{ color: colors.mutedText, fontSize: 13, fontWeight: "600", fontFamily: fonts.body }}>
+            Clear this day&apos;s log
+          </Text>
+        </TouchableOpacity>
+      ) : null}
+    </BottomSheet>
   );
 }
 

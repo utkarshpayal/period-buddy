@@ -11,6 +11,7 @@ import { getHeroGradient, getShadow } from "./ui-tokens";
 import { HubTile, groupTiles } from "../lib/appConfig";
 import { trackUse } from "../lib/usage";
 import { Icon } from "./Icon";
+import { PressableScale } from "./PressableScale";
 
 /**
  * Hub tiles in the looks the hub screens use (lib/hubLayout.ts decides
@@ -73,9 +74,8 @@ function GridTile({ feature }: { feature: HubTile }) {
   const soon = feature.launch.access === "soon";
   const dim = soon ? LOCKED_OPACITY : 1;
   return (
-    <TouchableOpacity
+    <PressableScale
       onPress={onPress}
-      activeOpacity={0.8}
       accessibilityRole="button"
       accessibilityLabel={[title, launchSuffix(feature)].filter(Boolean).join(", ")}
       style={{ flex: 1, backgroundColor: bg, borderRadius: 22, padding: 16, gap: 18 }}
@@ -105,7 +105,7 @@ function GridTile({ feature }: { feature: HubTile }) {
           {feature.description}
         </Text>
       </View>
-    </TouchableOpacity>
+    </PressableScale>
   );
 }
 
@@ -223,9 +223,8 @@ function BookHero({ tile }: { tile: HubTile }) {
             </View>
           ))}
         </View>
-        <TouchableOpacity
+        <PressableScale
           onPress={onPress}
-          activeOpacity={0.85}
           accessibilityRole="button"
           accessibilityLabel={`${title}, book a call`}
           style={{ height: 48, borderRadius: 14, backgroundColor: "#FFFFFF", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 }}
@@ -235,7 +234,7 @@ function BookHero({ tile }: { tile: HubTile }) {
             Book a call
           </Text>
           <Icon set="ion" name="arrow-forward" size={16} color={roseOnWhite} />
-        </TouchableOpacity>
+        </PressableScale>
       </LinearGradient>
     </View>
   );
@@ -259,9 +258,8 @@ function AskHero({ tile }: { tile: HubTile }) {
 
   return (
     <View className="mx-6" style={{ backgroundColor: colors.surface, borderRadius: 24, padding: 20, gap: 16, ...getShadow(colors, isDark) }}>
-        <TouchableOpacity
+        <PressableScale
           onPress={onPress}
-          activeOpacity={0.8}
           accessibilityRole="button"
           accessibilityLabel={`${title}. Open chats`}
           style={{ flexDirection: "row", alignItems: "center", gap: 14 }}
@@ -276,7 +274,7 @@ function AskHero({ tile }: { tile: HubTile }) {
             </Text>
           </View>
           <Icon set="ion" name="chevron-forward" size={18} color={colors.mutedText} />
-        </TouchableOpacity>
+        </PressableScale>
         <View
           style={{
             height: 48,

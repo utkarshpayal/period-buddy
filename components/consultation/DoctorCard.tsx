@@ -8,6 +8,7 @@ import { ratingLabel } from "../DoctorProfileSheet";
 import { useTheme } from "../theme";
 import { getShadow } from "../ui-tokens";
 import { Icon } from "../Icon";
+import { PressableScale } from "../PressableScale";
 
 /**
  * One doctor in the list. The profile tap area and the action button are
@@ -54,15 +55,13 @@ export const DoctorCard = memo(function DoctorCard({
         ...getShadow(colors, isDark),
       }}
     >
-      <TouchableOpacity
-        activeOpacity={0.9}
+      <PressableScale
         onPress={() => onOpenProfile(doctor)}
         accessibilityRole="button"
         accessibilityLabel={`${name}, ${doctor.specialty}. ${meta}`}
         accessibilityHint="Opens this doctor's full profile"
         accessibilityState={{ selected }}
-        className="flex-row items-start"
-        style={{ gap: 14, padding: 16, paddingBottom: 14 }}
+        style={{ flexDirection: "row", alignItems: "flex-start", gap: 14, padding: 16, paddingBottom: 14 }}
       >
         <DoctorPhoto
           name={name}
@@ -105,7 +104,7 @@ export const DoctorCard = memo(function DoctorCard({
           ) : null}
         </View>
         <Icon set="feather" name="chevron-right" size={18} color={colors.mutedText} style={{ marginTop: 2 }} />
-      </TouchableOpacity>
+      </PressableScale>
 
       {/* Fee and the one action, on their own row so the name keeps its width. */}
       <View

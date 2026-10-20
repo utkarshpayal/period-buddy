@@ -2,9 +2,6 @@ import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
   RefreshControl,
   ScrollView,
   StatusBar,
@@ -20,6 +17,7 @@ import Avatar from "../../components/Avatar";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { SkeletonCard } from "../../components/Skeleton";
+import { BottomSheet } from "../../components/BottomSheet";
 import { AppModalHost } from "../../components/modals/AppModalHost";
 import { useTheme } from "../../components/theme";
 import { useAsyncLoad } from "../../hooks/useAsyncLoad";
@@ -64,37 +62,30 @@ function Sheet({
 }) {
   const { colors, fonts } = useTheme();
   const insets = useSafeAreaInsets();
-  const onDismissedRef = useRef(onDismissed);
-  onDismissedRef.current = onDismissed;
-  useEffect(() => {
-    // iOS reports the end of the slide-out through `onDismiss`; elsewhere the
-    // next modal can open straight away.
-    if (!visible && Platform.OS !== "ios") onDismissedRef.current?.();
-  }, [visible]);
   return (
-    <Modal transparent animationType="slide" visible={visible} onRequestClose={onClose} onDismiss={() => onDismissedRef.current?.()}>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1, justifyContent: "flex-end", backgroundColor: colors.overlay }}>
-        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={onClose} accessibilityLabel="Close" />
-        <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: SIDE, paddingTop: 10, paddingBottom: Math.max(insets.bottom, 12) + 22 }}>
-          <View style={{ alignSelf: "center", width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: 14 }} />
-          <View className="flex-row items-center justify-between mb-4">
-            <Text style={{ color: colors.foreground, fontSize: 18, fontFamily: fonts.heading, fontWeight: "800" }}>{title}</Text>
-            <TouchableOpacity
-              onPress={onClose}
-              hitSlop={12}
-              accessibilityLabel="Close"
-              className="items-center justify-center rounded-full"
-              style={{ width: 30, height: 30, backgroundColor: colors.surfaceSoft }}
-            >
-              <Icon set="feather" name="x" size={16} color={colors.mutedText} />
-            </TouchableOpacity>
-          </View>
-          {children}
-        </View>
-      </KeyboardAvoidingView>
-      {/* Alerts raised while the sheet is open draw on top of it, not behind. */}
-      {visible ? <AppModalHost inline /> : null}
-    </Modal>
+    <BottomSheet
+      visible={visible}
+      onClose={onClose}
+      onDismissed={onDismissed}
+      avoidKeyboard
+      style={{ paddingHorizontal: SIDE, paddingTop: 2, paddingBottom: Math.max(insets.bottom, 12) + 22 }}
+      // Alerts raised while the sheet is open draw on top of it, not behind.
+      overlay={visible ? <AppModalHost inline /> : null}
+    >
+      <View className="flex-row items-center justify-between mb-4" style={{ marginTop: 8 }}>
+        <Text style={{ color: colors.foreground, fontSize: 18, fontFamily: fonts.heading, fontWeight: "800" }}>{title}</Text>
+        <TouchableOpacity
+          onPress={onClose}
+          hitSlop={12}
+          accessibilityLabel="Close"
+          className="items-center justify-center rounded-full"
+          style={{ width: 30, height: 30, backgroundColor: colors.surfaceSoft }}
+        >
+          <Icon set="feather" name="x" size={16} color={colors.mutedText} />
+        </TouchableOpacity>
+      </View>
+      {children}
+    </BottomSheet>
   );
 }
 

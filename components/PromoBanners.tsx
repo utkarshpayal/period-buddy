@@ -1,6 +1,7 @@
 import { useRouter } from "expo-router";
 import React, { useEffect } from "react";
-import { Image, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { Image } from "expo-image";
 import { useAppConfig } from "./app-config";
 import { useTheme } from "./theme";
 import { getShadow } from "./ui-tokens";
@@ -10,6 +11,7 @@ import { BannerPlacement, PromoBanner, bannersFor } from "../lib/appConfig";
 import { runTapAction } from "../lib/tapAction";
 import { useContentWidth } from "../lib/layout";
 import { Icon } from "./Icon";
+import { motion } from "./motion";
 
 /*
  * Impressions for CTR in the CMS: each banner is reported once per app
@@ -120,7 +122,7 @@ function BannerCard({ banner, width, onDismiss }: { banner: PromoBanner; width: 
     return (
       <TouchableOpacity activeOpacity={tappable ? 0.9 : 1} disabled={!tappable} onPress={onPress} {...a11y}
         style={{ width, borderRadius: 20, overflow: "hidden", ...getShadow(colors, isDark) }}>
-        <Image source={{ uri: banner.imageUrl }} style={{ width, aspectRatio: 3 }} resizeMode="cover" />
+        <Image transition={motion.duration.base} source={{ uri: banner.imageUrl }} style={{ width, aspectRatio: 3 }} contentFit="cover" />
         {close}
       </TouchableOpacity>
     );
@@ -163,7 +165,7 @@ function BannerCard({ banner, width, onDismiss }: { banner: PromoBanner; width: 
         ) : null}
       </View>
       {banner.imageUrl ? (
-        <Image source={{ uri: banner.imageUrl }} style={{ width: 86, height: 72, borderRadius: 14 }} resizeMode="cover" />
+        <Image transition={motion.duration.base} source={{ uri: banner.imageUrl }} style={{ width: 86, height: 72, borderRadius: 14 }} contentFit="cover" />
       ) : null}
       {close}
     </TouchableOpacity>

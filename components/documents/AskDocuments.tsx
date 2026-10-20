@@ -6,6 +6,7 @@ import { PressableScale } from "../PressableScale";
 import { useTheme } from "../theme";
 import { getShadow } from "../ui-tokens";
 import { Icon } from "../Icon";
+import { motion } from "../motion";
 
 /** Example questions, cycled as the row's hint. */
 const QUESTIONS = [
@@ -53,8 +54,8 @@ export function AskDocuments({ gutter, onAsk }: { gutter: number; onAsk: () => v
         <View style={{ flex: 1, height: 22, overflow: "hidden", justifyContent: "center" }}>
           <Animated.Text
             key={hint}
-            entering={reduceMotion ? undefined : FadeInDown.duration(360)}
-            exiting={reduceMotion ? undefined : FadeOutUp.duration(240)}
+            entering={reduceMotion ? undefined : FadeInDown.duration(motion.duration.slow)}
+            exiting={reduceMotion ? undefined : FadeOutUp.duration(motion.duration.base)}
             numberOfLines={1}
             maxFontSizeMultiplier={1.3}
             style={{ fontSize: 15, color: colors.mutedText, fontFamily: fonts.body }}

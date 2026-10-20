@@ -1,12 +1,15 @@
-import React from "react";
-import { Image, Modal, Pressable, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import React, { useEffect, useState } from "react";
+import { Modal, Pressable, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { Image } from "expo-image";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { formatCount, type ReelItem } from "../../lib/reels";
+import { BottomSheet } from "../BottomSheet";
 import { ColumnLabel } from "../ColumnLabel";
 import { MedicalReviewBadge } from "../MedicalReviewBadge";
 import { useTheme } from "../theme";
 import { getShadow } from "../ui-tokens";
 import { Icon } from "../Icon";
+import { motion } from "../motion";
 
 /** Creator profile (page sheet): stats from the loaded reels, follow, their videos. */
 export function CreatorSheet({
@@ -54,7 +57,7 @@ export function CreatorSheet({
 
             <View className="items-center px-6 pt-8">
               {creator.creatorAvatar ? (
-                <Image source={{ uri: creator.creatorAvatar }} className="h-28 w-28 rounded-full bg-neutral-200" />
+                <Image transition={motion.duration.base} source={{ uri: creator.creatorAvatar }} className="h-28 w-28 rounded-full bg-neutral-200" />
               ) : (
                 <View className="h-28 w-28 items-center justify-center rounded-full" style={{ backgroundColor: colors.primaryLight }}>
                   <Icon set="feather" name="user" size={44} color={colors.primary} />
@@ -133,7 +136,7 @@ export function CreatorSheet({
                     onPress={() => onPlayReel(reel.id)}
                     style={{ backgroundColor: colors.surface, borderColor: colors.border }}
                   >
-                    <Image source={{ uri: reel.thumbnailUrl }} className="h-20 w-24 bg-neutral-200" />
+                    <Image transition={motion.duration.base} source={{ uri: reel.thumbnailUrl }} className="h-20 w-24 bg-neutral-200" />
                     <View className="flex-1 justify-center p-3">
                       <Text className="text-xs font-black" numberOfLines={2} style={{ color: colors.foreground, fontFamily: fonts.heading }}>
                         {reel.title}
@@ -163,11 +166,14 @@ export function PollPanel({
   onVote,
   onClose,
   bottomInset,
+  inSheet,
 }: {
   reel: ReelItem;
   onVote: (reelId: string, optionId: string) => void;
   onClose: () => void;
   bottomInset: number;
+  /** Inside a BottomSheet, which already draws the rounded top and grab handle. */
+  inSheet?: boolean;
 }) {
   const { colors, fonts } = useTheme();
   const total = reel.pollOptions.reduce((sum, option) => sum + option.votes, 0);
@@ -175,7 +181,7 @@ export function PollPanel({
 
   return (
     <View
-      className="rounded-t-3xl border-t p-5"
+      className={inSheet ? "px-5 pt-1" : "rounded-t-3xl border-t p-5"}
       style={{ backgroundColor: colors.surface, borderColor: colors.border, paddingBottom: bottomInset + 20 }}
     >
       <View className="mb-4 flex-row items-center justify-between">
@@ -253,15 +259,18 @@ export function PollSheet({
   onClose: () => void;
 }) {
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+  // Keep the last poll on screen while the sheet slides away.
+  const [lastReel, setLastReel] = useState(reel);
+  useEffect(() => {
+    if (reel) setLastReel(reel);
+  }, [reel]);
+  const shown = reel ?? lastReel;
 
   return (
-    <Modal visible={!!reel} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable className="flex-1 justify-end" style={{ backgroundColor: "rgba(0,0,0,0.6)" }} onPress={onClose}>
-        <Pressable onPress={(event) => event.stopPropagation()}>
-          {reel ? <PollPanel reel={reel} onVote={onVote} onClose={onClose} bottomInset={insets.bottom} /> : null}
-        </Pressable>
-      </Pressable>
-    </Modal>
+    <BottomSheet visible={!!reel} onClose={onClose} backdropLabel="Close poll" style={{ backgroundColor: colors.surface }}>
+      {shown ? <PollPanel reel={shown} onVote={onVote} onClose={onClose} bottomInset={insets.bottom} inSheet /> : null}
+    </BottomSheet>
   );
 }
 

@@ -1,7 +1,8 @@
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import React, { useEffect, useRef, useState } from "react";
-import { Image, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Image } from "expo-image";
 import Animated, {
   FadeIn,
   FadeInDown,
@@ -28,6 +29,7 @@ import {
 } from "./documentMeta";
 import { fileBadge, PageBadge } from "./DocumentCard";
 import { ChoiceChips, DateField, DocumentSheet, FieldLabel, SheetButton } from "./DocumentSheet";
+import { motion } from "../motion";
 
 export type PickedFile = {
   mimeType: string;
@@ -263,14 +265,15 @@ export function UploadSheet({
           <Text style={{ marginTop: 4, fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}>Added to your documents.</Text>
         </View>
       ) : file ? (
-        <Animated.View entering={FadeInDown.duration(240)} style={{ gap: 20 }}>
+        <Animated.View entering={FadeInDown.duration(motion.duration.base)} style={{ gap: 20 }}>
           {/* Picked file */}
           <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
             {fileKind(file.mimeType) === "image" ? (
               <Image
+                cachePolicy="memory"
                 source={{ uri: file.uri }}
                 style={{ width: 34, height: 42, borderRadius: 6, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceSoft }}
-                resizeMode="cover"
+                contentFit="cover"
               />
             ) : (
               <PageBadge label={fileBadge(file.mimeType)} />
@@ -354,7 +357,7 @@ function UploadProgress() {
   }, [x]);
   const barStyle = useAnimatedStyle(() => ({ left: `${-40 + x.value * 140}%` }));
   return (
-    <Animated.View entering={FadeIn.duration(180)} style={{ gap: 8 }}>
+    <Animated.View entering={FadeIn.duration(motion.duration.fast)} style={{ gap: 8 }}>
       <View style={{ height: 3, borderRadius: 2, overflow: "hidden", backgroundColor: colors.track }}>
         <Animated.View style={[{ position: "absolute", top: 0, bottom: 0, width: "40%", borderRadius: 3, backgroundColor: colors.primary }, barStyle]} />
       </View>

@@ -8,6 +8,7 @@ import { CalendarModal } from "../CalendarModal";
 import { useTheme } from "../theme";
 import { dateKeyToDate, formatDateLabel, lastDaysRange } from "./documentMeta";
 import { ChoiceChips, DateField, DocumentSheet, FieldLabel, SheetButton } from "./DocumentSheet";
+import { motion } from "../motion";
 
 const PRESETS = [
   { key: "30", label: "Last 30 days", days: 30 },
@@ -176,7 +177,7 @@ export function SummarizeSheet({
       }
     >
       {result ? (
-        <Animated.View entering={FadeInDown.duration(260)}>
+        <Animated.View entering={FadeInDown.duration(motion.duration.base)}>
           <View>
             <Markdown
               style={{

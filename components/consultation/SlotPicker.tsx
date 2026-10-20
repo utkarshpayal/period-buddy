@@ -1,10 +1,10 @@
 import React, { useMemo, useState } from "react";
-import { Modal, Pressable, ScrollView, Text, TouchableOpacity, View, useWindowDimensions } from "react-native";
+import { Pressable, ScrollView, Text, TouchableOpacity, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Doctor, DoctorAvailability } from "../../lib/api";
 import { dayChipLabel, formatSessionWhen, formatTime, shortZoneName } from "../../lib/consultationFormat";
 import { SLOT_PERIODS, getDoctorDisplayName, slotPeriod } from "../../lib/consultationModel";
-import { AppLockCover } from "../AppLockScreen";
+import { BottomSheet } from "../BottomSheet";
 import { DoctorPhoto } from "../DoctorPhoto";
 import { EmptyState } from "../EmptyState";
 import { SkeletonRow } from "../Skeleton";
@@ -220,106 +220,94 @@ export function SlotPicker({
   };
 
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-      <View style={{ flex: 1, justifyContent: "flex-end", backgroundColor: colors.overlay }}>
-        <Pressable style={{ flex: 1 }} onPress={onClose} accessibilityLabel="Close" />
-        <View
-          style={{
-            maxHeight: height * 0.88,
-            // Dark: lift the sheet off the dimmed page (surface + hairline edge).
-            backgroundColor: isDark ? colors.surface : colors.background,
-            borderTopLeftRadius: 28,
-            borderTopRightRadius: 28,
-            borderWidth: isDark ? 1 : 0,
-            borderBottomWidth: 0,
-            borderColor: colors.border,
-          }}
-        >
-          <View style={{ alignItems: "center", paddingTop: 10 }}>
-            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: colors.border }} />
-          </View>
+    <BottomSheet
+      visible
+      onClose={onClose}
+      style={{
+        maxHeight: height * 0.88,
+        // Dark: lift the sheet off the dimmed page (surface + hairline edge from BottomSheet).
+        backgroundColor: isDark ? colors.surface : colors.background,
+      }}
+    >
 
-          {/* Who it's with */}
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: GUTTER, paddingTop: 16, paddingBottom: 20 }}>
-            <DoctorPhoto
-              name={name}
-              uri={doctor.avatarUrl}
-              size={44}
-              backgroundColor={colors.primaryLight}
-              textColor={colors.primary}
-              fontFamily={fonts.heading}
-            />
-            <View style={{ flex: 1 }}>
-              <Text numberOfLines={1} style={{ fontSize: 17, fontWeight: "700", color: colors.foreground, fontFamily: fonts.heading }}>
-                {name}
-              </Text>
-              <Text numberOfLines={1} style={{ ...label, marginTop: 2 }}>
-                {[doctor.specialty, "Video consultation"].filter(Boolean).join(" · ")}
-              </Text>
-            </View>
-            <TouchableOpacity onPress={onClose} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close">
-              <Icon set="feather" name="x" size={22} color={colors.mutedText} />
-            </TouchableOpacity>
-          </View>
+      {/* Who it's with */}
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: GUTTER, paddingTop: 16, paddingBottom: 20 }}>
+        <DoctorPhoto
+          name={name}
+          uri={doctor.avatarUrl}
+          size={44}
+          backgroundColor={colors.primaryLight}
+          textColor={colors.primary}
+          fontFamily={fonts.heading}
+        />
+        <View style={{ flex: 1 }}>
+          <Text numberOfLines={1} style={{ fontSize: 17, fontWeight: "700", color: colors.foreground, fontFamily: fonts.heading }}>
+            {name}
+          </Text>
+          <Text numberOfLines={1} style={{ ...label, marginTop: 2 }}>
+            {[doctor.specialty, "Video consultation"].filter(Boolean).join(" · ")}
+          </Text>
+        </View>
+        <TouchableOpacity onPress={onClose} hitSlop={12} accessibilityRole="button" accessibilityLabel="Close">
+          <Icon set="feather" name="x" size={22} color={colors.mutedText} />
+        </TouchableOpacity>
+      </View>
 
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
-            {renderBody()}
-          </ScrollView>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 24 }}>
+        {renderBody()}
+      </ScrollView>
 
-          {/* What's picked, and the way on to payment */}
-          <View
+      {/* What's picked, and the way on to payment */}
+      <View
+        style={{
+          borderTopWidth: 1,
+          borderColor: colors.border,
+          paddingHorizontal: GUTTER,
+          paddingTop: 14,
+          paddingBottom: Math.max(16, insets.bottom + 8),
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 16,
+        }}
+      >
+        <View style={{ flex: 1 }}>
+          <Text
+            numberOfLines={1}
             style={{
-              borderTopWidth: 1,
-              borderColor: colors.border,
-              paddingHorizontal: GUTTER,
-              paddingTop: 14,
-              paddingBottom: Math.max(16, insets.bottom + 8),
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 16,
+              ...body,
+              fontSize: 14,
+              fontWeight: "700",
+              color: selectedSlotStart ? colors.foreground : colors.mutedText,
             }}
           >
-            <View style={{ flex: 1 }}>
-              <Text
-                numberOfLines={1}
-                style={{
-                  ...body,
-                  fontSize: 14,
-                  fontWeight: "700",
-                  color: selectedSlotStart ? colors.foreground : colors.mutedText,
-                }}
-              >
-                {selectedSlotStart ? formatSessionWhen(selectedSlotStart) : "Select a time"}
-              </Text>
-              <Text numberOfLines={1} style={{ ...label, fontSize: 12, marginTop: 2 }}>
-                {fee ? `${fee} · 1 session` : "Booking isn't open yet"}
-              </Text>
-            </View>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              disabled={!canContinue}
-              onPress={onContinue}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: !canContinue }}
-              style={{
-                height: 48,
-                paddingHorizontal: 28,
-                borderRadius: 14,
-                alignItems: "center",
-                justifyContent: "center",
-                backgroundColor: canContinue ? colors.primary : colors.surfaceStrong,
-              }}
-            >
-              <Text
-                style={{ ...body, fontSize: 15, fontWeight: "700", color: canContinue ? colors.buttonText : colors.mutedText }}
-              >
-                Continue
-              </Text>
-            </TouchableOpacity>
-          </View>
+            {selectedSlotStart ? formatSessionWhen(selectedSlotStart) : "Select a time"}
+          </Text>
+          <Text numberOfLines={1} style={{ ...label, fontSize: 12, marginTop: 2 }}>
+            {fee ? `${fee} · 1 session` : "Booking isn't open yet"}
+          </Text>
         </View>
+        <TouchableOpacity
+          activeOpacity={0.85}
+          disabled={!canContinue}
+          onPress={onContinue}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !canContinue }}
+          style={{
+            height: 48,
+            paddingHorizontal: 28,
+            borderRadius: 14,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: canContinue ? colors.primary : colors.surfaceStrong,
+          }}
+        >
+          <Text
+            style={{ ...body, fontSize: 15, fontWeight: "700", color: canContinue ? colors.buttonText : colors.mutedText }}
+          >
+            Continue
+          </Text>
+        </TouchableOpacity>
       </View>
-      <AppLockCover />
-    </Modal>
+    </BottomSheet>
   );
 }

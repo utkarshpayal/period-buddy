@@ -18,6 +18,7 @@ import { dateFromDayKey, formatShortDate } from "../../lib/format";
 import { SAMPLE_SYMPTOM_PREDICTIONS, sampleNextCycleStart } from "../../lib/symptomDemo";
 import { useSecureScreen } from "../../lib/screenPrivacy";
 import { Icon } from "../../components/Icon";
+import { motion } from "../../components/motion";
 
 const PHASE_ORDER: CyclePhase[] = ["period", "follicular", "ovulation", "luteal"];
 
@@ -232,7 +233,7 @@ function SymptomPredictionsContent() {
                 {/* Right now, in plain sentences */}
                 {currentPhase ? (
                   <Animated.View
-                    entering={FadeInDown.duration(320)}
+                    entering={FadeInDown.duration(motion.duration.slow)}
                     style={{
                       ...card,
                       padding: 20,
@@ -280,7 +281,7 @@ function SymptomPredictionsContent() {
                   const isNow = phase === currentPhase;
                   const last = index === PHASE_ORDER.length - 1;
                   return (
-                    <Animated.View key={phase} entering={FadeInDown.delay(80 * index).duration(300)} style={{ flexDirection: "row", gap: 14 }}>
+                    <Animated.View key={phase} entering={FadeInDown.delay(80 * index).duration(motion.duration.slow)} style={{ flexDirection: "row", gap: 14 }}>
                       {/* Timeline rail */}
                       <View style={{ alignItems: "center", width: 16 }}>
                         <View

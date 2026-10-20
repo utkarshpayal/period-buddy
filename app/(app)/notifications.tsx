@@ -1,6 +1,7 @@
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
-import { Image, LayoutAnimation, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { LayoutAnimation, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Image } from "expo-image";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
@@ -16,6 +17,8 @@ import { notificationIcon, notificationImage } from "../../lib/notificationIcons
 import { useAuth } from "../../components/auth-context";
 import { useSecureScreen } from "../../lib/screenPrivacy";
 import { Icon } from "../../components/Icon";
+import Animated from "react-native-reanimated";
+import { listEntering, motion } from "../../components/motion";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -179,7 +182,7 @@ export default function NotificationsScreen() {
           ) : (
             <>
               {groupByDay(list).map((group, gi) => (
-                <View key={`${group.label}-${gi}`}>
+                <Animated.View key={`${group.label}-${gi}`} entering={gi < 6 ? listEntering(gi) : undefined}>
                   <Text
                     accessibilityRole="header"
                     style={{
@@ -197,7 +200,7 @@ export default function NotificationsScreen() {
                   {group.items.map((notif, i) => (
                     <NotificationRow key={notif._id} notif={notif} last={i === group.items.length - 1} onPress={handlePress} />
                   ))}
-                </View>
+                </Animated.View>
               ))}
               <View className="px-6 mt-2">
                 <LoadMoreButton hasMore={hasMore} loading={loadingMore} onPress={loadMore} />
@@ -320,9 +323,10 @@ function NotificationRow({
         {image ? (
           expanded ? (
             <Image
+              transition={motion.duration.base}
               source={{ uri: image }}
               accessibilityIgnoresInvertColors
-              resizeMode="cover"
+              contentFit="cover"
               style={{ width: "100%", aspectRatio: 2, borderRadius: 12, marginTop: 8, backgroundColor: colors.surfaceSoft }}
             />
           ) : null

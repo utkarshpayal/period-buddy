@@ -1,6 +1,7 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
-import { Image, Modal, Pressable, Text, TouchableOpacity, View } from "react-native";
+import { Modal, Pressable, Text, TouchableOpacity, View } from "react-native";
+import { Image } from "expo-image";
 import { useAppConfig } from "./app-config";
 import { reportImpressions } from "./PromoBanners";
 import { useTheme } from "./theme";
@@ -9,6 +10,7 @@ import { appConfigApi } from "../lib/api";
 import { PromoBanner, bannersFor } from "../lib/appConfig";
 import { runTapAction } from "../lib/tapAction";
 import { Icon } from "./Icon";
+import { motion } from "./motion";
 
 // A beat after Home settles, so it never lands on top of the first paint
 // or a permission prompt.
@@ -71,7 +73,7 @@ export function PromoPopup() {
           accessibilityViewIsModal
         >
           {banner.imageUrl ? (
-            <Image source={{ uri: banner.imageUrl }} style={{ width: "100%", aspectRatio: banner.layout === "image" ? 0.8 : 1.6 }} resizeMode="cover" />
+            <Image transition={motion.duration.base} source={{ uri: banner.imageUrl }} style={{ width: "100%", aspectRatio: banner.layout === "image" ? 0.8 : 1.6 }} contentFit="cover" />
           ) : null}
           {banner.layout !== "image" ? (
             <View style={{ padding: 22 }}>

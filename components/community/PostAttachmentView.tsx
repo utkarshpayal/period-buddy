@@ -1,10 +1,12 @@
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { useVideoPlayer, VideoView } from "expo-video";
 import React, { useEffect, useRef, useState } from "react";
-import { Image, Modal, PanResponder, Pressable, Text, TouchableOpacity, View } from "react-native";
+import { Modal, PanResponder, Pressable, Text, TouchableOpacity, View } from "react-native";
+import { Image } from "expo-image";
 import type { CommunityAttachment } from "../../lib/api";
 import { useTheme } from "../theme";
 import { Icon } from "../Icon";
+import { motion } from "../motion";
 
 export function PostAttachmentView({ attachment }: { attachment: CommunityAttachment }) {
   const { colors } = useTheme();
@@ -20,10 +22,11 @@ export function PostAttachmentView({ attachment }: { attachment: CommunityAttach
           accessibilityHint="Opens it full screen"
         >
           <Image
+            transition={motion.duration.base}
             source={{ uri: attachment.url }}
             className="mt-4 w-full rounded-2xl"
             style={{ aspectRatio: 4 / 3, backgroundColor: colors.surfaceSoft }}
-            resizeMode="cover"
+            contentFit="cover"
           />
         </Pressable>
         {/* Mounted only while open: it holds a video player, which every
@@ -118,9 +121,10 @@ function FullscreenMediaModal({
 
         {attachment.type === "image" ? (
           <Image
+            transition={motion.duration.base}
             source={{ uri: attachment.url }}
             style={{ width: "100%", height: "80%" }}
-            resizeMode="contain"
+            contentFit="contain"
           />
         ) : (
           <VideoView

@@ -20,6 +20,8 @@ import { getFriendlyErrorMessage, habitsApi, isNetworkError, type Habit } from "
 import { HeaderIconButton, ScreenHeader } from "../../components/ScreenHeader";
 import { useSecureScreen } from "../../lib/screenPrivacy";
 import { Icon } from "../../components/Icon";
+import { CelebrationBurst } from "../../components/celebrations/Lottie";
+import { haptics } from "../../lib/haptics";
 
 const HABIT_IDEAS = [
   { title: "Sleep 8 Hours", icon: "moon-outline", color: HABIT_CATEGORY_COLORS.sleep, tokens: 45 },
@@ -42,6 +44,8 @@ export default function Habits() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  // The habit just ticked off, for a one-shot burst on its check.
+  const [celebrateId, setCelebrateId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<{ message: string; offline: boolean } | null>(null);
   // A ref, so a fast double tap can't add the same habit twice.
   const addingRef = useRef(false);
@@ -88,6 +92,11 @@ export default function Habits() {
     setTogglingId(id);
     try {
       const result = await habitsApi.toggleHabit(id);
+      if (result.completed) {
+        haptics.success();
+        setCelebrateId(id);
+        setTimeout(() => setCelebrateId((current) => (current === id ? null : current)), 900);
+      } else haptics.tap();
       setHabits((prev) =>
         prev.map((h) =>
           h.id === id
@@ -275,6 +284,11 @@ export default function Habits() {
                       </View>
 
                       {/* Checkmark toggle */}
+                      {celebrateId === habit.id ? (
+                        <View pointerEvents="none" style={{ position: "absolute", right: 16 + 13 - 40, width: 80, height: 80, top: "50%", marginTop: -40 }}>
+                          <CelebrationBurst size={80} />
+                        </View>
+                      ) : null}
                       <View
                         className="h-[26px] w-[26px] items-center justify-center rounded-full border"
                         style={{

@@ -1,9 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
   Text,
   TextInput,
   TouchableOpacity,
@@ -13,7 +10,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { consultationApi, getFriendlyErrorMessage, type Consultation, type Doctor } from "../lib/api";
 import { DoctorPhoto } from "./DoctorPhoto";
 import { useTheme } from "./theme";
-import { AppLockCover } from "./AppLockScreen";
+import { BottomSheet } from "./BottomSheet";
 import { Icon } from "./Icon";
 
 const LABELS = ["", "Poor", "Fair", "Good", "Very good", "Excellent"];
@@ -68,117 +65,110 @@ export function RateSessionSheet({
   };
 
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        className="flex-1 justify-end"
-        style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
-      >
-        <View
-          className="rounded-t-3xl px-6 pt-5"
-          style={{ backgroundColor: colors.background, paddingBottom: Math.max(20, insets.bottom + 12) }}
+    <BottomSheet
+      visible
+      onClose={onClose}
+      avoidKeyboard
+      style={{ paddingHorizontal: 24, paddingTop: 4, paddingBottom: Math.max(20, insets.bottom + 12) }}
+    >
+      <View className="flex-row justify-end">
+        <TouchableOpacity
+          hitSlop={6}
+          onPress={onClose}
+          accessibilityLabel="Close"
+          className="h-9 w-9 rounded-full items-center justify-center"
+          style={{ backgroundColor: colors.surfaceSoft }}
         >
-          <View className="flex-row justify-end">
-            <TouchableOpacity
-              hitSlop={6}
-              onPress={onClose}
-              accessibilityLabel="Close"
-              className="h-9 w-9 rounded-full items-center justify-center"
-              style={{ backgroundColor: colors.surfaceSoft }}
-            >
-              <Icon set="feather" name="x" size={18} color={colors.foreground} />
-            </TouchableOpacity>
-          </View>
+          <Icon set="feather" name="x" size={18} color={colors.foreground} />
+        </TouchableOpacity>
+      </View>
 
-          <View className="items-center -mt-4">
-            <DoctorPhoto
-              name={doctorName}
-              uri={doctor?.avatarUrl}
-              size={72}
-              backgroundColor={colors.primaryLight}
-              textColor={colors.primary}
-              fontFamily={fonts.heading}
-            />
-            <Text
-              className="text-lg font-extrabold mt-3 text-center"
-              style={{ color: colors.foreground, fontFamily: fonts.heading }}
-            >
-              How was your session?
-            </Text>
-            <Text className="text-sm mt-1 text-center" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-              with {doctorName}
-            </Text>
-          </View>
+      <View className="items-center -mt-4">
+        <DoctorPhoto
+          name={doctorName}
+          uri={doctor?.avatarUrl}
+          size={72}
+          backgroundColor={colors.primaryLight}
+          textColor={colors.primary}
+          fontFamily={fonts.heading}
+        />
+        <Text
+          className="text-lg font-extrabold mt-3 text-center"
+          style={{ color: colors.foreground, fontFamily: fonts.heading }}
+        >
+          How was your session?
+        </Text>
+        <Text className="text-sm mt-1 text-center" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+          with {doctorName}
+        </Text>
+      </View>
 
-          {/* Stars */}
-          <View className="flex-row justify-center gap-2 mt-5" accessibilityRole="adjustable" accessibilityValue={{ min: 0, max: 5, now: rating }}>
-            {[1, 2, 3, 4, 5].map((n) => (
-              <TouchableOpacity
-                key={n}
-                onPress={() => setRating(n)}
-                accessibilityLabel={`${n} star${n > 1 ? "s" : ""}`}
-                hitSlop={6}
-              >
-                <Icon set="mci"
-                  name={n <= rating ? "star" : "star-outline"}
-                  size={40}
-                  color={n <= rating ? colors.primary : colors.mutedText}
-                />
-              </TouchableOpacity>
-            ))}
-          </View>
-          <Text
-            className="text-sm font-bold text-center mt-2"
-            style={{ color: rating ? colors.foreground : colors.mutedText, fontFamily: fonts.body, minHeight: 20 }}
-          >
-            {rating ? LABELS[rating] : "Tap a star"}
-          </Text>
-
-          <TextInput
-            value={comment}
-            onChangeText={(t) => setComment(t.slice(0, COMMENT_MAX))}
-            accessibilityLabel="Feedback, optional"
-            placeholder="Anything you'd like to share? (optional)"
-            placeholderTextColor={colors.mutedText}
-            multiline
-            className="mt-4 rounded-2xl border px-4 py-3 text-sm"
-            style={{
-              borderColor: colors.border,
-              backgroundColor: colors.surface,
-              color: colors.foreground,
-              fontFamily: fonts.body,
-              minHeight: 88,
-              textAlignVertical: "top",
-            }}
-          />
-          <Text className="text-[11px] text-right mt-1" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-            {comment.length}/{COMMENT_MAX} · Your doctor can see this
-          </Text>
-
-          {error ? (
-            <Text className="text-sm mt-2 text-center" style={{ color: colors.danger, fontFamily: fonts.body }}>
-              {error}
-            </Text>
-          ) : null}
-
+      {/* Stars */}
+      <View className="flex-row justify-center gap-2 mt-5" accessibilityRole="adjustable" accessibilityValue={{ min: 0, max: 5, now: rating }}>
+        {[1, 2, 3, 4, 5].map((n) => (
           <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={submit}
-            disabled={!rating || saving}
-            className="rounded-2xl py-4 items-center mt-4"
-            style={{ backgroundColor: colors.primary, opacity: !rating || saving ? 0.5 : 1 }}
+            key={n}
+            onPress={() => setRating(n)}
+            accessibilityLabel={`${n} star${n > 1 ? "s" : ""}`}
+            hitSlop={6}
           >
-            {saving ? (
-              <ActivityIndicator color={colors.buttonText} />
-            ) : (
-              <Text className="text-sm font-extrabold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-                Submit rating
-              </Text>
-            )}
+            <Icon set="mci"
+              name={n <= rating ? "star" : "star-outline"}
+              size={40}
+              color={n <= rating ? colors.primary : colors.mutedText}
+            />
           </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
-      <AppLockCover />
-    </Modal>
+        ))}
+      </View>
+      <Text
+        className="text-sm font-bold text-center mt-2"
+        style={{ color: rating ? colors.foreground : colors.mutedText, fontFamily: fonts.body, minHeight: 20 }}
+      >
+        {rating ? LABELS[rating] : "Tap a star"}
+      </Text>
+
+      <TextInput
+        value={comment}
+        onChangeText={(t) => setComment(t.slice(0, COMMENT_MAX))}
+        accessibilityLabel="Feedback, optional"
+        placeholder="Anything you'd like to share? (optional)"
+        placeholderTextColor={colors.mutedText}
+        multiline
+        className="mt-4 rounded-2xl border px-4 py-3 text-sm"
+        style={{
+          borderColor: colors.border,
+          backgroundColor: colors.surface,
+          color: colors.foreground,
+          fontFamily: fonts.body,
+          minHeight: 88,
+          textAlignVertical: "top",
+        }}
+      />
+      <Text className="text-[11px] text-right mt-1" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+        {comment.length}/{COMMENT_MAX} · Your doctor can see this
+      </Text>
+
+      {error ? (
+        <Text className="text-sm mt-2 text-center" style={{ color: colors.danger, fontFamily: fonts.body }}>
+          {error}
+        </Text>
+      ) : null}
+
+      <TouchableOpacity
+        activeOpacity={0.85}
+        onPress={submit}
+        disabled={!rating || saving}
+        className="rounded-2xl py-4 items-center mt-4"
+        style={{ backgroundColor: colors.primary, opacity: !rating || saving ? 0.5 : 1 }}
+      >
+        {saving ? (
+          <ActivityIndicator color={colors.buttonText} />
+        ) : (
+          <Text className="text-sm font-extrabold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
+            Submit rating
+          </Text>
+        )}
+      </TouchableOpacity>
+    </BottomSheet>
   );
 }

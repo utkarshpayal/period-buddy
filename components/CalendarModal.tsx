@@ -4,6 +4,7 @@ import Animated, { FadeIn, FadeInLeft, FadeInRight, ZoomIn } from "react-native-
 import { useTheme } from "./theme";
 import { AppLockCover } from "./AppLockScreen";
 import { Icon } from "./Icon";
+import { motion } from "./motion";
 
 const WEEKDAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
 const MONTH_LABELS = [
@@ -202,7 +203,7 @@ export function CalendarModal({
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 4 }}>
               <Animated.Text
                 key={pending ?? "none"}
-                entering={FadeIn.duration(180)}
+                entering={FadeIn.duration(motion.duration.fast)}
                 numberOfLines={1}
                 maxFontSizeMultiplier={1.3}
                 style={{ flexShrink: 1, fontSize: 22, fontWeight: "800", color: pending ? colors.foreground : colors.mutedText, fontFamily: fonts.heading }}
@@ -254,7 +255,7 @@ export function CalendarModal({
             </View>
 
             {mode === "months" ? (
-              <Animated.View key={`months-${viewedYear}`} entering={FadeIn.duration(180)} style={{ flexDirection: "row", flexWrap: "wrap", paddingBottom: 6 }}>
+              <Animated.View key={`months-${viewedYear}`} entering={FadeIn.duration(motion.duration.fast)} style={{ flexDirection: "row", flexWrap: "wrap", paddingBottom: 6 }}>
                 {MONTH_LABELS.map((label, m) => {
                   const idx = monthIndex(viewedYear, m);
                   const off = idx < minMonth || idx > maxMonth;
@@ -303,7 +304,7 @@ export function CalendarModal({
                 <View style={{ overflow: "hidden" }}>
                   <Animated.View
                     key={`${viewedYear}-${viewedMonth}`}
-                    entering={(direction === 1 ? FadeInRight : FadeInLeft).duration(220)}
+                    entering={(direction === 1 ? FadeInRight : FadeInLeft).duration(motion.duration.base)}
                     style={{ flexDirection: "row", flexWrap: "wrap" }}
                   >
                     {cells.map((day, index) => {

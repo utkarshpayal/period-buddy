@@ -39,6 +39,7 @@ import { SendStatusLabel } from "../../components/partner-view/SendStatusLabel";
 import { useSecureScreen } from "../../lib/screenPrivacy";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { Icon } from "../../components/Icon";
+import { motion } from "../../components/motion";
 
 // --- STRUCTURAL BACKEND REGISTRY CONTRACTS ---
 interface PeriodBuddy {
@@ -652,7 +653,7 @@ function BuddyNomination() {
                 {/* Your current buddy (the way back into the chat) */}
                 {activeBuddyData ? (
                   <Animated.View
-                    entering={reduceMotion ? undefined : FadeIn.duration(250)}
+                    entering={reduceMotion ? undefined : FadeIn.duration(motion.duration.base)}
                     // Plain styles: NativeWind's className doesn't reach Reanimated views.
                     style={{ marginBottom: 24 }}
                   >
@@ -898,7 +899,7 @@ function BuddyNomination() {
                   {/* Your buddy started a call */}
                   {incomingCallFrom && !buddyCall && (
                     <Animated.View
-                      entering={reduceMotion ? undefined : FadeIn.duration(200)}
+                      entering={reduceMotion ? undefined : FadeIn.duration(motion.duration.base)}
                       // Plain styles: NativeWind's className doesn't reach Reanimated views.
                       style={{
                         flexDirection: "row",

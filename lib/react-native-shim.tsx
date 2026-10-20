@@ -1,6 +1,7 @@
 // App code's `import ... from "react-native"` resolves here (see metro.config.js).
 // Everything passes through untouched except Text and TextInput, which get
-// Manrope as their default font. React 19 ignores `defaultProps` on function
+// Manrope as their default font, and TouchableOpacity, whose default press
+// dim (0.2) is a harsh flash; an explicit activeOpacity still wins. React 19 ignores `defaultProps` on function
 // components, so `Text.defaultProps = { style: ... }` no longer does anything,
 // and any Text without an explicit `fontFamily` rendered in Roboto/SF.
 // An explicit fontFamily in `style` still wins, since it comes after the default.
@@ -23,7 +24,15 @@ TextInput.displayName = "TextInput";
 // Static helper some code reaches for (TextInput.State.currentlyFocusedInput()).
 TextInput.State = RN.TextInput.State;
 
-const overrides: Record<string, unknown> = { Text, TextInput };
+// One soft dim for every tap that doesn't pick its own.
+const DEFAULT_ACTIVE_OPACITY = 0.7;
+
+function TouchableOpacity(props: React.ComponentProps<typeof RN.TouchableOpacity>) {
+  return <RN.TouchableOpacity activeOpacity={DEFAULT_ACTIVE_OPACITY} {...props} />;
+}
+TouchableOpacity.displayName = "TouchableOpacity";
+
+const overrides: Record<string, unknown> = { Text, TextInput, TouchableOpacity };
 
 module.exports = new Proxy(RN, {
   get(target, key) {

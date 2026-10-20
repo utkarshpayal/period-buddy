@@ -56,6 +56,7 @@ import { useContentWidth } from "../../lib/layout";
 import { useSecureScreen } from "../../lib/screenPrivacy";
 import { cleanupTempFiles } from "../../lib/tempFiles";
 import { Icon } from "../../components/Icon";
+import { motion } from "../../components/motion";
 
 type Filter = DocType | "all";
 
@@ -541,7 +542,7 @@ export default function DocumentsScreen() {
                   style={{ flex: 1, fontSize: 15, color: colors.foreground, fontFamily: fonts.body, paddingVertical: 0 }}
                 />
                 {search ? (
-                  <Animated.View entering={ZoomIn.duration(160)} exiting={ZoomOut.duration(120)}>
+                  <Animated.View entering={ZoomIn.duration(motion.duration.fast)} exiting={ZoomOut.duration(motion.duration.fast)}>
                     <TouchableOpacity
                       onPress={() => setSearch("")}
                       accessibilityRole="button"
@@ -555,7 +556,7 @@ export default function DocumentsScreen() {
                 ) : null}
               </Animated.View>
               {searchFocused || search ? (
-                <Animated.View entering={FadeInRight.duration(200)} exiting={FadeOutRight.duration(150)}>
+                <Animated.View entering={FadeInRight.duration(motion.duration.base)} exiting={FadeOutRight.duration(motion.duration.fast)}>
                   <TouchableOpacity
                     onPress={() => {
                       setSearch("");
@@ -582,7 +583,7 @@ export default function DocumentsScreen() {
           </View>
 
           {showTools ? (
-            <Animated.View entering={FadeIn.duration(220)} exiting={FadeOut.duration(150)}>
+            <Animated.View entering={FadeIn.duration(motion.duration.base)} exiting={FadeOut.duration(motion.duration.fast)}>
               <AskDocuments gutter={gutter} onAsk={() => askAI()} />
             </Animated.View>
           ) : null}
@@ -637,7 +638,7 @@ export default function DocumentsScreen() {
                 // Keyed by tab and sort too, so the list settles in again when either changes.
                 <Animated.View
                   key={`${activeFilter}-${sortOrder}-${group.label}`}
-                  entering={groupIndex < 4 ? FadeInDown.delay(groupIndex * 70).duration(300) : undefined}
+                  entering={groupIndex < 4 ? FadeInDown.delay(groupIndex * 70).duration(motion.duration.slow) : undefined}
                   layout={LinearTransition.duration(220)}
                 >
                   <Text

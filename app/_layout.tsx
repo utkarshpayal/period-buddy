@@ -33,6 +33,7 @@ import { cssInterop } from "nativewind";
 import { MAX_CONTENT_WIDTH } from "../lib/layout";
 import { ScreenPrivacySync } from "../lib/screenPrivacy";
 import { KeyboardProvider } from "react-native-keyboard-controller";
+import { Image as ExpoImage } from "expo-image";
 
 // The payload's data fields. The type normally arrives in content.data, but
 // on Android a notification displayed by the FCM SDK itself (app
@@ -63,6 +64,7 @@ function isEntryPath(pathname: string, isAuthenticated: boolean) {
 // on anything else the prop is silently ignored. Register third-party
 // components that take className here.
 cssInterop(LinearGradient, { className: "style" });
+cssInterop(ExpoImage, { className: "style" });
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync().catch(() => {});
