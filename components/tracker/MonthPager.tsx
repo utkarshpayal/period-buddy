@@ -1,6 +1,6 @@
 import React, { useMemo, useRef } from "react";
 import { PanResponder, Text, TouchableOpacity, View } from "react-native";
-import Animated, { FadeInLeft, FadeInRight, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
+import Animated, { FadeInLeft, FadeInRight, ZoomIn, ZoomOut, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { CalendarDayGrid, CalendarKeyButton, usePhasePalette, type Lookups } from "../CycleCalendar";
 import { motion } from "../motion";
 import { useTheme } from "../theme";
@@ -8,6 +8,7 @@ import { getShadow } from "../ui-tokens";
 import { MONTH_NAMES, WEEKDAY_LABELS, monthSlots, type DayStatus } from "../../lib/cycleCalendar";
 import { dateFromDayKey } from "../../lib/format";
 import { Icon } from "../Icon";
+import { haptics } from "../../lib/haptics";
 
 // Every month gets 6 rows so changing month never changes the card's height.
 const CAL_ROWS = 6;
@@ -22,7 +23,9 @@ const SWIPE_VELOCITY = 0.35;
  * the month itself.
  *
  * Only the selected month is drawn. Arrows, Today and a horizontal swipe
- * change `year`/`month` (through `onChangeMonth`) and the new month slides in.
+ * change `year`/`month` (through `onChangeMonth`) with a light tick: the
+ * title rolls in from that side and the days arrive in a diagonal wave
+ * (also on first show).
  * There is deliberately no long horizontal list of months: that design kept
  * mis-positioning itself on Android (opening on January 2020, drifting years
  * back after Today, sliding left and right on its own), and a single month
@@ -59,6 +62,7 @@ export function MonthPager({
   const goTo = (target: Date) => {
     const { year: y, month: m, onChangeMonth: change } = latest.current;
     direction.current = target.getFullYear() * 12 + target.getMonth() >= y * 12 + m ? 1 : -1;
+    haptics.select();
     change(target.getFullYear(), target.getMonth());
   };
   const shiftMonth = (delta: -1 | 1) => {
@@ -99,6 +103,7 @@ export function MonthPager({
   );
 
   const entering = (direction.current > 0 ? FadeInRight : FadeInLeft).duration(motion.duration.base).easing(motion.easing.enter);
+  const titleEntering = (direction.current > 0 ? FadeInRight : FadeInLeft).duration(motion.duration.slow).easing(motion.easing.enter);
 
   return (
     <View
@@ -114,20 +119,23 @@ export function MonthPager({
           className="flex-row items-center flex-1"
           style={{ gap: 5, minWidth: 0 }}
         >
-          <Text
+          <Animated.Text
+            key={`${year}-${month}`}
+            entering={titleEntering}
             numberOfLines={1}
             adjustsFontSizeToFit
             minimumFontScale={0.85}
             style={{ flexShrink: 1, color: colors.foreground, fontSize: 17, lineHeight: 24, fontWeight: "700", fontFamily: fonts.heading }}
           >
             {MONTH_NAMES[month]}
-            <Text style={{ color: colors.mutedText, fontWeight: "400" }}>{` ${year}`}</Text>
-          </Text>
+            <Text style={{ color: colors.mutedText, fontWeight: "400", fontFamily: fonts.heading }}>{` ${year}`}</Text>
+          </Animated.Text>
           <Icon set="mci" name="calendar-month-outline" size={16} color={colors.mutedText} />
         </TouchableOpacity>
         <CalendarKeyButton />
 
         {!isViewingCurrentMonth && (
+          <Animated.View entering={ZoomIn.springify().damping(14)} exiting={ZoomOut.duration(motion.duration.fast)}>
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={() => goTo(new Date(today.getFullYear(), today.getMonth(), 1))}
@@ -139,6 +147,7 @@ export function MonthPager({
           >
             <Icon set="mci" name="calendar-today" size={16} color={colors.primary} />
           </TouchableOpacity>
+          </Animated.View>
         )}
         {([-1, 1] as const).map((delta) => (
           <TouchableOpacity
@@ -176,7 +185,7 @@ export function MonthPager({
             entering={entering}
             style={{ paddingHorizontal: 12, flexDirection: "row", flexWrap: "wrap" }}
           >
-            <CalendarDayGrid dates={slots} lookups={lookups} palette={palette} height={TRACKER_CELL} onPressDay={onPressDay} />
+            <CalendarDayGrid dates={slots} lookups={lookups} palette={palette} height={TRACKER_CELL} onPressDay={onPressDay} stagger />
           </Animated.View>
         </Animated.View>
       </View>

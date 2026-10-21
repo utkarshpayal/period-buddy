@@ -139,6 +139,28 @@ export type DayStatus = {
 
 type EntryLookup = (dateKey: string) => LocalDayEntry | undefined;
 
+const isFlowDay = (entry: LocalDayEntry | undefined) => Boolean(entry?.flow && entry.flow !== "none");
+
+/**
+ * True when `date` falls within the usual period length of a logged period
+ * that started on or before it, so it's likely still a period day. Lets the
+ * calendar show the rest of a period as predicted the moment one day is
+ * logged, without waiting for (or depending on) the server's cycle start.
+ * Stops at a day marked "not on my period" (flow "none").
+ */
+export function continuesLoggedPeriod(date: Date, periodLength: number, entryFor: EntryLookup): boolean {
+  for (let back = 1; back < periodLength; back += 1) {
+    const entry = entryFor(getDateKey(addDays(date, -back)));
+    if (entry?.flow === "none") return false;
+    if (!isFlowDay(entry)) continue;
+    // Nearest logged flow day: walk back to where that run of flow started.
+    let start = back;
+    while (start < periodLength && isFlowDay(entryFor(getDateKey(addDays(date, -(start + 1)))))) start += 1;
+    return start < periodLength;
+  }
+  return false;
+}
+
 export function dayStatus(date: Date, model: CalendarModel, entryFor: EntryLookup, noteFor: (dateKey: string) => string | undefined, todayKey: string): DayStatus {
   const dateKey = getDateKey(date);
   // From the current period's start up to today the days count on without
@@ -166,8 +188,13 @@ export function dayStatus(date: Date, model: CalendarModel, entryFor: EntryLooku
     isToday: dateKey === todayKey,
     isFuture: dateKey > todayKey,
     isLogged,
-    hasFlow: Boolean(entry?.flow && entry.flow !== "none"),
-    isPredictedPeriod: phase === "period" && !isLogged && !isPhantomTail && d >= model.todayStart,
+    hasFlow: isFlowDay(entry),
+    // Today or later and not logged: the server's predicted period, or the
+    // rest of a period the person has just started logging.
+    isPredictedPeriod:
+      !isLogged &&
+      d >= model.todayStart &&
+      ((phase === "period" && !isPhantomTail) || continuesLoggedPeriod(date, model.periodLength, entryFor)),
     isFertile: cycleDay >= model.ovulationDay - 5 && cycleDay <= model.ovulationDay,
     isOvulation: cycleDay === model.ovulationDay,
   };

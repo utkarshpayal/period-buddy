@@ -153,7 +153,7 @@ export default function ConsultationScreen() {
 
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
   // The page opens as a list of doctors; days and times show only after
-  // "See times" (or Book again / the profile's Book), for that doctor.
+  // "Available slots" (or Book again / the profile's Book), for that doctor.
   const [slotsOpen, setSlotsOpen] = useState(false);
   // Doctor whose full profile sheet is open (tapping a doctor in the list).
   const [profileDoctor, setProfileDoctor] = useState<Doctor | null>(null);

@@ -1,18 +1,18 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { RefreshControl, ScrollView, StatusBar, Text, View } from "react-native";
+import { RefreshControl, ScrollView, StatusBar, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import DayDetailsModal from "../../../components/DayDetailsModal";
 import { LoadingErrorState } from "../../../components/LoadingErrorState";
 import { HeaderIconButton, TabHeader } from "../../../components/ScreenHeader";
 import { useTheme } from "../../../components/theme";
-import { CycleRing } from "../../../components/tracker/CycleRing";
+import { CycleHero } from "../../../components/tracker/CycleHero";
 import { CycleSettingsSheet } from "../../../components/tracker/CycleSettingsSheet";
 import { MonthPager } from "../../../components/tracker/MonthPager";
 import { TrackerBodySkeleton } from "../../../components/tracker/TrackerBodySkeleton";
 import { TrackerSearchModal } from "../../../components/tracker/TrackerSearchModal";
 import { WeekStrip } from "../../../components/tracker/WeekStrip";
-import { getShadow } from "../../../components/ui-tokens";
+import { QuickLogButtons } from "../../../components/QuickLogButtons";
 import { useDayLogActions } from "../../../hooks/useDayLogActions";
 import { useQuickLog } from "../../../hooks/useQuickLog";
 import { useTrackerData } from "../../../hooks/useTrackerData";
@@ -24,15 +24,16 @@ import { invalidateQueries } from "../../../lib/queryCache";
 import { useSecureScreen } from "../../../lib/screenPrivacy";
 import { runTapAction } from "../../../lib/tapAction";
 import type { TrackerSearchAction } from "../../../lib/trackerSearch";
-import { Button } from "../../../components/Button";
+
+const TRACKER_QUICK_LOG = ["flow", "symptoms", "mood"] as const;
 
 export default function Tracker() {
   useSecureScreen("tracker");
   const insets = useSafeAreaInsets();
-  const { colors, isDark, fonts } = useTheme();
+  const { colors, isDark } = useTheme();
   const router = useRouter();
-  // "Log period" logs today in one tap, "Symptoms" opens the small sheet
-  // (same as Home); "All details" in the sheet opens today's full log here,
+  // "Log period" logs today in one tap, "Symptoms"/"Mood" open the small
+  // sheet (same as Home); "All details" in the sheet opens today's full log here,
   // once the sheet has closed (useQuickLog).
   const quickLog = useQuickLog({
     toastBottom: 62 + Math.max(insets.bottom, 12) + 14,
@@ -126,6 +127,17 @@ export default function Tracker() {
     }
   }
 
+  // Any log or settings change replays the hero's update animation: today's
+  // quick logs, plus a bump for days saved from the calendar.
+  const [logEdits, setLogEdits] = useState(0);
+  const bumpHero = () => setLogEdits((n) => n + 1);
+  const heroPulseKey = [
+    logEdits,
+    quickLog.periodLoggedToday,
+    ...TRACKER_QUICK_LOG.map((k) => quickLog.loggedCount(k)),
+    settings ? JSON.stringify(settings) : "",
+  ].join("|");
+
   const calendarMonthParam = `${selectedYear}-${String(selectedMonthIndex + 1).padStart(2, "0")}`;
 
   return (
@@ -161,48 +173,28 @@ export default function Tracker() {
             onRetry={data.reloadModel}
             skeleton={<TrackerBodySkeleton />}
           >
-            {/* Today · Cycle day N — surface card framing the ring */}
-            <View
-              className="mx-6 mt-4 items-center"
-              style={{ backgroundColor: colors.surface, borderRadius: 28, borderCurve: "continuous", padding: 20, gap: 18, ...getShadow(colors, isDark) }}
+            {/* Today · Cycle day N and the quick-log buttons on one animated panel */}
+            <CycleHero
+              activeCycleLength={model.cycleLength}
+              activePeriodLength={model.periodLength}
+              ovulationDayPivot={model.ovulationDay}
+              cycleDay={cycleDay}
+              nextPeriodDaysAway={nextPeriodDaysAway}
+              nextPeriodDate={predictions?.nextPeriodDate}
+              fertilityReliable={predictions?.ovulationReliable !== false}
+              daysLate={predictions?.isLate ? (predictions.daysLate ?? 0) : 0}
+              pulseKey={heroPulseKey}
             >
-              <Text style={{ color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "700", letterSpacing: 1.1, textTransform: "uppercase", fontFamily: fonts.body }}>
-                {`Today · Cycle day ${cycleDay} of ${model.cycleLength}`}
-              </Text>
+              {/* Same one-tap Log period / Symptoms / Mood buttons as Home */}
+              <QuickLogButtons
+                keys={TRACKER_QUICK_LOG}
+                periodLoggedToday={quickLog.periodLoggedToday}
+                loggedCount={quickLog.loggedCount}
+                onPress={quickLog.onQuickAction}
+              />
+            </CycleHero>
 
-              <View className="items-center justify-center">
-                <CycleRing
-                  activeCycleLength={model.cycleLength}
-                  activePeriodLength={model.periodLength}
-                  ovulationDayPivot={model.ovulationDay}
-                  cycleDay={cycleDay}
-                  nextPeriodDaysAway={nextPeriodDaysAway}
-                  nextPeriodDate={predictions?.nextPeriodDate}
-                  fertilityReliable={predictions?.ovulationReliable !== false}
-                  daysLate={predictions?.isLate ? (predictions.daysLate ?? 0) : 0}
-                />
-              </View>
-
-              {/* "Log period" / "Symptoms" quick-entry buttons */}
-              <View className="w-full flex-row" style={{ gap: 10 }}>
-                <Button
-                  label={quickLog.periodLoggedToday ? "Period logged" : "Log period"}
-                  icon={quickLog.periodLoggedToday ? "checkmark" : "add"}
-                  size="md"
-                  onPress={() => void quickLog.logPeriodNow()}
-                  accessibilityLabel={quickLog.periodLoggedToday ? "Period logged today. Change flow" : "Log period for today"}
-                  style={{ flex: 1, paddingHorizontal: 12 }}
-                />
-                <Button
-                  label="Log symptoms"
-                  icon="pulse-outline"
-                  variant="secondary"
-                  size="md"
-                  onPress={() => void quickLog.openSheet("symptoms")}
-                  style={{ flex: 1, paddingHorizontal: 12 }}
-                />
-              </View>
-            </View>
+            <View style={{ height: 8 }} />
 
             <MonthPager
               year={selectedYear}
@@ -244,12 +236,15 @@ export default function Tracker() {
         details={selected ? (noteFor(selected.dateKey) ?? "") : undefined}
         onSaveEntry={async (entry) => {
           if (selected) await save(selected.dateKey, entry, true);
+          bumpHero();
         }}
         onClearEntry={async () => {
           if (selected) await clear(selected.dateKey);
+          bumpHero();
         }}
         onLogSymptom={(symptoms) => {
           if (selected) logSymptoms(selected.dateKey, symptoms);
+          bumpHero();
         }}
       />
       {quickLog.overlays}

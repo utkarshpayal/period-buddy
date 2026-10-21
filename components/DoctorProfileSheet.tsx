@@ -213,7 +213,7 @@ export function DoctorProfileSheet({
               {price ?? "Not set"}
             </Text>
           </View>
-          <Button label={hasActiveSession ? "Open consultation chat" : "Choose a time"} onPress={onPrimary} style={{ flex: 1 }} />
+          <Button label={hasActiveSession ? "Open consultation chat" : "Book slot"} onPress={onPrimary} style={{ flex: 1 }} />
         </View>
       </View>
       <AppLockCover />
