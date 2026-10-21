@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -21,6 +20,8 @@ import { Loader } from "../components/Loader";
 import { ThemeToggle, useTheme, type ThemeColors } from "../components/theme";
 import { getScreenGradient, getShadow } from "../components/ui-tokens";
 import { useContentWidth } from "../lib/layout";
+import { Button } from "../components/Button";
+import { Icon } from "../components/Icon";
 
 type Slide = {
   key: string;
@@ -89,7 +90,11 @@ export default function Index() {
     return () => clearTimeout(timer);
   }, [index, dragging, reduceMotion, isFocused, isAuthenticated, contentWidth]);
 
+  // Only while focused: after signing in on login/signup (pushed on top of
+  // this screen), that screen routes by the resolved partner role itself, and
+  // a redirect from here would race it to the wrong place.
   useEffect(() => {
+    if (!isFocused) return;
     if (isAuthenticated && !hasNavigated.current) {
       hasNavigated.current = true;
       const timer = setTimeout(() => {
@@ -101,7 +106,7 @@ export default function Index() {
     } else if (!isAuthenticated) {
       hasNavigated.current = false;
     }
-  }, [isAuthenticated, router, user?.partnerRole]);
+  }, [isAuthenticated, isFocused, router, user?.partnerRole]);
 
   // onScroll (not onMomentumScrollEnd) so the dots follow the swipe live.
   function onScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
@@ -220,39 +225,14 @@ export default function Index() {
               ))}
             </View>
 
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => router.push("/(tabs)/signup")}
-              style={({ pressed }) => ({
-                height: 56,
-                borderRadius: 18,
-                backgroundColor: colors.primary,
-                alignItems: "center",
-                justifyContent: "center",
-                transform: [{ scale: pressed ? 0.98 : 1 }],
-                ...getShadow(colors, isDark),
-              })}
-            >
-              <Text style={{ color: colors.buttonText, fontSize: 19, fontWeight: "800", letterSpacing: 0.2, fontFamily: fonts.body }}>
-                Get started
-              </Text>
-            </Pressable>
-
-            <Pressable
-              accessibilityRole="button"
+            <Button label="Get started" iconRight="arrow-forward" onPress={() => router.push("/(tabs)/signup")} fullWidth />
+            <Button
+              label="I already have an account"
+              variant="ghost"
+              size="md"
               onPress={() => router.push("/(tabs)/login")}
-              style={({ pressed }) => ({
-                height: 52,
-                alignItems: "center",
-                justifyContent: "center",
-                marginTop: 6,
-                opacity: pressed ? 0.6 : 1,
-              })}
-            >
-              <Text style={{ color: colors.foreground, fontSize: 15, fontWeight: "700", fontFamily: fonts.body }}>
-                I already have an account
-              </Text>
-            </Pressable>
+              style={{ marginTop: 8, alignSelf: "center" }}
+            />
 
             <Pressable
               accessibilityRole="button"
@@ -261,7 +241,7 @@ export default function Index() {
               className="flex-row justify-center items-center"
               style={({ pressed }) => ({ paddingVertical: 6, opacity: pressed ? 0.6 : 1 })}
             >
-              <Ionicons name="heart-outline" size={14} color={colors.mutedText} style={{ marginRight: 5 }} />
+              <Icon set="ion" name="heart-outline" size={14} color={colors.mutedText} style={{ marginRight: 5 }} />
               <Text style={{ color: colors.mutedText, fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}>
                 Joining a partner? Use your invite code
               </Text>
@@ -323,7 +303,7 @@ function SlideArt({ art, colors, isDark }: { art: Slide["art"]; colors: ThemeCol
         }}
       >
         {spec.icon ? (
-          <Ionicons name={spec.icon} size={36} color={spec.fg} />
+          <Icon set="ion" name={spec.icon} size={36} color={spec.fg} />
         ) : (
           <Image
             source={require("../assets/images/brand/logo-mark.png")}

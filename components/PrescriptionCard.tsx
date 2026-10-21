@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import React, { useState } from "react";
 import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
 import { alert } from "../lib/alert";
@@ -6,6 +5,8 @@ import { getFriendlyErrorMessage, type Consultation } from "../lib/api";
 import { prescriptionAction } from "../lib/prescriptionPdf";
 import { PrescriptionViewer } from "./PrescriptionViewer";
 import { useTheme } from "./theme";
+import { Icon } from "./Icon";
+import { Button } from "./Button";
 
 const MAX_LISTED = 3;
 
@@ -64,7 +65,7 @@ export function PrescriptionCard({ consultation, doctorName }: { consultation: C
           <View className="gap-2">
             {medicines.slice(0, MAX_LISTED).map((m, i) => (
               <View key={i} className="flex-row gap-2">
-                <Feather name="check-circle" size={14} color={colors.primary} style={{ marginTop: 2 }} />
+                <Icon set="feather" name="check-circle" size={14} color={colors.primary} style={{ marginTop: 2 }} />
                 <View className="flex-1">
                   <Text className="text-sm font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
                     {m.name}
@@ -89,7 +90,7 @@ export function PrescriptionCard({ consultation, doctorName }: { consultation: C
 
         {rx?.followUp ? (
           <View className="flex-row items-center gap-1.5 mt-3">
-            <Feather name="calendar" size={13} color={colors.mutedText} />
+            <Icon set="feather" name="calendar" size={13} color={colors.mutedText} />
             <Text className="text-xs" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
               Follow-up: <Text style={{ color: colors.foreground, fontWeight: "700" }}>{rx.followUp}</Text>
             </Text>
@@ -98,18 +99,7 @@ export function PrescriptionCard({ consultation, doctorName }: { consultation: C
       </View>
 
       <View className="px-4 pt-4 pb-4 gap-2.5">
-        <TouchableOpacity
-          onPress={() => setViewing(true)}
-          accessibilityRole="button"
-          accessibilityLabel="View full prescription"
-          className="flex-row items-center justify-center gap-2 rounded-full py-3"
-          style={{ backgroundColor: colors.primary }}
-        >
-          <Feather name="eye" size={16} color={colors.buttonText} />
-          <Text className="text-sm font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-            View prescription
-          </Text>
-        </TouchableOpacity>
+        <Button label="View prescription" icon="eye-outline" size="md" fullWidth onPress={() => setViewing(true)} accessibilityLabel="View full prescription" />
         <View className="flex-row gap-2.5">
           {(["download", "print"] as const).map((action) => (
             <TouchableOpacity
@@ -125,7 +115,7 @@ export function PrescriptionCard({ consultation, doctorName }: { consultation: C
               {busy === action ? (
                 <ActivityIndicator size="small" color={colors.primary} />
               ) : (
-                <Feather name={action === "download" ? "download" : "printer"} size={15} color={colors.primary} />
+                <Icon set="feather" name={action === "download" ? "download" : "printer"} size={15} color={colors.primary} />
               )}
               <Text className="text-sm font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
                 {action === "download" ? (busy === "download" ? "Preparing…" : "Download PDF") : "Print"}

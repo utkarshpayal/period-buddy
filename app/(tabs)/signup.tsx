@@ -1,13 +1,9 @@
-import { Ionicons } from "@expo/vector-icons";
 import { Link, useLocalSearchParams, useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import * as WebBrowser from "expo-web-browser";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -20,7 +16,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../components/auth-context";
 import {
   AuthDivider,
-  AuthErrorBanner,
   AuthField,
   AuthPrimaryButton,
   AuthTopBar,
@@ -34,6 +29,10 @@ import { isStrongPassword, PASSWORD_RULES } from "../../lib/password";
 import type { AuthUser } from "../../lib/api";
 import { alert } from "../../lib/alert";
 import { getScreenGradient, getShadow } from "../../components/ui-tokens";
+import { getFriendlyErrorMessage } from "../../lib/api";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
+import { Icon } from "../../components/Icon";
+import { showErrorToast } from "../../lib/toast";
 
 const TERMS_URL = "https://thenura.care/terms";
 const PRIVACY_URL = "https://thenura.care/privacy";
@@ -48,7 +47,6 @@ export default function SignUp() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const role: "user" | "partner" = partnerCode ? "partner" : "user";
-  const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isOtpModalVisible, setIsOtpModalVisible] = useState(false);
   // The rule checklist appears once the user starts on the password, so the
@@ -76,21 +74,20 @@ export default function SignUp() {
   }, [fadeAnim, slideAnim]);
 
   async function handleSignup() {
-    setErrorMessage("");
 
     if (firstName.trim().length < 2) {
-      setErrorMessage("Please enter your first name.");
+      showErrorToast("Please enter your first name.");
       return;
     }
 
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) {
-      setErrorMessage("Please enter a valid email address.");
+      showErrorToast("Please enter a valid email address.");
       return;
     }
 
     if (!isStrongPassword(password)) {
       setShowPasswordRules(true);
-      setErrorMessage("Your password needs a few more things — see the checklist.");
+      showErrorToast("Your password needs a few more things — see the checklist.");
       return;
     }
 
@@ -113,7 +110,7 @@ export default function SignUp() {
 
       setIsOtpModalVisible(true);
     } catch (error) {
-      setErrorMessage(
+      showErrorToast(
         error instanceof Error
           ? error.message
           : "Unable to create your account right now.",
@@ -131,13 +128,16 @@ export default function SignUp() {
       await connectPartnerAndResolveRoute(partnerCode);
 
     // A modal alert survives this screen unmounting on the router.replace()
-    // below — an inline banner (setErrorMessage) would just flash and
+    // below — an inline error would just flash and
     // disappear, leaving no trace of why the partner connection failed.
     if (connectError) {
       alert("Couldn't connect as a partner", connectError);
     }
 
     updateUser({ ...user, partnerRole });
+    // Drop the signed-out screens (welcome, login) under this one, so Android
+    // Back from the dashboard can't return to them while signed in.
+    if (router.canDismiss()) router.dismissAll();
     router.replace(destination);
   }
 
@@ -156,19 +156,18 @@ export default function SignUp() {
       await finishSignIn(signedInUser);
     } catch (error) {
       setIsFinishing(false);
-      setErrorMessage(error instanceof Error ? error.message : "Unable to finish signing up.");
+      showErrorToast(getFriendlyErrorMessage(error));
     }
   }
 
   async function handleGoogleSignInSuccess({ token, user }: { token: string; user: AuthUser }) {
-    setErrorMessage("");
     try {
       await signIn({ token, user });
       await finishSignIn(user);
     } catch (error) {
       setIsFinishing(false);
-      setErrorMessage(
-        error instanceof Error ? error.message : "Unable to complete Google sign-in.",
+      showErrorToast(
+        getFriendlyErrorMessage(error),
       );
     }
   }
@@ -182,15 +181,12 @@ export default function SignUp() {
       />
 
       <SafeAreaView className="flex-1">
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        <View
           className="flex-1"
-          keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
         >
           <AuthTopBar />
 
-          <ScrollView
-            automaticallyAdjustKeyboardInsets
+          <KeyboardAwareScrollView bottomOffset={24}
             contentContainerStyle={{
               alignItems: "center",
               flexGrow: 1,
@@ -231,7 +227,7 @@ export default function SignUp() {
                   className="mb-4 flex-row items-center gap-2.5 p-3.5 rounded-2xl border"
                   style={{ backgroundColor: colors.primaryLight, borderColor: colors.border }}
                 >
-                  <Ionicons name="heart-outline" size={15} color={colors.primary} />
+                  <Icon set="ion" name="heart-outline" size={15} color={colors.primary} />
                   <Text
                     className="flex-1 text-xs font-semibold leading-4"
                     style={{ color: colors.foreground, fontFamily: fonts.body }}
@@ -245,7 +241,7 @@ export default function SignUp() {
               <GoogleSignInButton
                 disabled={isSubmitting}
                 onBusyChange={setIsFinishing}
-                onError={setErrorMessage}
+                onError={showErrorToast}
                 onSuccess={handleGoogleSignInSuccess}
                 role={role}
               />
@@ -257,10 +253,7 @@ export default function SignUp() {
                   icon="person-outline"
                   autoCapitalize="words"
                   autoComplete="given-name"
-                  onChangeText={(text) => {
-                    setErrorMessage("");
-                    setFirstName(text);
-                  }}
+                  onChangeText={setFirstName}
                   onSubmitEditing={() => emailRef.current?.focus()}
                   placeholder="First name"
                   returnKeyType="next"
@@ -275,10 +268,7 @@ export default function SignUp() {
                   autoCapitalize="none"
                   autoComplete="email"
                   keyboardType="email-address"
-                  onChangeText={(text) => {
-                    setErrorMessage("");
-                    setEmail(text);
-                  }}
+                  onChangeText={setEmail}
                   onSubmitEditing={() => passwordRef.current?.focus()}
                   placeholder="Email address"
                   returnKeyType="next"
@@ -293,10 +283,7 @@ export default function SignUp() {
                   isPassword
                   autoComplete="new-password"
                   onFocus={() => setShowPasswordRules(true)}
-                  onChangeText={(text) => {
-                    setErrorMessage("");
-                    setPassword(text);
-                  }}
+                  onChangeText={setPassword}
                   onSubmitEditing={handleSignup}
                   placeholder="Create a password"
                   returnKeyType="done"
@@ -324,7 +311,7 @@ export default function SignUp() {
                           borderColor: met ? colors.successLight : colors.border,
                         }}
                       >
-                        <Ionicons
+                        <Icon set="ion"
                           name={met ? "checkmark-circle" : "ellipse-outline"}
                           size={13}
                           color={met ? colors.success : colors.mutedText}
@@ -359,12 +346,6 @@ export default function SignUp() {
                   onPress={handleSignup}
                 />
               </View>
-
-              {errorMessage ? (
-                <View style={{ marginTop: 14 }}>
-                  <AuthErrorBanner message={errorMessage} />
-                </View>
-              ) : null}
 
               <Text
                 className="text-center"
@@ -424,8 +405,8 @@ export default function SignUp() {
                 </Link>
               </View>
             </Animated.View>
-          </ScrollView>
-        </KeyboardAvoidingView>
+          </KeyboardAwareScrollView>
+        </View>
       </SafeAreaView>
 
       <OtpModal

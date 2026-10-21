@@ -1,21 +1,15 @@
-import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  ScrollView,
-  StatusBar,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import React, { useEffect, useRef, useState } from "react";
+import { Linking, ScrollView, StatusBar, Text, View } from "react-native";
+import Animated, { FadeInRight } from "react-native-reanimated";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { SkeletonCardList } from "../../components/Skeleton";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { useTheme } from "../../components/theme";
 import { getShadow, getSoftTints } from "../../components/ui-tokens";
 import { shareWithAppLink } from "../../lib/share";
 import { useSubscriptionAccess } from "../../hooks/useSubscriptionAccess";
+import { useAsyncLoad } from "../../hooks/useAsyncLoad";
 import { LockedFeatureCard } from "../../components/subscription/LockedFeatureCard";
 import { PaywallModal } from "../../components/subscription/PaywallModal";
 import {
@@ -24,85 +18,81 @@ import {
   type ScreeningAssessmentResponse,
   type ScreeningCondition,
   type ScreeningQuestion,
+  getFriendlyErrorMessage,
 } from "../../lib/api";
+import { EMERGENCY_NUMBER, soonRedFlags, triageRedFlags } from "../../lib/redFlagScreen";
+import { useSecureScreen } from "../../lib/screenPrivacy";
+import { useContentWidth } from "../../lib/layout";
+import { haptics } from "../../lib/haptics";
+import { Icon } from "../../components/Icon";
+import { Button } from "../../components/Button";
+import { showErrorToast } from "../../lib/toast";
+import { motion } from "../../components/motion";
+import {
+  ConditionPicker,
+  IntroView,
+  QuestionView,
+  ResultView,
+  SafetyCheckView,
+} from "../../components/symptom-checker/SymptomCheckerViews";
+import { conditionLabel, riskStyle } from "../../components/symptom-checker/meta";
 
-type Step = "pick" | "questions" | "results";
+// "intro" explains the check; "prescreen" (the red-flag safety check) always
+// comes before any questionnaire; "urgent" is the get-care card it leads to.
+type Step = "intro" | "prescreen" | "urgent" | "pick" | "questions" | "results";
 
-const CONDITIONS: { id: ScreeningCondition; label: string; icon: keyof typeof MaterialCommunityIcons.glyphMap; desc: string }[] = [
-  { id: "pcos", label: "PCOS", icon: "chart-donut", desc: "Irregular cycles, hormonal signs" },
-  { id: "endometriosis", label: "Endometriosis", icon: "flower-outline", desc: "Pelvic pain patterns" },
-  { id: "fibroid", label: "Fibroids", icon: "circle-multiple-outline", desc: "Heavy flow, pressure symptoms" },
-  { id: "thyroid", label: "Thyroid", icon: "waveform", desc: "Energy, weight, mood signs" },
-];
+type AssessmentResult = ScreeningAssessmentResponse;
 
-const SCALE_LABELS = ["None", "Mild", "Moderate", "Severe"];
-
-// Severity ramp icons for the 0–3 scale options — a filling circle that reads
-// at a glance without relying on color alone.
-const SCALE_ICONS: (keyof typeof MaterialCommunityIcons.glyphMap)[] = [
-  "circle-outline",
-  "circle-slice-2",
-  "circle-slice-5",
-  "circle-slice-8",
-];
-
-// Picks a relevant icon for a screening question by keyword, so each question
-// carries a small visual cue instead of being a wall of text.
-function getQuestionIcon(text: string): keyof typeof MaterialCommunityIcons.glyphMap {
-  const t = text.toLowerCase();
-  if (/(pain|cramp|ache|pelvic)/.test(t)) return "lightning-bolt";
-  if (/(bleed|flow|period|spotting|menstru)/.test(t)) return "water";
-  if (/(weight|gain|loss)/.test(t)) return "scale-bathroom";
-  if (/(hair|hirsut)/.test(t)) return "content-cut";
-  if (/(acne|skin|oily)/.test(t)) return "face-woman-shimmer";
-  if (/(mood|anxi|depress|irritab|stress)/.test(t)) return "emoticon-sad-outline";
-  if (/(tired|fatigue|energy|exhaust)/.test(t)) return "battery-low";
-  if (/(sleep|insomnia)/.test(t)) return "sleep";
-  if (/(cycle|irregular|late|missed)/.test(t)) return "calendar-sync";
-  if (/(bloat|gas|digest|bowel|constip)/.test(t)) return "stomach";
-  if (/(cold|hot|temperature|sweat|heat)/.test(t)) return "thermometer";
-  if (/(heart|palpitat|pulse)/.test(t)) return "heart-pulse";
-  return "help-circle-outline";
-}
+// After an answer, wait this long (so the choice is seen) before moving on.
+const AUTO_ADVANCE_MS = 320;
 
 export default function SymptomCheckerScreen() {
+  useSecureScreen("symptom-checker");
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const softTints = getSoftTints(colors);
+  const compact = useContentWidth() < 360;
+  const gutter = compact ? 16 : 24;
 
-  const RISK_META: Record<string, { color: string; bg: string; label: string }> = {
-    low: { color: colors.success, bg: softTints.emerald, label: "Few signs" },
-    moderate: { color: colors.warning, bg: softTints.amber, label: "Some signs" },
-    high: { color: colors.danger, bg: softTints.danger, label: "Talk to a doctor" },
-  };
-
-  const [step, setStep] = useState<Step>("pick");
+  const [step, setStep] = useState<Step>("intro");
+  const [redFlagPicks, setRedFlagPicks] = useState<string[]>([]);
   const [condition, setCondition] = useState<ScreeningCondition | null>(null);
   const [questions, setQuestions] = useState<ScreeningQuestion[]>([]);
   const [questionIndex, setQuestionIndex] = useState(0);
+  const [direction, setDirection] = useState<1 | -1>(1);
   const [answers, setAnswers] = useState<Record<string, number | boolean>>({});
   const [loadingQuestions, setLoadingQuestions] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<ScreeningAssessmentResponse | null>(null);
+  const [result, setResult] = useState<AssessmentResult | null>(null);
   const [paywallVisible, setPaywallVisible] = useState(false);
+  const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
   const {
     hasAccess,
     isLoading: subscriptionLoading,
     refresh: refreshSubscriptionAccess,
   } = useSubscriptionAccess();
-  // Whole-screen gate — don't even let the user land on the condition
-  // picker if they can't use the checker at all, instead of gating just the
-  // pick/submit actions.
+  // Whole-screen gate — don't even let the user land on the checker if they
+  // can't use it at all, instead of gating just the pick/submit actions.
   const locked = !subscriptionLoading && !hasAccess("symptom_checker");
+
+  // Past checks for the intro. Quiet: none (or a failure) just hides the list.
+  const { data: history, reload: reloadHistory } = useAsyncLoad(() => screeningApi.getHistory(), [], {});
 
   useEffect(() => {
     if (locked) setPaywallVisible(true);
   }, [locked]);
+  useEffect(() => () => {
+    if (advanceTimer.current) clearTimeout(advanceTimer.current);
+  }, []);
+  // Each step starts at the top.
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+  }, [step]);
 
   async function loadCondition(pick: ScreeningCondition) {
     setCondition(pick);
-    setError(null);
     setLoadingQuestions(true);
     setAnswers({});
     setQuestionIndex(0);
@@ -111,7 +101,7 @@ export default function SymptomCheckerScreen() {
       setQuestions(data.questions ?? []);
       setStep("questions");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load questions");
+      showErrorToast(getFriendlyErrorMessage(err));
     } finally {
       setLoadingQuestions(false);
     }
@@ -127,27 +117,39 @@ export default function SymptomCheckerScreen() {
     await loadCondition(pick);
   }
 
+  // Answering moves on by itself (after a beat), except on the last question,
+  // which waits for "See my results".
   function handleAnswer(question: ScreeningQuestion, value: number | boolean) {
+    haptics.select();
     setAnswers((prev) => ({ ...prev, [question.id]: value }));
+    if (advanceTimer.current) clearTimeout(advanceTimer.current);
+    if (questionIndex < questions.length - 1) {
+      advanceTimer.current = setTimeout(() => {
+        setDirection(1);
+        setQuestionIndex((i) => Math.min(i + 1, questions.length - 1));
+      }, AUTO_ADVANCE_MS);
+    }
   }
 
   async function handleNext() {
     if (questionIndex < questions.length - 1) {
+      setDirection(1);
       setQuestionIndex((i) => i + 1);
       return;
     }
     if (!condition) return;
     setSubmitting(true);
-    setError(null);
     try {
       const assessment = await screeningApi.submitAssessment(condition, answers);
       setResult(assessment);
       setStep("results");
+      haptics.success();
+      reloadHistory();
     } catch (err) {
       if (isFeatureLockedError(err)) {
         setPaywallVisible(true);
       } else {
-        setError(err instanceof Error ? err.message : "Failed to submit assessment");
+        showErrorToast(getFriendlyErrorMessage(err));
       }
     } finally {
       setSubmitting(false);
@@ -155,8 +157,11 @@ export default function SymptomCheckerScreen() {
   }
 
   function handleBackQuestion() {
-    if (questionIndex > 0) setQuestionIndex((i) => i - 1);
-    else setStep("pick");
+    if (advanceTimer.current) clearTimeout(advanceTimer.current);
+    if (questionIndex > 0) {
+      setDirection(-1);
+      setQuestionIndex((i) => i - 1);
+    } else setStep("pick");
   }
 
   function handleRestart() {
@@ -166,15 +171,13 @@ export default function SymptomCheckerScreen() {
     setAnswers({});
     setQuestionIndex(0);
     setResult(null);
-    setError(null);
   }
 
   async function handleShare() {
     if (!result) return;
-    const conditionLabel = CONDITIONS.find((c) => c.id === result.condition)?.label ?? result.condition;
     const message = [
-      `Symptom Checker Summary — ${conditionLabel}`,
-      `Risk level: ${RISK_META[result.riskLevel]?.label ?? result.riskLevel} (score ${result.score})`,
+      `Symptom Checker Summary — ${conditionLabel(result.condition)}`,
+      `Result: ${riskStyle(result.riskLevel, colors).label} (score ${result.score} of 100)`,
       "",
       result.doctorDiscussionSummary,
       "",
@@ -192,11 +195,13 @@ export default function SymptomCheckerScreen() {
   }
 
   const currentQuestion = questions[questionIndex];
+  const isLastQuestion = questionIndex === questions.length - 1;
   const canProceed = currentQuestion ? answers[currentQuestion.id] !== undefined : false;
+  const triage = triageRedFlags(redFlagPicks);
+  const soon = soonRedFlags(redFlagPicks);
 
-  // Wait on the subscription check before rendering the condition picker —
-  // otherwise it can flash for a frame before `locked` flips true and swaps
-  // it for the paywall.
+  // Wait on the subscription check before rendering — otherwise the checker
+  // can flash for a frame before `locked` flips true and swaps in the paywall.
   if (subscriptionLoading) {
     return (
       <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
@@ -206,292 +211,152 @@ export default function SymptomCheckerScreen() {
     );
   }
 
+  function goBack() {
+    if (step === "intro") router.back();
+    else if (step === "prescreen") setStep("intro");
+    else if (step === "urgent" || step === "pick") setStep("prescreen");
+    else if (step === "results") handleRestart();
+    else handleBackQuestion();
+  }
+
   return (
     <>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
-      <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
-        <ScreenHeader
-          title="Symptom Checker"
-          onBack={() => (step === "pick" ? router.back() : handleBackQuestion())}
-        />
+      <SafeAreaView edges={["top"]} className="flex-1" style={{ backgroundColor: colors.background }}>
+        <ScreenHeader title="Symptom Checker" onBack={goBack} />
 
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }}>
-          <View className="mx-6 mt-5">
-            {locked ? (
-              <LockedFeatureCard
-                title="Symptom Checker"
-                description="Check for signs of PCOS, endometriosis and more."
-                onPress={() => setPaywallVisible(true)}
-              />
-            ) : null}
+        <ScrollView
+          ref={scrollRef}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: gutter, paddingTop: 16, paddingBottom: insets.bottom + (step === "questions" ? 120 : 48) }}
+        >
+          {locked ? (
+            <LockedFeatureCard
+              title="Symptom Checker"
+              description="Check for signs of PCOS, endometriosis and more."
+              onPress={() => setPaywallVisible(true)}
+            />
+          ) : null}
 
-            {!locked && step === "pick" && (
-              <>
-                <Text className="text-sm font-semibold leading-5 mb-5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                  Pick a condition and answer a few questions. For education, not diagnosis.
-                </Text>
-                {error ? (
-                  <Text className="text-xs font-semibold mb-3" style={{ color: colors.danger, fontFamily: fonts.body }}>
-                    {error}
+          {!locked && step === "intro" && <IntroView history={history ?? []} onStart={() => setStep("prescreen")} />}
+
+          {!locked && step === "prescreen" && (
+            <SafetyCheckView
+              picks={redFlagPicks}
+              onToggle={(id) => {
+                haptics.select();
+                setRedFlagPicks((prev) => (prev.includes(id) ? prev.filter((pick) => pick !== id) : [...prev, id]));
+              }}
+              onNone={() => {
+                if (redFlagPicks.length > 0) {
+                  setRedFlagPicks([]);
+                  return;
+                }
+                setStep("pick");
+              }}
+              onContinue={() => setStep("urgent")}
+            />
+          )}
+
+          {!locked && step === "urgent" && (
+            <Animated.View entering={FadeInRight.duration(motion.duration.base)}>
+              {triage === "emergency" ? (
+                <View style={{ borderRadius: 24, borderCurve: "continuous", padding: 20, marginBottom: 16, backgroundColor: softTints.danger, borderWidth: 1, borderColor: colors.danger }}>
+                  <View style={{ width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center", backgroundColor: colors.danger, marginBottom: 14 }}>
+                    <Icon set="mci" name="alert" size={26} color="#fff" />
+                  </View>
+                  <Text accessibilityRole="header" maxFontSizeMultiplier={1.3} style={{ fontSize: 21, lineHeight: 27, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
+                    Please get medical care now
                   </Text>
-                ) : null}
-                <View style={{ gap: 12 }}>
-                  {CONDITIONS.map((item) => (
-                    <TouchableOpacity
-                      key={item.id}
-                      disabled={loadingQuestions}
-                      onPress={() => handlePickCondition(item.id)}
-                      activeOpacity={0.75}
-                      className="flex-row items-center border p-4"
-                      style={{ backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 20, ...getShadow(colors, isDark) }}
-                    >
-                      <View className="w-11 h-11 rounded-xl items-center justify-center mr-3.5" style={{ backgroundColor: softTints.pink }}>
-                        <MaterialCommunityIcons name={item.icon} size={20} color={colors.primary} />
-                      </View>
-                      <View className="flex-1">
-                        <Text className="text-sm font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
-                          {item.label}
-                        </Text>
-                        <Text className="text-xs mt-0.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                          {item.desc}
-                        </Text>
-                      </View>
-                      {loadingQuestions && condition === item.id ? (
-                        <ActivityIndicator size="small" color={colors.primary} />
-                      ) : (
-                        <Feather name="chevron-right" size={16} color={colors.mutedText} />
-                      )}
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </>
-            )}
-
-            {!locked && step === "questions" && currentQuestion && (
-              <>
-                <View className="flex-row items-center justify-between mb-2">
-                  <Text className="text-[12px] font-black uppercase tracking-widest" style={{ color: colors.primary, fontFamily: fonts.heading }}>
-                    Question {questionIndex + 1} of {questions.length}
+                  <Text maxFontSizeMultiplier={1.3} style={{ marginTop: 8, fontSize: 14.5, lineHeight: 22, color: colors.foreground, fontFamily: fonts.body }}>
+                    {`What you ticked can be a sign of something serious. Call ${EMERGENCY_NUMBER} or go to the nearest hospital emergency department now. Don't wait to see if it passes.`}
                   </Text>
-                </View>
-                <View className="h-1.5 rounded-full overflow-hidden mb-6" style={{ backgroundColor: colors.surfaceSoft }}>
-                  <View
-                    style={{
-                      width: `${((questionIndex + 1) / questions.length) * 100}%`,
-                      height: "100%",
-                      backgroundColor: colors.primary,
-                    }}
+                  <Button
+                    label={`Call ${EMERGENCY_NUMBER}`}
+                    icon="call"
+                    variant="danger"
+                    size="lg"
+                    onPress={() => Linking.openURL(`tel:${EMERGENCY_NUMBER}`).catch(() => {})}
+                    accessibilityLabel={`Call ${EMERGENCY_NUMBER}`}
+                    fullWidth
+                    style={{ marginTop: 16 }}
                   />
                 </View>
+              ) : null}
 
-                <View
-                  className="border p-6 mb-6"
-                  style={{ backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 24, ...getShadow(colors, isDark) }}
-                >
-                  <View className="flex-row items-start gap-3 mb-5">
-                    <View
-                      className="items-center justify-center rounded-2xl"
-                      style={{ width: 40, height: 40, backgroundColor: softTints.pink }}
-                    >
-                      <MaterialCommunityIcons
-                        name={getQuestionIcon(currentQuestion.text)}
-                        size={20}
-                        color={colors.primary}
-                      />
-                    </View>
-                    <Text
-                      className="flex-1 text-base font-bold leading-6"
-                      style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                    >
-                      {currentQuestion.text}
+              {soon.length > 0 ? (
+                <View style={{ borderRadius: 24, borderCurve: "continuous", padding: 20, marginBottom: 16, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.warning, ...getShadow(colors, isDark) }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                    <Icon set="mci" name="stethoscope" size={22} color={colors.warning} />
+                    <Text maxFontSizeMultiplier={1.3} style={{ flex: 1, fontSize: 17, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
+                      See a gynaecologist soon
                     </Text>
                   </View>
-
-                  {currentQuestion.type === "yesno" ? (
-                    <View className="flex-row gap-3">
-                      {[
-                        { label: "No", value: false, icon: "close-circle-outline" as const },
-                        { label: "Yes", value: true, icon: "check-circle-outline" as const },
-                      ].map((opt) => {
-                        const selected = answers[currentQuestion.id] === opt.value;
-                        return (
-                          <TouchableOpacity
-                            key={opt.label}
-                            onPress={() => handleAnswer(currentQuestion, opt.value)}
-                            activeOpacity={0.8}
-                            className="flex-1 flex-row items-center justify-center gap-2 py-3.5 rounded-2xl border"
-                            style={{
-                              backgroundColor: selected ? colors.primary : colors.input,
-                              borderColor: selected ? colors.primary : colors.border,
-                            }}
-                          >
-                            <MaterialCommunityIcons
-                              name={opt.icon}
-                              size={18}
-                              color={selected ? colors.buttonText : colors.mutedText}
-                            />
-                            <Text
-                              className="text-sm font-black"
-                              style={{ color: selected ? colors.buttonText : colors.foreground, fontFamily: fonts.body }}
-                            >
-                              {opt.label}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  ) : (
-                    <View className="flex-row gap-2">
-                      {SCALE_LABELS.map((label, value) => {
-                        const selected = answers[currentQuestion.id] === value;
-                        return (
-                          <TouchableOpacity
-                            key={label}
-                            onPress={() => handleAnswer(currentQuestion, value)}
-                            activeOpacity={0.8}
-                            className="flex-1 items-center py-3 rounded-2xl border"
-                            style={{
-                              backgroundColor: selected ? colors.primary : colors.input,
-                              borderColor: selected ? colors.primary : colors.border,
-                            }}
-                          >
-                            <MaterialCommunityIcons
-                              name={SCALE_ICONS[value]}
-                              size={18}
-                              color={selected ? colors.buttonText : colors.primary}
-                            />
-                            <Text
-                              className="text-xs font-semibold mt-1"
-                              style={{ color: selected ? colors.buttonText : colors.mutedText, fontFamily: fonts.body }}
-                            >
-                              {label}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  )}
-                </View>
-
-                {error ? (
-                  <Text className="text-xs font-semibold mb-3" style={{ color: colors.danger, fontFamily: fonts.body }}>
-                    {error}
+                  <Text maxFontSizeMultiplier={1.3} style={{ fontSize: 14.5, lineHeight: 22, color: colors.foreground, fontFamily: fonts.body }}>
+                    {`${soon.map((item) => item.label).join(" and ")} isn't usually an emergency, but it isn't normal either. Please book a check-up in the next few days, even if it's light or has stopped.`}
                   </Text>
-                ) : null}
-
-                <TouchableOpacity
-                  disabled={!canProceed || submitting}
-                  onPress={handleNext}
-                  activeOpacity={0.85}
-                  className="py-4 rounded-2xl items-center flex-row justify-center gap-2"
-                  style={{ backgroundColor: canProceed ? colors.primary : colors.border }}
-                >
-                  {submitting ? (
-                    <ActivityIndicator size="small" color={colors.buttonText} />
-                  ) : (
-                    <Text className="text-sm font-black" style={{ color: canProceed ? colors.buttonText : colors.mutedText, fontFamily: fonts.body }}>
-                      {questionIndex < questions.length - 1 ? "Next" : "See results"}
-                    </Text>
-                  )}
-                </TouchableOpacity>
-              </>
-            )}
-
-            {!locked && step === "results" && result && (
-              <>
-                {/* Progress header, matching mockup's "Screening complete" bar */}
-                <Text className="text-xs font-bold mb-1.5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                  Screening complete
-                </Text>
-                <View className="h-2 rounded-full overflow-hidden mb-6" style={{ backgroundColor: colors.border }}>
-                  <View style={{ width: "100%", height: "100%", backgroundColor: colors.primary }} />
+                  <Button label="Talk to a gynaecologist" icon="chatbubbles-outline" onPress={() => router.push("/(app)/consultation" as never)} fullWidth style={{ marginTop: 16 }} />
                 </View>
+              ) : null}
 
-                <Text className="text-base font-black mb-3" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-                  Your results
-                </Text>
+              <View style={{ gap: 10 }}>
+                {triage === "soon" ? <Button label="Continue to the symptom checker" variant="secondary" onPress={() => setStep("pick")} fullWidth /> : null}
+                <Button label="Change my answers" variant="ghost" onPress={() => setStep("prescreen")} fullWidth />
+              </View>
+            </Animated.View>
+          )}
 
-                {/* Single-row result card, mirroring the mockup's condition/risk-pill list */}
-                <View
-                  className="border rounded-2xl px-4 py-3.5 flex-row items-center justify-between mb-5"
-                  style={{ backgroundColor: colors.surface, borderColor: colors.border, ...getShadow(colors, isDark) }}
-                >
-                  <Text className="text-sm font-extrabold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
-                    {CONDITIONS.find((c) => c.id === result.condition)?.label ?? result.condition}
-                  </Text>
-                  <View
-                    className="rounded-full px-3 py-1.5"
-                    style={{ backgroundColor: RISK_META[result.riskLevel]?.bg ?? colors.surfaceSoft }}
-                  >
-                    <Text
-                      className="text-xs font-black"
-                      style={{ color: RISK_META[result.riskLevel]?.color ?? colors.foreground, fontFamily: fonts.body }}
-                    >
-                      {RISK_META[result.riskLevel]?.label ?? result.riskLevel} · {result.score}
-                    </Text>
-                  </View>
-                </View>
+          {!locked && step === "pick" && (
+            <ConditionPicker compact={compact} loadingId={loadingQuestions ? condition : null} onPick={handlePickCondition} />
+          )}
 
-                <View
-                  className="rounded-2xl px-4 py-3.5 mb-5"
-                  style={{ backgroundColor: softTints.pink }}
-                >
-                  <Text className="text-xs font-semibold leading-5" style={{ color: colors.foreground, fontFamily: fonts.body }}>
-                    This isn&apos;t a diagnosis — {result.disclaimer}
-                  </Text>
-                </View>
+          {!locked && step === "questions" && currentQuestion && condition && (
+            <QuestionView
+              condition={condition}
+              question={currentQuestion}
+              index={questionIndex}
+              total={questions.length}
+              value={answers[currentQuestion.id]}
+              direction={direction}
+              onAnswer={(value) => handleAnswer(currentQuestion, value)}
+            />
+          )}
 
-                <View
-                  className="border p-5 mb-5"
-                  style={{ backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 24, ...getShadow(colors, isDark) }}
-                >
-                  <Text className="text-xs font-black uppercase tracking-wide mb-2" style={{ color: colors.primary, fontFamily: fonts.heading }}>
-                    Summary
-                  </Text>
-                  <Text className="text-[13px] leading-5 font-medium" style={{ color: colors.foreground, fontFamily: fonts.body }}>
-                    {result.summary}
-                  </Text>
-                </View>
-
-                <View
-                  className="border p-5 mb-8"
-                  style={{ backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 24, ...getShadow(colors, isDark) }}
-                >
-                  <Text className="text-xs font-black uppercase tracking-wide mb-2" style={{ color: colors.accentText, fontFamily: fonts.heading }}>
-                    For your doctor visit
-                  </Text>
-                  <Text className="text-[13px] leading-5 font-medium" style={{ color: colors.foreground, fontFamily: fonts.body }}>
-                    {result.doctorDiscussionSummary}
-                  </Text>
-                </View>
-
-                <View style={{ gap: 10 }}>
-                  <TouchableOpacity
-                    onPress={handleShare}
-                    activeOpacity={0.85}
-                    className="py-4 rounded-2xl items-center flex-row justify-center gap-2"
-                    style={{ backgroundColor: colors.primary }}
-                  >
-                    <Feather name="share" size={15} color={colors.buttonText} />
-                    <Text className="text-sm font-black" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-                      Save / share for doctor visit
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={handleRestart}
-                    activeOpacity={0.85}
-                    className="py-4 rounded-2xl items-center border"
-                    style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-                  >
-                    <Text className="text-sm font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
-                      Check another condition
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
-          </View>
+          {!locked && step === "results" && result && (
+            <ResultView
+              result={result}
+              onBook={() => router.push("/(app)/consultation" as never)}
+              onShare={handleShare}
+              onRestart={handleRestart}
+            />
+          )}
         </ScrollView>
+
+        {/* Questions: Back and Next/See results pinned at the bottom. */}
+        {!locked && step === "questions" && currentQuestion ? (
+          <View
+            style={{
+              flexDirection: "row",
+              gap: 10,
+              paddingHorizontal: gutter,
+              paddingTop: 12,
+              paddingBottom: insets.bottom + 12,
+              borderTopWidth: 1,
+              borderColor: colors.border,
+              backgroundColor: colors.background,
+            }}
+          >
+            <Button label="Back" icon="arrow-back" variant="neutral" onPress={handleBackQuestion} style={{ paddingHorizontal: 18 }} />
+            <Button
+              label={isLastQuestion ? "See my results" : "Next"}
+              iconRight={isLastQuestion ? undefined : "arrow-forward"}
+              onPress={handleNext}
+              disabled={!canProceed}
+              loading={submitting}
+              style={{ flex: 1 }}
+            />
+          </View>
+        ) : null}
       </SafeAreaView>
 
       <PaywallModal

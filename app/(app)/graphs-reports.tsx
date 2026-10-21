@@ -1,4 +1,4 @@
-import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useMemo } from "react";
@@ -10,8 +10,10 @@ import { SkeletonCard } from "../../components/Skeleton";
 import { useTheme, type ThemeColors } from "../../components/theme";
 import { getShadow } from "../../components/ui-tokens";
 import { useAsyncLoad } from "../../hooks/useAsyncLoad";
-import { cycleApi, reportApi, type DayEntry, type HealthReportCycleStats, type Predictions } from "../../lib/api";
+import { cycleApi, isNetworkError, reportApi, type DayEntry, type HealthReportCycleStats, type Predictions } from "../../lib/api";
 import { dateFromDayKey, formatShortDate, getDateKey, getMonthKey } from "../../lib/format";
+import { useSecureScreen } from "../../lib/screenPrivacy";
+import { Icon } from "../../components/Icon";
 
 type GraphsData = {
   cycleLengths: number[];
@@ -27,8 +29,14 @@ async function loadGraphsData(): Promise<GraphsData> {
   const rangeStart = new Date(today);
   rangeStart.setDate(rangeStart.getDate() - 90);
 
+  // Each part may fail on its own, but a network error on predictions means
+  // nothing here is real: throw so the screen shows the offline state instead
+  // of default numbers (28-day cycle, day 1).
   const [predictions, monthsLogs, report] = await Promise.all([
-    cycleApi.getPredictions().catch<Predictions | null>(() => null),
+    cycleApi.getPredictions().catch<Predictions | null>((error) => {
+      if (isNetworkError(error)) throw error;
+      return null;
+    }),
     Promise.all(
       [0, 1, 2].map((offset) => {
         const d = new Date(today.getFullYear(), today.getMonth() - offset, 1);
@@ -83,7 +91,7 @@ function StatCard({
   return (
     <View
       style={{
-        borderRadius: 24,
+        borderRadius: 24, borderCurve: "continuous",
         marginBottom: 14,
         backgroundColor: colors.surface,
         borderWidth: 1.5,
@@ -91,15 +99,13 @@ function StatCard({
         // mode too (where the pale *Light washes are nearly invisible).
         borderColor: `${tint.accent}${isDark ? "59" : "47"}`,
         ...getShadow(colors, isDark),
-        shadowOpacity: isDark ? 0.4 : 0.1,
-        elevation: 4,
       }}
     >
       <LinearGradient
         colors={[isDark ? `${tint.accent}33` : tint.light, colors.surface]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={{ padding: 18, minHeight: 124, borderRadius: 22.5, overflow: "hidden" }}
+        style={{ padding: 18, minHeight: 124, borderRadius: 22.5, borderCurve: "continuous", overflow: "hidden" }}
       >
         {/* Decorative watermark icon, bottom-right — purely visual. */}
         <View pointerEvents="none" style={{ position: "absolute", right: 12, bottom: 8, opacity: isDark ? 0.12 : 0.1 }}>
@@ -244,18 +250,16 @@ function ReportRow({
         alignItems: "center",
         gap: 14,
         padding: 16,
-        borderRadius: 20,
+        borderRadius: 20, borderCurve: "continuous",
         backgroundColor: colors.surface,
-        borderWidth: 1,
-        borderColor: colors.border,
         marginBottom: 12,
         ...getShadow(colors, isDark),
       }}
     >
       <View
-        style={{ width: 46, height: 46, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: iconBg }}
+        style={{ width: 46, height: 46, borderRadius: 14, borderCurve: "continuous", alignItems: "center", justifyContent: "center", backgroundColor: iconBg }}
       >
-        <Ionicons name={icon} size={22} color={iconColor} />
+        <Icon set="ion" name={icon} size={22} color={iconColor} />
       </View>
       <View style={{ flex: 1 }}>
         <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "800", fontFamily: fonts.heading }}>
@@ -271,6 +275,7 @@ function ReportRow({
 }
 
 export default function GraphsAndReportsScreen() {
+  useSecureScreen("graphs-reports");
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
 
@@ -328,7 +333,7 @@ export default function GraphsAndReportsScreen() {
                 <StatCard
                   title="Cycle length"
                   tint={cardTints.cycle}
-                  icon={(p) => <MaterialCommunityIcons name="calendar-sync-outline" {...p} />}
+                  icon={(p) => <Icon set="mci" name="calendar-sync-outline" {...p} />}
                 >
                   <CycleLengthBars values={data.cycleLengths} colors={colors} tint={cardTints.cycle} />
                 </StatCard>
@@ -336,7 +341,7 @@ export default function GraphsAndReportsScreen() {
                 <StatCard
                   title="Weight"
                   tint={cardTints.weight}
-                  icon={(p) => <MaterialCommunityIcons name="scale-bathroom" {...p} />}
+                  icon={(p) => <Icon set="mci" name="scale-bathroom" {...p} />}
                 >
                   <StatValue
                     value={data.latestWeight ? String(data.latestWeight.value) : null}
@@ -348,7 +353,7 @@ export default function GraphsAndReportsScreen() {
                 <StatCard
                   title="Basal body temperature"
                   tint={cardTints.bbt}
-                  icon={(p) => <MaterialCommunityIcons name="thermometer" {...p} />}
+                  icon={(p) => <Icon set="mci" name="thermometer" {...p} />}
                 >
                   <StatValue
                     value={data.latestTemperature ? String(data.latestTemperature.value) : null}
@@ -360,7 +365,7 @@ export default function GraphsAndReportsScreen() {
                 <StatCard
                   title="Water intake"
                   tint={cardTints.water}
-                  icon={(p) => <Ionicons name="water" {...p} />}
+                  icon={(p) => <Icon set="ion" name="water" {...p} />}
                 >
                   <StatValue
                     value={avgWater != null ? String(Math.round(avgWater)) : null}
@@ -372,7 +377,7 @@ export default function GraphsAndReportsScreen() {
                 <StatCard
                   title="Sleep"
                   tint={cardTints.sleep}
-                  icon={(p) => <Ionicons name="moon" {...p} />}
+                  icon={(p) => <Icon set="ion" name="moon" {...p} />}
                 >
                   <StatValue
                     value={avgSleep != null ? avgSleep.toFixed(1) : null}
@@ -393,7 +398,7 @@ export default function GraphsAndReportsScreen() {
                   iconColor={colors.rose}
                   title="Symptom report"
                   subtitle="Review your symptoms and cycle."
-                  trailing={<Feather name="chevron-right" size={18} color={colors.mutedText} />}
+                  trailing={<Icon set="feather" name="chevron-right" size={18} color={colors.mutedText} />}
                   onPress={() => router.push("/symptom-report")}
                 />
 
@@ -403,7 +408,7 @@ export default function GraphsAndReportsScreen() {
                   iconColor={colors.danger}
                   title="Download doctor report"
                   subtitle="Understand your cycle and health."
-                  trailing={<Feather name="download" size={18} color={colors.mutedText} />}
+                  trailing={<Icon set="feather" name="download" size={18} color={colors.mutedText} />}
                   onPress={() => router.push({ pathname: "/documents", params: { openReport: "1" } })}
                 />
               </View>

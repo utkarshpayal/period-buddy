@@ -19,33 +19,6 @@ function formatNumber(value: number): string {
 }
 
 /**
- * A ranked horizontal bar list for nominal categories (doc types, symptoms, moods).
- * One flat color for every bar — a value ramp on unordered categories double-encodes
- * length as hue for no reason.
- */
-export function barListHtml(
-  items: { label: string; value: number }[],
-  opts: { color: string; trackColor: string; unit?: string },
-): string {
-  if (items.length === 0) return "";
-  const maxValue = Math.max(...items.map((item) => item.value), 1);
-  const rows = items
-    .map((item) => {
-      const pct = Math.max((item.value / maxValue) * 100, 4);
-      return `
-        <div class="bar-row">
-          <div class="bar-label">${escapeHtml(item.label)}</div>
-          <div class="bar-track" style="background:${opts.trackColor}">
-            <div class="bar-fill" style="width:${pct}%;background:${opts.color}"></div>
-          </div>
-          <div class="bar-value">${formatNumber(item.value)}${opts.unit ? ` ${opts.unit}` : ""}</div>
-        </div>`;
-    })
-    .join("");
-  return `<div class="bar-chart">${rows}</div>`;
-}
-
-/**
  * A single-series trend line (sleep, water, stress across the date range).
  * Endpoints are direct-labeled since there is no hover layer in print; every
  * other value stays reachable via the accompanying average stat tile.
@@ -91,16 +64,4 @@ export function sparklineSvg(
       <text x="${firstCoord.x}" y="${Math.max(firstCoord.y - 10, 10)}" font-size="11" fill="${REPORT_THEME.labelText}" text-anchor="start">${formatNumber(first.value)}${unit}</text>
       <text x="${lastCoord.x}" y="${Math.max(lastCoord.y - 10, 10)}" font-size="11" fill="${REPORT_THEME.labelText}" text-anchor="end">${formatNumber(last.value)}${unit}</text>
     </svg>`;
-}
-
-export function statTileHtml(label: string, value: string): string {
-  return `
-    <div class="stat-tile">
-      <div class="stat-value">${escapeHtml(value)}</div>
-      <div class="stat-label">${escapeHtml(label)}</div>
-    </div>`;
-}
-
-export function kpiRowHtml(tiles: { label: string; value: string }[]): string {
-  return `<div class="kpi-row">${tiles.map((t) => statTileHtml(t.label, t.value)).join("")}</div>`;
 }

@@ -1,5 +1,7 @@
 import React from "react";
-import { Image, Text, View, type ViewStyle } from "react-native";
+import { Text, View, type ViewStyle } from "react-native";
+import { Image } from "expo-image";
+import { motion } from "./motion";
 
 type AvatarProps = {
   uri?: string;
@@ -13,7 +15,8 @@ type AvatarProps = {
   style?: ViewStyle;
 };
 
-function getInitials(name: string): string {
+/** First + last initial, uppercase, "N" when there's no name. */
+export function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   const first = parts[0]?.[0];
   const last = parts.length > 1 ? parts[parts.length - 1]?.[0] : undefined;
@@ -36,6 +39,10 @@ export default function Avatar({
   style,
 }: AvatarProps) {
   const initials = getInitials(name);
+  // A broken or expired photo URL falls back to the initials instead of an
+  // empty circle; a new URL gets a fresh try.
+  const [failedUri, setFailedUri] = React.useState<string | null>(null);
+  const showImage = Boolean(uri) && failedUri !== uri;
 
   return (
     <View
@@ -66,11 +73,13 @@ export default function Avatar({
           overflow: "hidden",
         }}
       >
-        {uri ? (
+        {showImage ? (
           <Image
+            transition={motion.duration.base}
             source={{ uri }}
+            onError={() => setFailedUri(uri ?? null)}
             style={{ width: "100%", height: "100%" }}
-            resizeMode="cover"
+            contentFit="cover"
           />
         ) : (
           <Text

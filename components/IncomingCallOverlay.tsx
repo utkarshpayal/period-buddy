@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import { Modal, StatusBar, Text, TouchableOpacity, View } from "react-native";
@@ -10,6 +9,7 @@ import { guardRoute } from "../lib/launchGuard";
 import { startRingTone } from "../lib/ringTone";
 import { DoctorPhoto } from "./DoctorPhoto";
 import { useTheme } from "./theme";
+import { Icon } from "./Icon";
 
 /** The doctor is already in the video room (self-hosted Jitsi), waiting for us. */
 type IncomingCall = {
@@ -161,7 +161,7 @@ export function IncomingCallOverlay({
               className="h-[72px] w-[72px] rounded-full items-center justify-center"
               style={{ backgroundColor: colors.danger }}
             >
-              <Feather name="phone-off" size={28} color="#FFFFFF" />
+              <Icon set="feather" name="phone-off" size={28} color="#FFFFFF" />
             </TouchableOpacity>
             <Text className="text-xs font-bold mt-2" style={{ color: "#FFFFFF", fontFamily: fonts.body }}>
               Decline
@@ -175,7 +175,7 @@ export function IncomingCallOverlay({
               className="h-[72px] w-[72px] rounded-full items-center justify-center"
               style={{ backgroundColor: colors.success }}
             >
-              <Feather name="video" size={28} color="#FFFFFF" />
+              <Icon set="feather" name="video" size={28} color="#FFFFFF" />
             </TouchableOpacity>
             <Text className="text-xs font-bold mt-2" style={{ color: "#FFFFFF", fontFamily: fonts.body }}>
               Accept

@@ -35,6 +35,9 @@ export function useAsyncLoad<T>(
   const [offline, setOffline] = useState(false);
   const hasDataRef = useRef(cached !== undefined);
   hasDataRef.current = data !== null;
+  // Only the newest request may write state, so a slow older response (e.g.
+  // the previous month after the user flipped forward) can't overwrite it.
+  const requestIdRef = useRef(0);
 
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
@@ -63,6 +66,8 @@ export function useAsyncLoad<T>(
 
   const reload = useCallback(
     async (isRefresh = false) => {
+      const id = ++requestIdRef.current;
+      const latest = () => id === requestIdRef.current;
       try {
         if (isRefresh) setRefreshing(true);
         // A cached copy stays on screen while it revalidates.
@@ -70,16 +75,18 @@ export function useAsyncLoad<T>(
         setError(null);
         setOffline(false);
         const result = await run(true);
-        setData(result);
+        if (latest()) setData(result);
       } catch (err) {
         // Keep showing cached data if we have it; the error only matters with nothing to show.
-        if (!hasDataRef.current || isRefresh) {
+        if (latest() && (!hasDataRef.current || isRefresh)) {
           setError(getFriendlyErrorMessage(err));
           setOffline(isNetworkError(err));
         }
       } finally {
-        setLoading(false);
-        setRefreshing(false);
+        if (latest()) {
+          setLoading(false);
+          setRefreshing(false);
+        }
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -88,23 +95,26 @@ export function useAsyncLoad<T>(
 
   useEffect(() => {
     let cancelled = false;
+    const supersede = () => {
+      requestIdRef.current += 1;
+    };
     if (!cacheKey) {
       void reload();
-      return;
+      return supersede;
     }
     const current = peekQuery<T>(cacheKey);
     if (current !== undefined) {
       setData(current);
       setLoading(false);
-      if (isQueryFresh(cacheKey, staleMs)) return;
+      if (isQueryFresh(cacheKey, staleMs)) return supersede;
       void reload();
-      return;
+      return supersede;
     }
     hasDataRef.current = false;
     setData(null);
     if (!persist) {
       void reload();
-      return;
+      return supersede;
     }
     // Paint the device copy first (if any), then revalidate.
     void hydrateQuery<T>(cacheKey).then((stored) => {
@@ -118,6 +128,7 @@ export function useAsyncLoad<T>(
     });
     return () => {
       cancelled = true;
+      supersede();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reload]);
@@ -125,8 +136,10 @@ export function useAsyncLoad<T>(
   // Background refetch: no loader or spinner, and a failure keeps whatever
   // is already on screen instead of swapping it for an error state.
   const silentReload = useCallback(async () => {
+    const id = ++requestIdRef.current;
     try {
       const result = await run(true);
+      if (id !== requestIdRef.current) return;
       setData(result);
       setError(null);
       setOffline(false);

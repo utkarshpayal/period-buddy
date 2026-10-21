@@ -1,4 +1,3 @@
-  import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -18,6 +17,7 @@ import { wellbeingApi, type MedicalReview, type WellbeingResource } from "../../
 import { ScreenHeader, SectionHeader } from "../../components/ScreenHeader";
 import {
   ArticleListSkeleton,
+  ArticleRow,
   ConsultNudge,
   DetailSection,
   getWellbeingTones,
@@ -26,20 +26,29 @@ import {
   MediaButtons,
   MetaPill,
   PrivacyNote,
+  WellbeingCard,
   WellbeingEmpty,
   WellbeingIntro,
   type WellbeingToneKey,
 } from "../../components/wellbeing/WellbeingUI";
 import { MedicalReviewBadge } from "../../components/MedicalReviewBadge";
 import { pickMedicalReview } from "../../lib/medicalReview";
+import { Icon } from "../../components/Icon";
+
+type HygieneCategory = "products" | "daily" | "activities" | "prevention" | "more";
 
 // Each topic's label, default icon and colour (an API resource's own icon wins when it has one).
-const TOPICS: Record<HygieneItem["category"], { label: string; icon: string; tone: WellbeingToneKey }> = {
+// "more" holds CMS tips whose title doesn't clearly belong to one of the four topics.
+const TOPICS: Record<HygieneCategory, { label: string; icon: string; tone: WellbeingToneKey }> = {
   products: { label: "Products", icon: "water-outline", tone: "rose" },
   daily: { label: "Daily care", icon: "flower-outline", tone: "mint" },
   activities: { label: "Activities", icon: "swim", tone: "sky" },
   prevention: { label: "Prevention", icon: "shield-checkmark-outline", tone: "lavender" },
+  more: { label: "More tips", icon: "bulb-outline", tone: "amber" },
 };
+
+const MAIN_TOPICS = ["products", "daily", "activities", "prevention"] as const;
+const TOPIC_ROWS = [MAIN_TOPICS.slice(0, 2), MAIN_TOPICS.slice(2, 4)];
 
 // --- BACKEND RESPONSE MODEL SCHEMAS ---
 interface HygieneItem {
@@ -48,7 +57,7 @@ interface HygieneItem {
   icon: string;
   iconType: "ionicons" | "feather" | "material";
   description: string;
-  category: "products" | "daily" | "activities" | "prevention";
+  category: HygieneCategory;
   tips: string[];
   estimatedReadTime?: number;
   videoUrl?: string;
@@ -56,14 +65,14 @@ interface HygieneItem {
   review?: MedicalReview;
 }
 
-function mapHygieneResource(resource: WellbeingResource, index: number): HygieneItem {
+function mapHygieneResource(resource: WellbeingResource): HygieneItem {
   return {
     id: resource._id ?? resource.id ?? resource.title,
     title: resource.title,
     icon: resource.icon,
     iconType: "ionicons",
     description: resource.summary,
-    category: inferHygieneCategory(resource.title, index),
+    category: inferHygieneCategory(resource.title),
     tips:
       resource.extendedGuide.length > 0
         ? resource.extendedGuide
@@ -75,107 +84,97 @@ function mapHygieneResource(resource: WellbeingResource, index: number): Hygiene
   };
 }
 
-function inferHygieneCategory(
-  title: string,
-  index: number,
-): HygieneItem["category"] {
+// Whole-word starts (\b), so "uti" can't match "routine" or "pad" "spade".
+const CATEGORY_KEYWORDS: [Exclude<HygieneCategory, "more">, RegExp][] = [
+  ["products", /\b(products?|pads?|tampons?|(menstrual )?cups?|sanitary|period underwear|disposal)\b/],
+  ["activities", /\b(bath\w*|swim\w*|movement|exercis\w*|workouts?|sports?|travel\w*)\b/],
+  ["prevention", /\b(infections?|utis?|odou?rs?|itch\w*|rash\w*|yeast|prevent\w*)\b/],
+  ["daily", /\b(daily|everyday|wash\w*|vulva|underwear|clean\w*)\b/],
+];
+
+/**
+ * Topic from the CMS title's keywords. No confident match → "more", never a
+ * guessed topic (a mislabelled tip under the wrong card reads as an error).
+ */
+function inferHygieneCategory(title: string): HygieneCategory {
   const normalized = title.toLowerCase();
-  if (normalized.includes("product") || normalized.includes("pad")) {
-    return "products";
+  for (const [category, pattern] of CATEGORY_KEYWORDS) {
+    if (pattern.test(normalized)) return category;
   }
-  if (
-    normalized.includes("bath") ||
-    normalized.includes("swim") ||
-    normalized.includes("movement")
-  ) {
-    return "activities";
-  }
-  if (
-    normalized.includes("infection") ||
-    normalized.includes("uti") ||
-    normalized.includes("odor")
-  ) {
-    return "prevention";
-  }
-  if (
-    normalized.includes("daily") ||
-    normalized.includes("wash") ||
-    normalized.includes("vulva")
-  ) {
-    return "daily";
-  }
-  return (["products", "daily", "activities", "prevention"] as const)[
-    index % 4
-  ];
+  return "more";
 }
+
+// Bundled tips: shown for any topic the CMS has nothing for (and offline on a
+// first launch). Plain words, no review stamp: these aren't doctor-reviewed.
+const BUNDLED_TIPS: HygieneItem[] = [
+  {
+    id: "h1",
+    title: "Period products",
+    icon: "water-outline",
+    iconType: "ionicons",
+    description:
+      "Choose and change period products based on your flow and comfort.",
+    category: "products",
+    tips: [
+      "Change pads every 4–6 hours, or sooner if full.",
+      "Use the lowest-absorbency tampon you need. Change it every 4–8 hours and never leave one in more than 8 hours.",
+      "Empty menstrual cups at least every 12 hours.",
+      "Sudden high fever, rash, vomiting or dizziness while using a tampon or cup? Remove it and get medical help right away.",
+      "Use breathable period underwear for light days, spotting, or backup protection.",
+    ],
+  },
+  {
+    id: "h2",
+    title: "Everyday care",
+    icon: "flower-outline",
+    iconType: "ionicons",
+    description:
+      "Simple daily care during your period that keeps your body's natural balance.",
+    category: "daily",
+    tips: [
+      "Wash only the outside (the vulva) with lukewarm water. The vagina cleans itself.",
+      "Skip douching and scented intimate washes. They can upset your natural balance (pH) and cause itching.",
+      "Change into fresh cotton underwear when it feels damp or uncomfortable.",
+    ],
+  },
+  {
+    id: "h3",
+    title: "Bathing & swimming",
+    icon: "swim",
+    iconType: "material",
+    description:
+      "Staying clean and comfortable when you bathe, swim or exercise.",
+    category: "activities",
+    tips: [
+      "Use a fresh tampon or cup before swimming if that feels right for you.",
+      "A warm bath can help ease cramps and relax your body.",
+      "Dry off and change your product or underwear after swimming or a workout.",
+    ],
+  },
+  {
+    id: "h4",
+    title: "Avoiding infections",
+    icon: "shield-check-outline",
+    iconType: "material",
+    description:
+      "Lower the chance of itching, odour and UTIs (urine infections) on sensitive days.",
+    category: "prevention",
+    tips: [
+      "Wipe from front to back after using the toilet.",
+      "Drink plenty of water, especially if you get UTIs often.",
+      "Choose loose cotton underwear when your skin feels irritated.",
+    ],
+  },
+];
 
 export default function Hygiene() {
   const { colors, isDark, fonts } = useTheme();
   const router = useRouter();
 
-  // Tab controller to filter hygiene sections gracefully
-  const [activeTab, setActiveTab] =
-    useState<HygieneItem["category"]>("products");
+  // Which topic is open, and which of its tips (null = the first one).
+  const [activeTab, setActiveTab] = useState<HygieneCategory>("products");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  // Dynamic Array Payloads ready for easy backend mapping
-  const hygieneTips: HygieneItem[] = [
-    {
-      id: "h1",
-      title: "Menstrual Products Management",
-      icon: "water-outline",
-      iconType: "ionicons",
-      description:
-        "Choose and change period products based on your flow and comfort.",
-      category: "products",
-      tips: [
-        "Change pads or tampons every 4-6 hours, or sooner if flow is heavy.",
-        "Menstrual cups can often be worn up to 12 hours, depending on flow and product guidance.",
-        "Use breathable period underwear for light days, spotting, or backup protection.",
-      ],
-    },
-    {
-      id: "h2",
-      title: "Daily Biological Hygiene",
-      icon: "flower-outline",
-      iconType: "ionicons",
-      description:
-        "Simple daily care during periods without disrupting your natural balance.",
-      category: "daily",
-      tips: [
-        "Clean only the external vulva with lukewarm water.",
-        "Avoid douching or scented intimate washes because they can disrupt pH.",
-        "Change into fresh, breathable underwear when damp or uncomfortable.",
-      ],
-    },
-    {
-      id: "h3",
-      title: "Bathing & Aquatic Activities",
-      icon: "swim",
-      iconType: "material",
-      description:
-        "Clean, comfortable guidance for swimming, bathing, and movement.",
-      category: "activities",
-      tips: [
-        "Use a fresh tampon or cup before swimming if that feels right for you.",
-        "Warm baths can help ease cramps and lower body tension.",
-        "Dry off and change products or underwear after swimming or workouts.",
-      ],
-    },
-    {
-      id: "h4",
-      title: "Systemic Infection Prevention",
-      icon: "shield-check-outline",
-      iconType: "material",
-      description:
-        "Reduce irritation, odor, UTIs, and friction during sensitive days.",
-      category: "prevention",
-      tips: [
-        "Wipe front to back to reduce infection risk.",
-        "Stay hydrated, especially if you are prone to UTIs.",
-        "Avoid tight synthetic underwear when skin feels irritated.",
-      ],
-    },
-  ];
   // Public CMS content: cached (and kept on the device) so a revisit or cold
   // start paints at once; `loading` is only true with nothing cached yet, and
   // the topic grid waits for it so the bundled tips don't flash and then swap.
@@ -202,24 +201,30 @@ export default function Hygiene() {
 
   const tones = getWellbeingTones(colors);
 
-  // Merge per category rather than swapping the whole list: the live API can
-  // return fewer resources than there are tabs, and a wholesale swap would
-  // leave tabs with no matching category blank (worse than static fallback).
-  const activeResources: HygieneItem[] = (
-    ["products", "daily", "activities", "prevention"] as const
-  ).map(
-    (category) =>
-      apiHygieneTips.find((item) => item.category === category) ??
-      hygieneTips.find((item) => item.category === category)!,
-  );
+  // Every CMS tip shows under its topic. A topic the CMS has nothing for falls
+  // back to its bundled tip, so no topic card is ever empty; "more" only
+  // exists when the CMS has tips that match no topic.
+  const itemsByTopic = useMemo(() => {
+    const map = {} as Record<HygieneCategory, HygieneItem[]>;
+    (Object.keys(TOPICS) as HygieneCategory[]).forEach((topic) => {
+      const fromCms = apiHygieneTips.filter((item) => item.category === topic);
+      map[topic] = fromCms.length > 0 ? fromCms : BUNDLED_TIPS.filter((item) => item.category === topic);
+    });
+    return map;
+  }, [apiHygieneTips]);
+  const hasMoreTips = itemsByTopic.more.length > 0;
+  const currentTab: HygieneCategory = activeTab === "more" && !hasMoreTips ? "products" : activeTab;
+  const topicItems = itemsByTopic[currentTab];
+  const currentActiveData = topicItems.find((item) => item.id === selectedId) ?? topicItems[0];
 
-  const currentActiveData = activeResources.find(
-    (item) => item.category === activeTab,
-  );
+  function selectTopic(topic: HygieneCategory) {
+    setActiveTab(topic);
+    setSelectedId(null);
+  }
 
-  // Reports how long the reader actually had this tab's tip open, so the
-  // backend can refine its read-time average instead of relying on a static
-  // admin estimate. The cleanup (fired on tab change or unmount) reports the
+  // Reports how long the reader actually had this tip open, so the backend
+  // can refine its read-time average instead of relying on a static admin
+  // estimate. The cleanup (fired on tip/tab change or unmount) reports the
   // duration for the tip that was active when the effect was set up.
   useEffect(() => {
     if (!currentActiveData) return;
@@ -231,18 +236,64 @@ export default function Hygiene() {
     };
     // Deliberately keyed on id only — this reports dwell time for the tip
     // that was active when the effect ran, not on every object identity
-    // change from re-renders of activeResources.
+    // change from re-renders.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentActiveData?.id]);
 
-  const topicOrder = ["products", "daily", "activities", "prevention"] as const;
-  const topicRows = [topicOrder.slice(0, 2), topicOrder.slice(2, 4)];
-  const activeMeta = currentActiveData
-    ? [
-        currentActiveData.estimatedReadTime ? { icon: "time-outline", label: `${currentActiveData.estimatedReadTime} min read` } : null,
-        { icon: "list-outline", label: `${currentActiveData.tips.length} ${currentActiveData.tips.length === 1 ? "tip" : "tips"}` },
-      ].filter((m): m is { icon: string; label: string } => m !== null)
-    : [];
+  const metaFor = (item: HygieneItem) =>
+    [
+      item.estimatedReadTime ? { icon: "time-outline", label: `${item.estimatedReadTime} min read` } : null,
+      { icon: "list-outline", label: `${item.tips.length} ${item.tips.length === 1 ? "tip" : "tips"}` },
+      item.videoUrl ? { icon: "play-circle-outline", label: "Video" } : null,
+    ].filter((m): m is { icon: string; label: string } => m !== null);
+  const activeTopic = TOPICS[currentTab];
+  const activeTone = tones[activeTopic.tone];
+
+  const renderTopicCard = (id: HygieneCategory) => {
+    const items = itemsByTopic[id];
+    const topic = TOPICS[id];
+    const tone = tones[topic.tone];
+    const isSelected = currentTab === id;
+    const subtitle = items.length > 1 ? `${items.length} guides` : items[0]?.title ?? "";
+    return (
+      <TouchableOpacity
+        key={id}
+        onPress={() => selectTopic(id)}
+        activeOpacity={0.85}
+        accessibilityRole="tab"
+        accessibilityState={{ selected: isSelected }}
+        accessibilityLabel={`${topic.label}: ${subtitle}`}
+        style={{
+          flex: 1,
+          borderRadius: 24, borderCurve: "continuous",
+          padding: 16,
+          backgroundColor: isSelected ? tone.bg : colors.surface,
+          borderWidth: isSelected ? 1.5 : 1,
+          borderColor: isSelected ? tone.fg : colors.border,
+          ...(isSelected ? null : getShadow(colors, isDark)),
+        }}
+      >
+        <View className="flex-row items-start justify-between">
+          <IconCircle icon={items[0]?.icon} fallback={topic.icon} tone={tone} size={42} solid={isSelected} />
+          {isSelected ? <Icon set="ion" name="checkmark-circle" size={20} color={tone.fg} /> : null}
+        </View>
+        <Text
+          numberOfLines={1}
+          maxFontSizeMultiplier={1.3}
+          style={{ color: tone.fg, fontSize: 11.5, fontWeight: "800", letterSpacing: 0.6, textTransform: "uppercase", fontFamily: fonts.body, marginTop: 12 }}
+        >
+          {topic.label}
+        </Text>
+        <Text
+          numberOfLines={2}
+          maxFontSizeMultiplier={1.3}
+          style={{ flexShrink: 1, color: colors.foreground, fontSize: 15, lineHeight: 21, fontWeight: "700", fontFamily: fonts.heading, marginTop: 2 }}
+        >
+          {subtitle}
+        </Text>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <>
@@ -264,14 +315,14 @@ export default function Hygiene() {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
           }
         >
-          {usingOfflineTips && (
+          {usingOfflineTips && !loading && (
             <View
               className="flex-row items-center"
-              style={{ gap: 8, marginBottom: 14, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 14, backgroundColor: colors.surfaceSoft }}
+              style={{ gap: 8, marginBottom: 14, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 14, borderCurve: "continuous", backgroundColor: colors.surfaceSoft }}
             >
-              <Ionicons name="cloud-offline-outline" size={16} color={colors.mutedText} />
-              <Text style={{ flex: 1, color: colors.mutedText, fontSize: 13, lineHeight: 18, fontFamily: fonts.body }}>
-                Showing saved tips. Pull down to get the latest.
+              <Icon set="ion" name="cloud-offline-outline" size={16} color={colors.mutedText} />
+              <Text style={{ flex: 1, color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "500", fontFamily: fonts.body }}>
+                Showing saved tips. Pull down to refresh.
               </Text>
             </View>
           )}
@@ -280,95 +331,74 @@ export default function Hygiene() {
             icon="water-outline"
             tone={tones.sky}
             title="Care that fits your flow"
-            body="Pick a topic for simple, doctor-reviewed hygiene tips."
+            body="Pick a topic for simple, safe hygiene tips."
           />
 
-          {/* 2x2 topic grid: tap a card to switch the active topic */}
+          {/* 2x2 topic grid (+ a full-width "More tips" card when the CMS has unmatched tips) */}
           <SectionHeader title="Topics" style={{ marginTop: 28 }} />
           {loading ? (
             <View style={{ gap: 12 }}>
               {[0, 1].map((row) => (
                 <View key={row} className="flex-row" style={{ gap: 12 }}>
-                  <SkeletonBlock width="48%" height={138} radius={22} />
-                  <SkeletonBlock width="48%" height={138} radius={22} />
+                  <SkeletonBlock width="48%" height={138} radius={24} />
+                  <SkeletonBlock width="48%" height={138} radius={24} />
                 </View>
               ))}
             </View>
           ) : (
             <View style={{ gap: 12 }}>
-              {topicRows.map((row, rowIndex) => (
+              {TOPIC_ROWS.map((row, rowIndex) => (
                 <View key={rowIndex} className="flex-row" style={{ gap: 12 }}>
-                  {row.map((id) => {
-                    const item = activeResources.find((r) => r.category === id);
-                    if (!item) return <View key={id} style={{ flex: 1 }} />;
-                    const topic = TOPICS[id];
-                    const tone = tones[topic.tone];
-                    const isSelected = activeTab === id;
-                    return (
-                      <TouchableOpacity
-                        key={id}
-                        onPress={() => setActiveTab(id)}
-                        activeOpacity={0.85}
-                        accessibilityRole="tab"
-                        accessibilityState={{ selected: isSelected }}
-                        accessibilityLabel={`${topic.label}: ${item.title}`}
-                        style={{
-                          flex: 1,
-                          borderRadius: 22,
-                          padding: 16,
-                          backgroundColor: isSelected ? tone.bg : colors.surface,
-                          borderWidth: 1.5,
-                          borderColor: isSelected ? tone.fg : colors.border,
-                          ...(isSelected ? null : getShadow(colors, isDark)),
-                        }}
-                      >
-                        <View className="flex-row items-start justify-between">
-                          <IconCircle icon={item.icon} fallback={topic.icon} tone={tone} size={42} solid={isSelected} />
-                          {isSelected ? <Ionicons name="checkmark-circle" size={20} color={tone.fg} /> : null}
-                        </View>
-                        <Text
-                          numberOfLines={1}
-                          maxFontSizeMultiplier={1.3}
-                          style={{ color: tone.fg, fontSize: 11.5, fontWeight: "800", letterSpacing: 0.6, textTransform: "uppercase", fontFamily: fonts.body, marginTop: 12 }}
-                        >
-                          {topic.label}
-                        </Text>
-                        <Text
-                          numberOfLines={2}
-                          maxFontSizeMultiplier={1.3}
-                          style={{ flexShrink: 1, color: colors.foreground, fontSize: 14.5, lineHeight: 20, fontWeight: "700", fontFamily: fonts.heading, marginTop: 2 }}
-                        >
-                          {item.title}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
+                  {row.map(renderTopicCard)}
                 </View>
               ))}
+              {hasMoreTips ? <View className="flex-row">{renderTopicCard("more")}</View> : null}
             </View>
           )}
 
-          {/* The active topic, as a readable article */}
+          {/* The active topic: its tips as rows (when there are several), then the open one as a readable article */}
           {loading ? (
             <View style={{ marginTop: 28 }}>
               <ArticleListSkeleton rows={3} />
             </View>
           ) : currentActiveData ? (
             <View style={{ marginTop: 28 }}>
+              {topicItems.length > 1 ? (
+                <>
+                  <SectionHeader title={activeTopic.label} subtitle={`${topicItems.length} guides · tap one to read it`} />
+                  <WellbeingCard style={{ padding: 4, marginBottom: 24 }}>
+                    {topicItems.map((item, index) => (
+                      <ArticleRow
+                        key={item.id}
+                        first={index === 0}
+                        icon={item.icon}
+                        fallbackIcon={activeTopic.icon}
+                        tone={activeTone}
+                        title={item.title}
+                        summary={item.description}
+                        selected={item.id === currentActiveData.id}
+                        onPress={() => setSelectedId(item.id)}
+                      />
+                    ))}
+                  </WellbeingCard>
+                </>
+              ) : null}
+
               <Text
                 accessibilityRole="header"
-                numberOfLines={2}
-                style={{ color: colors.foreground, fontSize: 19, lineHeight: 25, fontWeight: "800", letterSpacing: -0.2, fontFamily: fonts.heading }}
+                numberOfLines={3}
+                maxFontSizeMultiplier={1.4}
+                style={{ color: colors.foreground, fontSize: 22, lineHeight: 28, fontWeight: "800", letterSpacing: -0.2, fontFamily: fonts.heading }}
               >
                 {currentActiveData.title}
               </Text>
               <View className="flex-row flex-wrap" style={{ gap: 6, marginTop: 8 }}>
-                {activeMeta.map((m) => (
+                {metaFor(currentActiveData).map((m) => (
                   <MetaPill key={m.label} icon={m.icon} label={m.label} />
                 ))}
               </View>
               <MedicalReviewBadge item={currentActiveData.review} style={{ marginTop: 10 }} />
-              <Text style={{ color: colors.foreground, opacity: 0.85, fontSize: 15, lineHeight: 23, fontFamily: fonts.body, marginTop: 12 }}>
+              <Text style={{ color: colors.foreground, fontSize: 16, lineHeight: 26, fontWeight: "400", fontFamily: fonts.body, marginTop: 12 }}>
                 {currentActiveData.description}
               </Text>
 
@@ -384,14 +414,20 @@ export default function Hygiene() {
             </View>
           ) : (
             <View style={{ marginTop: 28 }}>
-              <WellbeingEmpty icon="water-outline" title="No hygiene guides yet" message="Pull down to refresh." />
+              <WellbeingEmpty
+                icon="water-outline"
+                title="No tips in this topic yet"
+                message="Try another topic."
+                actionLabel="Show period products"
+                onAction={() => selectTopic("products")}
+              />
             </View>
           )}
 
           <ConsultNudge
             style={{ marginTop: 28 }}
             title="Rash, itching or unusual odour?"
-            body="Talk privately with a gynecologist if it lasts or gets worse."
+            body="Talk privately with a gynaecologist if it lasts or gets worse."
             onPress={() => router.push("/(app)/consultation" as any)}
           />
 

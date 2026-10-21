@@ -5,6 +5,7 @@ import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { RefreshControl, ScrollView, StatusBar, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useAuth } from "../../components/auth-context";
 import { EmptyState } from "../../components/EmptyState";
 import { ColumnLabel } from "../../components/ColumnLabel";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
@@ -16,6 +17,9 @@ import { useAsyncLoad } from "../../hooks/useAsyncLoad";
 import { ApiError, genzApi, type CycleSyncCategory, type CycleSyncTip } from "../../lib/api";
 import type { CyclePhase } from "../../lib/cycle";
 import { shareViewAsImage } from "../../lib/genz";
+import { useSecureScreen } from "../../lib/screenPrivacy";
+import { Icon } from "../../components/Icon";
+import { SegmentedControl } from "../../components/SegmentedControl";
 
 /**
  * Your Era — today's cycle phase as a Gen Z "era" with its aura, how long
@@ -45,7 +49,8 @@ const PHASE_NAMES: Record<CyclePhase, string> = {
 const WHITE = "#FFFFFF";
 const SIDE = 24;
 
-const TRIED_KEY = "nura.era.tried.v1";
+// Per account, as sign-out doesn't clear it.
+const triedKey = (userId: string) => `nura.era.tried.v1:${userId}`;
 
 const todayKey = () => {
   const d = new Date();
@@ -59,11 +64,12 @@ const tipKey = (category: CycleSyncCategory, t: CycleSyncTip) => t.id ?? `${cate
  * Tips ticked off as "tried" today, kept on the device and cleared the next
  * day. A storage failure just means ticks don't survive a restart.
  */
-function useTriedToday() {
+function useTriedToday(userId: string | undefined) {
   const [tried, setTried] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
-    AsyncStorage.getItem(TRIED_KEY)
+    if (!userId) return;
+    AsyncStorage.getItem(triedKey(userId))
       .then((raw) => {
         const saved = raw ? (JSON.parse(raw) as { date?: string; keys?: string[] }) : null;
         // Merge, so a tick made before storage answered isn't lost.
@@ -72,17 +78,17 @@ function useTriedToday() {
         }
       })
       .catch(() => undefined);
-  }, []);
+  }, [userId]);
 
   const toggle = useCallback((key: string) => {
     setTried((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
-      AsyncStorage.setItem(TRIED_KEY, JSON.stringify({ date: todayKey(), keys: [...next] })).catch(() => undefined);
+      if (userId) AsyncStorage.setItem(triedKey(userId), JSON.stringify({ date: todayKey(), keys: [...next] })).catch(() => undefined);
       return next;
     });
-  }, []);
+  }, [userId]);
 
   return { tried, toggle };
 }
@@ -93,6 +99,7 @@ const flattenTips = (tips: Record<CycleSyncCategory, CycleSyncTip[]>): FlatTip[]
   CATEGORIES.flatMap(({ key: category }) => (tips[category] ?? []).map((tip) => ({ key: tipKey(category, tip), category, tip })));
 
 export default function EraScreen() {
+  useSecureScreen("era");
   const router = useRouter();
   const { colors, isDark, fonts } = useTheme();
   const shareRef = useRef<View>(null);
@@ -110,7 +117,8 @@ export default function EraScreen() {
   );
   const data = result ?? null;
   const needsSetup = !loading && !error && result === null;
-  const { tried, toggle } = useTriedToday();
+  const { user } = useAuth();
+  const { tried, toggle } = useTriedToday(user?._id);
   const allTips = data ? flattenTips(data.era.tips) : [];
   const triedCount = allTips.filter((t) => tried.has(t.key)).length;
 
@@ -161,12 +169,12 @@ export default function EraScreen() {
               >
                 <View style={{ marginHorizontal: SIDE, marginTop: 12 }}>
                   {/* Aura card (also the share image, so no buttons inside it). */}
-                  <View ref={shareRef} collapsable={false} style={{ borderRadius: 24, ...getShadow(colors, isDark) }}>
+                  <View ref={shareRef} collapsable={false} style={{ borderRadius: 24, borderCurve: "continuous", ...getShadow(colors, isDark) }}>
                     <LinearGradient
                       colors={data.era.era.aura}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 1 }}
-                      style={{ borderRadius: 24, padding: 22, overflow: "hidden" }}
+                      style={{ borderRadius: 24, borderCurve: "continuous", padding: 22, overflow: "hidden" }}
                     >
                       <View className="flex-row items-center" style={{ gap: 14 }}>
                         <View className="items-center justify-center rounded-full" style={{ width: 60, height: 60, backgroundColor: "rgba(255,255,255,0.25)" }}>
@@ -264,32 +272,20 @@ export default function EraScreen() {
                   ) : null}
 
                   {/* Category switcher: one segmented control. */}
-                  <View className="flex-row rounded-full mt-4" style={{ backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, padding: 4 }}>
-                    {CATEGORIES.map((c) => {
-                      const active = c.key === category;
+                  <SegmentedControl
+                    segments={CATEGORIES.map((c) => {
                       const inCategory = allTips.filter((t) => t.category === c.key);
                       const done = inCategory.filter((t) => tried.has(t.key)).length;
-                      return (
-                        <TouchableOpacity
-                          key={c.key}
-                          onPress={() => setCategory(c.key)}
-                          activeOpacity={0.85}
-                          accessibilityRole="tab"
-                          accessibilityState={{ selected: active }}
-                          accessibilityLabel={`${c.label}, ${done} of ${inCategory.length} tried`}
-                          className="flex-1 items-center justify-center rounded-full"
-                          style={{ height: 36, backgroundColor: active ? colors.primary : "transparent" }}
-                        >
-                          <Text style={{ color: active ? colors.buttonText : colors.mutedText, fontSize: 13, fontFamily: fonts.body, fontWeight: "700" }} numberOfLines={1}>
-                            {c.label}
-                          </Text>
-                        </TouchableOpacity>
-                      );
+                      return { key: c.key, label: c.label, accessibilityLabel: `${c.label}, ${done} of ${inCategory.length} tried` };
                     })}
-                  </View>
+                    value={category}
+                    onChange={setCategory}
+                    height={40}
+                    style={{ marginTop: 16 }}
+                  />
                 </View>
 
-                <View style={{ marginTop: 12, marginHorizontal: SIDE, backgroundColor: colors.surface, borderRadius: 22, paddingVertical: 4, ...getShadow(colors, isDark) }}>
+                <View style={{ marginTop: 12, marginHorizontal: SIDE, backgroundColor: colors.surface, borderRadius: 22, borderCurve: "continuous", paddingVertical: 4, ...getShadow(colors, isDark) }}>
                   {data.era.tips[category].length ? (
                     allTips
                       .filter((t) => t.category === category)
@@ -320,7 +316,7 @@ function CheckCircle({ done, color }: { done: boolean; color: string }) {
       className="items-center justify-center rounded-full"
       style={{ width: 24, height: 24, marginTop: 2, backgroundColor: done ? color : "transparent", borderColor: done ? color : colors.border, borderWidth: 1.5 }}
     >
-      {done ? <Feather name="check" size={14} color={WHITE} /> : null}
+      {done ? <Icon set="feather" name="check" size={14} color={WHITE} /> : null}
     </View>
   );
 }

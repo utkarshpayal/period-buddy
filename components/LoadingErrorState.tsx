@@ -1,8 +1,10 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
-import { Text, TouchableOpacity, View } from "react-native";
+import { Text, View } from "react-native";
+import { Button } from "./Button";
 import { Loader } from "./Loader";
 import { useTheme } from "./theme";
+import { Icon } from "./Icon";
 
 export function LoadingErrorState({
   loading,
@@ -45,22 +47,27 @@ export function LoadingErrorState({
     const title = offline ? "You're offline" : errorTitle;
     return (
       <View className="flex-1 items-center justify-center px-8">
-        <MaterialCommunityIcons name={icon} size={48} color={colors.primary} />
-        <Text className="mt-4 text-base font-bold text-center" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
+        <View
+          style={{
+            width: 84,
+            height: 84,
+            borderRadius: 42,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: colors.primaryLight,
+            borderWidth: 8,
+            borderColor: colors.surfaceSoft,
+          }}
+        >
+          <Icon set="mci" name={icon} size={32} color={colors.primaryDark} />
+        </View>
+        <Text style={{ marginTop: 18, fontSize: 17, lineHeight: 24, fontWeight: "700", letterSpacing: -0.3, textAlign: "center", color: colors.foreground, fontFamily: fonts.heading }}>
           {title}
         </Text>
-        <Text className="mt-2 text-xs text-center leading-5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
+        <Text style={{ marginTop: 6, maxWidth: 300, fontSize: 14, lineHeight: 20, textAlign: "center", color: colors.mutedText, fontFamily: fonts.body }}>
           {error}
         </Text>
-        <TouchableOpacity
-          onPress={onRetry}
-          className="mt-6 px-6 py-3 rounded-2xl"
-          style={{ backgroundColor: colors.primary }}
-        >
-          <Text className="text-sm font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-            Retry
-          </Text>
-        </TouchableOpacity>
+        <Button label="Try again" icon="refresh" onPress={onRetry} size="md" style={{ marginTop: 22 }} />
       </View>
     );
   }

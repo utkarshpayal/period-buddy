@@ -1,9 +1,9 @@
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { memo, useState } from "react";
 import { Text, TouchableOpacity, View } from "react-native";
 import { captionNeedsMore, formatCount, hasPoll, type ReelItem } from "../../lib/reels";
 import { MedicalReviewBadge } from "../MedicalReviewBadge";
 import { useTheme } from "../theme";
+import { Icon } from "../Icon";
 
 const SHADOW = { textShadowColor: "rgba(0,0,0,0.5)", textShadowRadius: 6 } as const;
 
@@ -54,7 +54,7 @@ export const ReelOverlay = memo(function ReelOverlay({
           >
             {reel.creatorName}
           </Text>
-          {reel.verified ? <MaterialCommunityIcons name="check-decagram" size={15} color="white" /> : null}
+          {reel.verified ? <Icon set="mci" name="check-decagram" size={15} color="white" /> : null}
         </TouchableOpacity>
         <TouchableOpacity
           accessibilityRole="button"
@@ -115,7 +115,7 @@ export const ReelOverlay = memo(function ReelOverlay({
           className="flex-row items-center self-start rounded-full px-3 py-1.5"
           style={{ gap: 6, backgroundColor: "rgba(255,255,255,0.16)", maxWidth: "100%" }}
         >
-          <MaterialCommunityIcons name="poll" size={14} color="white" />
+          <Icon set="mci" name="poll" size={14} color="white" />
           <Text numberOfLines={1} className="text-[12.5px] font-bold text-white" style={{ flexShrink: 1, fontFamily: fonts.body }}>
             {reel.votedOptionId ? "Poll results" : "Vote in poll"}
           </Text>

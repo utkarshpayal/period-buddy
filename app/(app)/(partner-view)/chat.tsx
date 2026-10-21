@@ -1,24 +1,26 @@
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { Feather, Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
+  FlatList,
   StatusBar,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useTheme } from "../../../components/theme";
 import { SkeletonRow } from "../../../components/Skeleton";
-import { partnerApi } from "../../../lib/api";
+import { getFriendlyErrorMessage } from "../../../lib/api";
 import { usePartnerViewState } from "../../../components/partner-view-state";
+import { SendStatusLabel } from "../../../components/partner-view/SendStatusLabel";
+import { usePartnerChat } from "../../../hooks/usePartnerChat";
+import { partnerDisplayName } from "../../../lib/partnerChat";
 import { useSecureScreen } from "../../../lib/screenPrivacy";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import { Icon } from "../../../components/Icon";
+import { Button } from "../../../components/Button";
+import { SendButton } from "../../../components/SendButton";
 
 export default function PartnerViewChat() {
   useSecureScreen("partner-chat");
@@ -26,36 +28,24 @@ export default function PartnerViewChat() {
   const router = useRouter();
   const { prefill } = useLocalSearchParams<{ prefill?: string }>();
   const { profile, chatMessages, setChatMessages } = usePartnerViewState();
-  const scrollRef = useRef<ScrollView>(null);
   // The tab bar in ./_layout.tsx floats via tabBarStyle position:"absolute",
   // so it doesn't reserve any layout space of its own — without this, the
   // message input footer below renders right underneath it, out of reach.
   const tabBarHeight = useBottomTabBarHeight();
 
   const [typedMessage, setTypedMessage] = useState("");
-  const [sendingMessage, setSendingMessage] = useState(false);
-  const [loadingMessages, setLoadingMessages] = useState(true);
+  const { loading, loadError, loadMessages, sendMessage, retryMessage } = usePartnerChat({
+    setMessages: setChatMessages,
+  });
 
   const isConnected = profile?.isConnected ?? false;
-  const partnerName =
-    profile?.partnerId && typeof profile.partnerId === "object"
-      ? `${profile.partnerId.firstName ?? ""} ${profile.partnerId.lastName ?? ""}`.trim()
-      : "your partner";
-
-  const loadMessages = useCallback(async () => {
-    try {
-      const msgs = await partnerApi.getMessages();
-      setChatMessages(msgs);
-    } catch {
-      // keep whatever's already in shared state
-    } finally {
-      setLoadingMessages(false);
-    }
-  }, [setChatMessages]);
+  const partnerName = partnerDisplayName(profile);
+  // Inverted list: newest first, so it opens at the latest message with no
+  // scroll-to-end timers.
+  const newestFirst = useMemo(() => [...chatMessages].reverse(), [chatMessages]);
 
   useEffect(() => {
     if (isConnected) loadMessages();
-    else setLoadingMessages(false);
   }, [isConnected, loadMessages]);
 
   // Arriving from Home's "Send a check-in" pre-fills a starter message —
@@ -68,26 +58,10 @@ export default function PartnerViewChat() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill]);
 
-  useEffect(() => {
-    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: false }), 100);
-  }, [chatMessages.length]);
-
-  async function handleSendMessage() {
-    if (!typedMessage.trim() || sendingMessage) return;
-    const text = typedMessage.trim();
+  function handleSendMessage() {
+    if (!typedMessage.trim()) return;
+    sendMessage(typedMessage);
     setTypedMessage("");
-    setSendingMessage(true);
-
-    setChatMessages((prev) => [...prev, { sender: "user", text, sentAt: new Date().toISOString() }]);
-    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 50);
-
-    try {
-      await partnerApi.sendMessage(text);
-    } catch {
-      // stays optimistically
-    } finally {
-      setSendingMessage(false);
-    }
   }
 
   return (
@@ -99,7 +73,7 @@ export default function PartnerViewChat() {
             className="w-9 h-9 rounded-full items-center justify-center"
             style={{ backgroundColor: colors.primaryLight }}
           >
-            <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.primary} />
+            <Icon set="ion" name="chatbubble-ellipses-outline" size={16} color={colors.primary} />
           </View>
           <View className="flex-1 min-w-0">
             <Text
@@ -107,7 +81,7 @@ export default function PartnerViewChat() {
               numberOfLines={1}
               style={{ color: colors.foreground, fontFamily: fonts.heading }}
             >
-              {partnerName !== "your partner" ? partnerName : "Chat"}
+              {partnerName ?? "Chat"}
             </Text>
             <Text
               className="text-xs font-semibold"
@@ -119,13 +93,13 @@ export default function PartnerViewChat() {
         </View>
 
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          behavior="padding"
           className="flex-1"
-          keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+          keyboardVerticalOffset={90}
         >
           {!isConnected ? (
             <View className="flex-1 items-center justify-center px-8">
-              <Ionicons name="chatbubble-ellipses-outline" size={22} color={colors.mutedText} style={{ marginBottom: 10 }} />
+              <Icon set="ion" name="chatbubble-ellipses-outline" size={22} color={colors.mutedText} style={{ marginBottom: 10 }} />
               <Text
                 className="text-center text-xs font-semibold leading-5"
                 style={{ color: colors.mutedText, fontFamily: fonts.body }}
@@ -133,7 +107,7 @@ export default function PartnerViewChat() {
                 No partner connected yet.
               </Text>
             </View>
-          ) : loadingMessages ? (
+          ) : loading && chatMessages.length === 0 ? (
             <View className="px-4 pt-4 gap-5">
               <SkeletonRow />
               <SkeletonRow />
@@ -143,28 +117,37 @@ export default function PartnerViewChat() {
             </View>
           ) : (
             <>
-              <ScrollView
-                ref={scrollRef}
-                className="flex-1"
-                contentContainerStyle={{ padding: 16, paddingBottom: 8 }}
-                onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
-              >
-                {chatMessages.length === 0 ? (
+              {loadError && chatMessages.length === 0 ? (
+                <View className="flex-1 items-center justify-center px-8">
                   <Text
-                    className="text-center text-xs font-semibold mt-8"
+                    className="text-center text-xs font-semibold leading-5"
                     style={{ color: colors.mutedText, fontFamily: fonts.body }}
                   >
-                    Say hi to {partnerName || "your partner"}.
+                    {getFriendlyErrorMessage(loadError)}
                   </Text>
-                ) : (
-                  chatMessages.map((msg, idx) => {
+                  <Button label="Try again" size="sm" onPress={loadMessages} style={{ marginTop: 16 }} />
+                </View>
+              ) : chatMessages.length === 0 ? (
+                <View className="flex-1 items-center justify-center px-8">
+                  <Text
+                    className="text-center text-xs font-semibold"
+                    style={{ color: colors.mutedText, fontFamily: fonts.body }}
+                  >
+                    Say hi to {partnerName ?? "your partner"}.
+                  </Text>
+                </View>
+              ) : (
+                <FlatList
+                  inverted
+                  data={newestFirst}
+                  keyExtractor={(msg, idx) => msg.localId ?? msg._id ?? `${msg.sentAt}_${idx}`}
+                  className="flex-1"
+                  contentContainerStyle={{ padding: 16, paddingTop: 8 }}
+                  keyboardShouldPersistTaps="handled"
+                  renderItem={({ item: msg }) => {
                     const mine = msg.sender === "user";
                     return (
-                      <View
-                        key={msg._id ?? idx}
-                        className="mb-2"
-                        style={{ alignItems: mine ? "flex-end" : "flex-start" }}
-                      >
+                      <View className="mb-2" style={{ alignItems: mine ? "flex-end" : "flex-start" }}>
                         <View
                           className="rounded-2xl px-3.5 py-2"
                           style={{
@@ -172,6 +155,7 @@ export default function PartnerViewChat() {
                             backgroundColor: mine ? colors.primaryDark : colors.surface,
                             borderWidth: mine ? 0 : 1,
                             borderColor: colors.border,
+                            opacity: msg.status === "failed" ? 0.6 : 1,
                           }}
                         >
                           <Text
@@ -184,11 +168,12 @@ export default function PartnerViewChat() {
                             {msg.text}
                           </Text>
                         </View>
+                        <SendStatusLabel status={msg.status} onRetry={() => retryMessage(msg)} />
                       </View>
                     );
-                  })
-                )}
-              </ScrollView>
+                  }}
+                />
+              )}
 
               <View
                 className="flex-row items-center px-4 pt-3 border-t gap-2"
@@ -201,6 +186,7 @@ export default function PartnerViewChat() {
                 <TextInput
                   value={typedMessage}
                   onChangeText={setTypedMessage}
+                  accessibilityLabel="Message"
                   placeholder="Message..."
                   placeholderTextColor={colors.mutedText}
                   onSubmitEditing={handleSendMessage}
@@ -211,20 +197,7 @@ export default function PartnerViewChat() {
                     fontFamily: fonts.body,
                   }}
                 />
-                <TouchableOpacity
-                  disabled={!typedMessage.trim() || sendingMessage}
-                  onPress={handleSendMessage}
-                  accessibilityRole="button"
-                  accessibilityLabel="Send message"
-                  className="w-9 h-9 rounded-full items-center justify-center"
-                  style={{ backgroundColor: typedMessage.trim() ? colors.primary : colors.border }}
-                >
-                  {sendingMessage ? (
-                    <ActivityIndicator size="small" color={colors.buttonText} />
-                  ) : (
-                    <Feather name="arrow-up" size={16} color={typedMessage.trim() ? colors.buttonText : colors.mutedText} />
-                  )}
-                </TouchableOpacity>
+                <SendButton onPress={handleSendMessage} disabled={!typedMessage.trim()} size={36} accessibilityLabel="Send message" />
               </View>
             </>
           )}

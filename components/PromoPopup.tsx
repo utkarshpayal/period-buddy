@@ -1,7 +1,7 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
-import { Image, Modal, Pressable, Text, TouchableOpacity, View } from "react-native";
+import { Modal, Pressable, Text, TouchableOpacity, View } from "react-native";
+import { Image } from "expo-image";
 import { useAppConfig } from "./app-config";
 import { reportImpressions } from "./PromoBanners";
 import { useTheme } from "./theme";
@@ -9,6 +9,9 @@ import { useViewer } from "../hooks/useViewer";
 import { appConfigApi } from "../lib/api";
 import { PromoBanner, bannersFor } from "../lib/appConfig";
 import { runTapAction } from "../lib/tapAction";
+import { Icon } from "./Icon";
+import { motion } from "./motion";
+import { Button } from "./Button";
 
 // A beat after Home settles, so it never lands on top of the first paint
 // or a permission prompt.
@@ -67,11 +70,11 @@ export function PromoPopup() {
       <Pressable onPress={close} style={{ flex: 1, backgroundColor: colors.overlay, alignItems: "center", justifyContent: "center", padding: 28 }}>
         <Pressable
           onPress={() => undefined}
-          style={{ width: "100%", maxWidth: 380, backgroundColor: bg, borderRadius: 26, overflow: "hidden" }}
+          style={{ width: "100%", maxWidth: 380, backgroundColor: bg, borderRadius: 28, borderCurve: "continuous", overflow: "hidden" }}
           accessibilityViewIsModal
         >
           {banner.imageUrl ? (
-            <Image source={{ uri: banner.imageUrl }} style={{ width: "100%", aspectRatio: banner.layout === "image" ? 0.8 : 1.6 }} resizeMode="cover" />
+            <Image transition={motion.duration.base} source={{ uri: banner.imageUrl }} style={{ width: "100%", aspectRatio: banner.layout === "image" ? 0.8 : 1.6 }} contentFit="cover" />
           ) : null}
           {banner.layout !== "image" ? (
             <View style={{ padding: 22 }}>
@@ -82,14 +85,8 @@ export function PromoPopup() {
             </View>
           ) : null}
           <View style={{ flexDirection: "row", gap: 10, paddingHorizontal: 22, paddingBottom: 20, paddingTop: banner.layout === "image" ? 16 : 0 }}>
-            <TouchableOpacity onPress={close} activeOpacity={0.8} style={{ flex: 1, borderRadius: 999, paddingVertical: 12, alignItems: "center", borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface }}>
-              <Text style={{ color: colors.foreground, fontWeight: "800", fontFamily: fonts.body }}>{tappable ? "Not now" : "Close"}</Text>
-            </TouchableOpacity>
-            {tappable ? (
-              <TouchableOpacity onPress={onPress} activeOpacity={0.85} style={{ flex: 1.4, borderRadius: 999, paddingVertical: 12, alignItems: "center", backgroundColor: colors.button }}>
-                <Text style={{ color: colors.buttonText, fontWeight: "800", fontFamily: fonts.body }}>{banner.ctaLabel ?? "Open"}</Text>
-              </TouchableOpacity>
-            ) : null}
+            <Button label={tappable ? "Not now" : "Close"} variant="neutral" size="md" onPress={close} style={{ flex: 1 }} />
+            {tappable ? <Button label={banner.ctaLabel ?? "Open"} size="md" onPress={onPress} style={{ flex: 1.4 }} /> : null}
           </View>
           <TouchableOpacity
             onPress={close}
@@ -98,7 +95,7 @@ export function PromoPopup() {
             accessibilityLabel="Close"
             style={{ position: "absolute", top: 12, right: 12, width: 28, height: 28, borderRadius: 14, backgroundColor: "rgba(0,0,0,0.35)", alignItems: "center", justifyContent: "center" }}
           >
-            <Ionicons name="close" size={16} color="#fff" />
+            <Icon set="ion" name="close" size={16} color="#fff" />
           </TouchableOpacity>
         </Pressable>
       </Pressable>

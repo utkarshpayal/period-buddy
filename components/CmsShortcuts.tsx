@@ -1,12 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
-import { Text, TouchableOpacity, View } from "react-native";
+import { Text, View } from "react-native";
 import { useAppConfig } from "./app-config";
 import { genZLabel, useGenZMode } from "./genz-mode";
 import { LOCKED_OPACITY, PauseDot, isLocked, launchSuffix, pillColors, tilePill, useTilePress } from "./LaunchTileParts";
 import { ThemeColors, useTheme } from "./theme";
 import { useViewer } from "../hooks/useViewer";
 import { HubTile, hubTilesFor } from "../lib/appConfig";
+import { Icon } from "./Icon";
+import { PressableScale } from "./PressableScale";
 
 const PER_ROW = 4;
 const ICON = 60;
@@ -80,9 +82,8 @@ function Shortcut({ tile }: { tile: HubTile }) {
   const dim = tile.launch.access === "soon" ? LOCKED_OPACITY : 1;
 
   return (
-    <TouchableOpacity
+    <PressableScale
       onPress={onPress}
-      activeOpacity={0.7}
       accessibilityRole="button"
       accessibilityLabel={[
         [label, launchSuffix(tile)].filter(Boolean).join(", "),
@@ -96,7 +97,7 @@ function Shortcut({ tile }: { tile: HubTile }) {
     >
       <View>
         <View style={{ width: ICON, height: ICON, borderRadius: ICON / 2, backgroundColor: bg, alignItems: "center", justifyContent: "center" }}>
-          <Ionicons name={tile.icon as keyof typeof Ionicons.glyphMap} size={24} color={color} style={{ opacity: dim }} />
+          <Icon set="ion" name={tile.icon as keyof typeof Ionicons.glyphMap} size={24} color={color} style={{ opacity: dim }} />
           {tile.launch.access === "paused" ? <PauseDot size={18} offset={-2} ring={colors.background} /> : null}
         </View>
         {pill && pillTint ? (
@@ -131,7 +132,7 @@ function Shortcut({ tile }: { tile: HubTile }) {
               justifyContent: "center",
             }}
           >
-            <Ionicons name="arrow-up-outline" size={11} color={colors.mutedText} style={{ transform: [{ rotate: "45deg" }] }} />
+            <Icon set="ion" name="arrow-up-outline" size={11} color={colors.mutedText} style={{ transform: [{ rotate: "45deg" }] }} />
           </View>
         ) : null}
       </View>
@@ -142,6 +143,6 @@ function Shortcut({ tile }: { tile: HubTile }) {
       >
         {label}
       </Text>
-    </TouchableOpacity>
+    </PressableScale>
   );
 }

@@ -19,3 +19,10 @@ test("analytics switch", () => {
   assert.equal(analyticsAllowed(), false);
   setAnalyticsAllowed(true);
 });
+
+test("isMinor is calendar-exact around the 18th birthday", () => {
+  const birthdayEve = new Date(2026, 9, 17, 23, 0).getTime();
+  const birthday = new Date(2026, 9, 18, 0, 30).getTime();
+  assert.equal(isMinor("2008-10-18", birthdayEve), true);
+  assert.equal(isMinor("2008-10-18", birthday), false);
+});

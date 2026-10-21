@@ -1,146 +1,151 @@
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
 import { Text, TouchableOpacity, View } from "react-native";
-import Animated, { FadeInDown, LinearTransition } from "react-native-reanimated";
 import type { MedicalDocument } from "../../lib/api";
+import PressableFeedback from "../PressableFeedback";
 import { SkeletonBlock } from "../Skeleton";
 import { useTheme } from "../theme";
 import { getShadow } from "../ui-tokens";
-import {
-  DOC_TYPE_META,
-  docTypeAccent,
-  extractionNote,
-  fileKind,
-  fileKindStyle,
-  formatDateLabel,
-  formatFileSize,
-} from "./documentMeta";
+import { DOC_TYPE_META, extractionNote, formatDateLabel, formatFileSize } from "./documentMeta";
+import { Icon } from "../Icon";
+
+/** "PDF", "JPG", "PNG"… from the MIME type, for the small page badge. */
+export function fileBadge(mimeType: string | undefined) {
+  if (!mimeType) return "FILE";
+  if (mimeType === "application/pdf") return "PDF";
+  const sub = mimeType.split("/")[1]?.split(/[+;.-]/)[0]?.toUpperCase();
+  if (sub === "JPEG") return "JPG";
+  return sub && sub.length <= 4 ? sub : "FILE";
+}
 
 /**
- * One document in the list: file-type icon in a tinted square, title,
- * category · date · size, an optional "couldn't read" note, and a ⋯ button.
- * Tap opens it, long-press or ⋯ opens the actions.
+ * The file's extension on a small tinted page, standing in for a thumbnail:
+ * rose for PDFs, sky for photos, lavender for anything else (the app's soft tints).
+ */
+export function PageBadge({ label }: { label: string }) {
+  const { colors, fonts } = useTheme();
+  const tint =
+    label === "PDF"
+      ? { fg: colors.primaryDark, bg: colors.primaryLight }
+      : label === "FILE"
+        ? { fg: colors.secondary, bg: colors.secondaryLight }
+        : { fg: colors.sky, bg: colors.skyLight };
+  return (
+    <View style={{ width: 36, height: 44, borderRadius: 10, borderTopRightRadius: 16, backgroundColor: tint.bg, justifyContent: "flex-end", alignItems: "center", paddingBottom: 7 }}>
+      <Text maxFontSizeMultiplier={1} style={{ fontSize: 10, fontWeight: "800", letterSpacing: 0.4, color: tint.fg, fontFamily: fonts.body }}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+/**
+ * One document row in a month's list: page badge, title, category · date ·
+ * size, an optional reading note, and a ⋯ button. Tap opens it, long-press
+ * or ⋯ opens the actions.
  */
 export function DocumentCard({
   doc,
-  index,
+  divider,
   onOpen,
   onMore,
-  width,
 }: {
   doc: MedicalDocument;
-  /** Fixed card width in the two-column tablet grid; full width otherwise. */
-  width?: number;
-  /** Position in the list; the first few cards stagger in. */
-  index: number;
+  /** Hairline above the row (every row but a group's first). */
+  divider: boolean;
   onOpen: (doc: MedicalDocument) => void;
-  onMore: (doc: MedicalDocument) => void;
+  /** Rename/delete/share actions; left out for rows that have none (doctors' prescriptions). */
+  onMore?: (doc: MedicalDocument) => void;
 }) {
-  const { colors, fonts, isDark } = useTheme();
-  const kind = fileKindStyle(colors, fileKind(doc.mimeType));
+  const { colors, fonts } = useTheme();
   const meta = DOC_TYPE_META[doc.docType] ?? DOC_TYPE_META.other;
-  const accent = docTypeAccent(colors, doc.docType);
   const note = extractionNote(doc);
   const size = formatFileSize(doc.fileSize);
   const pending = doc.extractionStatus === "pending";
-  const noteColor = pending ? colors.mutedText : colors.warning;
+  const badge = fileBadge(doc.mimeType);
 
   return (
-    <Animated.View
-      entering={index < 8 ? FadeInDown.delay(index * 40).duration(260) : undefined}
-      layout={LinearTransition.duration(220)}
-      style={width ? { width } : undefined}
+    <PressableFeedback
+      onPress={() => onOpen(doc)}
+      onLongPress={onMore ? () => onMore(doc) : undefined}
+      delayLongPress={350}
+      accessibilityRole="button"
+      accessibilityLabel={`${doc.title}, ${badge}, ${meta.label}, ${formatDateLabel(doc.documentDate)}`}
+      accessibilityHint={onMore ? "Opens the document. Long-press for more actions." : "Opens the document."}
+      // Rows highlight while held, like a native list.
+      style={({ pressed }) => ({
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 14,
+        paddingLeft: 16,
+        paddingRight: 4,
+        backgroundColor: pressed ? colors.surfaceSoft : colors.surface,
+      })}
     >
-      <TouchableOpacity
-        activeOpacity={0.75}
-        onPress={() => onOpen(doc)}
-        onLongPress={() => onMore(doc)}
-        delayLongPress={350}
-        accessibilityRole="button"
-        accessibilityLabel={`${doc.title}, ${kind.label}, ${meta.label}, ${formatDateLabel(doc.documentDate)}`}
-        accessibilityHint="Opens the document. Long-press for more actions."
+      <PageBadge label={badge} />
+      <View
         style={{
+          flex: 1,
+          minWidth: 0,
           flexDirection: "row",
           alignItems: "center",
-          gap: 14,
-          minHeight: 76,
           paddingVertical: 14,
-          paddingLeft: 14,
-          paddingRight: 6,
-          borderRadius: 20,
-          backgroundColor: colors.surface,
-          borderWidth: 1,
-          borderColor: isDark ? colors.border : "transparent",
-          ...getShadow(colors, isDark),
+          borderTopWidth: divider ? 1 : 0,
+          borderColor: colors.track,
         }}
       >
-        <View style={{ width: 48, height: 48, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: kind.bg }}>
-          <MaterialCommunityIcons name={kind.icon} size={26} color={kind.color} />
-        </View>
-
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text
             numberOfLines={1}
             maxFontSizeMultiplier={1.4}
-            style={{ flexShrink: 1, fontSize: 15, lineHeight: 21, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}
+            style={{ fontSize: 15, lineHeight: 21, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}
           >
             {doc.title}
           </Text>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 3 }}>
-            <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: accent.color }} />
-            <Text numberOfLines={1} maxFontSizeMultiplier={1.4} style={{ flexShrink: 1, fontSize: 13, lineHeight: 18, color: colors.mutedText, fontFamily: fonts.body }}>
-              {[meta.label, formatDateLabel(doc.documentDate), size].filter(Boolean).join(" · ")}
-            </Text>
-          </View>
+          <Text numberOfLines={1} maxFontSizeMultiplier={1.4} style={{ marginTop: 2, fontSize: 13, lineHeight: 18, color: colors.mutedText, fontFamily: fonts.body }}>
+            {[meta.label, formatDateLabel(doc.documentDate), size].filter(Boolean).join(" · ")}
+          </Text>
           {note ? (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 }}>
-              <Ionicons name={pending ? "hourglass-outline" : "alert-circle-outline"} size={14} color={noteColor} />
-              <Text numberOfLines={1} maxFontSizeMultiplier={1.4} style={{ flexShrink: 1, fontSize: 13, fontWeight: "600", color: noteColor, fontFamily: fonts.body }}>
-                {note}
-              </Text>
-            </View>
+            <Text
+              numberOfLines={1}
+              maxFontSizeMultiplier={1.4}
+              style={{ marginTop: 2, fontSize: 13, lineHeight: 18, color: pending ? colors.mutedText : colors.warning, fontFamily: fonts.body }}
+            >
+              {note}
+            </Text>
           ) : null}
         </View>
-
+        {onMore ? (
         <TouchableOpacity
           onPress={() => onMore(doc)}
           accessibilityRole="button"
           accessibilityLabel={`More actions for ${doc.title}`}
           hitSlop={6}
-          style={{ width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" }}
+          style={{ width: 40, height: 40, alignItems: "center", justifyContent: "center" }}
         >
-          <Ionicons name="ellipsis-horizontal" size={20} color={colors.mutedText} />
+          <Icon set="ion" name="ellipsis-horizontal" size={18} color={colors.mutedText} />
         </TouchableOpacity>
-      </TouchableOpacity>
-    </Animated.View>
+        ) : (
+          <View style={{ width: 40, height: 40, alignItems: "center", justifyContent: "center" }}>
+            <Icon set="ion" name="chevron-forward" size={16} color={colors.mutedText} />
+          </View>
+        )}
+      </View>
+    </PressableFeedback>
   );
 }
 
-/** Loading placeholder shaped like the cards above. */
-export function DocumentListSkeleton({ count = 5, width }: { count?: number; width?: number }) {
+/** Loading placeholder shaped like the rows above. */
+export function DocumentListSkeleton({ count = 5 }: { count?: number }) {
   const { colors, isDark } = useTheme();
   return (
-    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }} accessibilityLabel="Loading documents">
+    <View accessibilityLabel="Loading documents" style={{ borderRadius: 22, borderCurve: "continuous", backgroundColor: colors.surface, ...getShadow(colors, isDark) }}>
       {Array.from({ length: count }).map((_, i) => (
-        <View
-          key={i}
-          style={{
-            width: width ?? "100%",
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 14,
-            padding: 14,
-            borderRadius: 20,
-            backgroundColor: colors.surface,
-            ...getShadow(colors, isDark),
-          }}
-        >
-          <SkeletonBlock width={48} height={48} radius={14} />
-          <View style={{ flex: 1, gap: 8 }}>
-            <SkeletonBlock width={i % 2 ? "55%" : "72%"} height={14} radius={7} />
-            <SkeletonBlock width="48%" height={12} radius={6} />
+        <View key={i} style={{ flexDirection: "row", alignItems: "center", gap: 14, paddingLeft: 16 }}>
+          <SkeletonBlock width={36} height={44} radius={10} />
+          <View style={{ flex: 1, gap: 8, paddingVertical: 18, borderTopWidth: i ? 1 : 0, borderColor: colors.track }}>
+            <SkeletonBlock width={i % 2 ? "55%" : "72%"} height={13} radius={6} />
+            <SkeletonBlock width="40%" height={11} radius={5} />
           </View>
-          <SkeletonBlock width={20} height={6} radius={3} style={{ marginRight: 10 }} />
         </View>
       ))}
     </View>

@@ -7,9 +7,6 @@ export const REPORT_THEME = {
   mutedText: "#66748A",
   border: "#E3E7ED",
   labelText: "#52514e",
-  symptomsBar: "#2E8B7A",
-  stressBar: "#E4694F",
-  documentsTrack: "#FFF1ED",
   // Brand accent used on the report's letterhead bar/wordmark — matches the
   // app's primary rose (components/theme.tsx `primary`/`primaryDark`).
   brand: "#E8618F",

@@ -150,18 +150,22 @@ export function SkeletonPostList({ count = 4, style }: { count?: number; style?:
 
 /** A media card skeleton: cover image block + title/subtitle, for blog/reel grids. */
 export function SkeletonMediaCard({ style }: { style?: ViewStyle }) {
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   return (
     <View
-      className="overflow-hidden rounded-2xl"
+      className="overflow-hidden"
       style={{
         backgroundColor: colors.surface,
-        borderWidth: isDark ? 0 : 1,
+        borderRadius: 24, borderCurve: "continuous",
+        borderWidth: 1,
         borderColor: colors.border,
         ...style,
       }}
     >
-      <SkeletonBlock width="100%" height={120} radius={0} />
+      {/* Same 16:10 cover as MediaTile, so content doesn't jump when it loads. */}
+      <View style={{ aspectRatio: 16 / 10 }}>
+        <SkeletonBlock width="100%" height="100%" radius={0} />
+      </View>
       <View className="p-3 gap-2">
         <SkeletonBlock width="90%" height={12} />
         <SkeletonBlock width="55%" height={10} />

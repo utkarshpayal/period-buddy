@@ -2,6 +2,8 @@ import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useRef } from "react";
 import { AccessibilityInfo, Animated, Text, TouchableOpacity, View } from "react-native";
 import { useTheme } from "./theme";
+import { Icon } from "./Icon";
+import { SuccessCheck } from "./celebrations/Lottie";
 
 export type ToastAction = { label: string; onPress: () => void };
 export type ToastContent = { id: number; title: string; detail?: string; icon?: keyof typeof Ionicons.glyphMap; actions?: ToastAction[] };
@@ -55,7 +57,7 @@ export function UndoToast({ toast, bottom, onHide }: { toast: ToastContent | nul
           paddingRight: 6,
           paddingVertical: 8,
           minHeight: 56,
-          borderRadius: 18,
+          borderRadius: 18, borderCurve: "continuous",
           backgroundColor: bg,
           shadowColor: "#000",
           shadowOpacity: 0.18,
@@ -64,7 +66,12 @@ export function UndoToast({ toast, bottom, onHide }: { toast: ToastContent | nul
           elevation: 8,
         }}
       >
-        {toast.icon ? <Ionicons name={toast.icon} size={20} color={colors.primary} /> : null}
+        {toast.icon === "checkmark-circle" ? (
+          // Draws itself once per toast (keyed by id so a new toast replays it).
+          <SuccessCheck key={toast.id} size={22} />
+        ) : toast.icon ? (
+          <Icon set="ion" name={toast.icon} size={20} color={colors.primary} />
+        ) : null}
         <View style={{ flex: 1 }}>
           <Text numberOfLines={1} style={{ color: fg, fontSize: 14, fontWeight: "800", fontFamily: fonts.body }}>
             {toast.title}

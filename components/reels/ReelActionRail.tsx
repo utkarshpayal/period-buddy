@@ -1,8 +1,10 @@
-import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { memo } from "react";
-import { Image, Text, TouchableOpacity, View } from "react-native";
+import { Text, TouchableOpacity, View } from "react-native";
+import { Image } from "expo-image";
 import { formatCount, type ReelItem } from "../../lib/reels";
 import { useTheme } from "../theme";
+import { Icon } from "../Icon";
+import { motion } from "../motion";
 
 const SHADOW = { textShadowColor: "rgba(0,0,0,0.45)", textShadowRadius: 6 } as const;
 
@@ -74,10 +76,10 @@ export const ReelActionRail = memo(function ReelActionRail({
           onPress={onOpenCreator}
         >
           {reel.creatorAvatar ? (
-            <Image source={{ uri: reel.creatorAvatar }} className="h-12 w-12 rounded-full border-2 border-white bg-neutral-300" />
+            <Image transition={motion.duration.base} source={{ uri: reel.creatorAvatar }} className="h-12 w-12 rounded-full border-2 border-white bg-neutral-300" />
           ) : (
             <View className="h-12 w-12 items-center justify-center rounded-full border-2 border-white bg-white/25">
-              <Feather name="user" size={22} color="white" />
+              <Icon set="feather" name="user" size={22} color="white" />
             </View>
           )}
         </TouchableOpacity>
@@ -85,16 +87,16 @@ export const ReelActionRail = memo(function ReelActionRail({
           <TouchableOpacity
             accessibilityRole="button"
             accessibilityLabel={`Follow ${reel.creatorName}`}
-            hitSlop={8}
+            hitSlop={12}
             onPress={onFollow}
             className="-mt-3 h-6 w-6 items-center justify-center rounded-full border-2 border-white"
             style={{ backgroundColor: colors.primary }}
           >
-            <Ionicons name="add" size={14} color="white" />
+            <Icon set="ion" name="add" size={14} color="white" />
           </TouchableOpacity>
         ) : reel.verified ? (
           <View className="-mt-3 rounded-full border-2 border-white p-0.5" style={{ backgroundColor: colors.success }}>
-            <MaterialCommunityIcons name="check" size={11} color="white" />
+            <Icon set="mci" name="check" size={11} color="white" />
           </View>
         ) : null}
       </View>
@@ -104,15 +106,15 @@ export const ReelActionRail = memo(function ReelActionRail({
         accessibilityLabel={`${reel.isLiked ? "Unlike" : "Like"}. ${reel.likeCount} likes`}
         onPress={onLike}
       >
-        <Ionicons name={reel.isLiked ? "heart" : "heart-outline"} size={32} color={reel.isLiked ? "#FF3B5C" : "white"} style={SHADOW} />
+        <Icon set="ion" name={reel.isLiked ? "heart" : "heart-outline"} size={32} color={reel.isLiked ? "#FF3B5C" : "white"} style={SHADOW} />
       </RailButton>
 
       <RailButton count={reel.commentCount} accessibilityLabel={`Comments. ${reel.commentCount} comments`} onPress={onComments}>
-        <Ionicons name="chatbubble-outline" size={29} color="white" style={SHADOW} />
+        <Icon set="ion" name="chatbubble-outline" size={29} color="white" style={SHADOW} />
       </RailButton>
 
       <RailButton label="Share" accessibilityLabel="Share reel" onPress={onShare}>
-        <Feather name="send" size={27} color="white" style={SHADOW} />
+        <Icon set="feather" name="send" size={27} color="white" style={SHADOW} />
       </RailButton>
 
       <RailButton
@@ -120,7 +122,7 @@ export const ReelActionRail = memo(function ReelActionRail({
         accessibilityLabel={reel.isSaved ? "Remove from saved" : "Save reel"}
         onPress={onSave}
       >
-        <Ionicons name={reel.isSaved ? "bookmark" : "bookmark-outline"} size={28} color="white" style={SHADOW} />
+        <Icon set="ion" name={reel.isSaved ? "bookmark" : "bookmark-outline"} size={28} color="white" style={SHADOW} />
       </RailButton>
     </View>
   );

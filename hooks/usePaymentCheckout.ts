@@ -1,14 +1,34 @@
 import { useRef, useState } from "react";
 import type { CashfreeResult } from "../components/CashfreeCheckoutModal";
 import type { PaymentSheetOutcome } from "../components/PaymentSheet";
-import { getFriendlyErrorMessage, isNetworkError, subscriptionApi, type SubscriptionOrder } from "../lib/api";
+import { getFriendlyErrorMessage, subscriptionApi, type Entitlement, type SubscriptionOrder } from "../lib/api";
+import { isPaymentDeclined, isPendingVerify, verifyWithRetries, type PendingVerify } from "../lib/paymentVerify";
 
 export type PurchaseResult =
   | { type: "success" }
   | { type: "failed"; message: string }
-  | { type: "pending" };
+  | { type: "pending"; message?: string };
 
 type PurchasePayload = { source: "plan"; planId: string } | { source: "feature"; featureKey: string };
+
+/** The Cashfree fields every order shape (subscription, consultation) carries. */
+export type CheckoutOrder = {
+  orderId?: string;
+  paymentSessionId?: string;
+  cashfreeMode?: "sandbox" | "production";
+  amount?: number;
+};
+
+export type CheckoutAdapter<O extends CheckoutOrder, V> = {
+  /** One verify call: the settled record, or `{ pending: true }` while Cashfree's order is still open. */
+  verify: (order: O, orderId: string) => Promise<V | PendingVerify>;
+  /** Runs once a payment is confirmed, with the verified record when this session saw it. */
+  onPaid?: (verified: V | null, order: O) => void;
+  /** HTTP statuses that mean "definitely not paid". Default [400]; everything else keeps waiting. */
+  failedStatuses?: readonly number[];
+};
+
+const NOT_CHARGED = "The payment didn't go through. You haven't been charged.";
 
 // A hosted-checkout "success" occasionally races Cashfree's own webhook —
 // verifying the order a moment too early can still come back `pending` even
@@ -16,22 +36,21 @@ type PurchasePayload = { source: "plan"; planId: string } | { source: "feature";
 // resolves nearly all of those before we ever show the user a dead end.
 const PENDING_RETRY_DELAYS_MS = [1500, 3000, 5000];
 
-function wait(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 /**
- * The order→checkout→verify state machine shared by the paywall
- * (components/subscription/PaywallModal.tsx) and the always-available
- * pricing screen (app/(app)/subscription.tsx) — both buy against
- * `subscriptionApi` and resolve to the same `SubscriptionOrder`/entitlement
- * shape. app/(app)/consultation.tsx books against a differently-shaped
- * `consultationApi` (a `consultationId`, not an `entitlementId`) and isn't
- * unified into this hook yet — see docs/fixes.md 6.7.
+ * The checkout→verify state machine behind PaymentSheet (UPI apps / UPI ID)
+ * and CashfreeCheckoutModal (cards, netbanking, wallets), independent of what
+ * is being bought: the caller creates the order and passes it to `open`, and
+ * `adapter.verify` checks it. `usePaymentCheckout` below is the subscription
+ * flavour; a consultation booking can use this directly with
+ * `consultationApi.verifyPayment` (and `failedStatuses: [400, 409]`, since 409
+ * there means "paid, but the slot was gone").
+ *
+ * Only a definite answer from the server (lib/paymentVerify.ts) ever turns
+ * into "failed": a 5xx or a dropped connection while someone is paying is
+ * "still pending", never "You haven't been charged".
  */
-export function usePaymentCheckout() {
-  const [purchasingKey, setPurchasingKey] = useState<string | null>(null);
-  const [checkout, setCheckout] = useState<SubscriptionOrder | null>(null);
+export function useCheckoutSession<O extends CheckoutOrder, V>(adapter: CheckoutAdapter<O, V>) {
+  const [checkout, setCheckout] = useState<O | null>(null);
   // Nura's own PaymentSheet (UPI apps, UPI ID, then "Card, netbanking or
   // wallet") is the landing surface; that last option switches to Cashfree's
   // hosted checkout. The sheet opens UPI apps directly, which the hosted page
@@ -40,113 +59,109 @@ export function usePaymentCheckout() {
   /** What is being paid for, shown on the sheet. */
   const [checkoutTitle, setCheckoutTitle] = useState<string | undefined>(undefined);
   const [purchaseResult, setPurchaseResult] = useState<PurchaseResult | null>(null);
-  const lastOrder = useRef<SubscriptionOrder | null>(null);
+
+  const adapterRef = useRef(adapter);
+  adapterRef.current = adapter;
+  // Read through refs: PaymentSheet polls verifyUpiOnce from a timer, and a
+  // closure from an older render would see an older (or no) order.
+  const checkoutRef = useRef<O | null>(null);
+  const lastOrder = useRef<O | null>(null);
+  /** The record a successful UPI poll returned, handed to onPaid. */
+  const verifiedRef = useRef<V | null>(null);
+
+  const declined = (err: unknown) => isPaymentDeclined(err, { failedStatuses: adapterRef.current.failedStatuses });
+
+  const paid = (verified: V | null, order: O) => {
+    setPurchaseResult({ type: "success" });
+    adapterRef.current.onPaid?.(verified, order);
+  };
+
+  function open(order: O, title?: string) {
+    checkoutRef.current = order;
+    lastOrder.current = order;
+    verifiedRef.current = null;
+    setUseHostedCheckout(false);
+    setCheckoutTitle(title);
+    setCheckout(order);
+  }
+
+  function closeCheckout() {
+    checkoutRef.current = null;
+    setCheckout(null);
+  }
 
   function reset() {
-    setCheckout(null);
+    closeCheckout();
     setPurchaseResult(null);
     setUseHostedCheckout(false);
   }
 
-  async function startPurchase(
-    key: string,
-    payload: PurchasePayload,
-    options?: { couponCode?: string; title?: string },
-  ): Promise<{ free: boolean } | null> {
-    setPurchasingKey(key);
-    try {
-      const order = await subscriptionApi.createOrder({ ...payload, couponCode: options?.couponCode });
-      lastOrder.current = order;
-      if (order.free) {
-        setPurchaseResult({ type: "success" });
-        return { free: true };
-      }
-      setUseHostedCheckout(false);
-      setCheckoutTitle(options?.title);
-      setCheckout(order);
-      return { free: false };
-    } catch (err) {
-      setPurchaseResult({ type: "failed", message: getFriendlyErrorMessage(err) });
-      return null;
-    } finally {
-      setPurchasingKey(null);
-    }
-  }
-
-  async function verifyWithRetries(entitlementId: string, orderId: string) {
-    for (let attempt = 0; attempt <= PENDING_RETRY_DELAYS_MS.length; attempt++) {
-      try {
-        const verified = await subscriptionApi.verifyPayment({ entitlementId, orderId });
-        if (!("pending" in verified)) return verified;
-      } catch {
-        // Treat a transient verify error the same as "still pending" and
-        // keep retrying — the payment itself already succeeded on Cashfree's
-        // side by the time we're in this branch.
-      }
-      if (attempt < PENDING_RETRY_DELAYS_MS.length) await wait(PENDING_RETRY_DELAYS_MS[attempt]);
-    }
-    return null;
-  }
-
   const handleCheckoutResult = async (result: CashfreeResult) => {
-    const order = checkout;
-    setCheckout(null);
-    if (!order) return;
+    const order = checkoutRef.current;
+    closeCheckout();
+    if (!order?.orderId) return;
+    const orderId = order.orderId;
+    const verify = () => adapterRef.current.verify(order, orderId);
 
     if (result.type === "dismiss") {
       // A dismiss is usually a genuine cancel, but it's also what happens if
       // the user closes the checkout the instant after a redirect-based
       // method (netbanking/wallet/other UPI app) finishes — before
       // CashfreeCheckoutModal's own return_url interception fires. One
-      // silent verify check catches that case and unlocks anyway; a real
-      // cancel just resolves to "pending"/an error here and stays quiet.
+      // verify check catches that case and unlocks anyway; a real cancel
+      // comes back pending (order still open) and stays quiet.
       try {
-        const verified = await subscriptionApi.verifyPayment({
-          entitlementId: order.entitlementId,
-          orderId: order.orderId!,
-        });
-        if (!("pending" in verified)) setPurchaseResult({ type: "success" });
-      } catch {
-        // Genuine cancel — nothing was charged, stay quiet.
+        const verified = await verify();
+        if (!isPendingVerify(verified)) paid(verified, order);
+      } catch (err) {
+        // Couldn't ask: if money did move, a silent dismiss would lose it.
+        if (!declined(err)) {
+          setPurchaseResult({ type: "pending", message: "We couldn't check this payment. If you paid, tap below to confirm it." });
+        }
       }
       return;
     }
     if (result.type === "failed") {
-      setPurchaseResult({ type: "failed", message: "The payment didn't go through. You haven't been charged." });
+      setPurchaseResult({ type: "failed", message: NOT_CHARGED });
       return;
     }
 
     try {
-      const verified = await verifyWithRetries(order.entitlementId, result.orderId);
-      setPurchaseResult(verified ? { type: "success" } : { type: "pending" });
+      const verified = await verifyWithRetries(verify, PENDING_RETRY_DELAYS_MS, {
+        failedStatuses: adapterRef.current.failedStatuses,
+      });
+      if (verified) paid(verified, order);
+      else setPurchaseResult({ type: "pending" });
     } catch (err) {
-      setPurchaseResult({ type: "failed", message: getFriendlyErrorMessage(err) });
+      setPurchaseResult({ type: "failed", message: declined(err) ? NOT_CHARGED : getFriendlyErrorMessage(err) });
     }
   };
 
   // Polled by PaymentSheet every few seconds while the user pays in their
-  // UPI app. A dropped connection is "still pending", not a failed payment.
+  // UPI app.
   const verifyUpiOnce = async (orderId: string): Promise<"paid" | "pending" | "failed"> => {
-    if (!checkout) return "failed";
+    const order = checkoutRef.current;
+    if (!order) return "pending";
     try {
-      const result = await subscriptionApi.verifyPayment({ entitlementId: checkout.entitlementId, orderId });
-      return "pending" in result ? "pending" : "paid";
+      const result = await adapterRef.current.verify(order, orderId);
+      if (isPendingVerify(result)) return "pending";
+      verifiedRef.current = result;
+      return "paid";
     } catch (err) {
-      return isNetworkError(err) ? "pending" : "failed";
+      return declined(err) ? "failed" : "pending";
     }
   };
 
   const handleUpiOutcome = (result: PaymentSheetOutcome) => {
-    setCheckout(null);
+    const order = checkoutRef.current;
+    closeCheckout();
     if (result.type === "dismiss") return;
     if (result.type === "failed") {
-      setPurchaseResult({
-        type: "failed",
-        message: result.message ?? "The payment didn't go through. You haven't been charged.",
-      });
+      setPurchaseResult({ type: "failed", message: result.message ?? NOT_CHARGED });
       return;
     }
-    setPurchaseResult({ type: "success" });
+    if (order) paid(verifiedRef.current, order);
+    else setPurchaseResult({ type: "success" });
   };
 
   // Manual "Check payment status" retry for the dead-end pending state
@@ -159,26 +174,74 @@ export function usePaymentCheckout() {
       return;
     }
     try {
-      const verified = await subscriptionApi.verifyPayment({ entitlementId: order.entitlementId, orderId: order.orderId });
-      setPurchaseResult("pending" in verified ? { type: "pending" } : { type: "success" });
+      const verified = await adapterRef.current.verify(order, order.orderId);
+      if (isPendingVerify(verified)) setPurchaseResult({ type: "pending" });
+      else paid(verified, order);
     } catch (err) {
-      setPurchaseResult({ type: "failed", message: getFriendlyErrorMessage(err) });
+      setPurchaseResult(
+        declined(err)
+          ? { type: "failed", message: NOT_CHARGED }
+          : { type: "pending", message: "We couldn't reach the payment check just now. Try again in a moment." },
+      );
     }
   };
 
   return {
-    purchasingKey,
     checkout,
     checkoutTitle,
     useHostedCheckout,
     setUseHostedCheckout,
     purchaseResult,
     setPurchaseResult,
-    startPurchase,
+    open,
     handleCheckoutResult,
     verifyUpiOnce,
     handleUpiOutcome,
     recheckPending,
     reset,
   };
+}
+
+const SUBSCRIPTION_CHECKOUT: CheckoutAdapter<SubscriptionOrder, Entitlement> = {
+  verify: (order, orderId) => subscriptionApi.verifyPayment({ entitlementId: order.entitlementId, orderId }),
+};
+
+/**
+ * Subscriptions: shared by the paywall (components/subscription/PaywallModal.tsx)
+ * and the always-available pricing screen (app/(app)/subscription.tsx) — both
+ * buy against `subscriptionApi` and resolve to the same
+ * `SubscriptionOrder`/entitlement shape.
+ */
+export function usePaymentCheckout() {
+  const session = useCheckoutSession(SUBSCRIPTION_CHECKOUT);
+  const [purchasingKey, setPurchasingKey] = useState<string | null>(null);
+  // A double tap on Confirm would otherwise create two orders.
+  const purchasingRef = useRef(false);
+
+  async function startPurchase(
+    key: string,
+    payload: PurchasePayload,
+    options?: { couponCode?: string; title?: string },
+  ): Promise<{ free: boolean } | null> {
+    if (purchasingRef.current) return null;
+    purchasingRef.current = true;
+    setPurchasingKey(key);
+    try {
+      const order = await subscriptionApi.createOrder({ ...payload, couponCode: options?.couponCode });
+      if (order.free) {
+        session.setPurchaseResult({ type: "success" });
+        return { free: true };
+      }
+      session.open(order, options?.title);
+      return { free: false };
+    } catch (err) {
+      session.setPurchaseResult({ type: "failed", message: getFriendlyErrorMessage(err) });
+      return null;
+    } finally {
+      purchasingRef.current = false;
+      setPurchasingKey(null);
+    }
+  }
+
+  return { ...session, purchasingKey, startPurchase };
 }

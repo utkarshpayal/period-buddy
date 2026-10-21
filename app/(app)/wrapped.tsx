@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -10,6 +9,8 @@ import { useTheme } from "../../components/theme";
 import { useAsyncLoad } from "../../hooks/useAsyncLoad";
 import { genzApi, type CycleWrapped } from "../../lib/api";
 import { moodDisplay, prettifyTag, shareViewAsImage } from "../../lib/genz";
+import { useSecureScreen } from "../../lib/screenPrivacy";
+import { Icon } from "../../components/Icon";
 
 /**
  * Cycle Wrapped — a Spotify-Wrapped-style story of the user's month or year,
@@ -240,7 +241,7 @@ function PersonaCard({ w }: { w: CycleWrapped }) {
       colors={["#FF5E8A", "#B24BF3", "#3A0CA3"]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
-      style={{ borderRadius: 28, padding: 26 }}
+      style={{ borderRadius: 28, borderCurve: "continuous", padding: 26 }}
     >
       <Kicker>{`${w.label} Wrapped`}</Kicker>
       <Text style={{ fontSize: 72, marginTop: 18 }}>{w.persona.emoji}</Text>
@@ -310,8 +311,11 @@ function Story({ wrapped, range, onRange }: { wrapped: CycleWrapped; range: Rang
     [fade, total],
   );
 
-  // Restart on a new range.
-  useEffect(() => setIndex(0), [wrapped]);
+  // Restart on a new range only: a background revalidate of the same range
+  // (cached copy, then fresh, then a cycle refresh) keeps the current slide,
+  // pulled back if that refresh left fewer slides.
+  useEffect(() => setIndex(0), [range]);
+  useEffect(() => setIndex((i) => Math.min(i, total - 1)), [total]);
 
   const run = useCallback(
     (from = 0) => {
@@ -381,7 +385,7 @@ function Story({ wrapped, range, onRange }: { wrapped: CycleWrapped; range: Rang
             })}
           </View>
           <TouchableOpacity onPress={() => router.back()} accessibilityLabel="Close" hitSlop={12}>
-            <Feather name="x" size={24} color={WHITE} />
+            <Icon set="feather" name="x" size={24} color={WHITE} />
           </TouchableOpacity>
         </View>
 
@@ -414,7 +418,7 @@ function Story({ wrapped, range, onRange }: { wrapped: CycleWrapped; range: Rang
               className="flex-row items-center justify-center rounded-2xl py-4"
               style={{ backgroundColor: WHITE, gap: 8, opacity: sharing ? 0.7 : 1 }}
             >
-              <Feather name="share" size={18} color="#3A0CA3" />
+              <Icon set="feather" name="share" size={18} color="#3A0CA3" />
               <Text style={{ color: "#3A0CA3", fontSize: 16, fontFamily: fonts.heading, fontWeight: "900" }}>
                 {sharing ? "Getting it ready…" : "Share to your story"}
               </Text>
@@ -430,6 +434,7 @@ function Story({ wrapped, range, onRange }: { wrapped: CycleWrapped; range: Rang
 }
 
 export default function WrappedScreen() {
+  useSecureScreen("wrapped");
   const router = useRouter();
   const { colors } = useTheme();
   const [range, setRange] = useState<RangeKey>(() => (new Date().getDate() <= 5 ? "last_month" : "this_month"));

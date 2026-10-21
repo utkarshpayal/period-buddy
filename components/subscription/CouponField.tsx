@@ -1,9 +1,10 @@
-import { Feather } from "@expo/vector-icons";
 import React from "react";
-import { ActivityIndicator, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useTheme } from "../theme";
 import { getSoftTints } from "../ui-tokens";
 import type { CouponPreview } from "../../lib/api";
+import { Icon } from "../Icon";
+import { Button } from "../Button";
 
 /**
  * Coupon code input, shared by PaywallModal and the My Subscription pricing
@@ -38,7 +39,7 @@ export function CouponField({
         className="flex-row items-center rounded-2xl px-4 py-3"
         style={{ backgroundColor: softTints.emerald }}
       >
-        <Feather name="tag" size={16} color={colors.success} />
+        <Icon set="feather" name="tag" size={16} color={colors.success} />
         <View className="flex-1 ml-2.5">
           <Text className="text-xs font-black" style={{ color: colors.success, fontFamily: fonts.heading }}>
             {preview.code} applied
@@ -49,8 +50,8 @@ export function CouponField({
               : `₹${preview.discountAmount} off — now ₹${preview.finalAmount}`}
           </Text>
         </View>
-        <TouchableOpacity onPress={onRemove} activeOpacity={0.7} className="p-1.5">
-          <Feather name="x" size={16} color={colors.mutedText} />
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Remove coupon" onPress={onRemove} activeOpacity={0.7} className="p-1.5">
+          <Icon set="feather" name="x" size={16} color={colors.mutedText} />
         </TouchableOpacity>
       </View>
     );
@@ -62,10 +63,11 @@ export function CouponField({
         className="flex-row items-center rounded-2xl px-3.5"
         style={{ backgroundColor: colors.input }}
       >
-        <Feather name="tag" size={15} color={colors.mutedText} />
+        <Icon set="feather" name="tag" size={15} color={colors.mutedText} />
         <TextInput
           value={code}
           onChangeText={(v) => onChangeCode(v.toUpperCase())}
+          accessibilityLabel="Coupon code"
           placeholder="Have a coupon code?"
           placeholderTextColor={colors.mutedText}
           autoCapitalize="characters"
@@ -74,21 +76,7 @@ export function CouponField({
           style={{ color: colors.foreground, fontFamily: fonts.body }}
           onSubmitEditing={onApply}
         />
-        <TouchableOpacity
-          onPress={onApply}
-          activeOpacity={0.8}
-          disabled={!code.trim() || applying}
-          className="rounded-full px-3.5 py-2 ml-1"
-          style={{ backgroundColor: code.trim() ? colors.primary : colors.border }}
-        >
-          {applying ? (
-            <ActivityIndicator size="small" color={colors.buttonText} />
-          ) : (
-            <Text className="text-xs font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-              Apply
-            </Text>
-          )}
-        </TouchableOpacity>
+        <Button label="Apply" size="sm" onPress={onApply} disabled={!code.trim()} loading={applying} style={{ marginLeft: 4 }} />
       </View>
       {error ? (
         <Text className="text-xs font-semibold mt-1.5 ml-1" style={{ color: colors.danger, fontFamily: fonts.body }}>

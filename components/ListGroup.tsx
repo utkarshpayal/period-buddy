@@ -1,8 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
-import { Text, TouchableOpacity, View, type StyleProp, type ViewStyle } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View, type StyleProp, type ViewStyle } from "react-native";
 import { useTheme } from "./theme";
 import { getShadow } from "./ui-tokens";
+import { Icon } from "./Icon";
 
 type IconName = React.ComponentProps<typeof Ionicons>["name"];
 
@@ -17,10 +18,10 @@ export function ListGroup({ children, style }: { children: React.ReactNode; styl
   const rows = React.Children.toArray(children).filter(Boolean);
   if (rows.length === 0) return null;
   return (
-    <View style={[{ backgroundColor: colors.surface, borderRadius: 22, paddingVertical: 4, ...getShadow(colors, isDark) }, style]}>
+    <View style={[{ backgroundColor: colors.surface, borderRadius: 24, paddingVertical: 4, ...getShadow(colors, isDark) }, style]}>
       {rows.map((row, i) => (
         <React.Fragment key={(row as React.ReactElement).key ?? i}>
-          {i > 0 ? <View style={{ height: 1, marginLeft: 72, backgroundColor: colors.track }} /> : null}
+          {i > 0 ? <View style={{ height: StyleSheet.hairlineWidth, marginLeft: 72, backgroundColor: colors.border }} /> : null}
           {row}
         </React.Fragment>
       ))}
@@ -67,8 +68,8 @@ export function ListRow({
       accessibilityLabel={accessibilityLabel ?? title}
       style={{ flexDirection: "row", alignItems: "center", paddingVertical: 12, paddingHorizontal: 16, gap: 14 }}
     >
-      <View style={{ width: 42, height: 42, borderRadius: 13, backgroundColor: iconBg, alignItems: "center", justifyContent: "center" }}>
-        <Ionicons name={icon} size={20} color={iconColor} style={{ opacity: dim }} />
+      <View style={{ width: 42, height: 42, borderRadius: 14, backgroundColor: iconBg, alignItems: "center", justifyContent: "center", borderCurve: "continuous" }}>
+        <Icon set="ion" name={icon} size={20} color={iconColor} style={{ opacity: dim }} />
         {iconAccessory}
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
@@ -76,7 +77,7 @@ export function ListRow({
           <Text
             numberOfLines={2}
             maxFontSizeMultiplier={1.4}
-            style={{ flexShrink: 1, fontSize: 15, lineHeight: 22, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body, opacity: dim }}
+            style={{ flexShrink: 1, fontSize: 15, lineHeight: 22, fontWeight: "700", letterSpacing: -0.15, color: colors.foreground, fontFamily: fonts.body, opacity: dim }}
           >
             {title}
           </Text>
@@ -93,10 +94,11 @@ export function ListRow({
         ) : null}
       </View>
       {trailing === "none" ? null : (
-        <Ionicons
+        <Icon set="ion"
           name={trailing === "external" ? "open-outline" : "chevron-forward"}
-          size={18}
+          size={17}
           color={colors.mutedText}
+          style={{ opacity: 0.7 }}
           accessibilityLabel={trailing === "external" ? "Opens outside the app" : undefined}
         />
       )}

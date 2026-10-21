@@ -1,6 +1,6 @@
-import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import React, { useEffect, useState } from "react";
-import { ActivityIndicator, Image, Linking, Modal, Platform, Text, TouchableOpacity, View } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Linking, Modal, Platform, Text, TouchableOpacity, View } from "react-native";
+import { Image } from "expo-image";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
@@ -11,17 +11,15 @@ import { useContentWidth } from "../../lib/layout";
 import { useTheme } from "../theme";
 import {
   DOC_TYPE_META,
-  docTypeAccent,
   extractionNote,
   fileKind,
-  fileKindStyle,
   formatDateLabel,
   formatFileSize,
   documentsLayout,
   openPdfOnDevice,
 } from "./documentMeta";
-
-type IconName = keyof typeof Ionicons.glyphMap;
+import { Icon } from "../Icon";
+import { motion } from "../motion";
 
 /**
  * Full-screen document viewer. `ready` turns true once the fresh signed
@@ -51,15 +49,30 @@ export function DocumentPreview({
   const { gutter } = documentsLayout(useContentWidth());
   // Keep the last document while the sheet slides away.
   const [shown, setShown] = useState<MedicalDocument | null>(doc);
+  // Two quick taps would both delete and re-download the same cache file.
+  const [openingPdf, setOpeningPdf] = useState(false);
+  const openingPdfRef = useRef(false);
+
+  async function openPdf(target: MedicalDocument) {
+    if (openingPdfRef.current) return;
+    openingPdfRef.current = true;
+    setOpeningPdf(true);
+    try {
+      await openPdfOnDevice(target);
+    } catch {
+      alert("Couldn't open the PDF", "Please try again.");
+    } finally {
+      openingPdfRef.current = false;
+      setOpeningPdf(false);
+    }
+  }
   useEffect(() => {
     if (doc) setShown(doc);
   }, [doc]);
 
   const current = doc ?? shown;
   const kind = current ? fileKind(current.mimeType) : "file";
-  const kindStyle = fileKindStyle(colors, kind);
   const meta = current ? DOC_TYPE_META[current.docType] ?? DOC_TYPE_META.other : DOC_TYPE_META.other;
-  const accent = current ? docTypeAccent(colors, current.docType) : docTypeAccent(colors, "other");
   const note = current ? extractionNote(current) : null;
 
   return (
@@ -68,24 +81,18 @@ export function DocumentPreview({
         <SafeAreaView edges={["top", "bottom"]} style={{ flex: 1, backgroundColor: colors.background }}>
           {/* Header */}
           <View style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: gutter, paddingTop: 16, paddingBottom: 12 }}>
-            <View style={{ width: 44, height: 44, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: kindStyle.bg }}>
-              <MaterialCommunityIcons name={kindStyle.icon} size={24} color={kindStyle.color} />
-            </View>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text
                 accessibilityRole="header"
                 numberOfLines={1}
                 maxFontSizeMultiplier={1.4}
-                style={{ fontSize: 18, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}
+                style={{ fontSize: 18, fontWeight: "700", color: colors.foreground, fontFamily: fonts.heading }}
               >
                 {current.title}
               </Text>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 }}>
-                <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: accent.color }} />
-                <Text numberOfLines={1} maxFontSizeMultiplier={1.4} style={{ flexShrink: 1, fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}>
-                  {[meta.label, formatDateLabel(current.documentDate), formatFileSize(current.fileSize)].filter(Boolean).join(" · ")}
-                </Text>
-              </View>
+              <Text numberOfLines={1} maxFontSizeMultiplier={1.4} style={{ marginTop: 2, fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}>
+                {[meta.label, formatDateLabel(current.documentDate), formatFileSize(current.fileSize)].filter(Boolean).join(" · ")}
+              </Text>
             </View>
             <TouchableOpacity
               onPress={onClose}
@@ -94,40 +101,33 @@ export function DocumentPreview({
               hitSlop={8}
               style={{ width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceSoft }}
             >
-              <Ionicons name="close" size={18} color={colors.foreground} />
+              <Icon set="ion" name="close" size={18} color={colors.foreground} />
             </TouchableOpacity>
           </View>
 
           {note ? (
-            <View
+            <Text
               style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 8,
                 marginHorizontal: gutter,
                 marginBottom: 12,
-                paddingHorizontal: 12,
-                paddingVertical: 10,
-                borderRadius: 14,
-                backgroundColor: current.extractionStatus === "pending" ? colors.surfaceSoft : colors.warningLight,
+                fontSize: 13,
+                lineHeight: 18,
+                color: current.extractionStatus === "pending" ? colors.mutedText : colors.warning,
+                fontFamily: fonts.body,
               }}
             >
-              <Ionicons name={current.extractionStatus === "pending" ? "hourglass-outline" : "alert-circle-outline"} size={16} color={current.extractionStatus === "pending" ? colors.mutedText : colors.warning} />
-              <Text style={{ flex: 1, fontSize: 13, color: colors.foreground, fontFamily: fonts.body }}>
-                {current.extractionStatus === "pending" ? "Still reading this file. Ask AI will know about it in a moment." : `${note}. The AI may not be able to answer about it.`}
-              </Text>
-            </View>
+              {current.extractionStatus === "pending" ? "Still reading this file. You can ask about it in a moment." : `${note}, so answers about it may be incomplete.`}
+            </Text>
           ) : null}
 
           {/* Viewer */}
-          <View style={{ flex: 1, marginHorizontal: gutter, borderRadius: 22, overflow: "hidden", backgroundColor: colors.surfaceSoft, borderWidth: 1, borderColor: colors.border }}>
+          <View style={{ flex: 1, marginHorizontal: gutter, borderRadius: 12, overflow: "hidden", backgroundColor: colors.surfaceSoft }}>
             {!ready ? (
-              <CenterSpinner label="Opening securely…" />
+              <CenterSpinner label="Opening…" />
             ) : kind === "image" ? (
               <ImageViewer key={current.fileUrl} uri={current.fileUrl} />
             ) : Platform.OS === "web" ? (
               <ViewerNotice
-                icon="open-outline"
                 text="In-page preview isn't supported in the browser yet. Open the document in a new tab instead."
                 actionLabel="View in browser"
                 onAction={() => Linking.openURL(current.fileUrl)}
@@ -142,21 +142,19 @@ export function DocumentPreview({
               />
             ) : (
               <ViewerNotice
-                icon="document-text-outline"
                 text="Opens in your phone's PDF app. The file stays on your phone."
-                actionLabel="Open PDF"
-                onAction={() => openPdfOnDevice(current).catch(() => alert("Couldn't open the PDF", "Please try again."))}
+                actionLabel={openingPdf ? "Opening…" : "Open PDF"}
+                onAction={() => void openPdf(current)}
+                disabled={openingPdf}
               />
             )}
           </View>
 
           {/* Actions */}
           <View style={{ flexDirection: "row", gap: 10, paddingHorizontal: gutter, paddingTop: 14, paddingBottom: 12 }}>
-            <PreviewAction icon="sparkles-outline" label="Ask AI" onPress={() => onAskAI(current)} primary />
-            {Platform.OS !== "web" ? (
-              <PreviewAction icon="share-outline" label="Share" onPress={() => onShare(current)} loading={sharing} disabled={!ready} />
-            ) : null}
-            <PreviewAction icon="trash-outline" label="Delete" onPress={() => onDelete(current)} loading={deleting} danger />
+            <PreviewAction label="Ask about this" onPress={() => onAskAI(current)} primary />
+            {Platform.OS !== "web" ? <PreviewAction label="Share" onPress={() => onShare(current)} loading={sharing} disabled={!ready} /> : null}
+            <PreviewAction label="Delete" onPress={() => onDelete(current)} loading={deleting} danger />
           </View>
         </SafeAreaView>
       ) : null}
@@ -173,13 +171,14 @@ function ImageViewer({ uri }: { uri: string }) {
     <View style={{ flex: 1 }}>
       {!loaded && !failed ? <CenterSpinner label="Loading image…" absolute /> : null}
       {failed ? (
-        <ViewerNotice icon="cloud-offline-outline" text="Couldn't load this image. Check your connection and try again." />
+        <ViewerNotice text="Couldn't load this image. Check your connection and try again." />
       ) : (
-        <Animated.View entering={FadeIn.duration(250)} style={{ flex: 1, opacity: loaded ? 1 : 0 }}>
+        <Animated.View entering={FadeIn.duration(motion.duration.base)} style={{ flex: 1, opacity: loaded ? 1 : 0 }}>
           <Image
+            cachePolicy="memory"
             source={{ uri }}
             style={{ flex: 1 }}
-            resizeMode="contain"
+            contentFit="contain"
             onLoad={() => setLoaded(true)}
             onError={() => setFailed(true)}
             accessibilityIgnoresInvertColors
@@ -205,24 +204,32 @@ function CenterSpinner({ label, absolute }: { label: string; absolute?: boolean 
   );
 }
 
-function ViewerNotice({ icon, text, actionLabel, onAction }: { icon: IconName; text: string; actionLabel?: string; onAction?: () => void }) {
+function ViewerNotice({
+  text,
+  actionLabel,
+  onAction,
+  disabled,
+}: {
+  text: string;
+  actionLabel?: string;
+  onAction?: () => void;
+  disabled?: boolean;
+}) {
   const { colors, fonts } = useTheme();
   return (
-    <Animated.View entering={FadeIn.duration(220)} style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 14, paddingHorizontal: 32 }}>
-      <View style={{ width: 60, height: 60, borderRadius: 30, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface }}>
-        <Ionicons name={icon} size={26} color={colors.mutedText} />
-      </View>
+    <Animated.View entering={FadeIn.duration(motion.duration.base)} style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 14, paddingHorizontal: 32 }}>
       <Text style={{ textAlign: "center", fontSize: 13, lineHeight: 19, color: colors.mutedText, fontFamily: fonts.body }}>{text}</Text>
       {actionLabel && onAction ? (
         <TouchableOpacity
           onPress={onAction}
+          disabled={disabled}
           activeOpacity={0.85}
           accessibilityRole="button"
           accessibilityLabel={actionLabel}
-          style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 20, height: 44, borderRadius: 22, backgroundColor: colors.primary }}
+          accessibilityState={{ disabled }}
+          style={{ justifyContent: "center", paddingHorizontal: 20, height: 44, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background, opacity: disabled ? 0.6 : 1 }}
         >
-          <Feather name="external-link" size={15} color={colors.buttonText} />
-          <Text style={{ fontSize: 14, fontWeight: "700", color: colors.buttonText, fontFamily: fonts.body }}>{actionLabel}</Text>
+          <Text style={{ fontSize: 14, fontWeight: "600", color: colors.foreground, fontFamily: fonts.body }}>{actionLabel}</Text>
         </TouchableOpacity>
       ) : null}
     </Animated.View>
@@ -230,7 +237,6 @@ function ViewerNotice({ icon, text, actionLabel, onAction }: { icon: IconName; t
 }
 
 function PreviewAction({
-  icon,
   label,
   onPress,
   primary,
@@ -238,7 +244,6 @@ function PreviewAction({
   loading,
   disabled,
 }: {
-  icon: IconName;
   label: string;
   onPress: () => void;
   primary?: boolean;
@@ -248,7 +253,7 @@ function PreviewAction({
 }) {
   const { colors, fonts } = useTheme();
   const fg = primary ? colors.buttonText : danger ? colors.danger : colors.foreground;
-  const bg = primary ? colors.primary : danger ? colors.dangerLight : colors.surface;
+  const bg = primary ? colors.primary : colors.background;
   return (
     <TouchableOpacity
       onPress={onPress}
@@ -258,21 +263,21 @@ function PreviewAction({
       accessibilityLabel={label}
       accessibilityState={{ disabled: Boolean(loading || disabled), busy: Boolean(loading) }}
       style={{
-        flex: primary ? 1.4 : 1,
-        height: 50,
-        borderRadius: 16,
+        flex: primary ? 1.6 : 1,
+        height: 48,
+        borderRadius: 14, borderCurve: "continuous",
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "center",
         gap: 6,
         backgroundColor: bg,
-        borderWidth: primary || danger ? 0 : 1,
+        borderWidth: primary ? 0 : 1,
         borderColor: colors.border,
         opacity: disabled ? 0.5 : 1,
       }}
     >
-      {loading ? <ActivityIndicator size="small" color={fg} /> : <Ionicons name={icon} size={17} color={fg} />}
-      <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={{ fontSize: 14, fontWeight: "700", color: fg, fontFamily: fonts.body }}>
+      {loading ? <ActivityIndicator size="small" color={fg} /> : null}
+      <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={{ fontSize: 15, fontWeight: "600", color: fg, fontFamily: fonts.body }}>
         {label}
       </Text>
     </TouchableOpacity>

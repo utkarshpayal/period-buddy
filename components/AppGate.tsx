@@ -2,7 +2,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import * as WebBrowser from "expo-web-browser";
 import React, { useEffect, useRef, useState } from "react";
-import { Animated, BackHandler, Easing, Image, Linking, Pressable, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { Animated, BackHandler, Easing, Linking, Pressable, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { Image } from "expo-image";
 import { useReducedMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppConfig } from "./app-config";
@@ -12,6 +13,8 @@ import { useViewer } from "../hooks/useViewer";
 import { gateState, type UpdatePrompt } from "../lib/appConfig";
 import { openStoreLink } from "../lib/notifications";
 import { hideUpdatePreview, useUpdatePreview } from "../lib/updatePreview";
+import { Icon } from "./Icon";
+import { Button } from "./Button";
 
 // Holds the last closed prompt's key: its `promptId`, else the
 // `latestVersion` (the only thing builds before promptId stored here).
@@ -96,15 +99,13 @@ function AppIconBadge({ icon, tint }: { icon: keyof typeof Ionicons.glyphMap; ti
         style={{
           width: 80,
           height: 80,
-          borderRadius: 24,
+          borderRadius: 24, borderCurve: "continuous",
           overflow: "hidden",
           backgroundColor: colors.surface,
-          borderWidth: 1,
-          borderColor: colors.border,
           ...getShadow(colors, isDark),
         }}
       >
-        <Image source={APP_ICON} style={{ width: "100%", height: "100%" }} resizeMode="cover" accessibilityIgnoresInvertColors />
+        <Image source={APP_ICON} style={{ width: "100%", height: "100%" }} contentFit="cover" accessibilityIgnoresInvertColors />
       </View>
       <View
         style={{
@@ -121,7 +122,7 @@ function AppIconBadge({ icon, tint }: { icon: keyof typeof Ionicons.glyphMap; ti
           justifyContent: "center",
         }}
       >
-        <Ionicons name={icon} size={15} color={colors.buttonText} />
+        <Icon set="ion" name={icon} size={15} color={colors.buttonText} />
       </View>
     </View>
   );
@@ -135,7 +136,7 @@ function WhatsNew({ highlights }: { highlights: string[] }) {
       style={{
         alignSelf: "stretch",
         marginTop: 18,
-        borderRadius: 18,
+        borderRadius: 18, borderCurve: "continuous",
         backgroundColor: colors.surfaceSoft,
         borderWidth: 1,
         borderColor: colors.border,
@@ -160,7 +161,7 @@ function WhatsNew({ highlights }: { highlights: string[] }) {
               marginTop: 1,
             }}
           >
-            <Ionicons name="checkmark" size={13} color={colors.primary} />
+            <Icon set="ion" name="checkmark" size={13} color={colors.primary} />
           </View>
           <Text style={{ flex: 1, fontSize: 14, lineHeight: 20, color: colors.foreground, fontFamily: fonts.body }}>{h}</Text>
         </View>
@@ -170,32 +171,8 @@ function WhatsNew({ highlights }: { highlights: string[] }) {
 }
 
 function PrimaryButton({ label, icon, onPress, disabled }: { label: string; icon?: keyof typeof Ionicons.glyphMap; onPress: () => void; disabled?: boolean }) {
-  const { colors, fonts } = useTheme();
   return (
-    <TouchableOpacity
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      disabled={disabled}
-      onPress={onPress}
-      activeOpacity={0.85}
-      style={{
-        alignSelf: "stretch",
-        minHeight: 52,
-        borderRadius: 999,
-        backgroundColor: colors.button,
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 8,
-        paddingHorizontal: 24,
-        opacity: disabled ? 0.6 : 1,
-      }}
-    >
-      {icon ? <Ionicons name={icon} size={18} color={colors.buttonText} /> : null}
-      <Text numberOfLines={1} maxFontSizeMultiplier={1.4} style={{ color: colors.buttonText, fontSize: 15.5, fontWeight: "800", fontFamily: fonts.body }}>
-        {label}
-      </Text>
-    </TouchableOpacity>
+    <Button label={label} icon={icon} onPress={onPress} disabled={disabled} fullWidth />
   );
 }
 
@@ -388,7 +365,7 @@ function BlockingScreen({
               }}
               accessibilityRole="button"
             >
-              <Ionicons name="refresh" size={17} color={colors.foreground} />
+              <Icon set="ion" name="refresh" size={17} color={colors.foreground} />
               <Text style={{ color: colors.foreground, fontWeight: "800", fontSize: 15, fontFamily: fonts.body }}>{checking ? "Checking…" : "Try again"}</Text>
             </TouchableOpacity>
           ) : gate.storeUrl ? (

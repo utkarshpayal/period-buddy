@@ -55,6 +55,7 @@ export function fileKindStyle(
 export function formatDateLabel(dateString: string) {
   // Plain YYYY-MM-DD keys are local days; anything else is a timestamp.
   const date = /^\d{4}-\d{2}-\d{2}$/.test(dateString) ? dateKeyToDate(dateString) : new Date(dateString);
+  if (Number.isNaN(date.getTime())) return "Undated";
   return date.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" });
 }
 

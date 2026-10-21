@@ -197,7 +197,9 @@ export default function DashboardLayout() {
           backgroundColor: colors.surface,
           borderTopLeftRadius: 26,
           borderTopRightRadius: 26,
-          borderTopWidth: 0,
+          // A hairline edges the bar; in dark mode it is all that lifts it off the page.
+          borderTopWidth: StyleSheet.hairlineWidth,
+          borderColor: colors.border,
           overflow: "visible",
           // Soft upward ambient shadow so the sheet lifts off the content.
           elevation: 22,

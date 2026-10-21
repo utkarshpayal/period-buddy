@@ -1,16 +1,11 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams } from "expo-router";
 import React, { useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
   RefreshControl,
   ScrollView,
   StatusBar,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -22,6 +17,9 @@ import { useAsyncLoad } from "../../hooks/useAsyncLoad";
 import { getFriendlyErrorMessage, supportApi, type SupportTicket } from "../../lib/api";
 import { useSecureScreen } from "../../lib/screenPrivacy";
 import { REPLY_MAX, ticketTimeLabel } from "../../lib/support";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import { Icon } from "../../components/Icon";
+import { SendButton } from "../../components/SendButton";
 
 /** One support ticket: the original message, the reply thread and a composer. */
 export default function SupportTicketScreen() {
@@ -70,7 +68,7 @@ export default function SupportTicketScreen() {
         <View
           style={{
             maxWidth: "86%",
-            borderRadius: 18,
+            borderRadius: 18, borderCurve: "continuous",
             borderBottomRightRadius: mine ? 6 : 18,
             borderBottomLeftRadius: mine ? 18 : 6,
             paddingHorizontal: 14,
@@ -101,7 +99,7 @@ export default function SupportTicketScreen() {
 
       <LoadingErrorState loading={loading && !ticket} error={ticket ? null : error} offline={offline} onRetry={() => reload()}>
         {ticket ? (
-          <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          <KeyboardAvoidingView className="flex-1" behavior="padding">
             <ScrollView
               ref={scrollRef}
               className="flex-1"
@@ -122,7 +120,7 @@ export default function SupportTicketScreen() {
                 <Text style={{ color: colors.foreground, fontSize: 17, fontWeight: "700", fontFamily: fonts.heading }}>{ticket.subject}</Text>
                 {ticket.meta ? (
                   <View className="flex-row items-center" style={{ gap: 6 }}>
-                    <Ionicons name="phone-portrait-outline" size={14} color={colors.mutedText} />
+                    <Icon set="ion" name="phone-portrait-outline" size={14} color={colors.mutedText} />
                     <Text numberOfLines={1} style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body, flexShrink: 1 }}>
                       App info attached
                       {ticket.meta.appVersion ? ` · v${ticket.meta.appVersion}` : ""}
@@ -153,6 +151,7 @@ export default function SupportTicketScreen() {
                   <TextInput
                     value={draft}
                     onChangeText={(t) => setDraft(t.slice(0, REPLY_MAX))}
+                    accessibilityLabel="Reply to support"
                     placeholder={ticket.status === "resolved" ? "Still need help? Reply to reopen" : "Write a reply"}
                     placeholderTextColor={colors.mutedText}
                     multiline
@@ -169,22 +168,7 @@ export default function SupportTicketScreen() {
                       paddingBottom: 12,
                     }}
                   />
-                  <TouchableOpacity
-                    onPress={send}
-                    disabled={!draft.trim() || sending}
-                    accessibilityRole="button"
-                    accessibilityLabel="Send reply"
-                    className="items-center justify-center"
-                    style={{
-                      width: 46,
-                      height: 46,
-                      borderRadius: 23,
-                      backgroundColor: colors.primary,
-                      opacity: !draft.trim() || sending ? 0.5 : 1,
-                    }}
-                  >
-                    {sending ? <ActivityIndicator color={colors.buttonText} /> : <Ionicons name="send" size={18} color={colors.buttonText} />}
-                  </TouchableOpacity>
+                  <SendButton onPress={send} disabled={!draft.trim()} loading={sending} size={46} accessibilityLabel="Send reply" />
                 </View>
               </View>
             ) : (

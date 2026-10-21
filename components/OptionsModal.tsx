@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "./theme";
+import { Icon } from "./Icon";
 
 type OptionAction = "delete" | "report" | "save" | "share";
 
@@ -48,6 +49,10 @@ export default function OptionsModal({
 
     try {
       await callback();
+    } catch (error) {
+      // Callers alert their own failures; this only stops an unhandled
+      // rejection when one doesn't.
+      console.warn("Option action failed", error);
     } finally {
       setPendingAction(null);
     }
@@ -100,7 +105,7 @@ export default function OptionsModal({
               width: 34,
             }}
           >
-            <Ionicons name={icon} size={18} color={color} />
+            <Icon set="ion" name={icon} size={18} color={color} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={{ color, fontFamily: fonts.body, fontWeight: weight }}>{label}</Text>
@@ -250,7 +255,7 @@ export default function OptionsModal({
             style={{
               backgroundColor: colors.input,
               borderColor: colors.border,
-              borderRadius: 14,
+              borderRadius: 14, borderCurve: "continuous",
               borderWidth: 1,
               marginTop: 4,
               padding: 12,

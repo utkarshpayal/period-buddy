@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -12,16 +11,22 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../../components/auth-context";
+import { EmptyState } from "../../../components/EmptyState";
+import { OverviewHeader } from "../../../components/partner-view/OverviewHeader";
+import { SectionCard, SectionLabel } from "../../../components/partner-view/SectionCard";
+import { formatDateKey } from "../../../components/partner-view/dateLabel";
 import { SkeletonBlock, SkeletonCard } from "../../../components/Skeleton";
 import { useTheme } from "../../../components/theme";
 import { getShadow, getScreenGradient } from "../../../components/ui-tokens";
-import { formatShortDate, getDateKey } from "../../../lib/format";
-import { partnerApi, type PartnerSharedData } from "../../../lib/api";
+import { useDataRefresh } from "../../../hooks/useDataRefresh";
+import { getFriendlyErrorMessage, isNetworkError, partnerApi, type PartnerSharedData } from "../../../lib/api";
+import { partnerDisplayName } from "../../../lib/partnerChat";
 import { usePartnerViewState } from "../../../components/partner-view-state";
 import { getSharedHubTiles } from "../../../lib/hubTiles";
 import { isFeatureVisible } from "../../../lib/appConfig";
 import { useAppConfig } from "../../../components/app-config";
 import { useSecureScreen } from "../../../lib/screenPrivacy";
+import { Icon } from "../../../components/Icon";
 
 const PHASE_LABEL: Record<string, string> = {
   follicular: "Follicular phase",
@@ -41,21 +46,6 @@ const KNOWLEDGE_LINKS = getSharedHubTiles([
   "sexualWellbeing",
 ]).map((tile) => ({ id: tile.id, title: tile.title === "Nura AI" ? "Anonymous Q&A" : tile.title, desc: tile.desc, icon: tile.icon, route: tile.route }));
 
-function formatDateKey(dateKey?: string) {
-  if (!dateKey) return "—";
-  const date = new Date(`${dateKey}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return dateKey;
-
-  // Local dates: toISOString() is UTC, which in India called yesterday "Today" until 5:30am.
-  const now = new Date();
-  const todayKey = getDateKey(now);
-  const yesterdayKey = getDateKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
-  if (dateKey === todayKey) return "Today";
-  if (dateKey === yesterdayKey) return "Yesterday";
-
-  return formatShortDate(date);
-}
-
 export default function PartnerViewOverview() {
   useSecureScreen("partner-overview");
   const { colors, isDark, fonts } = useTheme();
@@ -65,51 +55,50 @@ export default function PartnerViewOverview() {
   const knowledgeLinks = KNOWLEDGE_LINKS.filter((link) => isFeatureVisible(appConfig, link.id));
   const { user } = useAuth();
   const router = useRouter();
-  const { profile, setProfile, notifications, setNotifications, refreshProfile } = usePartnerViewState();
+  const { profile, notifications, refreshProfile } = usePartnerViewState();
 
   const [expandedLogs, setExpandedLogs] = useState<Record<string, boolean>>({});
   const [data, setData] = useState<PartnerSharedData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [errorMessage, setErrorMessage] = useState("");
+  const [loadError, setLoadError] = useState<{ message: string; offline: boolean } | null>(null);
+  const loadSeq = useRef(0);
 
-  const load = useCallback(async () => {
+  // Profile and notifications live in PartnerViewStateProvider (it loads them
+  // itself); this screen only fetches what the owner shares. A failed refresh
+  // keeps what's on screen.
+  const loadShared = useCallback(async () => {
+    const seq = ++loadSeq.current;
     try {
-      setErrorMessage("");
-      const [shared, partnerProfile, notifs] = await Promise.all([
-        partnerApi.getSharedData(),
-        partnerApi.getProfile(),
-        partnerApi.getNotifications().catch(() => []),
-      ]);
+      const shared = await partnerApi.getSharedData();
+      if (seq !== loadSeq.current) return;
       setData(shared);
-      setProfile(partnerProfile);
-      setNotifications(notifs);
+      setLoadError(null);
     } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : "Unable to load shared data.",
-      );
+      if (seq !== loadSeq.current) return;
+      setLoadError({ message: getFriendlyErrorMessage(error), offline: isNetworkError(error) });
     }
-  }, [setProfile, setNotifications]);
+  }, []);
 
   useEffect(() => {
-    setIsLoading(true);
-    load().finally(() => setIsLoading(false));
-  }, [load]);
+    loadShared().finally(() => setIsLoading(false));
+  }, [loadShared]);
 
   async function onRefresh() {
     setIsRefreshing(true);
-    await load();
-    setIsRefreshing(false);
+    try {
+      await Promise.all([loadShared(), refreshProfile()]);
+    } finally {
+      setIsRefreshing(false);
+    }
   }
 
-  // The bell's unread badge reads from the shared partner-view notifications
-  // state, but the notifications screen it now pushes to (same shared route
-  // the owner's home screen uses) manages its own local copy — re-syncing on
-  // focus is what keeps the badge count accurate after reading/marking
-  // notifications there and coming back. Skip the very first focus: the
-  // provider's own mount effect and this screen's `load()` already fetch the
-  // same profile/notifications on initial mount, so refreshing here too
-  // would just be a redundant third concurrent request.
+  // Something the owner logs (and the push about it) shows on this mounted tab.
+  useDataRefresh(["partner", "notifications"], () => loadShared());
+
+  // Back from the notifications screen (or another tab): refresh the bell's
+  // unread count and the shared data. The first focus is the mount, which
+  // already loads both.
   const isInitialFocus = useRef(true);
   useFocusEffect(
     useCallback(() => {
@@ -118,7 +107,8 @@ export default function PartnerViewOverview() {
         return;
       }
       refreshProfile();
-    }, [refreshProfile]),
+      loadShared();
+    }, [refreshProfile, loadShared]),
   );
 
   const screenGradient = getScreenGradient(colors, isDark) as [
@@ -146,10 +136,8 @@ export default function PartnerViewOverview() {
   const nothingShared = !isLoading && !hasCycle && !hasAlerts && !hasSymptoms && !hasIntimacy;
   const unreadCount = notifications.filter((n) => !n.isRead).length;
   const isConnected = profile?.isConnected ?? false;
-  const partnerName =
-    profile?.partnerId && typeof profile.partnerId === "object"
-      ? `${profile.partnerId.firstName ?? ""} ${profile.partnerId.lastName ?? ""}`.trim()
-      : "your partner";
+  // Null until the owner's name is known.
+  const partnerName = partnerDisplayName(profile);
 
   return (
     <LinearGradient colors={screenGradient} className="flex-1">
@@ -159,90 +147,13 @@ export default function PartnerViewOverview() {
         translucent
       />
       <SafeAreaView className="flex-1">
-        {/* Header — greeting pattern with avatar, mirroring the owner
-            dashboard's home header layout/spacing for a consistent feel. */}
-        <View className="flex-row items-center justify-between px-5 py-4 gap-3">
-          <View className="flex-row items-center gap-2.5 flex-1 min-w-0">
-            <View
-              className="w-[38px] h-[38px] rounded-full items-center justify-center shrink-0"
-              style={{ backgroundColor: colors.primaryLight }}
-            >
-              <Text
-                className="text-sm font-black"
-                style={{ color: colors.primary, fontFamily: fonts.heading }}
-              >
-                {(user?.firstName?.[0] ?? "P").toUpperCase()}
-              </Text>
-            </View>
-            <View className="flex-1 min-w-0">
-              <Text
-                className="text-base font-black"
-                numberOfLines={1}
-                style={{ color: colors.foreground, fontFamily: fonts.heading }}
-              >
-                Hi {user?.firstName || "there"}
-              </Text>
-              <Text
-                numberOfLines={1}
-                style={{ fontSize: 12.5, fontWeight: "700", color: colors.mutedText, fontFamily: fonts.body }}
-              >
-                {isConnected && partnerName !== "your partner"
-                  ? `Here's how ${partnerName}'s doing`
-                  : "Read-only · shared with you"}
-              </Text>
-            </View>
-          </View>
-          <View className="flex-row items-center gap-2 shrink-0">
-            {typeof data?.streak?.count === "number" && data.streak.count > 0 && (
-              <View
-                className="flex-row items-center px-3 py-2 rounded-full border"
-                style={{ borderColor: colors.border, backgroundColor: colors.surface }}
-              >
-                <Ionicons name="flame" size={13} color={colors.primary} style={{ marginRight: 4 }} />
-                <Text
-                  style={{ fontSize: 12.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.body }}
-                >
-                  {data.streak.count}
-                </Text>
-              </View>
-            )}
-            {/* Notification Bell — previously plain-surface + foreground-tinted
-                at 15px, which read as inert chrome rather than a tappable
-                button next to the equally-quiet streak pill. Bumped size and
-                switched to a primary-tinted treatment (stronger still, and
-                unmissable, once there's something unread) so it actually
-                reads as its own actionable control in the header. */}
-            <TouchableOpacity
-              onPress={() => router.push("/(app)/notifications")}
-              accessibilityRole="button"
-              accessibilityLabel="Notifications"
-              className="flex-row items-center justify-center w-10 h-10 rounded-full border relative"
-              style={{
-                borderColor: unreadCount > 0 ? colors.primary : colors.border,
-                backgroundColor: unreadCount > 0 ? colors.primaryLight : colors.surface,
-              }}
-            >
-              <Ionicons name="notifications-outline" size={18} color={colors.primary} />
-              {unreadCount > 0 && (
-                <View
-                  className="absolute -top-1.5 -right-1.5 rounded-full items-center justify-center border"
-                  style={{
-                    backgroundColor: colors.danger,
-                    borderColor: colors.surface,
-                    borderWidth: 1.5,
-                    minWidth: 16,
-                    height: 16,
-                    paddingHorizontal: 3,
-                  }}
-                >
-                  <Text style={{ color: "#fff", fontSize: 9, fontWeight: "900" }}>
-                    {unreadCount}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
+        <OverviewHeader
+          firstName={user?.firstName}
+          subtitle={isConnected && partnerName ? `Here's how ${partnerName}'s doing` : "Read-only · shared with you"}
+          streakCount={data?.streak?.count}
+          unreadCount={unreadCount}
+          onOpenNotifications={() => router.push("/(app)/notifications")}
+        />
 
         <ScrollView
           contentContainerStyle={{ padding: 20, paddingTop: 0, paddingBottom: 140 }}
@@ -258,28 +169,27 @@ export default function PartnerViewOverview() {
               <SkeletonCard />
               <SkeletonCard />
             </View>
-          ) : errorMessage ? (
-            <View
-              className="rounded-2xl border px-4 py-4"
-              style={{ backgroundColor: colors.dangerLight, borderColor: colors.danger }}
-            >
-              <Text
-                className="text-xs font-bold text-center"
-                style={{ color: colors.danger, fontFamily: fonts.body }}
-              >
-                {errorMessage}
-              </Text>
-            </View>
+          ) : !data && loadError ? (
+            <EmptyState
+              compact
+              icon={loadError.offline ? "wifi-off" : "alert-circle-outline"}
+              title={loadError.offline ? "You're offline" : "Couldn't load what's shared"}
+              message={loadError.message}
+              actionLabel="Try again"
+              onAction={() => {
+                setIsLoading(true);
+                loadShared().finally(() => setIsLoading(false));
+              }}
+            />
           ) : (
             <>
               {/* Book a consultation quick-action */}
               <TouchableOpacity
                 activeOpacity={0.85}
                 onPress={() => router.push("/(app)/consultation")}
-                className="flex-row items-center rounded-3xl border p-4 mb-4"
+                className="flex-row items-center rounded-3xl p-4 mb-4"
                 style={{
                   backgroundColor: colors.surface,
-                  borderColor: colors.border,
                   ...getShadow(colors, isDark),
                 }}
               >
@@ -287,7 +197,7 @@ export default function PartnerViewOverview() {
                   className="w-10 h-10 rounded-2xl items-center justify-center mr-3 shrink-0"
                   style={{ backgroundColor: colors.primaryLight }}
                 >
-                  <Ionicons name="medkit-outline" size={18} color={colors.primary} />
+                  <Icon set="ion" name="medkit-outline" size={18} color={colors.primary} />
                 </View>
                 <View className="flex-1 min-w-0">
                   <Text
@@ -303,7 +213,7 @@ export default function PartnerViewOverview() {
                     Book your own video consultation
                   </Text>
                 </View>
-                <Ionicons name="chevron-forward" size={16} color={colors.mutedText} />
+                <Icon set="ion" name="chevron-forward" size={16} color={colors.mutedText} />
               </TouchableOpacity>
 
               {/* Cycle status hero */}
@@ -312,13 +222,13 @@ export default function PartnerViewOverview() {
                   colors={[colors.primary, colors.primaryLight]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
-                  style={{ borderRadius: 22, padding: 20, marginBottom: 14 }}
+                  style={{ borderRadius: 22, borderCurve: "continuous", padding: 20, marginBottom: 14 }}
                 >
                   <Text
                     className="text-[12px] font-bold uppercase"
                     style={{ color: "rgba(255,255,255,0.85)", fontFamily: fonts.body }}
                   >
-                    {(partnerName !== "your partner" ? partnerName.toUpperCase() : "CYCLE")} · DAY{" "}
+                    {(partnerName ? partnerName.toUpperCase() : "CYCLE")} · DAY{" "}
                     {data?.cycle?.currentCycleDay ?? "—"}
                   </Text>
                   <Text
@@ -394,10 +304,9 @@ export default function PartnerViewOverview() {
                 <TouchableOpacity
                   activeOpacity={0.85}
                   onPress={() => router.push("/(app)/(partner-view)/chat?prefill=1")}
-                  className="flex-row items-center justify-between rounded-3xl border p-4 mb-4"
+                  className="flex-row items-center justify-between rounded-3xl p-4 mb-4"
                   style={{
                     backgroundColor: colors.surface,
-                    borderColor: colors.border,
                     ...getShadow(colors, isDark),
                   }}
                 >
@@ -406,64 +315,48 @@ export default function PartnerViewOverview() {
                     numberOfLines={1}
                     style={{ color: colors.foreground, fontFamily: fonts.heading }}
                   >
-                    Send {partnerName !== "your partner" ? partnerName : "them"} a check-in
+                    Send {partnerName ?? "them"} a check-in
                   </Text>
                   <View
                     className="w-8 h-8 rounded-full items-center justify-center shrink-0"
                     style={{ backgroundColor: colors.primaryLight }}
                   >
-                    <Ionicons name="heart" size={14} color={colors.primary} />
+                    <Icon set="ion" name="heart" size={14} color={colors.primary} />
                   </View>
                 </TouchableOpacity>
               )}
 
               {/* "How to support today" tip */}
               {hasCare && data?.careSuggestions?.suggestions?.[0] && (
-                <View
-                  className="rounded-3xl border p-4 mb-4"
-                  style={{
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                    ...getShadow(colors, isDark),
-                  }}
-                >
-                  <Text
-                    className="text-[13.5px] font-black mb-1.5"
-                    style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                  >
-                    💡 How to support today
-                  </Text>
+                <SectionCard compact>
+                  <View className="flex-row items-center mb-1.5" style={{ gap: 6 }}>
+                    <Icon set="ion" name="bulb-outline" size={16} color={colors.primaryDark} />
+                    <Text
+                      className="text-[13.5px] font-black"
+                      style={{ color: colors.foreground, fontFamily: fonts.heading }}
+                    >
+                      How to support today
+                    </Text>
+                  </View>
                   <Text
                     className="text-xs font-semibold leading-5"
                     style={{ color: colors.mutedText, fontFamily: fonts.body }}
                   >
                     {data.careSuggestions.suggestions[0].message}
                   </Text>
-                </View>
+                </SectionCard>
               )}
 
               {/* Alerts */}
               {hasAlerts && (
-                <View
-                  className="rounded-3xl border p-5 mb-4"
-                  style={{
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                    ...getShadow(colors, isDark),
-                  }}
-                >
-                  <Text
-                    className="text-[11.5px] font-black uppercase tracking-widest mb-3"
-                    style={{ color: colors.primary, fontFamily: fonts.body }}
-                  >
-                    Alerts
-                  </Text>
+                <SectionCard>
+                  <SectionLabel>Alerts</SectionLabel>
                   {data?.alerts?.map((alert, idx) => (
                     <View
                       key={idx}
                       className="flex-row items-start mb-2 last:mb-0"
                     >
-                      <Ionicons
+                      <Icon set="ion"
                         name="alert-circle-outline"
                         size={15}
                         color={colors.primary}
@@ -477,25 +370,13 @@ export default function PartnerViewOverview() {
                       </Text>
                     </View>
                   ))}
-                </View>
+                </SectionCard>
               )}
 
               {/* Recent symptoms */}
               {hasSymptoms && (
-                <View
-                  className="rounded-3xl border p-5 mb-4"
-                  style={{
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                    ...getShadow(colors, isDark),
-                  }}
-                >
-                  <Text
-                    className="text-[11.5px] font-black uppercase tracking-widest mb-3"
-                    style={{ color: colors.primary, fontFamily: fonts.body }}
-                  >
-                    Recent symptoms
-                  </Text>
+                <SectionCard>
+                  <SectionLabel>Recent symptoms</SectionLabel>
                   {data?.recentSymptoms?.map((log, idx) => {
                     const wellbeingBits = [
                       typeof log.sleepHours === "number" ? `${log.sleepHours}h sleep` : null,
@@ -555,30 +436,18 @@ export default function PartnerViewOverview() {
                       </View>
                     );
                   })}
-                </View>
+                </SectionCard>
               )}
 
               {/* Intimacy Logs */}
               {hasIntimacy && (
-                <View
-                  className="rounded-3xl border p-5 mb-4"
-                  style={{
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                    ...getShadow(colors, isDark),
-                  }}
-                >
+                <SectionCard>
                   <View className="flex-row items-center justify-between mb-3">
                     <View className="flex-row items-center gap-1.5">
-                      <Ionicons name="heart-outline" size={15} color={colors.primary} />
-                      <Text
-                        className="text-[11.5px] font-black uppercase tracking-widest"
-                        style={{ color: colors.primary, fontFamily: fonts.body }}
-                      >
-                        Intimacy Notes
-                      </Text>
+                      <Icon set="ion" name="heart-outline" size={15} color={colors.primary} />
+                      <SectionLabel>Intimacy Notes</SectionLabel>
                     </View>
-                    <Ionicons name="lock-closed-outline" size={12} color={colors.mutedText} />
+                    <Icon set="ion" name="lock-closed-outline" size={12} color={colors.mutedText} />
                   </View>
                   <View style={{ gap: 8 }}>
                     {data?.intimacyLogs?.map((log, idx) => (
@@ -605,27 +474,15 @@ export default function PartnerViewOverview() {
                       </View>
                     ))}
                   </View>
-                </View>
+                </SectionCard>
               )}
 
               {/* Caring Guide */}
               {hasCare && (
-                <View
-                  className="rounded-3xl border p-5 mb-4"
-                  style={{
-                    backgroundColor: colors.surface,
-                    borderColor: colors.border,
-                    ...getShadow(colors, isDark),
-                  }}
-                >
+                <SectionCard>
                   <View className="flex-row items-center gap-1.5 mb-3">
-                    <Ionicons name="rose-outline" size={15} color={colors.primary} />
-                    <Text
-                      className="text-[11.5px] font-black uppercase tracking-widest"
-                      style={{ color: colors.primary, fontFamily: fonts.body }}
-                    >
-                      Partner Caring Guide
-                    </Text>
+                    <Icon set="ion" name="rose-outline" size={15} color={colors.primary} />
+                    <SectionLabel>Partner Caring Guide</SectionLabel>
                   </View>
 
                   {data?.careSuggestions?.suggestions && data.careSuggestions.suggestions.length > 0 && (
@@ -684,16 +541,16 @@ export default function PartnerViewOverview() {
                     <View className="border-t pt-4" style={{ borderColor: colors.border, gap: 16 }}>
                       {data.careSuggestions.dos && data.careSuggestions.dos.length > 0 && (
                         <View>
-                          <Text
-                            className="text-xs font-bold mb-2 flex-row items-center gap-1"
-                            style={{ color: colors.success, fontFamily: fonts.heading }}
-                          >
-                            👍 Do&apos;s for support
-                          </Text>
+                          <View className="flex-row items-center mb-2" style={{ gap: 6 }}>
+                            <Icon set="ion" name="thumbs-up-outline" size={14} color={colors.success} />
+                            <Text className="text-xs font-bold" style={{ color: colors.success, fontFamily: fonts.heading }}>
+                              Do&apos;s for support
+                            </Text>
+                          </View>
                           <View style={{ gap: 6 }}>
                             {data.careSuggestions.dos.map((item, idx) => (
                               <View key={idx} className="flex-row items-start gap-2">
-                                <Ionicons
+                                <Icon set="ion"
                                   name="checkmark-circle-outline"
                                   size={14}
                                   color={colors.success}
@@ -713,16 +570,16 @@ export default function PartnerViewOverview() {
 
                       {data.careSuggestions.donts && data.careSuggestions.donts.length > 0 && (
                         <View>
-                          <Text
-                            className="text-xs font-bold mb-2 flex-row items-center gap-1"
-                            style={{ color: colors.danger, fontFamily: fonts.heading }}
-                          >
-                            ⚠️ Don&apos;ts to keep in mind
-                          </Text>
+                          <View className="flex-row items-center mb-2" style={{ gap: 6 }}>
+                            <Icon set="ion" name="warning-outline" size={14} color={colors.danger} />
+                            <Text className="text-xs font-bold" style={{ color: colors.danger, fontFamily: fonts.heading }}>
+                              Don&apos;ts to keep in mind
+                            </Text>
+                          </View>
                           <View style={{ gap: 6 }}>
                             {data.careSuggestions.donts.map((item, idx) => (
                               <View key={idx} className="flex-row items-start gap-2">
-                                <Ionicons
+                                <Icon set="ion"
                                   name="close-circle-outline"
                                   size={14}
                                   color={colors.danger}
@@ -741,7 +598,7 @@ export default function PartnerViewOverview() {
                       )}
                     </View>
                   )}
-                </View>
+                </SectionCard>
               )}
 
               {nothingShared && (
@@ -749,7 +606,7 @@ export default function PartnerViewOverview() {
                   className="rounded-3xl border p-6 items-center"
                   style={{ backgroundColor: colors.surface, borderColor: colors.border }}
                 >
-                  <Ionicons
+                  <Icon set="ion"
                     name="lock-closed-outline"
                     size={22}
                     color={colors.mutedText}
@@ -759,7 +616,7 @@ export default function PartnerViewOverview() {
                     className="text-center text-xs font-semibold leading-5"
                     style={{ color: colors.mutedText, fontFamily: fonts.body }}
                   >
-                    {partnerName !== "your partner" ? partnerName : "Your partner"} hasn&apos;t
+                    {partnerName ?? "Your partner"} hasn&apos;t
                     turned on sharing yet. Nothing&apos;s wrong — they can enable it anytime
                     from their Partner Sync settings.
                   </Text>
@@ -767,20 +624,8 @@ export default function PartnerViewOverview() {
               )}
 
               {/* Knowledge & Resources */}
-              <View
-                className="rounded-3xl border p-5 mb-4"
-                style={{
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                  ...getShadow(colors, isDark),
-                }}
-              >
-                <Text
-                  className="text-[11.5px] font-black uppercase tracking-widest mb-3"
-                  style={{ color: colors.primary, fontFamily: fonts.body }}
-                >
-                  Knowledge & resources
-                </Text>
+              <SectionCard>
+                <SectionLabel>Knowledge & resources</SectionLabel>
                 <View className="flex-row flex-wrap justify-between" style={{ gap: 10 }}>
                   {knowledgeLinks.map((link) => (
                     <TouchableOpacity
@@ -792,7 +637,7 @@ export default function PartnerViewOverview() {
                         width: "48%",
                         backgroundColor: colors.surfaceSoft,
                         borderColor: colors.border,
-                        borderRadius: 16,
+                        borderRadius: 16, borderCurve: "continuous",
                         padding: 12,
                       }}
                     >
@@ -805,7 +650,7 @@ export default function PartnerViewOverview() {
                           marginBottom: 10,
                         }}
                       >
-                        <Ionicons name={link.icon as any} size={16} color={colors.primary} />
+                        <Icon set="ion" name={link.icon as any} size={16} color={colors.primary} />
                       </View>
                       <Text
                         className="text-xs font-black"
@@ -823,7 +668,7 @@ export default function PartnerViewOverview() {
                     </TouchableOpacity>
                   ))}
                 </View>
-              </View>
+              </SectionCard>
             </>
           )}
         </ScrollView>

@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import React, { useState } from "react";
 import { Text, TouchableOpacity, View } from "react-native";
 import Markdown from "react-native-markdown-display";
@@ -9,6 +8,7 @@ import { CalendarModal } from "../CalendarModal";
 import { useTheme } from "../theme";
 import { dateKeyToDate, formatDateLabel, lastDaysRange } from "./documentMeta";
 import { ChoiceChips, DateField, DocumentSheet, FieldLabel, SheetButton } from "./DocumentSheet";
+import { motion } from "../motion";
 
 const PRESETS = [
   { key: "30", label: "Last 30 days", days: 30 },
@@ -31,6 +31,10 @@ function useRangeForm(range: Range, setRange: (r: Range) => void) {
   const calendars = (
     <>
       <CalendarModal
+        title="Start date"
+        rangeStart={range.start || undefined}
+        rangeEnd={range.end || undefined}
+        rangeEdge="start"
         initialDateKey={range.start || undefined}
         maximumDate={range.end ? dateKeyToDate(range.end) : new Date()}
         onClose={() => setStartOpen(false)}
@@ -41,6 +45,10 @@ function useRangeForm(range: Range, setRange: (r: Range) => void) {
         visible={startOpen}
       />
       <CalendarModal
+        title="End date"
+        rangeStart={range.start || undefined}
+        rangeEnd={range.end || undefined}
+        rangeEdge="end"
         initialDateKey={range.end || undefined}
         maximumDate={new Date()}
         minimumDate={range.start ? dateKeyToDate(range.start) : undefined}
@@ -93,10 +101,10 @@ function RangeFields({
         />
         <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
           <View style={{ flex: 1 }}>
-            <DateField value={range.start ? formatDateLabel(range.start) : ""} placeholder="Start date" onPress={openStart} />
+            <DateField label="From" value={range.start ? formatDateLabel(range.start) : ""} placeholder="Start date" onPress={openStart} />
           </View>
           <View style={{ flex: 1 }}>
-            <DateField value={range.end ? formatDateLabel(range.end) : ""} placeholder="End date" onPress={openEnd} />
+            <DateField label="To" value={range.end ? formatDateLabel(range.end) : ""} placeholder="End date" onPress={openEnd} />
           </View>
         </View>
       </View>
@@ -146,11 +154,12 @@ export function SummarizeSheet({
       visible={visible}
       onClose={onClose}
       locked={summarizing}
-      title="Summarize reports"
-      subtitle={result ? `${formatDateLabel(range.start)} – ${formatDateLabel(range.end)}` : "Plain-language summary of a date range"}
-      icon="sparkles-outline"
-      iconColor={colors.accentText}
-      iconBg={colors.accentLight}
+      title={result ? "Summary" : "Summarize your reports"}
+      subtitle={
+        result
+          ? `${result.documentCount} document${result.documentCount === 1 ? "" : "s"} · ${formatDateLabel(range.start)} – ${formatDateLabel(range.end)}`
+          : "We'll read the documents from these dates and explain them simply."
+      }
       overlay={calendars}
       footer={
         result ? (
@@ -158,27 +167,21 @@ export function SummarizeSheet({
             onPress={onReset}
             activeOpacity={0.8}
             accessibilityRole="button"
-            style={{ height: 50, borderRadius: 18, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.primary }}
+            style={{ height: 50, borderRadius: 14, borderCurve: "continuous", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border }}
           >
-            <Text style={{ fontSize: 14, fontWeight: "700", color: colors.primaryDark, fontFamily: fonts.body }}>Choose a different range</Text>
+            <Text style={{ fontSize: 15, fontWeight: "600", color: colors.foreground, fontFamily: fonts.body }}>Change dates</Text>
           </TouchableOpacity>
         ) : (
-          <SheetButton label="Generate summary" loadingLabel="Reading your reports…" icon="sparkles-outline" onPress={onGenerate} disabled={!ready} loading={summarizing} />
+          <SheetButton label="Summarize" loadingLabel="Reading your reports…" onPress={onGenerate} disabled={!ready} loading={summarizing} />
         )
       }
     >
       {result ? (
-        <Animated.View entering={FadeInDown.duration(260)}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 12 }}>
-            <Ionicons name="documents-outline" size={15} color={colors.mutedText} />
-            <Text style={{ fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}>
-              Based on {result.documentCount} document{result.documentCount === 1 ? "" : "s"}
-            </Text>
-          </View>
-          <View style={{ borderRadius: 20, padding: 16, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}>
+        <Animated.View entering={FadeInDown.duration(motion.duration.base)}>
+          <View>
             <Markdown
               style={{
-                body: { color: colors.foreground, fontFamily: fonts.body, fontSize: 14, lineHeight: 21 },
+                body: { color: colors.foreground, fontFamily: fonts.body, fontSize: 15, lineHeight: 23 },
                 heading1: { color: colors.foreground, fontFamily: fonts.heading, fontSize: 17, marginBottom: 6 },
                 heading2: { color: colors.foreground, fontFamily: fonts.heading, fontSize: 15, marginTop: 12, marginBottom: 4 },
                 heading3: { color: colors.foreground, fontFamily: fonts.heading, fontSize: 14, marginTop: 10, marginBottom: 4 },
@@ -191,8 +194,8 @@ export function SummarizeSheet({
               {result.summary}
             </Markdown>
           </View>
-          <Text style={{ marginTop: 12, fontSize: 13, lineHeight: 18, color: colors.mutedText, fontFamily: fonts.body }}>
-            AI summaries can miss things. Check anything important with your doctor.
+          <Text style={{ marginTop: 16, paddingTop: 12, borderTopWidth: 1, borderColor: colors.border, fontSize: 13, lineHeight: 18, color: colors.mutedText, fontFamily: fonts.body }}>
+            Summaries can miss things. Check anything important with your doctor.
           </Text>
         </Animated.View>
       ) : (
@@ -230,24 +233,19 @@ export function DoctorReportSheet({
   generating: boolean;
   onGenerate: () => void;
 }) {
-  const { colors } = useTheme();
   const { calendars, openStart, openEnd } = useRangeForm(range, setRange);
   return (
     <DocumentSheet
       visible={visible}
       onClose={onClose}
       locked={generating}
-      title="Doctor report"
-      subtitle="A PDF you can save or share"
-      icon="document-attach-outline"
-      iconColor={colors.secondary}
-      iconBg={colors.secondaryLight}
+      title="Report for your doctor"
+      subtitle="Your cycle and symptom logs as a PDF to save or share."
       overlay={calendars}
       footer={
         <SheetButton
-          label="Generate & download"
+          label="Create PDF"
           loadingLabel="Creating your PDF…"
-          icon="download-outline"
           onPress={onGenerate}
           disabled={!range.start || !range.end}
           loading={generating}

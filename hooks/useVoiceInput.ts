@@ -8,9 +8,10 @@ import {
 } from "expo-audio";
 import { Platform } from "react-native";
 import { alert } from "../lib/alert";
+import { deleteRecording } from "../lib/audio";
 import { startWebMicLevel } from "../lib/webMicLevel";
 import { showPermissionModal } from "../lib/modal-host";
-import { speechApi, type LanguageCode } from "../lib/api";
+import { getFriendlyErrorMessage, speechApi, type LanguageCode } from "../lib/api";
 
 const SILENCE_DB_THRESHOLD = -45;
 // Voice mode sends after this much quiet. Long enough for a breath between
@@ -45,12 +46,23 @@ function normalizeLevel(db: number | undefined): number {
 interface UseVoiceInputOptions {
   language: LanguageCode;
   voiceMode: boolean;
-  onTranscript: (transcript: string) => void;
+  /**
+   * `fromVoiceMode` is whether the recording was started in voice mode, so a
+   * caller can drop a transcript that lands after the person left voice mode
+   * instead of starting a new turn with it.
+   */
+  onTranscript: (transcript: string, info: { fromVoiceMode: boolean }) => void;
 }
 
 export function useVoiceInput({ language, voiceMode, onTranscript }: UseVoiceInputOptions) {
   const recorder = useAudioRecorder(RECORDER_OPTIONS);
   const recorderState = useAudioRecorderState(recorder, METERING_POLL_MS);
+  // Read through a ref: callers pass an inline callback, and depending on it
+  // would give stopAndTranscribe/handleMicPress a new identity every render
+  // (resetting the callers' mic re-arm timer each time).
+  const onTranscriptRef = useRef(onTranscript);
+  onTranscriptRef.current = onTranscript;
+  const recordingVoiceModeRef = useRef(false);
 
   // Ask for mic permission as soon as this hook mounts, before any recorder
   // method touches the native audio hardware — some Android builds crash
@@ -138,14 +150,23 @@ export function useVoiceInput({ language, voiceMode, onTranscript }: UseVoiceInp
     peakLevelRef.current = 0;
 
     stopWebMeter();
-    await recorder.stop();
-    const uri = recorder.uri;
-    stoppingRef.current = false;
+    let uri: string | null = null;
+    try {
+      await recorder.stop();
+      uri = recorder.uri;
+    } catch {
+      // The recorder was already stopped or released; nothing to send.
+    } finally {
+      // Always released, or one failed stop would leave the mic dead until remount.
+      stoppingRef.current = false;
+    }
     if (!uri) return;
+    const fromVoiceMode = recordingVoiceModeRef.current;
 
     // Nothing was said: don't upload silence. After a couple of rounds,
     // stop re-arming until the person taps the mic.
     if (voiceMode && meteringSeenRef.current && !heardSpeechRef.current) {
+      deleteRecording(uri);
       silentRoundsRef.current += 1;
       if (silentRoundsRef.current >= SILENT_ROUNDS_BEFORE_PAUSE) setListeningPaused(true);
       return;
@@ -157,23 +178,24 @@ export function useVoiceInput({ language, voiceMode, onTranscript }: UseVoiceInp
       const result = await speechApi.transcribe(uri, language);
       const transcript = result.transcript.trim();
       if (transcript) {
-        onTranscript(transcript);
+        onTranscriptRef.current(transcript, { fromVoiceMode });
       } else if (voiceMode) {
         reportVoiceError("Didn't catch that — try again somewhere quieter.");
       } else {
         alert("Didn't catch that", "Try recording again somewhere quieter.");
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Please try again.";
+      const message = getFriendlyErrorMessage(error);
       if (voiceMode) {
         reportVoiceError(message);
       } else {
         alert("Voice input failed", message);
       }
     } finally {
+      deleteRecording(uri);
       setIsTranscribing(false);
     }
-  }, [clearSilenceTimer, clearMaxDurationTimer, language, onTranscript, recorder, reportVoiceError, stopWebMeter, voiceMode]);
+  }, [clearSilenceTimer, clearMaxDurationTimer, language, recorder, reportVoiceError, stopWebMeter, voiceMode]);
 
   // Live amplitude tracking + auto-submit after SILENCE_TIMEOUT_MS of quiet (voice mode only).
   // The countdown always runs and only resets while actual speech is detected, so
@@ -209,7 +231,7 @@ export function useVoiceInput({ language, voiceMode, onTranscript }: UseVoiceInp
     if (!silenceTimerRef.current) {
       silenceTimerRef.current = setTimeout(() => {
         silenceTimerRef.current = null;
-        stopAndTranscribe();
+        void stopAndTranscribe();
       }, SILENCE_TIMEOUT_MS);
     }
   }, [
@@ -244,7 +266,7 @@ export function useVoiceInput({ language, voiceMode, onTranscript }: UseVoiceInp
     if (isTranscribing) return;
 
     clearVoiceError();
-    const { granted } = await requestRecordingPermissionsAsync();
+    const { granted } = await requestRecordingPermissionsAsync().catch(() => ({ granted: false }));
     if (!granted) {
       showPermissionModal({
         title: "Microphone access needed",
@@ -260,8 +282,18 @@ export function useVoiceInput({ language, voiceMode, onTranscript }: UseVoiceInp
     // iOS needs a recording-capable session; replies switch it back
     // (hooks/useSpokenReply.ts) so they play on the loudspeaker.
     await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true }).catch(() => {});
-    await recorder.prepareToRecordAsync();
-    recorder.record();
+    try {
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+    } catch (error) {
+      // A busy audio session, or the permission revoked between prompts.
+      const message = "Couldn't start the microphone. Please try again.";
+      if (voiceMode) reportVoiceError(message);
+      else alert("Voice input failed", message);
+      console.warn("Recorder failed to start:", error);
+      return;
+    }
+    recordingVoiceModeRef.current = voiceMode;
 
     if (Platform.OS === "web" && voiceMode) {
       stopWebMeter();
@@ -275,10 +307,10 @@ export function useVoiceInput({ language, voiceMode, onTranscript }: UseVoiceInp
       clearMaxDurationTimer();
       maxDurationTimerRef.current = setTimeout(() => {
         maxDurationTimerRef.current = null;
-        stopAndTranscribe();
+        void stopAndTranscribe();
       }, MAX_RECORDING_MS);
     }
-  }, [clearMaxDurationTimer, clearVoiceError, isTranscribing, recorder, recorderState.isRecording, stopAndTranscribe, stopWebMeter, voiceMode]);
+  }, [clearMaxDurationTimer, clearVoiceError, isTranscribing, recorder, recorderState.isRecording, reportVoiceError, stopAndTranscribe, stopWebMeter, voiceMode]);
 
   useEffect(() => {
     return () => {

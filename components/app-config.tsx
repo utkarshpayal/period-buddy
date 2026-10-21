@@ -44,6 +44,15 @@ export function AppConfigProvider({ children }: { children: React.ReactNode }) {
   // signed-out fetch is still out) runs again once it lands, since the
   // config is per user and the older response would be the wrong one.
   const again = useRef(false);
+  // The raw JSON currently applied. An unchanged config (the usual case on
+  // foreground / sign-in / pull-to-refresh) skips setConfig: parseAppConfig
+  // builds new objects, so it would re-render every theme consumer.
+  const appliedRaw = useRef<string | null>(null);
+  const applyRaw = useCallback((json: string, raw: unknown) => {
+    if (json === appliedRaw.current) return;
+    appliedRaw.current = json;
+    setConfig(parseAppConfig(raw));
+  }, []);
 
   const refresh = useCallback((): Promise<void> => {
     if (inFlight.current) {
@@ -60,8 +69,10 @@ export function AppConfigProvider({ children }: { children: React.ReactNode }) {
             if (again.current) continue;
             fetched.current = true;
             lastFetch.current = Date.now();
-            setConfig(parseAppConfig(raw));
-            AsyncStorage.setItem(CACHE_KEY, JSON.stringify(raw)).catch(() => undefined);
+            const json = JSON.stringify(raw);
+            if (json === appliedRaw.current) continue;
+            applyRaw(json, raw);
+            AsyncStorage.setItem(CACHE_KEY, json).catch(() => undefined);
           } catch {
             // Offline, old backend without /api/app-config, server error: keep what we have.
           }
@@ -71,7 +82,7 @@ export function AppConfigProvider({ children }: { children: React.ReactNode }) {
       }
     })();
     return inFlight.current;
-  }, []);
+  }, [applyRaw]);
 
   useEffect(() => {
     let alive = true;
@@ -80,7 +91,7 @@ export function AppConfigProvider({ children }: { children: React.ReactNode }) {
         if (!alive) return;
         if (cached && !fetched.current) {
           try {
-            setConfig(parseAppConfig(JSON.parse(cached)));
+            applyRaw(cached, JSON.parse(cached));
           } catch {
             /* corrupt cache: defaults stay until the fetch lands */
           }
@@ -104,7 +115,7 @@ export function AppConfigProvider({ children }: { children: React.ReactNode }) {
       alive = false;
       sub.remove();
     };
-  }, [refresh]);
+  }, [applyRaw, refresh]);
 
   const dismissBanner = useCallback((id: string) => {
     setDismissed((prev) => {

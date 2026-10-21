@@ -28,6 +28,12 @@ type Entry<T = unknown> = {
   fetchedAt: number;
   hasData: boolean;
   promise?: Promise<T>;
+  /**
+   * Bumped whenever the entry is invalidated, so a request that was already in
+   * flight (and may carry pre-mutation data) is neither shared with the next
+   * read nor stamped fresh when it lands.
+   */
+  version: number;
   topics: DataTopic[];
   persist: boolean;
 };
@@ -58,16 +64,22 @@ export function configureQueryPersistence(next: PersistStore | null) {
   store = next;
 }
 
+function markStale(entry: Entry) {
+  entry.fetchedAt = 0;
+  entry.promise = undefined;
+  entry.version += 1;
+}
+
 subscribeDataChange((topics) => {
   for (const entry of entries.values()) {
-    if (entry.topics.some((topic) => topics.has(topic))) entry.fetchedAt = 0;
+    if (entry.topics.some((topic) => topics.has(topic))) markStale(entry);
   }
 });
 
 function entryFor(key: string, options: CacheOptions): Entry {
   let entry = entries.get(key);
   if (!entry) {
-    entry = { fetchedAt: 0, hasData: false, topics: options.topics ?? [], persist: Boolean(options.persist) };
+    entry = { fetchedAt: 0, hasData: false, version: 0, topics: options.topics ?? [], persist: Boolean(options.persist) };
     entries.set(key, entry);
   } else {
     if (options.topics) entry.topics = options.topics;
@@ -103,7 +115,7 @@ export function setQueryData<T>(key: string, data: T, options: CacheOptions = {}
 export function invalidateQueries(keyOrPrefix?: string) {
   for (const [key, entry] of entries) {
     if (!keyOrPrefix || key === keyOrPrefix || (keyOrPrefix.endsWith(":") && key.startsWith(keyOrPrefix))) {
-      entry.fetchedAt = 0;
+      markStale(entry);
     }
   }
 }
@@ -124,14 +136,20 @@ export function fetchQuery<T>(
   }
   if (entry.promise) return entry.promise;
   const startedIn = generation;
+  const startedAt = entry.version;
+  const current = () => entries.get(key) === entry && entry.version === startedAt;
   const promise = fetcher().then(
     (data) => {
-      if (entries.get(key) === entry) entry.promise = undefined;
-      if (startedIn === generation) setQueryData(key, data, options);
+      // Invalidated mid-flight: the caller still gets its answer, but the
+      // cache doesn't keep it (the next read refetches).
+      if (current()) {
+        entry.promise = undefined;
+        if (startedIn === generation) setQueryData(key, data, options);
+      }
       return data;
     },
     (err) => {
-      if (entries.get(key) === entry) entry.promise = undefined;
+      if (current()) entry.promise = undefined;
       throw err;
     },
   );

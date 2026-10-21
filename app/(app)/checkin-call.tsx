@@ -1,9 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   RefreshControl,
-  ScrollView,
   StatusBar,
   Switch,
   Text,
@@ -31,6 +30,11 @@ import {
   type CheckinCallSchedule,
 } from "../../lib/api";
 import { isPlausiblePhone, normalizePhone } from "../../lib/onboarding";
+import { useSecureScreen } from "../../lib/screenPrivacy";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
+import { Icon } from "../../components/Icon";
+import { Button } from "../../components/Button";
+import { SegmentedControl } from "../../components/SegmentedControl";
 
 const DAY_OFFSET_MIN = -5;
 const DAY_OFFSET_MAX = 5;
@@ -124,12 +128,14 @@ function describeCall(call: CheckinCallRecord): OutcomeStyle {
  * and writes the preference.
  */
 export default function CheckinCallScreen() {
+  useSecureScreen("checkin-call");
   const { colors, isDark, fonts } = useTheme();
   const { user, updateUser } = useAuth();
 
   const [phone, setPhone] = useState(user?.phone ?? "");
   const [isFocused, setIsFocused] = useState(false);
   const [isSavingPhone, setIsSavingPhone] = useState(false);
+  const phoneSaveRef = useRef<{ value: string; promise: Promise<boolean> } | null>(null);
 
   const [scheduleLoading, setScheduleLoading] = useState(true);
   // false only when this user has no CycleSettings yet — scheduling needs a
@@ -206,8 +212,20 @@ export default function CheckinCallScreen() {
 
   // The backend always calls the number on the user's profile, so the field
   // saves itself when the user leaves it (or before turning calls on).
-  async function savePhoneIfChanged(): Promise<boolean> {
+  // Tapping the switch also blurs the field, so both callers can arrive at
+  // once: they share one save instead of sending two updates (and two alerts).
+  function savePhoneIfChanged(): Promise<boolean> {
     const next = normalizePhone(phone);
+    const pending = phoneSaveRef.current;
+    if (pending && pending.value === next) return pending.promise;
+    const promise = persistPhone(next).finally(() => {
+      if (phoneSaveRef.current?.promise === promise) phoneSaveRef.current = null;
+    });
+    phoneSaveRef.current = { value: next, promise };
+    return promise;
+  }
+
+  async function persistPhone(next: string): Promise<boolean> {
     if (next === normalizePhone(user?.phone ?? "")) return true;
     if (!next && scheduleEnabled) {
       setPhone(user?.phone ?? "");
@@ -304,7 +322,7 @@ export default function CheckinCallScreen() {
       <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
         <ScreenHeader title="Check-in Call" />
 
-        <ScrollView
+        <KeyboardAwareScrollView bottomOffset={24}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 48 }}
           refreshControl={
@@ -318,13 +336,13 @@ export default function CheckinCallScreen() {
                 style={{
                   width: 44,
                   height: 44,
-                  borderRadius: 14,
+                  borderRadius: 14, borderCurve: "continuous",
                   backgroundColor: colors.skyLight,
                   alignItems: "center",
                   justifyContent: "center",
                 }}
               >
-                <Ionicons name="call-outline" size={20} color={colors.sky} />
+                <Icon set="ion" name="call-outline" size={20} color={colors.sky} />
               </View>
               <View className="flex-1">
                 <Text style={{ fontSize: 14.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
@@ -341,7 +359,7 @@ export default function CheckinCallScreen() {
                 borderWidth: isFocused ? 1.5 : 1,
               }}
             >
-              <Ionicons name="call-outline" size={18} color={isFocused ? colors.primary : colors.mutedText} />
+              <Icon set="ion" name="call-outline" size={18} color={isFocused ? colors.primary : colors.mutedText} />
               <TextInput
                 accessibilityLabel="Phone number"
                 autoComplete="tel"
@@ -403,7 +421,7 @@ export default function CheckinCallScreen() {
                 className="mt-4 flex-row items-center rounded-2xl px-3 py-3"
                 style={{ backgroundColor: colors.skyLight }}
               >
-                <Ionicons name="calendar-outline" size={18} color={colors.sky} />
+                <Icon set="ion" name="calendar-outline" size={18} color={colors.sky} />
                 <Text style={{ marginLeft: 8, fontSize: 12.5, color: colors.foreground, fontFamily: fonts.body }}>
                   Next call: <Text style={{ fontWeight: "800" }}>{formatWhen(schedule.nextCallAt)}</Text>
                 </Text>
@@ -412,37 +430,16 @@ export default function CheckinCallScreen() {
 
             {!scheduleLoading && scheduleAvailable && scheduleEnabled ? (
               <View className="mt-4" style={{ gap: 12 }}>
-                <View className="flex-row rounded-2xl border p-1" style={rowStyle}>
-                  {(
-                    [
-                      { value: "period_daily", label: "Every period day" },
-                      { value: "once", label: "Once a cycle" },
-                    ] as { value: CheckinCallMode; label: string }[]
-                  ).map((option) => {
-                    const selected = mode === option.value;
-                    return (
-                      <TouchableOpacity
-                        key={option.value}
-                        activeOpacity={0.8}
-                        disabled={isSavingSchedule}
-                        onPress={() => setMode(option.value)}
-                        className="flex-1 items-center rounded-xl py-2"
-                        style={{ backgroundColor: selected ? colors.primary : "transparent" }}
-                      >
-                        <Text
-                          style={{
-                            fontSize: 12.5,
-                            fontWeight: "700",
-                            fontFamily: fonts.body,
-                            color: selected ? colors.buttonText : colors.foreground,
-                          }}
-                        >
-                          {option.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
+                <SegmentedControl
+                  segments={[
+                    { key: "period_daily", label: "Every period day" },
+                    { key: "once", label: "Once a cycle" },
+                  ]}
+                  value={mode}
+                  onChange={(next) => {
+                    if (!isSavingSchedule) setMode(next as CheckinCallMode);
+                  }}
+                />
 
                 {mode === "period_daily" ? (
                   <Text style={{ fontSize: 12.5, color: colors.mutedText, fontFamily: fonts.body, lineHeight: 16 }}>
@@ -453,22 +450,22 @@ export default function CheckinCallScreen() {
                   <View className="flex-row items-center justify-between rounded-2xl border px-3 py-3" style={rowStyle}>
                     <Text style={labelStyle}>When</Text>
                     <View className="flex-row items-center" style={{ gap: 10 }}>
-                      <TouchableOpacity
+                      <TouchableOpacity accessibilityRole="button" accessibilityLabel="Earlier day"
                         activeOpacity={0.7}
                         disabled={isSavingSchedule || dayOffset <= DAY_OFFSET_MIN}
                         onPress={() => setDayOffset((d) => Math.max(DAY_OFFSET_MIN, d - 1))}
                         style={{ opacity: dayOffset <= DAY_OFFSET_MIN ? 0.35 : 1 }}
                       >
-                        <Ionicons name="chevron-back-circle" size={26} color={colors.primary} />
+                        <Icon set="ion" name="chevron-back-circle" size={26} color={colors.primary} />
                       </TouchableOpacity>
                       <Text style={valueStyle}>{formatDayOffset(dayOffset)}</Text>
-                      <TouchableOpacity
+                      <TouchableOpacity accessibilityRole="button" accessibilityLabel="Later day"
                         activeOpacity={0.7}
                         disabled={isSavingSchedule || dayOffset >= DAY_OFFSET_MAX}
                         onPress={() => setDayOffset((d) => Math.min(DAY_OFFSET_MAX, d + 1))}
                         style={{ opacity: dayOffset >= DAY_OFFSET_MAX ? 0.35 : 1 }}
                       >
-                        <Ionicons name="chevron-forward-circle" size={26} color={colors.primary} />
+                        <Icon set="ion" name="chevron-forward-circle" size={26} color={colors.primary} />
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -477,46 +474,32 @@ export default function CheckinCallScreen() {
                 <View className="flex-row items-center justify-between rounded-2xl border px-3 py-3" style={rowStyle}>
                   <Text style={labelStyle}>Time</Text>
                   <View className="flex-row items-center" style={{ gap: 10 }}>
-                    <TouchableOpacity
+                    <TouchableOpacity accessibilityRole="button" accessibilityLabel="Earlier time"
                       activeOpacity={0.7}
                       disabled={isSavingSchedule}
                       onPress={() => setTimeMinutes((t) => (t - TIME_STEP_MINUTES + 1440) % 1440)}
                     >
-                      <Ionicons name="chevron-back-circle" size={26} color={colors.primary} />
+                      <Icon set="ion" name="chevron-back-circle" size={26} color={colors.primary} />
                     </TouchableOpacity>
                     <Text style={valueStyle}>{formatTimeOfDay(timeMinutes)}</Text>
-                    <TouchableOpacity
+                    <TouchableOpacity accessibilityRole="button" accessibilityLabel="Later time"
                       activeOpacity={0.7}
                       disabled={isSavingSchedule}
                       onPress={() => setTimeMinutes((t) => (t + TIME_STEP_MINUTES) % 1440)}
                     >
-                      <Ionicons name="chevron-forward-circle" size={26} color={colors.primary} />
+                      <Icon set="ion" name="chevron-forward-circle" size={26} color={colors.primary} />
                     </TouchableOpacity>
                   </View>
                 </View>
 
                 <View className="flex-row" style={{ gap: 8 }}>
-                  <Ionicons name="information-circle-outline" size={16} color={colors.mutedText} />
+                  <Icon set="ion" name="information-circle-outline" size={16} color={colors.mutedText} />
                   <Text style={{ flex: 1, fontSize: 12.5, color: colors.mutedText, fontFamily: fonts.body, lineHeight: 16 }}>
                     Missed it? Buddy retries up to 2 times, never after 9:30 PM.
                   </Text>
                 </View>
 
-                <TouchableOpacity
-                  activeOpacity={0.9}
-                  disabled={isSavingSchedule}
-                  onPress={() => saveSchedule(true)}
-                  className="flex-row items-center justify-center rounded-full py-3"
-                  style={{ backgroundColor: colors.primary, opacity: isSavingSchedule ? 0.65 : 1 }}
-                >
-                  {isSavingSchedule ? (
-                    <ActivityIndicator color={colors.buttonText} />
-                  ) : (
-                    <Text style={{ fontSize: 13, fontWeight: "700", color: colors.buttonText, fontFamily: fonts.body }}>
-                      Save schedule
-                    </Text>
-                  )}
-                </TouchableOpacity>
+                <Button label="Save schedule" size="md" fullWidth loading={isSavingSchedule} onPress={() => saveSchedule(true)} />
               </View>
             ) : null}
           </View>
@@ -533,7 +516,7 @@ export default function CheckinCallScreen() {
                   const duration = formatDuration(call.durationSeconds);
                   return (
                     <View key={call._id} className="flex-row">
-                      <Ionicons name={look.icon} size={20} color={toneColor(look.tone)} />
+                      <Icon set="ion" name={look.icon} size={20} color={toneColor(look.tone)} />
                       <View className="ml-3 flex-1">
                         <View className="flex-row items-center justify-between">
                           <Text style={{ fontSize: 13, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>
@@ -570,7 +553,7 @@ export default function CheckinCallScreen() {
               </Text>
             </View>
           ) : null}
-        </ScrollView>
+        </KeyboardAwareScrollView>
       </SafeAreaView>
 
       <PaywallModal

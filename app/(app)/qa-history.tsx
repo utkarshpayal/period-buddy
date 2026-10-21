@@ -1,23 +1,26 @@
-import { Feather, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { Image, RefreshControl, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { RefreshControl, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../components/auth-context";
+import { EmptyState } from "../../components/EmptyState";
 import { LoadMoreButton } from "../../components/LoadMoreButton";
+import { NuraAvatar } from "../../components/NuraAvatar";
+import { showTopicLockedAlert } from "../../components/qa/topicLock";
 import { ScreenHeader, SectionHeader } from "../../components/ScreenHeader";
 import { SkeletonBlock } from "../../components/Skeleton";
 import { LockedFeatureCard } from "../../components/subscription/LockedFeatureCard";
 import { PaywallModal } from "../../components/subscription/PaywallModal";
 import { useTheme } from "../../components/theme";
-import { getLogCategoryTints, getShadow, getSoftTints } from "../../components/ui-tokens";
+import { getLogCategoryTints, getSoftTints, getGlow } from "../../components/ui-tokens";
 import { usePaginatedList } from "../../hooks/usePaginatedList";
 import { useSubscriptionAccess } from "../../hooks/useSubscriptionAccess";
 import { alert } from "../../lib/alert";
-import { questionAnswerApi, type ChatTopicId, type QaChatSessionSummary } from "../../lib/api";
+import { getFriendlyErrorMessage, questionAnswerApi, type ChatTopicId, type QaChatSessionSummary } from "../../lib/api";
 import { CHAT_TOPICS, getChatTopic, isTopicLocked } from "../../lib/chatTopics";
 import { formatShortDate } from "../../lib/format";
 import { useSecureScreen } from "../../lib/screenPrivacy";
+import { Icon } from "../../components/Icon";
 
 /**
  * Nura AI home — the entry to the assistant. One primary action (start a new
@@ -32,7 +35,8 @@ export default function NuraAiHome() {
   const { user } = useAuth();
   const softTints = getSoftTints(colors);
   const categoryTints = getLogCategoryTints(colors);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  // Per row: a second delete started while the first is in flight keeps both rows disabled.
+  const [deletingIds, setDeletingIds] = useState<ReadonlySet<string>>(() => new Set());
   const [paywallVisible, setPaywallVisible] = useState(false);
   const [pendingTopic, setPendingTopic] = useState<ChatTopicId | null>(null);
   const { hasAccess, isLoading: subscriptionLoading, refresh: refreshSubscriptionAccess } = useSubscriptionAccess();
@@ -48,6 +52,8 @@ export default function NuraAiHome() {
     setItems: setSessions,
     loading,
     refreshing,
+    error,
+    offline,
     reload,
     hasMore,
     loadingMore,
@@ -76,15 +82,19 @@ export default function NuraAiHome() {
       { style: "cancel", text: "Cancel" },
       {
         onPress: async () => {
-          setDeletingId(session.id);
+          setDeletingIds((prev) => new Set(prev).add(session.id));
           try {
             await questionAnswerApi.deleteSession(session.id);
             // Drop it in place; a reload would collapse pages opened with "Show more".
             setSessions((prev) => prev.filter((s) => s.id !== session.id));
           } catch (err) {
-            alert("Couldn't delete chat", err instanceof Error ? err.message : "Please try again.");
+            alert("Couldn't delete chat", getFriendlyErrorMessage(err));
           } finally {
-            setDeletingId(null);
+            setDeletingIds((prev) => {
+              const next = new Set(prev);
+              next.delete(session.id);
+              return next;
+            });
           }
         },
         style: "destructive",
@@ -144,23 +154,15 @@ export default function NuraAiHome() {
             alignItems: "center",
             gap: 14,
             padding: 18,
-            borderRadius: 24,
+            borderRadius: 26,
+            borderCurve: "continuous",
             backgroundColor: colors.primary,
-            ...getShadow(colors, isDark),
+            ...getGlow(colors.primary, isDark, "strong"),
           }}
         >
-          <View
-            className="items-center justify-start overflow-hidden rounded-full"
-            style={{ width: 52, height: 52, backgroundColor: softTints.pink, borderWidth: 2, borderColor: colors.buttonText }}
-          >
-            <Image
-              source={require("../../assets/images/illustrations/nura-avatar.png")}
-              style={{ width: 52, height: 52 * (1294 / 871) }}
-              resizeMode="cover"
-            />
-          </View>
+          <NuraAvatar size={52} style={{ borderWidth: 2, borderColor: colors.buttonText }} />
           <View className="flex-1">
-            <Text style={{ color: colors.buttonText, fontSize: 17, fontWeight: "800", fontFamily: fonts.heading }}>
+            <Text style={{ color: colors.buttonText, fontSize: 18, fontWeight: "800", letterSpacing: -0.4, fontFamily: fonts.heading }}>
               {firstName ? `Ask anything, ${firstName}` : "Ask anything"}
             </Text>
             <Text style={{ color: colors.buttonText, opacity: 0.85, fontSize: 13, marginTop: 2, fontFamily: fonts.body }}>
@@ -168,7 +170,7 @@ export default function NuraAiHome() {
             </Text>
           </View>
           <View className="items-center justify-center rounded-full" style={{ width: 36, height: 36, backgroundColor: colors.buttonText }}>
-            <Ionicons name="add" size={22} color={colors.primary} />
+            <Icon set="ion" name="add" size={22} color={colors.primary} />
           </View>
         </TouchableOpacity>
 
@@ -186,18 +188,15 @@ export default function NuraAiHome() {
                 accessibilityLabel={topicLocked ? `${topic.label}, locked` : topic.label}
                 onPress={() => {
                   if (topicLocked) {
-                    alert(
-                      "Age verification needed",
-                      `${topic.label} unlocks once your profile shows you're ${topic.minAge}+. Add your birthday in Profile → Edit profile.`,
-                    );
+                    showTopicLockedAlert(topic);
                     return;
                   }
                   openNewChat(topic.id);
                 }}
-                style={{ width: "47%", flexGrow: 1, padding: 14, borderRadius: 18, backgroundColor: colors.surface, opacity: topicLocked ? 0.55 : 1 }}
+                style={{ width: "47%", flexGrow: 1, padding: 14, borderRadius: 18, borderCurve: "continuous", backgroundColor: colors.surface, opacity: topicLocked ? 0.55 : 1 }}
               >
                 <View className="items-center justify-center rounded-xl" style={{ width: 36, height: 36, backgroundColor: tint.light }}>
-                  <Feather name={topicLocked ? "lock" : topic.icon} size={17} color={tint.color} />
+                  <Icon set="feather" name={topicLocked ? "lock" : topic.icon} size={17} color={tint.color} />
                 </View>
                 <Text numberOfLines={2} style={{ color: colors.foreground, fontSize: 14, lineHeight: 19, fontWeight: "700", marginTop: 10, fontFamily: fonts.body }}>
                   {topic.label}
@@ -217,25 +216,26 @@ export default function NuraAiHome() {
         ) : sessions?.length ? (
           <>
             <SectionHeader title="Recent chats" style={{ marginTop: 28 }} />
-            <View style={{ borderRadius: 20, backgroundColor: colors.surface, overflow: "hidden" }}>
+            <View style={{ borderRadius: 20, borderCurve: "continuous", backgroundColor: colors.surface, overflow: "hidden" }}>
               {sessions.map((session, index) => {
                 const topic = getChatTopic(session.topicId);
                 const tint = topic ? categoryTints[topic.tint] : { color: colors.primary, light: softTints.pink };
+                const deleting = deletingIds.has(session.id);
                 return (
                   <View key={session.id}>
                     {index > 0 ? <View style={{ height: 1, marginLeft: 68, backgroundColor: colors.border }} /> : null}
                     <TouchableOpacity
                       activeOpacity={0.7}
-                      disabled={deletingId === session.id}
+                      disabled={deleting}
                       onPress={() => router.push({ pathname: "/(app)/qa", params: { sessionId: session.id } })}
                       onLongPress={() => handleDelete(session)}
                       accessibilityRole="button"
                       accessibilityHint="Long press to delete"
                       className="flex-row items-center"
-                      style={{ gap: 12, paddingHorizontal: 16, paddingVertical: 14, opacity: deletingId === session.id ? 0.5 : 1 }}
+                      style={{ gap: 12, paddingHorizontal: 16, paddingVertical: 14, opacity: deleting ? 0.5 : 1 }}
                     >
                       <View className="items-center justify-center rounded-full" style={{ width: 40, height: 40, backgroundColor: tint.light }}>
-                        <Feather name={topic?.icon ?? "message-circle"} size={17} color={tint.color} />
+                        <Icon set="feather" name={topic?.icon ?? "message-circle"} size={17} color={tint.color} />
                       </View>
                       <View className="flex-1" style={{ minWidth: 0 }}>
                         <Text numberOfLines={1} style={{ color: colors.foreground, fontSize: 14.5, fontWeight: "700", fontFamily: fonts.body }}>
@@ -247,12 +247,12 @@ export default function NuraAiHome() {
                       </View>
                       <TouchableOpacity
                         onPress={() => handleDelete(session)}
-                        disabled={deletingId === session.id}
+                        disabled={deleting}
                         accessibilityRole="button"
                         accessibilityLabel={`Delete chat ${session.title}`}
                         hitSlop={10}
                       >
-                        <Ionicons name="trash-outline" size={17} color={colors.mutedText} />
+                        <Icon set="ion" name="trash-outline" size={17} color={colors.mutedText} />
                       </TouchableOpacity>
                     </TouchableOpacity>
                   </View>
@@ -261,6 +261,18 @@ export default function NuraAiHome() {
             </View>
             <LoadMoreButton hasMore={hasMore} loading={loadingMore} onPress={loadMore} />
           </>
+        ) : error ? (
+          // Not "no chats": offline, the history would otherwise look deleted.
+          <View style={{ marginTop: 28 }}>
+            <EmptyState
+              compact
+              icon={offline ? "wifi-off" : "alert-circle-outline"}
+              title={offline ? "You're offline" : "Couldn't load your chats"}
+              message={offline ? "Your recent chats will show here once you're back online." : error}
+              actionLabel="Try again"
+              onAction={() => reload(true)}
+            />
+          </View>
         ) : null}
       </ScrollView>
 

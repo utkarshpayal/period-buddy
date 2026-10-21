@@ -12,6 +12,7 @@ import { AuthProvider, useAuth } from "../components/auth-context";
 import { GenZModeProvider } from "../components/genz-mode";
 import { IncomingCallOverlay } from "../components/IncomingCallOverlay";
 import { AppModalHost } from "../components/modals/AppModalHost";
+import { ToastHost } from "../components/ToastHost";
 import { ThemeProvider, useTheme } from "../components/theme";
 import {
   clearPendingDeepLink,
@@ -32,7 +33,9 @@ import { LinearGradient } from "expo-linear-gradient";
 import { cssInterop } from "nativewind";
 import { MAX_CONTENT_WIDTH } from "../lib/layout";
 import { ScreenPrivacySync } from "../lib/screenPrivacy";
-
+import { KeyboardProvider } from "react-native-keyboard-controller";
+import { Image as ExpoImage } from "expo-image";
+import { stackScreenOptions } from "../components/motion";
 
 // The payload's data fields. The type normally arrives in content.data, but
 // on Android a notification displayed by the FCM SDK itself (app
@@ -42,7 +45,10 @@ function notificationData(response: Notifications.NotificationResponse): Record<
   const remoteData =
     (trigger as { remoteMessage?: { data?: Record<string, unknown> } } | null)?.remoteMessage
       ?.data ?? {};
-  return { ...remoteData, ...((content.data as Record<string, unknown> | null) ?? {}) };
+  return {
+    ...remoteData,
+    ...((content.data as Record<string, unknown> | null) ?? {}),
+  };
 }
 
 // Entry screens that immediately router.replace() into the app once a
@@ -60,11 +66,12 @@ function isEntryPath(pathname: string, isAuthenticated: boolean) {
 // on anything else the prop is silently ignored. Register third-party
 // components that take className here.
 cssInterop(LinearGradient, { className: "style" });
+cssInterop(ExpoImage, { className: "style" });
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync().catch(() => {});
 // Cross-fade from the splash into the first screen instead of cutting to it.
-// The splash colours (app.json: blush #FBF6F8, dark #221A20) are the theme's
+// The splash colour (app.json: blush #FBF6F8) is the light theme's
 // own `background` tokens, so the fade never passes through black or white.
 SplashScreen.setOptions({ fade: true, duration: 350 });
 
@@ -79,8 +86,11 @@ SplashScreen.setOptions({ fade: true, duration: 350 });
 // screen only once both are ready, stops the app from ever painting a screen
 // with the wrong/default theme.
 function AppShell() {
-  const { colors, hasHydrated } = useTheme();
-  const { isLocked } = useAppLock();
+  const { colors, hasHydrated: themeHydrated } = useTheme();
+  const { isLocked, hasHydrated: lockHydrated } = useAppLock();
+  // The App Lock settings gate the first paint too: otherwise the dashboard
+  // renders (and starts its fetches) for a frame before the lock appears.
+  const hasHydrated = themeHydrated && lockHydrated;
   const router = useRouter();
   const { isAuthenticated, user } = useAuth();
   const pathname = usePathname();
@@ -89,7 +99,6 @@ function AppShell() {
     null,
   );
   const handledNotificationIds = useRef(new Set<string>());
-
 
   // Shared content links (blogs, community posts, reels, schemes, partner
   // invites, ...) are intercepted by app/+native-intent.tsx before
@@ -160,9 +169,11 @@ function AppShell() {
       setPendingNotification(data);
     }
 
-    Notifications.getLastNotificationResponseAsync().then((response) => {
-      if (response) handleResponse(response);
-    });
+    Notifications.getLastNotificationResponseAsync()
+      .then((response) => {
+        if (response) handleResponse(response);
+      })
+      .catch(() => {});
     const subscription = Notifications.addNotificationResponseReceivedListener(handleResponse);
     // A push arriving while the app is open means the server-side list
     // changed — refresh unread badges and the notifications screen.
@@ -223,9 +234,21 @@ function AppShell() {
     <>
       {/* Phone-width column on tablets / wide web windows, so screens built
           for phones don't stretch edge to edge. No effect on phones. */}
-      <View style={{ flex: 1, backgroundColor: colors.background }}>
-        <View style={{ flex: 1, width: "100%", maxWidth: MAX_CONTENT_WIDTH, alignSelf: "center" }}>
-          <Stack screenOptions={{ headerShown: false }} />
+      {/* While locked, screen readers must not reach the content under the lock. */}
+      <View
+        style={{ flex: 1, backgroundColor: colors.background }}
+        accessibilityElementsHidden={isLocked}
+        importantForAccessibility={isLocked ? "no-hide-descendants" : "auto"}
+      >
+        <View
+          style={{
+            flex: 1,
+            width: "100%",
+            maxWidth: MAX_CONTENT_WIDTH,
+            alignSelf: "center",
+          }}
+        >
+          <Stack screenOptions={stackScreenOptions(colors.background)} />
         </View>
       </View>
       {isLocked && <AppLockScreen />}
@@ -242,6 +265,7 @@ function AppShell() {
         hidden={isLocked}
       />
       <AppModalHost />
+      <ToastHost />
     </>
   );
 }
@@ -275,16 +299,20 @@ export default function RootLayout() {
   return (
     // AppConfigProvider (App CMS layout) is outermost: ThemeProvider reads
     // its colour overrides, and it needs no auth (the config is public).
-    <AppConfigProvider>
-      <ThemeProvider>
-        <GenZModeProvider>
-          <AuthProvider>
-            <AppLockProvider>
-              <AppShell />
-            </AppLockProvider>
-          </AuthProvider>
-        </GenZModeProvider>
-      </ThemeProvider>
-    </AppConfigProvider>
+    // Tracks the software keyboard for every screen: with Android edge-to-edge
+    // the window no longer resizes, so inputs are lifted by this instead.
+    <KeyboardProvider>
+      <AppConfigProvider>
+        <ThemeProvider>
+          <GenZModeProvider>
+            <AuthProvider>
+              <AppLockProvider>
+                <AppShell />
+              </AppLockProvider>
+            </AuthProvider>
+          </GenZModeProvider>
+        </ThemeProvider>
+      </AppConfigProvider>
+    </KeyboardProvider>
   );
 }

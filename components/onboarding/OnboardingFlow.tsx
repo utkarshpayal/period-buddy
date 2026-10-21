@@ -2,7 +2,6 @@ import { Ionicons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BackHandler,
-  KeyboardAvoidingView,
   Platform,
   ScrollView,
   StatusBar,
@@ -11,8 +10,9 @@ import {
 } from "react-native";
 import Pressable from "../PressableFeedback";
 import Animated, { FadeIn, FadeInDown, FadeInLeft, FadeInRight, ZoomIn } from "react-native-reanimated";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle } from "react-native-svg";
+import { getFriendlyErrorMessage } from "../../lib/api";
 import { requestNotificationPermissionAsync } from "../../lib/notifications";
 import { secureGetItem, secureRemoveItem, secureSetItem } from "../../lib/secureStorage";
 import {
@@ -33,6 +33,9 @@ import {
 import { useTheme } from "../theme";
 import { BirthdayInput } from "../BirthdayInput";
 import { Chip, MonthCalendar, NumberStepper, OptionCard, PrimaryButton, ProgressBar, TextButton } from "./parts";
+import { KeyboardAwareScrollView, KeyboardStickyView } from "react-native-keyboard-controller";
+import { Icon } from "../Icon";
+import { motion } from "../motion";
 
 export type OnboardingValues = {
   cycleLength: number;
@@ -64,6 +67,8 @@ const WELCOME_POINTS = 20;
 
 export function OnboardingFlow({ userId, firstName, onSubmit, onFinish }: OnboardingFlowProps) {
   const { colors, fonts, isDark } = useTheme();
+  // The footer sits on the keyboard, not on the home-indicator inset, while it is open.
+  const insets = useSafeAreaInsets();
   const draftKey = onboardingDraftKey(userId);
   const [draft, setDraft] = useState<OnboardingDraft>(EMPTY_DRAFT);
   const [hasLoaded, setHasLoaded] = useState(false);
@@ -118,7 +123,10 @@ export function OnboardingFlow({ userId, firstName, onSubmit, onFinish }: Onboar
   }, [draft.stepIndex]);
 
   const goBack = useCallback(() => {
-    if (isDone || isSaving || draft.stepIndex === 0) return false;
+    // Mid-save, swallow Back: returning false would let Android exit the app
+    // while the profile is still being written.
+    if (isSaving) return true;
+    if (isDone || draft.stepIndex === 0) return false;
     goTo(draft.stepIndex - 1);
     return true;
   }, [draft.stepIndex, goTo, isDone, isSaving]);
@@ -151,11 +159,7 @@ export function OnboardingFlow({ userId, firstName, onSubmit, onFinish }: Onboar
       setDirection(1);
       setIsDone(true);
     } catch (error) {
-      setErrorMessage(
-        error instanceof Error && error.message
-          ? error.message
-          : "We couldn't save that. Check your connection and try again.",
-      );
+      setErrorMessage(getFriendlyErrorMessage(error));
     } finally {
       setIsSaving(false);
     }
@@ -168,11 +172,14 @@ export function OnboardingFlow({ userId, firstName, onSubmit, onFinish }: Onboar
 
   async function finish() {
     setIsFinishing(true);
+    setErrorMessage("");
     try {
       // The soft ask above explains why; the OS prompt follows. The push
       // token itself is uploaded by auth-context once setup is complete.
       await requestNotificationPermissionAsync().catch(() => null);
       await onFinish();
+    } catch {
+      setErrorMessage("We couldn't open the app just now. Please try again.");
     } finally {
       setIsFinishing(false);
     }
@@ -192,7 +199,7 @@ export function OnboardingFlow({ userId, firstName, onSubmit, onFinish }: Onboar
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={["top", "bottom"]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <View style={{ flex: 1 }}>
 
         {/* Top bar: back · progress · skip */}
         <View style={{ flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 24, paddingTop: 8, height: 52 }}>
@@ -212,7 +219,7 @@ export function OnboardingFlow({ userId, firstName, onSubmit, onFinish }: Onboar
                 opacity: pressed ? 0.6 : 1,
               })}
             >
-              <Ionicons name="chevron-back" size={20} color={colors.foreground} />
+              <Icon set="ion" name="chevron-back" size={20} color={colors.foreground} />
             </Pressable>
           ) : (
             <View style={{ width: 38 }} />
@@ -221,7 +228,8 @@ export function OnboardingFlow({ userId, firstName, onSubmit, onFinish }: Onboar
           <View style={{ width: 38 }} />
         </View>
 
-        <ScrollView
+        <KeyboardAwareScrollView
+          bottomOffset={150}
           ref={scrollRef}
           contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 24, paddingTop: 20, paddingBottom: 24 }}
           keyboardShouldPersistTaps="handled"
@@ -274,7 +282,7 @@ export function OnboardingFlow({ userId, firstName, onSubmit, onFinish }: Onboar
                 />
 
                 {showRanges ? (
-                  <Animated.View entering={FadeInDown.duration(220)} style={{ marginTop: 20 }}>
+                  <Animated.View entering={FadeInDown.duration(motion.duration.base)} style={{ marginTop: 20 }}>
                     <Text style={{ color: colors.foreground, fontSize: 14, fontWeight: "800", fontFamily: fonts.body, marginBottom: 10 }}>
                       Roughly when was it?
                     </Text>
@@ -353,24 +361,26 @@ export function OnboardingFlow({ userId, firstName, onSubmit, onFinish }: Onboar
               />
             ) : null}
           </Animated.View>
-        </ScrollView>
+        </KeyboardAwareScrollView>
 
         {/* Pinned footer */}
+        {/* Rides on top of the keyboard while it is open. */}
+        <KeyboardStickyView offset={{ opened: insets.bottom }}>
         <View style={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 12, gap: 6 }}>
           {errorMessage ? (
             <Animated.View
-              entering={FadeIn.duration(180)}
+              entering={FadeIn.duration(motion.duration.fast)}
               style={{
                 flexDirection: "row",
                 alignItems: "center",
                 gap: 8,
                 padding: 12,
-                borderRadius: 14,
+                borderRadius: 14, borderCurve: "continuous",
                 backgroundColor: colors.dangerLight,
                 marginBottom: 6,
               }}
             >
-              <Ionicons name="alert-circle" size={16} color={colors.danger} />
+              <Icon set="ion" name="alert-circle" size={16} color={colors.danger} />
               <Text style={{ flex: 1, color: colors.danger, fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}>
                 {errorMessage}
               </Text>
@@ -402,7 +412,8 @@ export function OnboardingFlow({ userId, firstName, onSubmit, onFinish }: Onboar
             ) : null}
           </View>
         </View>
-      </KeyboardAvoidingView>
+        </KeyboardStickyView>
+      </View>
     </SafeAreaView>
   );
 }
@@ -413,7 +424,7 @@ function StepTitle({ title, subtitle }: { title: string; subtitle?: string }) {
     <View style={{ marginBottom: 24 }}>
       <Text
         accessibilityRole="header"
-        style={{ color: colors.foreground, fontSize: 27, lineHeight: 34, fontWeight: "800", letterSpacing: -0.4, fontFamily: fonts.heading }}
+        style={{ color: colors.foreground, fontSize: 27, lineHeight: 34, fontWeight: "800", letterSpacing: -0.7, fontFamily: fonts.heading }}
       >
         {title}
       </Text>
@@ -474,10 +485,10 @@ function ReadyStep({ name, lastPeriodStartDate, cycleLength, periodLength, isEst
         </View>
       </Animated.View>
 
-      <Animated.View entering={FadeInDown.delay(120).duration(320)} style={{ alignItems: "center", marginTop: 22 }}>
+      <Animated.View entering={FadeInDown.delay(120).duration(motion.duration.slow)} style={{ alignItems: "center", marginTop: 22 }}>
         <Text
           accessibilityRole="header"
-          style={{ color: colors.foreground, fontSize: 27, lineHeight: 34, fontWeight: "800", textAlign: "center", fontFamily: fonts.heading }}
+          style={{ color: colors.foreground, fontSize: 27, lineHeight: 34, fontWeight: "800", letterSpacing: -0.7, textAlign: "center", fontFamily: fonts.heading }}
         >
           {name ? `You're all set, ${name}` : "You're all set"}
         </Text>
@@ -486,8 +497,8 @@ function ReadyStep({ name, lastPeriodStartDate, cycleLength, periodLength, isEst
         </Text>
       </Animated.View>
 
-      <Animated.View entering={FadeInDown.delay(220).duration(320)} style={{ alignSelf: "stretch", marginTop: 24, gap: 12 }}>
-        <View style={{ backgroundColor: colors.surface, borderRadius: 22, padding: 18, borderWidth: 1, borderColor: colors.border }}>
+      <Animated.View entering={FadeInDown.delay(220).duration(motion.duration.slow)} style={{ alignSelf: "stretch", marginTop: 24, gap: 12 }}>
+        <View style={{ backgroundColor: colors.surface, borderRadius: 22, borderCurve: "continuous", padding: 18, borderWidth: 1, borderColor: colors.border }}>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
             <Text style={{ color: colors.mutedText, fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}>
               {isEstimate ? "Next period (estimate)" : "Next period"}
@@ -511,14 +522,14 @@ function ReadyStep({ name, lastPeriodStartDate, cycleLength, periodLength, isEst
             alignItems: "center",
             gap: 12,
             backgroundColor: colors.surface,
-            borderRadius: 22,
+            borderRadius: 22, borderCurve: "continuous",
             padding: 16,
             borderWidth: 1,
             borderColor: colors.border,
           }}
         >
-          <View style={{ width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: colors.secondaryLight }}>
-            <Ionicons name="notifications-outline" size={19} color={colors.info} />
+          <View style={{ width: 40, height: 40, borderRadius: 14, borderCurve: "continuous", alignItems: "center", justifyContent: "center", backgroundColor: colors.secondaryLight }}>
+            <Icon set="ion" name="notifications-outline" size={19} color={colors.info} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={{ color: colors.foreground, fontSize: 14.5, fontWeight: "800", fontFamily: fonts.body }}>Gentle reminders</Text>
@@ -529,7 +540,7 @@ function ReadyStep({ name, lastPeriodStartDate, cycleLength, periodLength, isEst
         </View>
 
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 4 }}>
-          <Ionicons name="star" size={13} color={colors.gold} />
+          <Icon set="ion" name="star" size={13} color={colors.gold} />
           <Text style={{ color: colors.mutedText, fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}>
             +{WELCOME_POINTS} care points for finishing setup
           </Text>
@@ -543,7 +554,7 @@ function Stat({ icon, label }: { icon: keyof typeof Ionicons.glyphMap; label: st
   const { colors, fonts } = useTheme();
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-      <Ionicons name={icon} size={14} color={colors.primary} />
+      <Icon set="ion" name={icon} size={14} color={colors.primary} />
       <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}>{label}</Text>
     </View>
   );

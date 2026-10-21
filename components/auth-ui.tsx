@@ -2,7 +2,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { forwardRef, useState } from "react";
 import {
-  ActivityIndicator,
   Image,
   Text,
   TextInput,
@@ -10,30 +9,33 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { getShadow } from "./ui-tokens";
+import { getShadow, withAlpha } from "./ui-tokens";
 import { ThemeToggle, useTheme } from "./theme";
+import { Button } from "./Button";
+import { Icon } from "./Icon";
 
 /** Back button + theme toggle row shown above the auth card. */
 export function AuthTopBar() {
   const router = useRouter();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
 
   return (
     <View className="flex-row items-center justify-between px-5 pt-1 pb-3">
       <TouchableOpacity
+        hitSlop={5}
         accessibilityLabel="Go back"
         accessibilityRole="button"
         activeOpacity={0.85}
         onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))}
-        className="items-center justify-center rounded-full border"
+        className="items-center justify-center rounded-full"
         style={{
-          width: 38,
-          height: 38,
+          width: 44,
+          height: 44,
           backgroundColor: colors.surface,
-          borderColor: colors.border,
+          ...getShadow(colors, isDark),
         }}
       >
-        <Ionicons name="chevron-back" size={18} color={colors.foreground} />
+        <Icon set="ion" name="chevron-back" size={18} color={colors.foreground} />
       </TouchableOpacity>
       <ThemeToggle />
     </View>
@@ -46,12 +48,13 @@ export function AuthBrandMark() {
 
   return (
     <View
-      className="items-center justify-center rounded-[28px] border overflow-hidden"
+      className="items-center justify-center overflow-hidden"
       style={{
-        width: 94,
-        height: 94,
+        width: 96,
+        height: 96,
+        borderRadius: 30,
+        borderCurve: "continuous",
         backgroundColor: colors.surface,
-        borderColor: colors.border,
         ...getShadow(colors, isDark),
       }}
     >
@@ -80,29 +83,37 @@ export const AuthField = forwardRef<TextInput, AuthFieldProps>(function AuthFiel
 
   return (
     <View
-      className="w-full flex-row items-center border"
+      className="w-full flex-row items-center"
       style={{
-        backgroundColor: colors.input,
+        backgroundColor: isFocused ? colors.surface : colors.input,
         borderColor: isFocused ? colors.primary : colors.border,
-        borderWidth: isFocused ? 1.5 : 1,
-        borderRadius: 14,
-        height: 52,
-        paddingHorizontal: 14,
+        // Same border width either way so focusing never nudges the text;
+        // the focus halo is a spread shadow outside the field.
+        borderWidth: 1.5,
+        borderRadius: 16,
+        borderCurve: "continuous",
+        height: 54,
+        paddingHorizontal: 16,
+        boxShadow: isFocused ? `0 0 0 4px ${withAlpha(colors.primary, 0.14)}` : undefined,
       }}
     >
-      <Ionicons
+      <Icon set="ion"
         name={icon}
-        size={17}
+        size={18}
         color={isFocused ? colors.primary : colors.mutedText}
-        style={{ marginRight: 10 }}
+        style={{ marginRight: 12 }}
       />
       <TextInput
+        // Screen readers announce only the typed value once a field is filled,
+        // so the placeholder doubles as the field's name unless one is passed.
+        accessibilityLabel={typeof inputProps.placeholder === "string" ? inputProps.placeholder : undefined}
+        {...inputProps}
         ref={ref}
         placeholderTextColor={colors.mutedText}
         secureTextEntry={isPassword ? isSecure : undefined}
-        className="flex-1 text-sm outline-none font-semibold"
+        className="flex-1 outline-none font-semibold"
         style={[
-          { height: "100%", paddingVertical: 0, color: colors.foreground, fontFamily: fonts.body },
+          { height: "100%", paddingVertical: 0, fontSize: 15, color: colors.foreground, fontFamily: fonts.body },
           style,
         ]}
         onFocus={(e) => {
@@ -113,15 +124,15 @@ export const AuthField = forwardRef<TextInput, AuthFieldProps>(function AuthFiel
           setIsFocused(false);
           inputProps.onBlur?.(e);
         }}
-        {...inputProps}
       />
       {isPassword ? (
         <TouchableOpacity
+          accessibilityRole="button"
           accessibilityLabel={isSecure ? "Show password" : "Hide password"}
-          hitSlop={8}
+          hitSlop={15}
           onPress={() => setIsSecure((value) => !value)}
         >
-          <Ionicons
+          <Icon set="ion"
             name={isSecure ? "eye-outline" : "eye-off-outline"}
             size={17}
             color={colors.mutedText}
@@ -148,37 +159,14 @@ export function AuthPrimaryButton({
   loadingLabel,
   onPress,
 }: AuthPrimaryButtonProps) {
-  const { colors, fonts } = useTheme();
-  const isBusy = Boolean(disabled || isLoading);
-
   return (
-    <TouchableOpacity
-      activeOpacity={0.9}
-      disabled={isBusy}
+    <Button
+      label={loadingLabel && isLoading ? loadingLabel : label}
       onPress={onPress}
-      className="justify-center items-center"
-      style={{
-        height: 46,
-        borderRadius: 12,
-        backgroundColor: colors.primary,
-        opacity: isBusy ? 0.75 : 1,
-      }}
-    >
-      {isLoading ? (
-        <ActivityIndicator color={colors.buttonText} />
-      ) : (
-        <Text
-          style={{
-            fontSize: 14,
-            fontWeight: "800",
-            color: colors.buttonText,
-            fontFamily: fonts.body,
-          }}
-        >
-          {loadingLabel && isLoading ? loadingLabel : label}
-        </Text>
-      )}
-    </TouchableOpacity>
+      disabled={disabled && !isLoading}
+      loading={isLoading}
+      fullWidth
+    />
   );
 }
 
@@ -196,26 +184,6 @@ export function AuthDivider({ label = "OR CONTINUE WITH" }: { label?: string }) 
         {label}
       </Text>
       <View className="h-[1px] flex-1" style={{ backgroundColor: colors.border }} />
-    </View>
-  );
-}
-
-/** Inline error banner shown below the form. */
-export function AuthErrorBanner({ message }: { message: string }) {
-  const { colors, fonts } = useTheme();
-
-  return (
-    <View
-      className="mb-5 flex-row items-center gap-2 rounded-xl border px-3.5 py-3"
-      style={{ backgroundColor: colors.dangerLight, borderColor: colors.danger }}
-    >
-      <Ionicons name="alert-circle" size={15} color={colors.danger} />
-      <Text
-        className="flex-1 text-xs font-bold"
-        style={{ color: colors.danger, fontFamily: fonts.body }}
-      >
-        {message}
-      </Text>
     </View>
   );
 }

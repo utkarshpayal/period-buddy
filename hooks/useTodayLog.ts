@@ -9,8 +9,6 @@ import { useTodayKey } from "./useTodayKey";
 
 export type DayLogPatch = Partial<Omit<DayEntry, "updatedAt" | "note" | "symptoms">> & { symptoms?: string[] };
 
-/** The backend takes a flat 5 points back when a day log is deleted (cycleController.deleteCycleLog). */
-const LOG_DELETE_POINTS = 5;
 
 export const isPeriodFlow = (flow: DayEntry["flow"]) => Boolean(flow && flow !== "none");
 
@@ -25,7 +23,7 @@ export const isPeriodFlow = (flow: DayEntry["flow"]) => Boolean(flow && flow !==
  * is known, a save can't carry its symptoms and Undo can't know what to restore.
  */
 export function useTodayLog() {
-  const { dayEntries, saveDayEntry, removeDayEntry, earnTokens } = useAppState();
+  const { dayEntries, saveDayEntry, removeDayEntry } = useAppState();
   const dateKey = useTodayKey();
   // undefined = not loaded yet, null = nothing logged today.
   const [remote, setRemote] = useState<DayEntry | null | undefined>(undefined);
@@ -75,7 +73,6 @@ export function useTodayLog() {
         // Without today's log we don't know its symptoms: sending [] would erase them.
         const result = await cycleApi.saveLog({ dateKey: key, ...patch, ...(loaded || patch.symptoms ? { symptoms: next.symptoms } : {}) });
         setRemote(mapApiDayEntry(result.cycleLog));
-        if (result.tokensEarned) earnTokens(result.tokensEarned);
         return true;
       } catch (err) {
         if (before) saveDayEntry(key, before);
@@ -84,7 +81,7 @@ export function useTodayLog() {
         return false;
       }
     },
-    [entry, loaded, saveDayEntry, removeDayEntry, earnTokens],
+    [entry, loaded, saveDayEntry, removeDayEntry],
   );
 
   /**
@@ -98,11 +95,9 @@ export function useTodayLog() {
       const current = entryRef.current ?? undefined;
       try {
         if (!previous && (!current || isOnlyFlow(current))) {
-          const result = await cycleApi.deleteLog(key);
+          await cycleApi.deleteLog(key);
           removeDayEntry(key);
           setRemote(null);
-          // Mirrors the backend taking its points back.
-          if (result.deleted) earnTokens(-LOG_DELETE_POINTS);
         } else {
           const { updatedAt: _u, ...rest } = (current ?? previous)!;
           const next = { ...rest, flow: previous?.flow };
@@ -121,7 +116,7 @@ export function useTodayLog() {
         return false;
       }
     },
-    [saveDayEntry, removeDayEntry, earnTokens],
+    [saveDayEntry, removeDayEntry],
   );
 
   return { dateKey, entry, loaded, save, restoreFlow, reload: load };

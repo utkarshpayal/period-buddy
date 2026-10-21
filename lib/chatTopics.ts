@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import type { ComponentProps } from "react";
 import type { ChatTopicId } from "./api";
+import { ageFromDateOfBirth } from "./onboarding";
 
 // Topic starter grid shown before the first real exchange in the Nura AI
 // chat, plus the same metadata used to render each row in the chat history
@@ -187,15 +188,11 @@ export function getChatTopic(topicId?: string | null): ChatTopic | undefined {
   return CHAT_TOPICS.find((topic) => topic.id === topicId);
 }
 
-/** Whole-number age from a profile `dateOfBirth`, or null if unset/invalid —
- * mirrors the backend's own age calc in utils/companionChat.js so the
- * client-side minAge check agrees with what the server will decide. */
+/** Whole-number age from a profile `dateOfBirth`, or null if unset/invalid
+ * (lib/onboarding.ts `ageFromDateOfBirth`, the one age calc on the client). */
 export function computeAge(dateOfBirth?: string | null): number | null {
-  if (!dateOfBirth) return null;
-  const dob = new Date(dateOfBirth);
-  if (Number.isNaN(dob.getTime())) return null;
-  const age = Math.floor((Date.now() - dob.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
-  return age > 0 && age < 130 ? age : null;
+  const age = ageFromDateOfBirth(dateOfBirth);
+  return age !== null && age > 0 ? age : null;
 }
 
 export function isTopicLocked(topic: ChatTopic, dateOfBirth?: string | null): boolean {
@@ -204,12 +201,3 @@ export function isTopicLocked(topic: ChatTopic, dateOfBirth?: string | null): bo
   return age === null || age < topic.minAge;
 }
 
-/** Turns a filled-in intake form into one natural opening chat message, so
- * the rest of the app (session creation, sending, chat history) never needs
- * to know the form existed — it just sees a normal first user message. */
-export function composeIntakeMessage(topic: ChatTopic, answers: Record<string, string>): string {
-  const parts = (topic.intake ?? [])
-    .map((question) => answers[question.id]?.trim())
-    .filter((value): value is string => Boolean(value));
-  return parts.length ? parts.join(". ") : topic.label;
-}

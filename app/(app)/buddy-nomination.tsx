@@ -1,8 +1,6 @@
-import { Feather, Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  KeyboardAvoidingView,
-  Platform,
   RefreshControl,
   ScrollView,
   StatusBar,
@@ -12,7 +10,6 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { useAppState } from "../../components/AppState";
 import { JitsiCall } from "../../components/JitsiCall";
 import { ActionSheet } from "../../components/ActionSheet";
 import { setOpenVideoCall } from "../../lib/consultationPresence";
@@ -38,6 +35,12 @@ import {
   type BuddyMessage as ApiBuddyMessage,
 } from "../../lib/api";
 import { ScreenHeader, SectionHeader } from "../../components/ScreenHeader";
+import { SendStatusLabel } from "../../components/partner-view/SendStatusLabel";
+import { useSecureScreen } from "../../lib/screenPrivacy";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import { Icon } from "../../components/Icon";
+import { motion } from "../../components/motion";
+import { SendButton } from "../../components/SendButton";
 
 // --- STRUCTURAL BACKEND REGISTRY CONTRACTS ---
 interface PeriodBuddy {
@@ -61,6 +64,8 @@ interface BuddyMessage {
   text: string;
   time: string;
   sentAt?: string;
+  /** Our own message still on its way, or not delivered (tap to retry). */
+  status?: "sending" | "failed";
 }
 
 // How often we announce presence over the buddy room, and how long a buddy
@@ -150,7 +155,6 @@ function mergeBuddyMessages(prev: BuddyMessage[], newMsgs: ApiBuddyMessage[]): B
 
 function BuddyNomination() {
   const { colors, isDark, fonts } = useTheme();
-  const { earnTokens } = useAppState();
   const scrollViewRef = useRef<ScrollView>(null);
   const insets = useSafeAreaInsets();
   const socketRef = useRef<WebSocket | null>(null);
@@ -175,6 +179,8 @@ function BuddyNomination() {
     null,
   );
   const [isChatConsoleOpen, setIsChatConsoleOpen] = useState(false);
+  // The chat holds another person's messages.
+  useSecureScreen("buddy-chat", isChatConsoleOpen);
   const [paywallVisible, setPaywallVisible] = useState(false);
   const { hasAccess, refresh: refreshSubscriptionAccess } = useSubscriptionAccess();
   const [typedMessage, setTypedMessage] = useState("");
@@ -193,7 +199,8 @@ function BuddyNomination() {
         // null (not an empty list) on failure, so a failed fetch keeps the
         // nominees already on screen instead of wiping them.
         buddyApi.getMatches().catch(() => null),
-        buddyApi.getActive().catch(() => null),
+        // undefined = couldn't load (keep the pairing on screen), null = no pairing.
+        buddyApi.getActive().catch(() => undefined),
         // null = couldn't load (keep what's on screen), [] = no messages yet.
         buddyApi.getMessages().catch(() => null),
       ]);
@@ -206,6 +213,11 @@ function BuddyNomination() {
       if (mappedActive) {
         setActiveNominatedId(mappedActive.id);
         setIsChatConsoleOpen(true);
+      } else if (activeBuddy === null) {
+        // The server has no pairing (the buddy left, or it ended elsewhere):
+        // free Invite again instead of "Nomination Limit Reached".
+        setActiveNominatedId(null);
+        setIsChatConsoleOpen(false);
       }
 
       setNominees((prev) => {
@@ -222,24 +234,28 @@ function BuddyNomination() {
         return finalNominees;
       });
 
-      if (!activeBuddy) {
+      if (activeBuddy === null) {
         setChatLog([]);
-      } else if (messages) {
+      } else if (activeBuddy && messages) {
         const chatMessages =
           messages.length > 0 ? messages : (activeBuddy.messages ?? []);
         setChatLog(chatMessages.map(mapBuddyMessage));
       }
     } catch (err) {
+      // Keep what's on screen; pull to refresh tries again.
       console.warn("Failed to load buddy space:", err);
-      setNominees([]);
     } finally {
       setLoadingNominees(false);
     }
   }, []);
 
-  useEffect(() => {
-    loadBuddySpace();
-  }, [loadBuddySpace]);
+  // Every focus, the first included: a pairing can end, and messages arrive,
+  // while this screen is in the background.
+  useFocusEffect(
+    useCallback(() => {
+      loadBuddySpace();
+    }, [loadBuddySpace]),
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -276,7 +292,9 @@ function BuddyNomination() {
 
   // WebSocket live synchronization
   useEffect(() => {
-    if (!isChatConsoleOpen || !activeNominatedId || !activeRoomKey) return;
+    // Tied to the pairing, not to the chat being open: closing it ("See all
+    // matches") must not drop messages, call prompts or our presence.
+    if (!activeNominatedId || !activeRoomKey) return;
 
     let socket: WebSocket | null = null;
     let isDisconnected = false;
@@ -423,7 +441,7 @@ function BuddyNomination() {
       socketRef.current = null;
       setIsBuddyOnline(false);
     };
-  }, [isChatConsoleOpen, activeNominatedId, activeRoomKey]);
+  }, [activeNominatedId, activeRoomKey]);
 
 
   const sortedNominees = React.useMemo(
@@ -470,7 +488,6 @@ function BuddyNomination() {
     }
 
     setActiveNominatedId(id);
-    earnTokens(25);
     setIsChatConsoleOpen(true);
 
     try {
@@ -488,7 +505,6 @@ function BuddyNomination() {
           return prev.map((b) => (b.id === activeId ? { ...b, ...mapped } : b));
         });
       }
-      if (result.tokensAwarded) earnTokens(result.tokensAwarded);
       alert("Buddy nominated", "Your Period Buddy space is ready.");
     } catch (err) {
       console.warn("Failed to nominate buddy:", err);
@@ -497,7 +513,6 @@ function BuddyNomination() {
       // success there left a local-only "buddy" that vanished on next load.
       setActiveNominatedId(null);
       setIsChatConsoleOpen(false);
-      earnTokens(-25);
       if (isFeatureLockedError(err)) {
         setPaywallVisible(true);
       } else {
@@ -523,36 +538,45 @@ function BuddyNomination() {
     }
   }
 
+  async function deliverBuddyMessage(localId: string, text: string) {
+    try {
+      const result = await buddyApi.sendMessage(text);
+      setChatLog((prev) => {
+        const merged = result.messages?.length ? mergeBuddyMessages(prev, result.messages) : prev;
+        // Delivered: drop the "Sending…" even if the reply didn't echo it back.
+        return merged.map((m) => (m.id === localId ? { ...m, status: undefined } : m));
+      });
+    } catch (err) {
+      console.warn("Failed to send buddy message:", err);
+      setChatLog((prev) => prev.map((m) => (m.id === localId ? { ...m, status: "failed" } : m)));
+    }
+  }
+
   // `rawText` lets the in-call chat panel send without touching the chat
   // console's own input state; the console keeps calling it with no argument.
-  async function handleSendBuddyMessage(rawText?: string) {
+  function handleSendBuddyMessage(rawText?: string) {
     const source = rawText != null ? rawText : typedMessage;
-    if (!source.trim()) return;
+    const text = source.trim();
+    if (!text) return;
 
     const myPayload: BuddyMessage = {
       id: `msg_u_${Date.now()}`,
       sender: "me",
-      text: source.trim(),
+      text,
       time: "Just now",
       sentAt: new Date().toISOString(),
+      status: "sending",
     };
 
     setChatLog((prev) => [...prev, myPayload]);
     if (rawText == null) setTypedMessage("");
-    setTimeout(
-      () => scrollViewRef.current?.scrollToEnd({ animated: true }),
-      50,
-    );
+    setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 50);
+    deliverBuddyMessage(myPayload.id, text);
+  }
 
-    try {
-      const result = await buddyApi.sendMessage(myPayload.text);
-      if (result.tokensAwarded) earnTokens(result.tokensAwarded);
-      if (result.messages && result.messages.length > 0) {
-        setChatLog((prev) => mergeBuddyMessages(prev, result.messages));
-      }
-    } catch (err) {
-      console.warn("Failed to send buddy message:", err);
-    }
+  function retryBuddyMessage(message: BuddyMessage) {
+    setChatLog((prev) => prev.map((m) => (m.id === message.id ? { ...m, status: "sending" } : m)));
+    deliverBuddyMessage(message.id, message.text);
   }
 
   function handleLeavePairing() {
@@ -600,9 +624,9 @@ function BuddyNomination() {
         style={{ backgroundColor: colors.background }}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          behavior="padding"
           className="flex-1"
-          keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
+          keyboardVerticalOffset={8}
         >
         <ScrollView
           ref={scrollViewRef}
@@ -630,7 +654,7 @@ function BuddyNomination() {
                 {/* Your current buddy (the way back into the chat) */}
                 {activeBuddyData ? (
                   <Animated.View
-                    entering={reduceMotion ? undefined : FadeIn.duration(250)}
+                    entering={reduceMotion ? undefined : FadeIn.duration(motion.duration.base)}
                     // Plain styles: NativeWind's className doesn't reach Reanimated views.
                     style={{ marginBottom: 24 }}
                   >
@@ -677,7 +701,7 @@ function BuddyNomination() {
                       <View
                         style={{
                           marginTop: 14,
-                          borderRadius: 16,
+                          borderRadius: 16, borderCurve: "continuous",
                           paddingHorizontal: 14,
                           paddingVertical: 12,
                           backgroundColor: colors.surfaceSoft,
@@ -686,7 +710,7 @@ function BuddyNomination() {
                           gap: 10,
                         }}
                       >
-                        <Ionicons name="chatbubble-ellipses-outline" size={16} color={colors.mutedText} />
+                        <Icon set="ion" name="chatbubble-ellipses-outline" size={16} color={colors.mutedText} />
                         <Text numberOfLines={1} style={{ flex: 1, fontSize: 13.5, color: colors.foreground, fontFamily: fonts.body }}>
                           {lastBuddyMessage
                             ? `${lastBuddyMessage.sender === "me" ? "You: " : ""}${lastBuddyMessage.text}`
@@ -709,7 +733,7 @@ function BuddyNomination() {
                           backgroundColor: colors.primary,
                         }}
                       >
-                        <Ionicons name="chatbubbles" size={17} color="#FFFFFF" />
+                        <Icon set="ion" name="chatbubbles" size={17} color="#FFFFFF" />
                         <Text style={{ fontSize: 14.5, fontWeight: "800", color: "#FFFFFF", fontFamily: fonts.body }}>Open chat</Text>
                       </View>
                     </PressableFeedback>
@@ -721,7 +745,7 @@ function BuddyNomination() {
                   className="flex-row items-center rounded-2xl border px-4 mb-3"
                   style={{ backgroundColor: colors.surface, borderColor: colors.border, height: 50 }}
                 >
-                  <Feather name="search" size={16} color={colors.mutedText} />
+                  <Icon set="feather" name="search" size={16} color={colors.mutedText} />
                   <TextInput
                     placeholder="Search by name, phase or interest"
                     placeholderTextColor={colors.mutedText}
@@ -734,7 +758,7 @@ function BuddyNomination() {
                   />
                   {searchQuery.length > 0 && (
                     <TouchableOpacity onPress={() => setSearchQuery("")} accessibilityRole="button" accessibilityLabel="Clear search" hitSlop={10}>
-                      <Feather name="x-circle" size={17} color={colors.mutedText} />
+                      <Icon set="feather" name="x-circle" size={17} color={colors.mutedText} />
                     </TouchableOpacity>
                   )}
                 </View>
@@ -809,7 +833,7 @@ function BuddyNomination() {
                   {/* Buddy header: who, presence, call, more */}
                   <View
                     className="flex-row items-center rounded-3xl px-3.5 py-3 mb-5"
-                    style={{ gap: 12, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, ...getShadow(colors, isDark) }}
+                    style={{ gap: 12, backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
                   >
                     <View>
                       <View className="h-11 w-11 rounded-full items-center justify-center" style={{ backgroundColor: colors.primaryLight }}>
@@ -859,7 +883,7 @@ function BuddyNomination() {
                       className="h-11 w-11 rounded-full items-center justify-center"
                       style={{ backgroundColor: isBuddyOnline ? colors.primary : colors.surfaceSoft }}
                     >
-                      <Ionicons name="videocam" size={19} color={isBuddyOnline ? "#FFFFFF" : colors.mutedText} />
+                      <Icon set="ion" name="videocam" size={19} color={isBuddyOnline ? "#FFFFFF" : colors.mutedText} />
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={() => setMenuOpen(true)}
@@ -869,20 +893,20 @@ function BuddyNomination() {
                       className="h-11 w-11 rounded-full items-center justify-center"
                       style={{ backgroundColor: colors.surfaceSoft }}
                     >
-                      <Feather name="more-horizontal" size={19} color={colors.foreground} />
+                      <Icon set="feather" name="more-horizontal" size={19} color={colors.foreground} />
                     </TouchableOpacity>
                   </View>
 
                   {/* Your buddy started a call */}
                   {incomingCallFrom && !buddyCall && (
                     <Animated.View
-                      entering={reduceMotion ? undefined : FadeIn.duration(200)}
+                      entering={reduceMotion ? undefined : FadeIn.duration(motion.duration.base)}
                       // Plain styles: NativeWind's className doesn't reach Reanimated views.
                       style={{
                         flexDirection: "row",
                         alignItems: "center",
                         gap: 12,
-                        borderRadius: 24,
+                        borderRadius: 24, borderCurve: "continuous",
                         paddingHorizontal: 14,
                         paddingVertical: 12,
                         marginBottom: 20,
@@ -891,7 +915,7 @@ function BuddyNomination() {
                       accessibilityLiveRegion="polite"
                     >
                       <View className="h-10 w-10 rounded-full items-center justify-center" style={{ backgroundColor: colors.success }}>
-                        <Ionicons name="videocam" size={18} color="#FFFFFF" />
+                        <Icon set="ion" name="videocam" size={18} color="#FFFFFF" />
                       </View>
                       <View className="flex-1">
                         <Text numberOfLines={1} style={{ fontSize: 14.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
@@ -900,6 +924,7 @@ function BuddyNomination() {
                         <Text style={{ fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}>Video call</Text>
                       </View>
                       <TouchableOpacity
+                        hitSlop={{ top: 4, bottom: 4 }}
                         onPress={() => setIncomingCallFrom(null)}
                         accessibilityRole="button"
                         accessibilityLabel="Not now"
@@ -908,6 +933,7 @@ function BuddyNomination() {
                         <Text style={{ fontSize: 13, fontWeight: "700", color: colors.mutedText, fontFamily: fonts.body }}>Not now</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
+                        hitSlop={{ top: 4, bottom: 4 }}
                         onPress={() => {
                           setIncomingCallFrom(null);
                           setBuddyCall({ key: `buddy-${activeBuddyData.id}-${Date.now()}`, peerName: activeBuddyData.name });
@@ -926,7 +952,7 @@ function BuddyNomination() {
                   {chatLog.length === 0 ? (
                     <View className="items-center px-4 pt-6">
                       <View className="h-16 w-16 rounded-full items-center justify-center" style={{ backgroundColor: colors.primaryLight }}>
-                        <Ionicons name="chatbubbles" size={28} color={colors.primary} />
+                        <Icon set="ion" name="chatbubbles" size={28} color={colors.primary} />
                       </View>
                       <Text className="text-center mt-4" style={{ fontSize: 17, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
                         Say hi to {activeBuddyData.name.split(" ")[0]}
@@ -974,11 +1000,13 @@ function BuddyNomination() {
                                 {message.text}
                               </Text>
                             </View>
-                            {showTime && (
+                            {message.status ? (
+                              <SendStatusLabel status={message.status} onRetry={() => retryBuddyMessage(message)} />
+                            ) : showTime ? (
                               <Text style={{ fontSize: 11.5, marginTop: 4, marginHorizontal: 6, color: colors.mutedText, fontFamily: fonts.body }}>
                                 {message.time}
                               </Text>
-                            )}
+                            ) : null}
                           </View>
                         );
                       })}
@@ -1023,17 +1051,7 @@ function BuddyNomination() {
                 fontFamily: fonts.body,
               }}
             />
-            <TouchableOpacity
-              disabled={!typedMessage.trim()}
-              onPress={() => handleSendBuddyMessage()}
-              accessibilityRole="button"
-              accessibilityLabel="Send message"
-              accessibilityState={{ disabled: !typedMessage.trim() }}
-              className="h-11 w-11 rounded-full items-center justify-center"
-              style={{ backgroundColor: typedMessage.trim() ? colors.primary : colors.surfaceSoft }}
-            >
-              <Feather name="send" size={18} color={typedMessage.trim() ? colors.buttonText : colors.mutedText} />
-            </TouchableOpacity>
+            <SendButton onPress={() => handleSendBuddyMessage()} disabled={!typedMessage.trim()} size={44} accessibilityLabel="Send message" />
           </View>
         )}
         </KeyboardAvoidingView>
@@ -1052,6 +1070,7 @@ function BuddyNomination() {
               mine: m.sender === "me",
               text: m.text,
               sentAt: m.sentAt,
+              failed: m.status === "failed",
             })),
             onSend: (text) => handleSendBuddyMessage(text),
             canSend: true,

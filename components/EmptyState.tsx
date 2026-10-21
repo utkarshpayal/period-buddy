@@ -1,7 +1,9 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
-import { Text, TouchableOpacity, View } from "react-native";
+import { Text, View } from "react-native";
+import { Button } from "./Button";
 import { useTheme } from "./theme";
+import { Icon } from "./Icon";
 
 /**
  * Shared "nothing here yet" placeholder for lists/sections that loaded fine but
@@ -30,40 +32,35 @@ export function EmptyState({
     <View
       className={`items-center justify-center ${compact ? "py-8 px-6" : "flex-1 py-16 px-8"}`}
     >
+      {/* Icon in a tinted halo with a faint outer ring. */}
       <View
-        className="h-16 w-16 items-center justify-center rounded-full"
-        style={{ backgroundColor: colors.surfaceSoft ?? colors.surface }}
+        style={{
+          width: compact ? 64 : 84,
+          height: compact ? 64 : 84,
+          borderRadius: 42,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: colors.primaryLight,
+          borderWidth: compact ? 6 : 8,
+          borderColor: colors.surfaceSoft,
+        }}
       >
-        <MaterialCommunityIcons name={icon} size={30} color={colors.mutedText} />
+        <Icon set="mci" name={icon} size={compact ? 26 : 32} color={colors.primaryDark} />
       </View>
       <Text
-        className="mt-4 text-base font-bold text-center"
-        style={{ color: colors.foreground, fontFamily: fonts.heading }}
+        style={{ marginTop: 18, fontSize: 17, lineHeight: 24, fontWeight: "700", letterSpacing: -0.3, textAlign: "center", color: colors.foreground, fontFamily: fonts.heading }}
       >
         {title}
       </Text>
       {message ? (
         <Text
-          className="mt-2 text-xs text-center leading-5"
-          style={{ color: colors.mutedText, fontFamily: fonts.body }}
+          style={{ marginTop: 6, maxWidth: 300, fontSize: 14, lineHeight: 20, textAlign: "center", color: colors.mutedText, fontFamily: fonts.body }}
         >
           {message}
         </Text>
       ) : null}
       {actionLabel && onAction ? (
-        <TouchableOpacity
-          onPress={onAction}
-          activeOpacity={0.85}
-          className="mt-6 rounded-2xl px-6 py-3"
-          style={{ backgroundColor: colors.primary }}
-        >
-          <Text
-            className="text-sm font-bold"
-            style={{ color: colors.buttonText, fontFamily: fonts.body }}
-          >
-            {actionLabel}
-          </Text>
-        </TouchableOpacity>
+        <Button label={actionLabel} onPress={onAction} size="md" style={{ marginTop: 22 }} />
       ) : null}
     </View>
   );

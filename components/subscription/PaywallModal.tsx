@@ -1,31 +1,26 @@
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { Modal, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { Modal, Platform, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { EmptyState } from "../EmptyState";
 import { SkeletonBlock } from "../Skeleton";
 import { useTheme } from "../theme";
 import { CouponField } from "./CouponField";
+import { CYCLE_SUFFIX } from "./billing";
+import { LockedFeatureHeading } from "./LockedFeatureHeading";
 import { PaymentTrustFooter } from "./PaymentTrustFooter";
 import { PurchaseConfirmSheet } from "./PurchaseConfirmSheet";
 import { PurchaseResultPanel } from "./PurchaseResultPanel";
 import { CashfreeCheckoutModal } from "../CashfreeCheckoutModal";
 import { PaymentSheet } from "../PaymentSheet";
 import { usePaymentCheckout } from "../../hooks/usePaymentCheckout";
-import {
-  getFriendlyErrorMessage,
-  subscriptionApi,
-  type BillingCycle,
-  type CouponPreview,
-  type FeatureLockInfo,
-} from "../../lib/api";
+import { getFriendlyErrorMessage, subscriptionApi, type CouponPreview, type FeatureLockInfo } from "../../lib/api";
+import { AppLockCover } from "../AppLockScreen";
+import { Icon } from "../Icon";
+import { Button } from "../Button";
 
-const CYCLE_SUFFIX: Record<BillingCycle, string> = {
-  monthly: "/mo",
-  yearly: "/yr",
-  one_time: " once",
-};
+// How long to wait for iOS's onDismiss before presenting the next sheet anyway.
+const DISMISS_FALLBACK_MS = 700;
 
 type ConfirmTarget = {
   key: string;
@@ -91,6 +86,28 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
   const [couponPreview, setCouponPreview] = useState<CouponPreview | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
   const [applyingCoupon, setApplyingCoupon] = useState(false);
+
+  // Two native Modals presenting at once is unreliable (iOS/Android both
+  // refuse to stack a second one on top cleanly), so the paywall hides
+  // itself while the confirm/checkout sheets are up. Those sheets are
+  // siblings of the paywall's Modal, not children: a hidden Modal unmounts
+  // its children, which would take them down with it. On iOS they also wait
+  // until the paywall has finished dismissing (onDismiss).
+  const covered = !!checkout || !!confirmTarget;
+  const [paywallGone, setPaywallGone] = useState(false);
+  useEffect(() => {
+    if (!covered) {
+      setPaywallGone(false);
+      return;
+    }
+    if (Platform.OS !== "ios") {
+      setPaywallGone(true);
+      return;
+    }
+    const fallback = setTimeout(() => setPaywallGone(true), DISMISS_FALLBACK_MS);
+    return () => clearTimeout(fallback);
+  }, [covered]);
+  const sheetsReady = visible && paywallGone;
 
   useEffect(() => {
     if (lock) {
@@ -188,14 +205,14 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
   }
 
   return (
+    <>
     <Modal
-      // Two native Modals presenting at once is unreliable (iOS/Android both
-      // refuse to stack a second one on top cleanly) — hide this one the
-      // instant a Cashfree order exists, or the confirm sheet is open, so
-      // only one Modal is ever on screen at a time.
-      visible={visible && !checkout && !confirmTarget}
+      visible={visible && !covered}
       animationType="slide"
       onRequestClose={handleClose}
+      onDismiss={() => {
+        if (covered) setPaywallGone(true);
+      }}
       presentationStyle="pageSheet"
     >
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
@@ -203,13 +220,13 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
           <Text className="text-lg font-bold" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
             Unlock Premium
           </Text>
-          <TouchableOpacity
+          <TouchableOpacity hitSlop={6} accessibilityRole="button" accessibilityLabel="Close"
             onPress={handleClose}
             activeOpacity={0.7}
             className="h-9 w-9 items-center justify-center rounded-full"
             style={{ backgroundColor: colors.surface }}
           >
-            <MaterialCommunityIcons name="close" size={18} color={colors.mutedText} />
+            <Icon set="mci" name="close" size={18} color={colors.mutedText} />
           </TouchableOpacity>
         </View>
 
@@ -253,28 +270,16 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
               className="items-center rounded-3xl px-6 py-8 mt-2"
               style={{ backgroundColor: colors.goldLight ?? colors.surfaceSoft }}
             >
-              <View
-                className="h-14 w-14 items-center justify-center rounded-full"
-                style={{ backgroundColor: colors.gold ?? colors.primary }}
-              >
-                <MaterialCommunityIcons name="lock-outline" size={26} color={colors.buttonText} />
-              </View>
-              <Text
-                className="mt-4 text-base font-bold text-center"
-                style={{ color: colors.foreground, fontFamily: fonts.heading }}
-              >
-                {info.feature.name}
-              </Text>
-              {info.feature.description ? (
-                <Text
-                  className="mt-1.5 text-xs text-center leading-5"
-                  style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                >
-                  {info.feature.description}
-                </Text>
-              ) : null}
+              <LockedFeatureHeading title={info.feature.name} description={info.feature.description} />
 
-              <TouchableOpacity
+              <Button
+                label={
+                  couponPreview
+                    ? couponPreview.free
+                      ? "Unlock — free"
+                      : `Buy just this — ₹${couponPreview.finalAmount}`
+                    : `Buy just this — ₹${info.feature.price}${CYCLE_SUFFIX[info.feature.billingCycle]}`
+                }
                 onPress={() =>
                   setConfirmTarget({
                     key: "feature",
@@ -286,21 +291,9 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
                     couponPreview,
                   })
                 }
-                activeOpacity={0.85}
-                className="mt-5 flex-row items-center rounded-full px-6 py-3"
-                style={{ backgroundColor: colors.gold ?? colors.primary }}
-              >
-                {couponPreview ? (
-                  <Text className="text-sm font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-                    {couponPreview.free ? "Unlock — Free" : `Buy just this — ₹${couponPreview.finalAmount}`}
-                  </Text>
-                ) : (
-                  <Text className="text-sm font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-                    Buy just this — ₹{info.feature.price}
-                    {CYCLE_SUFFIX[info.feature.billingCycle]}
-                  </Text>
-                )}
-              </TouchableOpacity>
+                size="md"
+                style={{ marginTop: 20 }}
+              />
 
               <View className="w-full mt-5">
                 <CouponField
@@ -360,7 +353,9 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
                           {CYCLE_SUFFIX[plan.billingCycle]}
                         </Text>
                       </View>
-                      <TouchableOpacity
+                      <Button
+                        label="Choose"
+                        size="sm"
                         onPress={() =>
                           setConfirmTarget({
                             key: plan._id,
@@ -374,17 +369,7 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
                               : undefined,
                           })
                         }
-                        activeOpacity={0.85}
-                        className="rounded-full px-4 py-2.5"
-                        style={{ backgroundColor: colors.primary }}
-                      >
-                        <Text
-                          className="text-xs font-bold"
-                          style={{ color: colors.buttonText, fontFamily: fonts.body }}
-                        >
-                          Choose
-                        </Text>
-                      </TouchableOpacity>
+                      />
                     </View>
                   ))}
                 </View>
@@ -395,12 +380,14 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
           </ScrollView>
         )}
       </SafeAreaView>
+      <AppLockCover />
+    </Modal>
 
       <PurchaseConfirmSheet
         // Don't rely on handleConfirmPurchase's setConfirmTarget(null) alone
         // to prevent a stacked-Modal frame — hide the instant checkout/
         // purchaseResult exists too, regardless of render-batching timing.
-        visible={confirmTarget !== null && !checkout && !purchaseResult}
+        visible={sheetsReady && confirmTarget !== null && !checkout && !purchaseResult}
         itemName={confirmTarget?.label ?? ""}
         itemDescription={confirmTarget?.description}
         originalAmount={confirmTarget?.price ?? 0}
@@ -418,7 +405,7 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
           free order has neither) are always present here. PaymentSheet
           (UPI apps, UPI ID) is the default; its "Card, netbanking or wallet"
           option switches to Cashfree's hosted checkout. */}
-      {checkout && checkout.orderId && checkout.paymentSessionId && !useHostedCheckout && (
+      {sheetsReady && checkout && checkout.orderId && checkout.paymentSessionId && !useHostedCheckout && (
         <PaymentSheet
           visible
           mode={checkout.cashfreeMode ?? "production"}
@@ -430,7 +417,7 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
           onUseOtherMethod={() => setUseHostedCheckout(true)}
         />
       )}
-      {checkout && checkout.orderId && checkout.paymentSessionId && useHostedCheckout && (
+      {sheetsReady && checkout && checkout.orderId && checkout.paymentSessionId && useHostedCheckout && (
         <CashfreeCheckoutModal
           visible
           mode={checkout.cashfreeMode ?? "production"}
@@ -439,6 +426,6 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
           onResult={handleCheckoutResult}
         />
       )}
-    </Modal>
+    </>
   );
 }

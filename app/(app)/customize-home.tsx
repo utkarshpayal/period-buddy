@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useRef, useState } from "react";
-import { ScrollView, StatusBar, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { StatusBar, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppConfig } from "../../components/app-config";
 import { EmptyState } from "../../components/EmptyState";
@@ -40,6 +40,8 @@ import {
   withShortcutStyle,
   withShortcuts,
 } from "../../lib/homeLayout";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
+import { Icon } from "../../components/Icon";
 
 type IconName = React.ComponentProps<typeof Ionicons>["name"];
 
@@ -141,20 +143,20 @@ export default function CustomizeHome() {
   const iconBox = (icon: IconName, color: string, bg: string, dim = false, always = false) =>
     compact && !always ? null : (
     <View style={{ width: 36, height: 36, borderRadius: 11, backgroundColor: bg, alignItems: "center", justifyContent: "center", marginRight: 12, opacity: dim ? 0.5 : 1 }}>
-      <Ionicons name={icon} size={18} color={color} />
+      <Icon set="ion" name={icon} size={18} color={color} />
     </View>
   );
   const smallButton = (icon: IconName, a11y: string, onPress: () => void, disabled = false, color = colors.mutedText) => (
     <TouchableOpacity
       onPress={onPress}
       disabled={disabled}
-      hitSlop={6}
+      hitSlop={9}
       accessibilityRole="button"
       accessibilityLabel={a11y}
       accessibilityState={{ disabled }}
       style={{ width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", opacity: disabled ? 0.3 : 1 }}
     >
-      <Ionicons name={icon} size={18} color={color} />
+      <Icon set="ion" name={icon} size={18} color={color} />
     </TouchableOpacity>
   );
   /** Up/down stacked in one column, so a row keeps its width for the name. */
@@ -176,7 +178,7 @@ export default function CustomizeHome() {
           accessibilityState={{ disabled }}
           style={{ height: 26, width: 34, alignItems: "center", justifyContent: "center", opacity: disabled ? 0.25 : 1 }}
         >
-          <Ionicons name={icon} size={17} color={colors.mutedText} />
+          <Icon set="ion" name={icon} size={17} color={colors.mutedText} />
         </TouchableOpacity>
       ))}
     </View>
@@ -220,7 +222,7 @@ export default function CustomizeHome() {
           <Text style={{ color: colors.buttonText, fontSize: 10.5, fontWeight: "800", fontFamily: fonts.mono }}>{badge}</Text>
         </View>
       ) : icon ? (
-        <Ionicons name={icon} size={14} color={on ? colors.primary : colors.mutedText} />
+        <Icon set="ion" name={icon} size={14} color={on ? colors.primary : colors.mutedText} />
       ) : null}
       <Text style={{ fontSize: 13, fontWeight: "700", color: on ? colors.primary : colors.foreground, fontFamily: fonts.body }}>{text}</Text>
     </TouchableOpacity>
@@ -320,7 +322,7 @@ export default function CustomizeHome() {
                     borderColor: colors.foreground,
                   }}
                 >
-                  {on ? <Ionicons name="checkmark" size={15} color="#FFFFFF" /> : null}
+                  {on ? <Icon set="ion" name="checkmark" size={15} color="#FFFFFF" /> : null}
                 </TouchableOpacity>
               );
             })}
@@ -333,6 +335,7 @@ export default function CustomizeHome() {
               const on = (style.icon ?? original?.icon ?? tile.icon) === icon;
               return (
                 <TouchableOpacity
+                  hitSlop={{ top: 6, bottom: 6 }}
                   key={icon}
                   onPress={() => set({ icon: i === 0 ? null : icon })}
                   accessibilityRole="radio"
@@ -349,7 +352,7 @@ export default function CustomizeHome() {
                     backgroundColor: on ? colors.primaryLight : colors.surface,
                   }}
                 >
-                  <Ionicons name={icon as IconName} size={17} color={on ? colors.primary : colors.foreground} />
+                  <Icon set="ion" name={icon as IconName} size={17} color={on ? colors.primary : colors.foreground} />
                 </TouchableOpacity>
               );
             })}
@@ -372,11 +375,11 @@ export default function CustomizeHome() {
         subtitle="Only your Home changes"
         right={<HeaderIconButton icon="refresh-outline" accessibilityLabel="Reset to default" onPress={reset} disabled={isDefaultLayout(layout)} />}
       />
-      <ScrollView
+      <KeyboardAwareScrollView
+        bottomOffset={24}
         contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        automaticallyAdjustKeyboardInsets
       >
         {sectionTitle("Templates", "Pick the Home that fits you, then change anything below.")}
         <View style={{ marginHorizontal: 24, gap: 10 }} accessibilityRole="radiogroup">
@@ -401,7 +404,7 @@ export default function CustomizeHome() {
                   alignItems: "flex-start",
                   gap: 12,
                   padding: 14,
-                  borderRadius: 18,
+                  borderRadius: 18, borderCurve: "continuous",
                   borderWidth: on ? 1.5 : 1,
                   borderColor: on ? colors.primary : colors.border,
                   backgroundColor: colors.surface,
@@ -417,7 +420,7 @@ export default function CustomizeHome() {
                         const { color, bg } = tint(colors, p.shortcutStyles?.[f.key]?.color ?? f.colorKey);
                         return (
                           <View key={f.key} style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: bg, alignItems: "center", justifyContent: "center" }}>
-                            <Ionicons name={f.icon as IconName} size={14} color={color} />
+                            <Icon set="ion" name={f.icon as IconName} size={14} color={color} />
                           </View>
                         );
                       })}
@@ -451,7 +454,7 @@ export default function CustomizeHome() {
             accessibilityRole="button"
             style={{ alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 12, marginTop: 2 }}
           >
-            <Ionicons name="refresh-outline" size={15} color={colors.primary} />
+            <Icon set="ion" name="refresh-outline" size={15} color={colors.primary} />
             <Text style={{ color: colors.primary, fontSize: 13.5, fontWeight: "700", fontFamily: fonts.body }}>Back to the full standard Home</Text>
           </TouchableOpacity>
         ) : null}
@@ -554,7 +557,7 @@ export default function CustomizeHome() {
             ) : null}
           </>
         ) : null}
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </SafeAreaView>
   );
 }

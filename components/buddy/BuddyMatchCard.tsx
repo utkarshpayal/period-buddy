@@ -1,4 +1,4 @@
-import { Feather, Ionicons } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 import React from "react";
 import { Text, View } from "react-native";
 import Animated, { FadeInDown, LinearTransition, useReducedMotion } from "react-native-reanimated";
@@ -6,6 +6,8 @@ import { matchStrength, phaseKeyOf, PHASE_LABELS, type BuddyCandidate, type Budd
 import PressableFeedback from "../PressableFeedback";
 import { useTheme, type ThemeColors } from "../theme";
 import { getShadow } from "../ui-tokens";
+import { Icon } from "../Icon";
+import { motion } from "../motion";
 
 /** Solid + pale colour per cycle phase (same family the tracker uses). */
 export function phaseTint(phase: BuddyPhaseKey, colors: ThemeColors) {
@@ -66,7 +68,7 @@ export function BuddyMatchCard({
 
   return (
     <Animated.View
-      entering={reduceMotion ? undefined : FadeInDown.delay(Math.min(index, 8) * 45).duration(320)}
+      entering={reduceMotion ? undefined : FadeInDown.delay(Math.min(index, 8) * 45).duration(motion.duration.slow)}
       layout={reduceMotion ? undefined : LinearTransition.duration(200)}
     >
       <PressableFeedback
@@ -126,7 +128,7 @@ export function BuddyMatchCard({
 
           <View className="items-end" style={{ gap: 2 }}>
             <Text style={{ fontSize: 18, fontWeight: "800", color: strengthColor, fontFamily: fonts.mono }}>{score}%</Text>
-            <Feather name={expanded ? "chevron-up" : "chevron-down"} size={16} color={colors.mutedText} />
+            <Icon set="feather" name={expanded ? "chevron-up" : "chevron-down"} size={16} color={colors.mutedText} />
           </View>
         </View>
 
@@ -177,7 +179,7 @@ export function BuddyMatchCard({
                   opacity: pressed ? 0.85 : 1,
                 })}
               >
-                <Ionicons name="chatbubble-ellipses" size={15} color="#FFFFFF" />
+                <Icon set="ion" name="chatbubble-ellipses" size={15} color="#FFFFFF" />
                 <Text style={{ fontSize: 13, fontWeight: "800", color: "#FFFFFF", fontFamily: fonts.body }}>Open chat</Text>
               </PressableFeedback>
             ) : status === "available" ? (
@@ -197,7 +199,7 @@ export function BuddyMatchCard({
                   opacity: pressed ? 0.85 : 1,
                 })}
               >
-                <Feather name="user-plus" size={14} color="#FFFFFF" />
+                <Icon set="feather" name="user-plus" size={14} color="#FFFFFF" />
                 <Text style={{ fontSize: 13, fontWeight: "800", color: "#FFFFFF", fontFamily: fonts.body }}>Invite</Text>
               </PressableFeedback>
             ) : null}
@@ -212,7 +214,7 @@ function Reason({ icon, text }: { icon: React.ComponentProps<typeof Feather>["na
   const { colors, fonts } = useTheme();
   return (
     <View className="flex-row items-start" style={{ gap: 8 }}>
-      <Feather name={icon} size={14} color={colors.primary} style={{ marginTop: 2 }} />
+      <Icon set="feather" name={icon} size={14} color={colors.primary} style={{ marginTop: 2 }} />
       <Text style={{ flex: 1, fontSize: 13, lineHeight: 19, color: colors.foreground, fontFamily: fonts.body }}>{text}</Text>
     </View>
   );

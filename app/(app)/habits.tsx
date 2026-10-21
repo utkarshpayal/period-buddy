@@ -1,6 +1,5 @@
-import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   RefreshControl,
@@ -13,10 +12,16 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { alert } from "../../lib/alert";
 import { useTheme } from "../../components/theme";
+import { LoadingErrorState } from "../../components/LoadingErrorState";
 import { SkeletonList } from "../../components/Skeleton";
 import { getHeroGradient, getShadow, HABIT_CATEGORY_COLORS } from "../../components/ui-tokens";
-import { habitsApi, type Habit } from "../../lib/api";
+import { useDataRefresh } from "../../hooks/useDataRefresh";
+import { getFriendlyErrorMessage, habitsApi, isNetworkError, type Habit } from "../../lib/api";
 import { HeaderIconButton, ScreenHeader } from "../../components/ScreenHeader";
+import { useSecureScreen } from "../../lib/screenPrivacy";
+import { Icon } from "../../components/Icon";
+import { CelebrationBurst } from "../../components/celebrations/Lottie";
+import { haptics } from "../../lib/haptics";
 
 const HABIT_IDEAS = [
   { title: "Sleep 8 Hours", icon: "moon-outline", color: HABIT_CATEGORY_COLORS.sleep, tokens: 45 },
@@ -32,12 +37,20 @@ function computeTreeState(pct: number) {
 }
 
 export default function Habits() {
+  useSecureScreen("habits");
   const { colors, isDark, fonts } = useTheme();
 
   const [habits, setHabits] = useState<Habit[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  // The habit just ticked off, for a one-shot burst on its check.
+  const [celebrateId, setCelebrateId] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<{ message: string; offline: boolean } | null>(null);
+  // A ref, so a fast double tap can't add the same habit twice.
+  const addingRef = useRef(false);
+  const [adding, setAdding] = useState(false);
+  const loadedRef = useRef(false);
 
   const heroGradient = getHeroGradient(colors, isDark) as [string, string, string];
 
@@ -47,8 +60,13 @@ export default function Habits() {
       else setLoading(true);
       const data = await habitsApi.getHabits();
       setHabits(data);
+      loadedRef.current = true;
+      setLoadError(null);
     } catch (err) {
-      alert("Error", err instanceof Error ? err.message : "Failed to load habits");
+      // With nothing loaded yet, show an error with Retry instead of an empty
+      // list; otherwise keep the list on screen.
+      if (!loadedRef.current) setLoadError({ message: getFriendlyErrorMessage(err), offline: isNetworkError(err) });
+      else if (isRefresh) alert("Couldn't refresh habits", getFriendlyErrorMessage(err));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -59,10 +77,26 @@ export default function Habits() {
     load();
   }, [load]);
 
+  // Habits ticked elsewhere (Home, Forest); this screen's own writes already
+  // update the list.
+  useDataRefresh(["habits"], async ({ whileFocused }) => {
+    if (whileFocused) return;
+    try {
+      setHabits(await habitsApi.getHabits());
+    } catch {
+      // Quiet refresh.
+    }
+  });
+
   const toggleHabit = async (id: string) => {
     setTogglingId(id);
     try {
       const result = await habitsApi.toggleHabit(id);
+      if (result.completed) {
+        haptics.success();
+        setCelebrateId(id);
+        setTimeout(() => setCelebrateId((current) => (current === id ? null : current)), 900);
+      } else haptics.tap();
       setHabits((prev) =>
         prev.map((h) =>
           h.id === id
@@ -71,7 +105,7 @@ export default function Habits() {
         ),
       );
     } catch (err) {
-      alert("Error", err instanceof Error ? err.message : "Could not update habit");
+      alert("Couldn't update habit", getFriendlyErrorMessage(err));
     } finally {
       setTogglingId(null);
     }
@@ -83,11 +117,17 @@ export default function Habits() {
       alert("Habit list full", "You have already added all suggested habits.");
       return;
     }
+    if (addingRef.current) return;
+    addingRef.current = true;
+    setAdding(true);
     try {
       const newHabit = await habitsApi.createHabit(idea);
       setHabits((prev) => [...prev, newHabit]);
     } catch (err) {
-      alert("Error", err instanceof Error ? err.message : "Could not add habit");
+      alert("Couldn't add habit", getFriendlyErrorMessage(err));
+    } finally {
+      addingRef.current = false;
+      setAdding(false);
     }
   };
 
@@ -113,9 +153,13 @@ export default function Habits() {
           right={<HeaderIconButton icon="refresh" accessibilityLabel="Refresh" onPress={() => load(true)} />}
         />
 
-        {loading ? (
-          <SkeletonList count={6} style={{ marginTop: 16 }} />
-        ) : (
+        <LoadingErrorState
+          loading={loading}
+          error={loadError?.message ?? null}
+          offline={loadError?.offline}
+          onRetry={() => load()}
+          skeleton={<SkeletonList count={6} style={{ marginTop: 16 }} />}
+        >
           <ScrollView
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 100 }}
@@ -129,7 +173,7 @@ export default function Habits() {
                 colors={heroGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
-                style={{ borderRadius: 22, padding: 18 }}
+                style={{ borderRadius: 22, borderCurve: "continuous", padding: 18 }}
                 className="flex-row items-center justify-between"
               >
                 <View className="flex-1 shrink pr-3">
@@ -166,7 +210,7 @@ export default function Habits() {
                     className="items-center rounded-2xl border p-5"
                     style={{ backgroundColor: colors.surface, borderColor: colors.border }}
                   >
-                    <MaterialCommunityIcons name="sprout-outline" size={30} color={colors.primary} />
+                    <Icon set="mci" name="sprout-outline" size={30} color={colors.primary} />
                     <Text className="mt-3 text-sm font-black" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
                       Start with one gentle habit
                     </Text>
@@ -204,7 +248,7 @@ export default function Habits() {
                         className="h-10 w-10 items-center justify-center rounded-full mr-3.5"
                         style={{ backgroundColor: `${resolvedColor}22` }}
                       >
-                        <Ionicons name={habit.icon as any} size={18} color={resolvedColor} />
+                        <Icon set="ion" name={habit.icon as any} size={18} color={resolvedColor} />
                       </View>
 
                       {/* minWidth: 0 stops this flex item from growing past
@@ -226,17 +270,25 @@ export default function Habits() {
                         >
                           {habit.title}
                         </Text>
-                        <Text
-                          className="text-xs font-bold mt-0.5"
-                          numberOfLines={1}
-                          ellipsizeMode="tail"
-                          style={{ color: colors.mutedText, fontFamily: fonts.body }}
-                        >
-                          🔥 {habit.streak} day streak · +{habit.rewardPoints ?? habit.tokens} pts
-                        </Text>
+                        <View className="flex-row items-center mt-0.5" style={{ gap: 4 }}>
+                          <Icon set="ion" name="flame" size={13} color={colors.warning} />
+                          <Text
+                            className="text-xs font-bold"
+                            numberOfLines={1}
+                            ellipsizeMode="tail"
+                            style={{ color: colors.mutedText, fontFamily: fonts.body, flexShrink: 1 }}
+                          >
+                            {habit.streak} day streak · +{habit.rewardPoints ?? habit.tokens} pts
+                          </Text>
+                        </View>
                       </View>
 
                       {/* Checkmark toggle */}
+                      {celebrateId === habit.id ? (
+                        <View pointerEvents="none" style={{ position: "absolute", right: 16 + 13 - 40, width: 80, height: 80, top: "50%", marginTop: -40 }}>
+                          <CelebrationBurst size={80} />
+                        </View>
+                      ) : null}
                       <View
                         className="h-[26px] w-[26px] items-center justify-center rounded-full border"
                         style={{
@@ -248,7 +300,7 @@ export default function Habits() {
                         {isToggling ? (
                           <ActivityIndicator size="small" color={habit.completed ? colors.buttonText : colors.mutedText} />
                         ) : habit.completed ? (
-                          <Feather name="check" size={13} color={colors.buttonText} />
+                          <Icon set="feather" name="check" size={13} color={colors.buttonText} />
                         ) : null}
                       </View>
                     </TouchableOpacity>
@@ -261,15 +313,15 @@ export default function Habits() {
                 activeOpacity={0.7}
                 className="mt-6 rounded-2xl border border-dashed py-4 items-center justify-center"
                 onPress={addHabit}
-                disabled={!hasSuggestedHabits}
+                disabled={!hasSuggestedHabits || adding}
                 style={{
                   borderColor: colors.border,
                   backgroundColor: colors.surfaceSoft,
-                  opacity: hasSuggestedHabits ? 1 : 0.62,
+                  opacity: hasSuggestedHabits && !adding ? 1 : 0.62,
                 }}
               >
                 <View className="flex-row items-center gap-2">
-                  <Feather name="plus-circle" size={15} color={colors.primary} />
+                  <Icon set="feather" name="plus-circle" size={15} color={colors.primary} />
                   <Text className="text-xs font-black tracking-wide" style={{ color: colors.primary, fontFamily: fonts.body }}>
                     {hasSuggestedHabits ? "Add Suggested Habit" : "All Suggestions Added"}
                   </Text>
@@ -277,7 +329,7 @@ export default function Habits() {
               </TouchableOpacity>
             </View>
           </ScrollView>
-        )}
+        </LoadingErrorState>
       </SafeAreaView>
     </>
   );

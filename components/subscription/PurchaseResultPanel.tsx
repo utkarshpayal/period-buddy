@@ -1,9 +1,10 @@
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import React, { useState } from "react";
-import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
+import React, { useRef, useState } from "react";
+import { Text, TouchableOpacity, View } from "react-native";
 import { useTheme } from "../theme";
 import { getSoftTints } from "../ui-tokens";
 import type { PurchaseResult } from "../../hooks/usePaymentCheckout";
+import { Icon } from "../Icon";
+import { Button } from "../Button";
 
 /**
  * In-app success/failure/pending state rendered in place of a native OS
@@ -28,12 +29,16 @@ export function PurchaseResultPanel({
   const { colors, fonts } = useTheme();
   const softTints = getSoftTints(colors);
   const [checking, setChecking] = useState(false);
+  const checkingRef = useRef(false);
 
   const handleRecheck = async () => {
+    if (checkingRef.current) return;
+    checkingRef.current = true;
     setChecking(true);
     try {
       await onRecheckPending();
     } finally {
+      checkingRef.current = false;
       setChecking(false);
     }
   };
@@ -42,7 +47,7 @@ export function PurchaseResultPanel({
     return (
       <View className="flex-1 items-center justify-center px-8">
         <View className="h-16 w-16 items-center justify-center rounded-full" style={{ backgroundColor: softTints.emerald }}>
-          <MaterialCommunityIcons name="check-circle" size={34} color={colors.success} />
+          <Icon set="mci" name="check-circle" size={34} color={colors.success} />
         </View>
         <Text className="mt-5 text-lg font-bold text-center" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
           Unlocked!
@@ -51,16 +56,7 @@ export function PurchaseResultPanel({
           {itemLabel ? `${itemLabel} is active on your account.` : "Your purchase is active."}
         </Text>
 
-        <TouchableOpacity
-          onPress={onDone}
-          activeOpacity={0.9}
-          className="mt-7 w-full items-center rounded-full py-4"
-          style={{ backgroundColor: colors.primary }}
-        >
-          <Text className="text-sm font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-            Great, continue
-          </Text>
-        </TouchableOpacity>
+        <Button label="Great, continue" onPress={onDone} fullWidth style={{ marginTop: 28 }} />
 
         {onViewHistory ? (
           <TouchableOpacity onPress={onViewHistory} activeOpacity={0.7} className="mt-3 py-1">
@@ -77,30 +73,16 @@ export function PurchaseResultPanel({
     return (
       <View className="flex-1 items-center justify-center px-8">
         <View className="h-16 w-16 items-center justify-center rounded-full" style={{ backgroundColor: softTints.gold ?? softTints.amber }}>
-          <MaterialCommunityIcons name="clock-outline" size={32} color={colors.gold ?? colors.warning} />
+          <Icon set="mci" name="clock-outline" size={32} color={colors.gold ?? colors.warning} />
         </View>
         <Text className="mt-5 text-lg font-bold text-center" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
           Almost there
         </Text>
         <Text className="mt-1.5 text-sm text-center" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-          Payment is still processing. Tap below to check again.
+          {result.message ?? "Payment is still processing. Tap below to check again."}
         </Text>
 
-        <TouchableOpacity
-          onPress={handleRecheck}
-          activeOpacity={0.9}
-          disabled={checking}
-          className="mt-7 w-full flex-row items-center justify-center rounded-full py-4"
-          style={{ backgroundColor: colors.primary, opacity: checking ? 0.7 : 1 }}
-        >
-          {checking ? (
-            <ActivityIndicator color={colors.buttonText} />
-          ) : (
-            <Text className="text-sm font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-              Check payment status
-            </Text>
-          )}
-        </TouchableOpacity>
+        <Button label="Check payment status" onPress={handleRecheck} loading={checking} fullWidth style={{ marginTop: 28 }} />
 
         {onViewHistory ? (
           <TouchableOpacity onPress={onViewHistory} activeOpacity={0.7} className="mt-3 py-1">
@@ -116,7 +98,7 @@ export function PurchaseResultPanel({
   return (
     <View className="flex-1 items-center justify-center px-8">
       <View className="h-16 w-16 items-center justify-center rounded-full" style={{ backgroundColor: softTints.rose }}>
-        <MaterialCommunityIcons name="close-circle" size={32} color={colors.danger} />
+        <Icon set="mci" name="close-circle" size={32} color={colors.danger} />
       </View>
       <Text className="mt-5 text-lg font-bold text-center" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
         Payment failed
@@ -125,16 +107,7 @@ export function PurchaseResultPanel({
         {result.message}
       </Text>
 
-      <TouchableOpacity
-        onPress={onDismissFailure}
-        activeOpacity={0.9}
-        className="mt-7 w-full items-center rounded-full py-4"
-        style={{ backgroundColor: colors.primary }}
-      >
-        <Text className="text-sm font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-          Try again
-        </Text>
-      </TouchableOpacity>
+      <Button label="Try again" onPress={onDismissFailure} fullWidth style={{ marginTop: 28 }} />
     </View>
   );
 }

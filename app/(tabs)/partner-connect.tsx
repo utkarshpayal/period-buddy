@@ -1,12 +1,8 @@
-import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useState } from "react";
 import {
-  KeyboardAvoidingView,
-  Platform,
   StatusBar,
-  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
@@ -17,7 +13,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../components/auth-context";
 import { useTheme } from "../../components/theme";
 import { connectPartnerAndResolveRoute } from "../../lib/auth";
-import { getShadow } from "../../components/ui-tokens";
+import { getShadow, withAlpha } from "../../components/ui-tokens";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
+import { Icon } from "../../components/Icon";
+import { Button } from "../../components/Button";
+import { showErrorToast } from "../../lib/toast";
 
 const BENEFITS = [
   "Share your cycle phase, gently",
@@ -32,7 +32,6 @@ export default function PartnerConnect() {
   const { colors, isDark, fonts } = useTheme();
   const { width } = useWindowDimensions();
   const [inviteCode, setInviteCode] = useState(prefilledCode?.toUpperCase() ?? "");
-  const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [codeFocused, setCodeFocused] = useState(false);
 
@@ -40,11 +39,10 @@ export default function PartnerConnect() {
   const isAuthenticated = Boolean(token);
 
   async function handleConnect() {
-    setErrorMessage("");
 
     const code = inviteCode.trim();
     if (!code) {
-      setErrorMessage("Enter the invite code your partner shared with you.");
+      showErrorToast("Enter the invite code your partner shared with you.");
       return;
     }
 
@@ -63,7 +61,7 @@ export default function PartnerConnect() {
         await connectPartnerAndResolveRoute(code);
 
       if (connectError) {
-        setErrorMessage(connectError);
+        showErrorToast(connectError);
         return;
       }
 
@@ -83,13 +81,10 @@ export default function PartnerConnect() {
       />
 
       <SafeAreaView className="flex-1">
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        <View
           className="flex-1"
-          keyboardVerticalOffset={Platform.OS === "ios" ? 12 : 0}
         >
-          <ScrollView
-            automaticallyAdjustKeyboardInsets
+          <KeyboardAwareScrollView bottomOffset={24}
             contentContainerStyle={{
               alignItems: "center",
               flexGrow: 1,
@@ -102,12 +97,13 @@ export default function PartnerConnect() {
             {/* Hero gradient band */}
             <View className="w-full" style={{ height: 220 }}>
               <LinearGradient
-                colors={[colors.lavenderLight, colors.primaryLight, colors.secondary]}
+                // Dark: a deep berry-to-indigo glow, not the light theme's pastels (milky on black).
+                colors={isDark ? [colors.background, "#4A2045", "#3E2F7A"] : [colors.lavenderLight, colors.primaryLight, colors.secondary]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={{ flex: 1, alignItems: "center", justifyContent: "center" }}
               >
-                <TouchableOpacity
+                <TouchableOpacity hitSlop={5} accessibilityRole="button" accessibilityLabel="Go back"
                   onPress={() => router.back()}
                   activeOpacity={0.7}
                   className="absolute left-4 items-center justify-center rounded-full"
@@ -119,21 +115,26 @@ export default function PartnerConnect() {
                     ...getShadow(colors, isDark),
                   }}
                 >
-                  <Feather name="chevron-left" size={20} color={colors.foreground} />
+                  <Icon set="feather" name="chevron-left" size={20} color={colors.foreground} />
                 </TouchableOpacity>
 
                 <View
-                  className="items-center justify-center rounded-full border"
+                  className="items-center justify-center rounded-full"
                   style={{
                     width: 78,
                     height: 78,
                     backgroundColor: colors.surface,
-                    borderColor: colors.border,
                     ...getShadow(colors, isDark),
                   }}
                 >
-                  <Feather name="heart" size={30} color={colors.primary} />
+                  <Icon set="feather" name="heart" size={30} color={colors.primary} />
                 </View>
+                {/* Fade into the page instead of ending on a hard edge. */}
+                <LinearGradient
+                  pointerEvents="none"
+                  colors={[withAlpha(colors.background, 0), colors.background]}
+                  style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 72 }}
+                />
               </LinearGradient>
             </View>
 
@@ -175,7 +176,7 @@ export default function PartnerConnect() {
                       className="items-center justify-center rounded-full"
                       style={{ width: 22, height: 22, backgroundColor: colors.accentLight }}
                     >
-                      <Feather name="check" size={13} color={colors.accent} />
+                      <Icon set="feather" name="check" size={13} color={colors.accent} />
                     </View>
                     <Text
                       className="flex-1 text-xs font-semibold"
@@ -200,7 +201,7 @@ export default function PartnerConnect() {
                     height: 52,
                   }}
                 >
-                  <Feather
+                  <Icon set="feather"
                     name="key"
                     size={16}
                     color={codeFocused ? colors.primary : colors.mutedText}
@@ -209,12 +210,10 @@ export default function PartnerConnect() {
                   <TextInput
                     autoCapitalize="characters"
                     autoCorrect={false}
-                    onChangeText={(text) => {
-                      setErrorMessage("");
-                      setInviteCode(text);
-                    }}
+                    onChangeText={setInviteCode}
                     onFocus={() => setCodeFocused(true)}
                     onBlur={() => setCodeFocused(false)}
+                    accessibilityLabel="Invite code"
                     placeholder="Invite code"
                     placeholderTextColor={colors.mutedText}
                     returnKeyType="done"
@@ -228,55 +227,12 @@ export default function PartnerConnect() {
                   />
                 </View>
 
-                <TouchableOpacity
-                  activeOpacity={0.85}
-                  disabled={isSubmitting}
-                  onPress={handleConnect}
-                  className="mb-2 justify-center items-center"
-                  style={{
-                    height: 52,
-                    borderRadius: 999,
-                    backgroundColor: colors.primary,
-                    opacity: isSubmitting ? 0.75 : 1,
-                    ...getShadow(colors, isDark),
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: 14,
-                      fontWeight: "800",
-                      color: colors.buttonText,
-                      fontFamily: fonts.body,
-                    }}
-                  >
-                    {isSubmitting
-                      ? "Connecting..."
-                      : isAuthenticated
-                        ? "Connect Now"
-                        : "Continue"}
-                  </Text>
-                </TouchableOpacity>
+                <Button label={isAuthenticated ? "Connect now" : "Continue"} onPress={handleConnect} loading={isSubmitting} fullWidth style={{ marginBottom: 8 }} />
 
-                {errorMessage ? (
-                  <View
-                    className="mt-3 rounded-2xl border px-4 py-3"
-                    style={{
-                      backgroundColor: colors.dangerLight,
-                      borderColor: colors.danger,
-                    }}
-                  >
-                    <Text
-                      className="text-center text-xs font-bold"
-                      style={{ color: colors.danger, fontFamily: fonts.body }}
-                    >
-                      {errorMessage}
-                    </Text>
-                  </View>
-                ) : null}
               </View>
             </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
+          </KeyboardAwareScrollView>
+        </View>
       </SafeAreaView>
     </View>
   );

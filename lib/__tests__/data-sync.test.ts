@@ -29,6 +29,11 @@ test("more specific paths win over their prefixes", () => {
   assert.deepEqual(topicsForMutation("POST", "/api/reels/abc/like"), []);
   assert.deepEqual(topicsForMutation("POST", "/api/reels/abc/comments"), []);
   assert.deepEqual(topicsForMutation("PATCH", "/api/reels/abc/view"), []);
+  assert.deepEqual(topicsForMutation("POST", "/api/community/abc/poll/vote"), ["dashboard"]);
+  assert.deepEqual(topicsForMutation("POST", "/api/community/abc/save"), ["dashboard"]);
+  assert.deepEqual(topicsForMutation("POST", "/api/community/abc/like"), []);
+  assert.deepEqual(topicsForMutation("POST", "/api/buddies/message"), ["dashboard"]);
+  assert.deepEqual(topicsForMutation("POST", "/api/wellbeing/games/truth/draw"), ["dashboard"]);
 });
 
 test("query strings and unknown endpoints", () => {

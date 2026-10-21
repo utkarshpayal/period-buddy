@@ -3,7 +3,7 @@
  * not in front (every dashboard tab, and any screen lower in the stack) can
  * refetch instead of showing what it loaded when it first mounted.
  *
- * Emission is automatic: `apiEnvelopeRequest` (lib/api.ts) calls
+ * Emission is automatic: `apiEnvelopeRequest` (lib/api/client.ts) calls
  * `emitMutation()` after every successful non-GET request, and
  * `topicsForMutation()` below maps the endpoint to the topics it affects.
  * Consumers subscribe via `hooks/useDataRefresh.ts` (or `useAsyncLoad`'s
@@ -81,6 +81,10 @@ const MUTATION_TOPICS: [RegExp, DataTopic[] | null][] = [
   // Likes, saves, comments and views only show on the reels screen itself,
   // which updates them in place.
   [/^\/api\/reels\//, null],
+  // These award wallet points; everything else they change updates in place.
+  [/^\/api\/community\/[^/]+\/(poll\/vote|save)$/, ["dashboard"]],
+  [/^\/api\/buddies\//, ["dashboard"]],
+  [/^\/api\/wellbeing\/games\//, ["dashboard"]],
 ];
 
 export function topicsForMutation(method: string, path: string): DataTopic[] {

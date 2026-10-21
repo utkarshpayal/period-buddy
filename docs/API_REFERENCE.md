@@ -1,11 +1,11 @@
 # API Reference (Frontend ⇄ Backend)
 
-Every endpoint the app calls, grouped by the `xApi` object in `lib/api.ts`
+Every endpoint the app calls, grouped by the `xApi` object in `lib/api/`
 that wraps it — a friendlier index than reading the backend's
 `API_DOCUMENTATION.md` route-by-route. This lists *what the frontend
 actually uses*; staff-only routes (`/api/admin/*`, `/api/cms/*`,
 `/api/doctor/*`) belong to the Admin Workspace and the CMS, not this app.
-Checked against `lib/api.ts` on 2026-09-30.
+Checked against `lib/api/` on 2026-09-30.
 
 **Conventions:** all paths are relative to `EXPO_PUBLIC_API_BASE_URL`. Every
 request carries `Authorization: Bearer <jwt>` automatically unless the
@@ -15,7 +15,7 @@ frontend call passes `skipAuth: true` (the token comes from the OS keystore,
 Every response is
 `{ data, error, message, ... }`; `apiRequest` unwraps `.data` for you,
 `apiEnvelopeRequest` returns the whole envelope (used where `token`/`user`
-are needed alongside `data`, i.e. auth flows). See `lib/api.ts`'s top for
+are needed alongside `data`, i.e. auth flows). See `lib/api/`'s top for
 the shared `ApiError` shape (`kind`: `network`/`timeout`/`server`/
 `notFound`/`unauthorized`/`unknown`) every failure throws.
 
@@ -204,7 +204,7 @@ shape as blogs — admin-authored content, read-only from the app.
 `POST /api/wellbeing/games/:deck/draw` for the wellness card-draw game.
 
 Blogs, reels, Q&As, health issues and wellbeing resources carry the
-medical-review stamp (`MedicalReview` in `lib/api.ts`): `medicallyReviewed`,
+medical-review stamp (`MedicalReview` in `lib/api/`): `medicallyReviewed`,
 `reviewedBy` (reviewer's name) and `reviewedAt`, set by the backend when a
 Content Super Admin reviews the item. The blog article and the wellbeing /
 health-issue detail views show it with `components/MedicalReviewBadge.tsx`.
@@ -326,7 +326,7 @@ Profile → Help & support (`components/SupportTicketSheet.tsx`) and My tickets 
 
 ## Realtime (WebSocket)
 
-Not part of `lib/api.ts`'s REST helpers — a separate persistent connection
+Not part of `lib/api/`'s REST helpers — a separate persistent connection
 via `getWebSocketUrl()` (auth token as a query param) and
 `hooks/useRealtimeSocket.ts`, which multiplexes one physical socket across
 every screen that needs one. Rooms in use: `community`, `partner_<id>`,
@@ -338,5 +338,5 @@ extraction completion events.
 
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — how this fits into the whole system.
 - Backend `API_DOCUMENTATION.md` — the backend's own request/response body
-  reference, if you need exact payload shapes beyond what `lib/api.ts`'s
+  reference, if you need exact payload shapes beyond what `lib/api/`'s
   TypeScript types already show.

@@ -77,5 +77,3 @@ export async function prescriptionAction(
   else await sharePdf(doc);
 }
 
-/** Kept for callers that only download. */
-export const downloadPrescription = (consultationId: string) => prescriptionAction("download", { consultationId });

@@ -1,8 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { Text, View, type ViewStyle } from "react-native";
+import { Icon } from "./Icon";
 
-export type StatCardVariant = "tile" | "tile-stack" | "pill" | "pill-outline";
+export type StatCardVariant = "tile" | "pill" | "pill-outline";
 
 type StatCardProps = {
   icon: React.ComponentProps<typeof Ionicons>["name"];
@@ -25,7 +26,6 @@ type StatCardProps = {
 /**
  * Metric tile/pill used to display a stat (streak, points, days tracked...).
  * `variant="tile"` matches the 2-up icon+text row in home.tsx's header stats.
- * `variant="tile-stack"` matches profile.tsx's 3-up centered stat row.
  * `variant="pill"` / `"pill-outline"` matches home.tsx's compact header chips.
  */
 export default function StatCard({
@@ -47,17 +47,17 @@ export default function StatCard({
     return (
       <View
         className="flex-1 flex-row items-center"
-        style={{ backgroundColor, gap: 12, padding: 14, borderRadius: 20, ...containerStyle }}
+        style={{ backgroundColor, gap: 12, padding: 14, borderRadius: 22, borderCurve: "continuous", ...containerStyle }}
       >
         <View
           className="items-center justify-center"
-          style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: iconBg }}
+          style={{ width: 44, height: 44, borderRadius: 14, borderCurve: "continuous", backgroundColor: iconBg }}
         >
-          <Ionicons name={icon} size={20} color={iconColor} />
+          <Icon set="ion" name={icon} size={20} color={iconColor} />
         </View>
         <View className="flex-1" style={{ minWidth: 0 }}>
           <Text
-            style={{ fontSize: 20, lineHeight: 26, fontWeight: "700", color: valueColor, fontFamily: valueFontFamily }}
+            style={{ fontSize: 20, lineHeight: 26, fontWeight: "800", letterSpacing: -0.4, fontVariant: ["tabular-nums"], color: valueColor, fontFamily: valueFontFamily }}
             numberOfLines={1}
             adjustsFontSizeToFit
             minimumFontScale={0.75}
@@ -79,45 +79,6 @@ export default function StatCard({
     );
   }
 
-  if (variant === "tile-stack") {
-    // Icon-on-top, centered layout — for 3-up (or narrower) rows where the
-    // side-by-side "tile" variant leaves too little width for the label and
-    // wraps it across multiple lines.
-    return (
-      <View
-        className="flex-1 items-center px-2 py-3.5"
-        style={{ backgroundColor, borderRadius: 20, ...containerStyle }}
-      >
-        <View
-          className="items-center justify-center mb-2"
-          style={{ width: 40, height: 40, borderRadius: 13, backgroundColor: iconBg }}
-        >
-          <Ionicons name={icon} size={18} color={iconColor} />
-        </View>
-        <Text
-          style={{ fontSize: 18, lineHeight: 24, fontWeight: "700", color: valueColor, fontFamily: valueFontFamily }}
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          minimumFontScale={0.75}
-          maxFontSizeMultiplier={1.4}
-        >
-          {value}
-        </Text>
-        {label ? (
-          <Text
-            className="text-xs font-bold mt-0.5 text-center"
-            maxFontSizeMultiplier={1.4}
-            style={{ color: labelColor, fontFamily: labelFontFamily }}
-            numberOfLines={1}
-            adjustsFontSizeToFit
-          >
-            {label}
-          </Text>
-        ) : null}
-      </View>
-    );
-  }
-
   return (
     <View
       className={`flex-row items-center rounded-full${variant === "pill-outline" ? " border" : ""}`}
@@ -129,7 +90,7 @@ export default function StatCard({
         ...containerStyle,
       }}
     >
-      <Ionicons name={icon} size={12} color={iconColor} style={{ marginRight: 5 }} />
+      <Icon set="ion" name={icon} size={12} color={iconColor} style={{ marginRight: 5 }} />
       <Text
         style={{
           fontSize: 12.5,

@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import React from "react";
 import { ActivityIndicator, Modal, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -6,6 +5,9 @@ import type { Doctor, DoctorAvailability } from "../lib/api";
 import { formatINR, shortZoneName, to12Hour } from "../lib/consultationFormat";
 import { DoctorPhoto } from "./DoctorPhoto";
 import { useTheme } from "./theme";
+import { AppLockCover } from "./AppLockScreen";
+import { Icon } from "./Icon";
+import { Button } from "./Button";
 
 function doctorDisplayName(doctor: Doctor): string {
   return doctor.name || [doctor.firstName, doctor.lastName].filter(Boolean).join(" ") || "Clinical specialist";
@@ -82,12 +84,13 @@ export function DoctorProfileSheet({
       <View className="flex-1" style={{ backgroundColor: colors.background }}>
         <View className="flex-row justify-end px-4" style={{ paddingTop: Math.max(12, insets.top) }}>
           <TouchableOpacity
+            hitSlop={6}
             onPress={onClose}
             accessibilityLabel="Close profile"
             className="h-9 w-9 rounded-full items-center justify-center"
             style={{ backgroundColor: colors.surfaceSoft }}
           >
-            <Feather name="x" size={18} color={colors.foreground} />
+            <Icon set="feather" name="x" size={18} color={colors.foreground} />
           </TouchableOpacity>
         </View>
 
@@ -113,7 +116,7 @@ export function DoctorProfileSheet({
             </Text>
             <View className="flex-row items-center gap-3 mt-3">
               <View className="flex-row items-center gap-1 rounded-full px-3 py-1" style={{ backgroundColor: colors.surface }}>
-                <Feather name="star" size={13} color={colors.primary} />
+                <Icon set="feather" name="star" size={13} color={colors.primary} />
                 <Text className="text-xs font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
                   {ratingLabel(doctor)}
                 </Text>
@@ -133,7 +136,7 @@ export function DoctorProfileSheet({
             <View className="mt-6 rounded-2xl p-4 gap-3" style={{ backgroundColor: colors.surface }}>
               {facts.map((f) => (
                 <View key={f.icon} className="flex-row items-center gap-3">
-                  <Feather name={f.icon} size={16} color={colors.primary} />
+                  <Icon set="feather" name={f.icon} size={16} color={colors.primary} />
                   <Text className="flex-1 text-sm" style={{ color: colors.foreground, fontFamily: fonts.body }}>
                     {f.text}
                   </Text>
@@ -210,18 +213,10 @@ export function DoctorProfileSheet({
               {price ?? "Not set"}
             </Text>
           </View>
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={onPrimary}
-            className="flex-1 rounded-2xl py-4 items-center"
-            style={{ backgroundColor: colors.primary }}
-          >
-            <Text className="text-sm font-extrabold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-              {hasActiveSession ? "Open consultation chat" : "Choose a time"}
-            </Text>
-          </TouchableOpacity>
+          <Button label={hasActiveSession ? "Open consultation chat" : "Book slot"} onPress={onPrimary} style={{ flex: 1 }} />
         </View>
       </View>
+      <AppLockCover />
     </Modal>
   );
 }

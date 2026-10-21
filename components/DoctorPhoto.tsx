@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { Image, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import { Image } from "expo-image";
+import { motion } from "./motion";
 
 function initialsOf(name: string): string {
   const parts = name.replace(/^dr\.?\s+/i, "").trim().split(/\s+/).filter(Boolean);
@@ -44,9 +46,10 @@ export function DoctorPhoto({
     >
       {uri && !failed ? (
         <Image
+          transition={motion.duration.base}
           source={{ uri }}
           style={{ width: size, height: size }}
-          resizeMode="cover"
+          contentFit="cover"
           onError={() => setFailed(true)}
           accessibilityIgnoresInvertColors
         />

@@ -1,7 +1,7 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect } from "react";
-import { Image, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { Image } from "expo-image";
 import { useAppConfig } from "./app-config";
 import { useTheme } from "./theme";
 import { getShadow } from "./ui-tokens";
@@ -10,6 +10,8 @@ import { appConfigApi } from "../lib/api";
 import { BannerPlacement, PromoBanner, bannersFor } from "../lib/appConfig";
 import { runTapAction } from "../lib/tapAction";
 import { useContentWidth } from "../lib/layout";
+import { Icon } from "./Icon";
+import { motion } from "./motion";
 
 /*
  * Impressions for CTR in the CMS: each banner is reported once per app
@@ -91,7 +93,8 @@ function BannerCard({ banner, width, onDismiss }: { banner: PromoBanner; width: 
   const close = banner.dismissible ? (
     <TouchableOpacity
       onPress={onDismiss}
-      hitSlop={10}
+      // 22px dot + 13px on each side = 48dp tap area (Android minimum).
+      hitSlop={13}
       accessibilityRole="button"
       accessibilityLabel="Hide this banner"
       style={{
@@ -106,7 +109,7 @@ function BannerCard({ banner, width, onDismiss }: { banner: PromoBanner; width: 
         justifyContent: "center",
       }}
     >
-      <Ionicons name="close" size={13} color="#fff" />
+      <Icon set="ion" name="close" size={13} color="#fff" />
     </TouchableOpacity>
   ) : null;
 
@@ -118,8 +121,8 @@ function BannerCard({ banner, width, onDismiss }: { banner: PromoBanner; width: 
   if (banner.layout === "image" && banner.imageUrl) {
     return (
       <TouchableOpacity activeOpacity={tappable ? 0.9 : 1} disabled={!tappable} onPress={onPress} {...a11y}
-        style={{ width, borderRadius: 20, overflow: "hidden", ...getShadow(colors, isDark) }}>
-        <Image source={{ uri: banner.imageUrl }} style={{ width, aspectRatio: 3 }} resizeMode="cover" />
+        style={{ width, borderRadius: 20, borderCurve: "continuous", overflow: "hidden", ...getShadow(colors, isDark) }}>
+        <Image transition={motion.duration.base} source={{ uri: banner.imageUrl }} style={{ width, aspectRatio: 3 }} contentFit="cover" />
         {close}
       </TouchableOpacity>
     );
@@ -128,14 +131,14 @@ function BannerCard({ banner, width, onDismiss }: { banner: PromoBanner; width: 
   if (banner.layout === "strip") {
     return (
       <TouchableOpacity activeOpacity={tappable ? 0.85 : 1} disabled={!tappable} onPress={onPress} {...a11y}
-        style={{ width, backgroundColor: bg, borderRadius: 14, paddingVertical: 11, paddingHorizontal: 14, paddingRight: banner.dismissible ? 36 : 14, flexDirection: "row", alignItems: "center" }}>
+        style={{ width, backgroundColor: bg, borderRadius: 14, borderCurve: "continuous", paddingVertical: 11, paddingHorizontal: 14, paddingRight: banner.dismissible ? 36 : 14, flexDirection: "row", alignItems: "center" }}>
         <Text style={{ flex: 1, color: fg, fontSize: 12.5, fontWeight: "800", fontFamily: fonts.body }} numberOfLines={1}>
           {banner.title}
         </Text>
         {banner.ctaLabel && tappable ? (
           <View style={{ flexDirection: "row", alignItems: "center", marginLeft: 8 }}>
             <Text style={{ color: fg, fontSize: 12.5, fontWeight: "800", fontFamily: fonts.body }}>{banner.ctaLabel}</Text>
-            <Ionicons name="arrow-forward" size={13} color={fg} style={{ marginLeft: 3 }} />
+            <Icon set="ion" name="arrow-forward" size={13} color={fg} style={{ marginLeft: 3 }} />
           </View>
         ) : null}
         {close}
@@ -145,7 +148,7 @@ function BannerCard({ banner, width, onDismiss }: { banner: PromoBanner; width: 
 
   return (
     <TouchableOpacity activeOpacity={tappable ? 0.88 : 1} disabled={!tappable} onPress={onPress} {...a11y}
-      style={{ width, minHeight: 104, backgroundColor: bg, borderRadius: 20, padding: 16, flexDirection: "row", alignItems: "center", ...getShadow(colors, isDark) }}>
+      style={{ width, minHeight: 104, backgroundColor: bg, borderRadius: 20, borderCurve: "continuous", padding: 16, flexDirection: "row", alignItems: "center", ...getShadow(colors, isDark) }}>
       <View style={{ flex: 1, paddingRight: banner.imageUrl ? 10 : banner.dismissible ? 18 : 0 }}>
         <Text style={{ color: fg, fontSize: 15, fontWeight: "800", fontFamily: fonts.heading, lineHeight: 20 }} numberOfLines={2}>
           {banner.title}
@@ -162,7 +165,7 @@ function BannerCard({ banner, width, onDismiss }: { banner: PromoBanner; width: 
         ) : null}
       </View>
       {banner.imageUrl ? (
-        <Image source={{ uri: banner.imageUrl }} style={{ width: 86, height: 72, borderRadius: 14 }} resizeMode="cover" />
+        <Image transition={motion.duration.base} source={{ uri: banner.imageUrl }} style={{ width: 86, height: 72, borderRadius: 14 }} contentFit="cover" />
       ) : null}
       {close}
     </TouchableOpacity>

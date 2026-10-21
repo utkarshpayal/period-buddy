@@ -1,21 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../components/auth-context";
 import { authApi, type DashboardSummary } from "../lib/api";
-import { subscribeDataChange } from "../lib/data-sync";
+import { peekQuery, subscribeQuery } from "../lib/queryCache";
 import { useDataRefresh } from "./useDataRefresh";
 
-// Short-lived module-level cache: ~13 stack screens mount this hook on every
-// visit (stack screens unmount on navigate-away, unlike tabs), so without
-// this every visit re-fires GET /api/auth/dashboard even seconds apart.
-// Cleared on logout below so a new session never shows a stale user's data.
-const DASHBOARD_CACHE_TTL_MS = 60_000;
-let dashboardCache: { data: DashboardSummary; fetchedAt: number } | null = null;
-
-// A write that moves streak/points (a day log, habit, forest care, profile
-// edit) must not be hidden behind the cache on the next screen that mounts.
-subscribeDataChange((topics) => {
-  if (topics.has("dashboard")) dashboardCache = null;
-});
+// authApi.getDashboard is cached in lib/queryCache under this key: ~13 stack
+// screens mount this hook on every visit, and they share one request. The
+// cache is dropped on sign-out and marked stale by any "dashboard" write.
+const CACHE_KEY = "auth:dashboard";
 
 export type UserStats = {
   /** Current streak in days. Sourced from the dashboard fetch first (freshest),
@@ -40,15 +32,26 @@ export type UserStats = {
  */
 export function useUserStats(): UserStats {
   const { isAuthenticated, user, updateUser } = useAuth();
-  const [dashboard, setDashboard] = useState<DashboardSummary | null>(dashboardCache?.data ?? null);
+  const [dashboard, setDashboard] = useState<DashboardSummary | null>(() =>
+    isAuthenticated ? (peekQuery<DashboardSummary>(CACHE_KEY) ?? null) : null,
+  );
   // Only block on a spinner when we have nothing at all to show yet — a
   // cache hit (even a stale one) renders immediately and revalidates quietly.
-  const [isLoading, setIsLoading] = useState(!dashboardCache);
+  const [isLoading, setIsLoading] = useState(() => isAuthenticated && peekQuery(CACHE_KEY) === undefined);
+
+  // Any instance's fetch updates every mounted one.
+  useEffect(
+    () =>
+      subscribeQuery(CACHE_KEY, (value) => {
+        setDashboard(value as DashboardSummary);
+        setIsLoading(false);
+      }),
+    [],
+  );
 
   const refresh = useCallback(async () => {
     try {
-      const summary = await authApi.getDashboard();
-      dashboardCache = { data: summary, fetchedAt: Date.now() };
+      const summary = await authApi.getDashboard({ force: true });
       setDashboard(summary);
       if (summary.user) {
         updateUser(summary.user);
@@ -68,7 +71,6 @@ export function useUserStats(): UserStats {
     if (!isAuthenticated) return;
     try {
       const summary = await authApi.getDashboard();
-      dashboardCache = { data: summary, fetchedAt: Date.now() };
       setDashboard(summary);
       if (summary.user) updateUser(summary.user);
     } catch {
@@ -77,17 +79,10 @@ export function useUserStats(): UserStats {
   });
 
   useEffect(() => {
-    // Logging out invalidates the cache so the next signed-in user never
-    // briefly sees the previous account's cached dashboard.
+    // Signed out: queryCache was cleared, so the next signed-in user never
+    // briefly sees the previous account's dashboard.
     if (!isAuthenticated) {
-      dashboardCache = null;
       setDashboard(null);
-      setIsLoading(false);
-      return;
-    }
-
-    const isFresh = dashboardCache && Date.now() - dashboardCache.fetchedAt < DASHBOARD_CACHE_TTL_MS;
-    if (isFresh) {
       setIsLoading(false);
       return;
     }
@@ -96,15 +91,15 @@ export function useUserStats(): UserStats {
 
     (async () => {
       try {
+        // Served from the cache while fresh; a shared request otherwise.
         const summary = await authApi.getDashboard();
         if (!isMounted) return;
-        dashboardCache = { data: summary, fetchedAt: Date.now() };
         setDashboard(summary);
         if (summary.user) {
           updateUser(summary.user);
         }
       } catch {
-        if (isMounted) setDashboard(null);
+        if (isMounted && peekQuery(CACHE_KEY) === undefined) setDashboard(null);
       } finally {
         if (isMounted) setIsLoading(false);
       }

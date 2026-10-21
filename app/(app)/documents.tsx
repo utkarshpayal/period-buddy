@@ -1,18 +1,30 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Platform, RefreshControl, ScrollView, StatusBar, Text, TextInput, TouchableOpacity, View } from "react-native";
-import Animated, { FadeIn, FadeInDown, FadeOut, LinearTransition } from "react-native-reanimated";
+import Animated, {
+  FadeIn,
+  FadeInDown,
+  FadeInRight,
+  FadeOut,
+  FadeOutRight,
+  LinearTransition,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  ZoomIn,
+  ZoomOut,
+} from "react-native-reanimated";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { ActionSheet, type ActionSheetItem } from "../../components/ActionSheet";
 import { useAuth } from "../../components/auth-context";
 import { DocumentCard, DocumentListSkeleton } from "../../components/documents/DocumentCard";
+import { AskDocuments } from "../../components/documents/AskDocuments";
 import { DocumentPreview } from "../../components/documents/DocumentPreview";
-import { ChoiceChips } from "../../components/documents/DocumentSheet";
+import { FilterChips, type FilterChipOption } from "../../components/FilterChips";
+import { getShadow } from "../../components/ui-tokens";
 import {
   DOC_TYPE_META,
   DOC_TYPE_ORDER,
-  docTypeAccent,
   documentsLayout,
   formatDateLabel,
   groupByMonth,
@@ -21,20 +33,18 @@ import {
 } from "../../components/documents/documentMeta";
 import { DoctorReportSheet, SummarizeSheet } from "../../components/documents/RangeSheets";
 import { UploadSheet, type UploadRequest } from "../../components/documents/UploadSheet";
-import { EmptyState } from "../../components/EmptyState";
-import { ColumnLabel } from "../../components/ColumnLabel";
 import { LoadMoreButton } from "../../components/LoadMoreButton";
-import { ScreenHeader } from "../../components/ScreenHeader";
+import { HeaderIconButton, ScreenHeader } from "../../components/ScreenHeader";
 import { SkeletonList } from "../../components/Skeleton";
 import { LockedFeatureCard } from "../../components/subscription/LockedFeatureCard";
 import { PaywallModal } from "../../components/subscription/PaywallModal";
 import { useTheme } from "../../components/theme";
-import { getShadow } from "../../components/ui-tokens";
 import { useDataRefresh } from "../../hooks/useDataRefresh";
 import { useSubscriptionAccess } from "../../hooks/useSubscriptionAccess";
 import { alert } from "../../lib/alert";
 import {
   documentApi,
+  getFriendlyErrorMessage,
   hasMorePages,
   isFeatureLockedError,
   type DocType,
@@ -45,6 +55,12 @@ import { generateAndShareHealthReport } from "../../lib/healthReport";
 import { useContentWidth } from "../../lib/layout";
 import { useSecureScreen } from "../../lib/screenPrivacy";
 import { cleanupTempFiles } from "../../lib/tempFiles";
+import { consultationIdOfDoc } from "../../lib/prescriptionDocs";
+import { PrescriptionViewer } from "../../components/PrescriptionViewer";
+import { prescriptionAction } from "../../lib/prescriptionPdf";
+import { computeAge } from "../../lib/chatTopics";
+import { Icon } from "../../components/Icon";
+import { motion } from "../../components/motion";
 
 type Filter = DocType | "all";
 
@@ -64,9 +80,9 @@ export default function DocumentsScreen() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [search, setSearch] = useState("");
   const [searchFocused, setSearchFocused] = useState(false);
-  const [fabCollapsed, setFabCollapsed] = useState(false);
-  const { gutter, columns, gap, cardWidth, compact } = documentsLayout(useContentWidth());
-  const wide = columns === 2;
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const searchRef = useRef<TextInput>(null);
+  const { gutter } = documentsLayout(useContentWidth());
 
   // Upload/chat gated behind 'document_chat'; "Download doctor report" gated
   // client-side only behind 'health_reports' — GET /api/reports/health-report
@@ -108,27 +124,40 @@ export default function DocumentsScreen() {
     [typeFilter, sortOrder],
   );
 
+  // Bumped by every page-1 load (filter/sort change, refresh): a response for
+  // an older filter, or a "Show more" page started before it, is dropped.
+  const listSeq = useRef(0);
+  const docPageRef = useRef(docPage);
+  docPageRef.current = docPage;
+
   const fetchDocuments = useCallback(async () => {
+    const seq = ++listSeq.current;
     try {
       const result = await fetchDocumentsPage(1);
+      if (seq !== listSeq.current) return;
       setDocuments(result.documents);
       setDocPage(1);
       setDocTotal(result.pagination?.total ?? null);
       setHasMoreDocs(hasMorePages(result.pagination));
     } catch (error) {
-      alert("Couldn't load documents", error instanceof Error ? error.message : "Please try again.");
+      if (seq !== listSeq.current) return;
+      alert("Couldn't load documents", getFriendlyErrorMessage(error));
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (seq === listSeq.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, [fetchDocumentsPage]);
 
   const loadMoreDocuments = useCallback(async () => {
     if (loadingMoreDocs || !hasMoreDocs) return;
     setLoadingMoreDocs(true);
+    const seq = listSeq.current;
     try {
       const nextPage = docPage + 1;
       const result = await fetchDocumentsPage(nextPage);
+      if (seq !== listSeq.current) return;
       setDocuments((prev) => {
         const seen = new Set(prev.map((d) => d._id));
         return prev.concat(result.documents.filter((d) => !seen.has(d._id)));
@@ -142,6 +171,10 @@ export default function DocumentsScreen() {
       setLoadingMoreDocs(false);
     }
   }, [loadingMoreDocs, hasMoreDocs, docPage, fetchDocumentsPage]);
+
+  // A doctor's prescription (saved into Documents by the server) opens in
+  // the prescription viewer: id of its consultation, and the doctor's name.
+  const [rxViewing, setRxViewing] = useState<{ consultationId: string; doctorName?: string } | null>(null);
 
   useEffect(() => {
     if (locked) return;
@@ -160,13 +193,17 @@ export default function DocumentsScreen() {
   // with "Show more" stay open.
   useDataRefresh(["documents"], async () => {
     if (locked) return;
+    const seq = listSeq.current;
     const result = await fetchDocumentsPage(1);
+    if (seq !== listSeq.current) return;
+    // Read at answer time: "Show more" may have opened a page meanwhile.
+    const openedPages = docPageRef.current > 1;
     setDocuments((prev) => {
       const fresh = new Set(result.documents.map((d) => d._id));
-      return result.documents.concat(docPage > 1 ? prev.filter((d) => !fresh.has(d._id)) : []);
+      return result.documents.concat(openedPages ? prev.filter((d) => !fresh.has(d._id)) : []);
     });
     setDocTotal(result.pagination?.total ?? null);
-    if (docPage === 1) setHasMoreDocs(hasMorePages(result.pagination));
+    if (!openedPages) setHasMoreDocs(hasMorePages(result.pagination));
   });
 
   // Search runs over the pages already loaded (the list API has no text
@@ -216,14 +253,14 @@ export default function DocumentsScreen() {
         mimeType: request.file.mimeType,
         title: request.title,
       });
-      // Quiet refetch: the new card animates into the list behind the sheet.
-      fetchDocuments();
+      // The upload's "documents" change refetches page 1 quietly
+      // (useDataRefresh above), so opened pages stay open.
       return true;
     } catch (error) {
       if (isFeatureLockedError(error)) {
         paywallFromUpload();
       } else {
-        alert("Upload failed", error instanceof Error ? error.message : "Please try again.");
+        alert("Upload failed", getFriendlyErrorMessage(error));
       }
       return false;
     }
@@ -241,6 +278,12 @@ export default function DocumentsScreen() {
   // Links expire after 10 minutes, so each open asks for a fresh one; the
   // list's copy is only a fallback if that request fails.
   const openDocument = useCallback(async (doc: MedicalDocument) => {
+    // A doctor's prescription opens in the prescription viewer, not as a file.
+    const consultationId = consultationIdOfDoc(doc);
+    if (consultationId) {
+      setRxViewing({ consultationId, doctorName: doc.title.match(/^Prescription from (Dr\. .+)$/)?.[1] });
+      return;
+    }
     setPreviewReady(false);
     setPreviewDoc(doc);
     try {
@@ -269,7 +312,7 @@ export default function DocumentsScreen() {
             setDocuments((prev) => prev.filter((d) => d._id !== doc._id));
             setDocTotal((total) => (total == null ? total : Math.max(0, total - 1)));
           } catch (error) {
-            alert("Couldn't delete", error instanceof Error ? error.message : "Please try again.");
+            alert("Couldn't delete", getFriendlyErrorMessage(error));
           } finally {
             setDeleting(false);
           }
@@ -288,7 +331,7 @@ export default function DocumentsScreen() {
       const fresh = await documentApi.get(doc._id).then((r) => r.document).catch(() => doc);
       await shareDocumentFile(fresh);
     } catch (error) {
-      alert("Couldn't share", error instanceof Error ? error.message : "Please try again.");
+      alert("Couldn't share", getFriendlyErrorMessage(error));
     } finally {
       setSharing(false);
     }
@@ -305,14 +348,27 @@ export default function DocumentsScreen() {
     }
   }
 
-  const actionItems: ActionSheetItem[] = actionDoc
+  // A doctor's prescription: AI and save/print, but never delete (it's the doctor's record).
+  const actionConsultationId = actionDoc ? consultationIdOfDoc(actionDoc) : null;
+  const runPrescriptionAction = (action: "download" | "print", consultationId: string) =>
+    prescriptionAction(action, { consultationId }).catch((err) =>
+      alert(action === "print" ? "Couldn't print" : "Couldn't download", getFriendlyErrorMessage(err)),
+    );
+
+  const actionItems: ActionSheetItem[] = actionDoc && actionConsultationId
     ? [
-        { key: "view", label: "View", icon: "eye", onPress: () => openDocument(actionDoc) },
-        { key: "ask", label: "Ask AI about it", description: "Chat about this document", icon: "message-circle", onPress: () => askAI(actionDoc) },
-        ...(Platform.OS !== "web"
-          ? [{ key: "share", label: "Share file", description: "Send it to your doctor", icon: "share" as const, onPress: () => handleShare(actionDoc) }]
-          : []),
-        { key: "delete", label: "Delete", icon: "trash-2", destructive: true, onPress: () => handleDelete(actionDoc) },
+        { key: "view", label: "Open", onPress: () => openDocument(actionDoc) },
+        { key: "ask", label: "Ask about this prescription", onPress: () => askAI(actionDoc) },
+        { key: "summary", label: "Summarize this prescription", onPress: () => openSummarize(actionDoc) },
+        { key: "download", label: Platform.OS === "web" ? "Open printable copy" : "Save as PDF", onPress: () => runPrescriptionAction("download", actionConsultationId) },
+        ...(Platform.OS !== "web" ? [{ key: "print", label: "Print", onPress: () => runPrescriptionAction("print", actionConsultationId) }] : []),
+      ]
+    : actionDoc
+    ? [
+        { key: "view", label: "Open", onPress: () => openDocument(actionDoc) },
+        { key: "ask", label: "Ask about this document", onPress: () => askAI(actionDoc) },
+        ...(Platform.OS !== "web" ? [{ key: "share", label: "Share", onPress: () => handleShare(actionDoc) }] : []),
+        { key: "delete", label: "Delete", destructive: true, onPress: () => handleDelete(actionDoc) },
       ]
     : [];
 
@@ -323,8 +379,11 @@ export default function DocumentsScreen() {
   const [summaryResult, setSummaryResult] = useState<{ documentCount: number; summary: string } | null>(null);
   const [summaryLanguage, setSummaryLanguage] = useState<LanguageCode>("en-IN");
 
-  function openSummarize() {
-    setSummaryRange(lastDaysRange(90));
+  /** The last 90 days, or just the day of `doc` (a prescription's "Summarize"). */
+  function openSummarize(doc?: MedicalDocument) {
+    // The UTC calendar day, which is what the server's date range is built on.
+    const day = doc?.documentDate.slice(0, 10);
+    setSummaryRange(day ? { start: day, end: day } : lastDaysRange(90));
     setSummaryResult(null);
     setSummarizeVisible(true);
   }
@@ -345,7 +404,7 @@ export default function DocumentsScreen() {
       });
       setSummaryResult({ documentCount: result.documentCount, summary: result.summary });
     } catch (error) {
-      alert("Couldn't generate summary", error instanceof Error ? error.message : "Please try again.");
+      alert("Couldn't generate summary", getFriendlyErrorMessage(error));
     } finally {
       setSummarizing(false);
     }
@@ -370,12 +429,14 @@ export default function DocumentsScreen() {
   // "Download doctor report" on the Graphs & Reports screen deep-links here
   // (?openReport=1) instead of duplicating this whole flow — open the sheet
   // pre-filled to the last 90 days.
+  // Waits for the subscription check: until it answers, hasAccess() is
+  // optimistically true and would open a locked report.
   useEffect(() => {
-    if (openReport !== "1") return;
+    if (openReport !== "1" || subscriptionLoading) return;
     router.setParams({ openReport: undefined });
     openReportSheet();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openReport]);
+  }, [openReport, subscriptionLoading]);
 
   function closeReportModal() {
     if (generatingReport) return;
@@ -390,18 +451,19 @@ export default function DocumentsScreen() {
         startDate: reportRange.start,
         endDate: reportRange.end,
         language: reportLanguage,
-        userName: user?.firstName,
+        userName: [user?.firstName, user?.lastName].filter(Boolean).join(" ") || undefined,
+        age: computeAge(user?.dateOfBirth),
       });
       setReportVisible(false);
     } catch (error) {
-      alert("Couldn't create report", error instanceof Error ? error.message : "Please try again.");
+      alert("Couldn't create report", getFriendlyErrorMessage(error));
     } finally {
       setGeneratingReport(false);
     }
   }
 
   const statusBar = <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />;
-  const header = <ScreenHeader title="Documents" subtitle="Reports, prescriptions and bills" />;
+  const header = <ScreenHeader title="Documents" />;
 
   if (subscriptionLoading) {
     return (
@@ -443,76 +505,67 @@ export default function DocumentsScreen() {
   const showTools = !searching && typeFilter === null;
   const filterLabel = typeFilter ? DOC_TYPE_META[typeFilter].label : null;
   const count = searching ? visibleDocuments.length : docTotal ?? documents.length;
-  const listTitle = searching
-    ? "Results"
-    : typeFilter
-      ? DOC_TYPE_META[typeFilter].plural.charAt(0).toUpperCase() + DOC_TYPE_META[typeFilter].plural.slice(1)
-      : "Your files";
   const groups = groupByMonth(visibleDocuments);
 
-  const filterOptions: { value: Filter; label: string; icon?: keyof typeof Ionicons.glyphMap; color?: string; bg?: string }[] = [
-    { value: "all", label: "All" },
+  const filterOptions: FilterChipOption<Filter>[] = [
+    { key: "all", label: "All" },
     ...DOC_TYPE_ORDER.map((type) => {
-      const accent = docTypeAccent(colors, type);
-      return { value: type as Filter, label: DOC_TYPE_META[type].label, icon: DOC_TYPE_META[type].icon, color: accent.color, bg: accent.bg };
+      const plural = DOC_TYPE_META[type].plural;
+      return { key: type as Filter, label: type === "other" ? "Other" : plural.charAt(0).toUpperCase() + plural.slice(1) };
     }),
   ];
-
-  const tools: { key: string; label: string; hint: string; icon: keyof typeof Ionicons.glyphMap; color: string; bg: string; locked?: boolean; onPress: () => void }[] = [
-    {
-      key: "report",
-      label: "Doctor report",
-      hint: "PDF of your logs",
-      icon: "document-attach-outline",
-      color: colors.secondary,
-      bg: colors.secondaryLight,
-      locked: !hasAccess("health_reports"),
-      onPress: openReportSheet,
-    },
-    { key: "summary", label: "Summarize", hint: "Plain-language recap", icon: "sparkles-outline", color: colors.accentText, bg: colors.accentLight, onPress: openSummarize },
-    { key: "ask", label: "Ask AI", hint: "Chat about results", icon: "chatbubbles-outline", color: colors.primary, bg: colors.primaryLight, onPress: () => askAI() },
-  ];
+  const activeFilter: Filter = typeFilter ?? "all";
+  const muted = { fontSize: 13, color: colors.mutedText, fontFamily: fonts.body };
 
   return (
     <>
       {statusBar}
       <SafeAreaView edges={["top"]} className="flex-1" style={{ backgroundColor: colors.background }}>
-        {header}
+        <ScreenHeader
+          title="Documents"
+          right={
+            <>
+              <HeaderIconButton icon="ellipsis-horizontal" onPress={() => setToolsOpen(true)} accessibilityLabel="Summaries and reports" />
+              <HeaderIconButton icon="add" onPress={openUpload} accessibilityLabel="Upload a document" />
+            </>
+          }
+        />
 
         <ScrollView
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           stickyHeaderIndices={[0]}
-          onScroll={(e) => setFabCollapsed(e.nativeEvent.contentOffset.y > 140)}
-          scrollEventThrottle={64}
-          contentContainerStyle={{ paddingBottom: insets.bottom + 110 }}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
         >
-          {/* Search + category filter, pinned while the list scrolls */}
-          <View style={{ backgroundColor: colors.background, paddingTop: 8, paddingBottom: 10 }}>
-            <View style={{ paddingHorizontal: gutter }}>
-              <View
+          {/* Search + category tabs, pinned while the list scrolls */}
+          <View style={{ backgroundColor: colors.background, paddingTop: 8 }}>
+            <View style={{ paddingHorizontal: gutter, flexDirection: "row", alignItems: "center" }}>
+              <Animated.View
+                layout={LinearTransition.springify().damping(18)}
                 style={{
+                  flex: 1,
                   flexDirection: "row",
                   alignItems: "center",
                   gap: 10,
                   height: 48,
-                  paddingLeft: 16,
+                  paddingLeft: 14,
                   paddingRight: 6,
-                  borderRadius: 16,
-                  backgroundColor: colors.surface,
+                  borderRadius: 16, borderCurve: "continuous",
                   borderWidth: 1,
                   borderColor: searchFocused ? colors.primary : colors.border,
+                  backgroundColor: colors.surface,
                 }}
               >
-                <Ionicons name="search" size={18} color={searchFocused ? colors.primary : colors.mutedText} />
+                <Icon set="ion" name="search" size={18} color={searchFocused ? colors.primary : colors.mutedText} />
                 <TextInput
+                  ref={searchRef}
                   value={search}
                   onChangeText={setSearch}
                   onFocus={() => setSearchFocused(true)}
                   onBlur={() => setSearchFocused(false)}
-                  placeholder="Search by name, category or date"
+                  placeholder="Search your files"
                   placeholderTextColor={colors.mutedText}
                   returnKeyType="search"
                   autoCorrect={false}
@@ -522,199 +575,125 @@ export default function DocumentsScreen() {
                   style={{ flex: 1, fontSize: 15, color: colors.foreground, fontFamily: fonts.body, paddingVertical: 0 }}
                 />
                 {search ? (
-                  <TouchableOpacity
-                    onPress={() => setSearch("")}
-                    accessibilityRole="button"
-                    accessibilityLabel="Clear search"
-                    hitSlop={6}
-                    style={{ width: 36, height: 36, alignItems: "center", justifyContent: "center" }}
-                  >
-                    <Ionicons name="close-circle" size={18} color={colors.mutedText} />
-                  </TouchableOpacity>
+                  <Animated.View entering={ZoomIn.duration(motion.duration.fast)} exiting={ZoomOut.duration(motion.duration.fast)}>
+                    <TouchableOpacity
+                      onPress={() => setSearch("")}
+                      accessibilityRole="button"
+                      accessibilityLabel="Clear search"
+                      hitSlop={6}
+                      style={{ width: 34, height: 34, alignItems: "center", justifyContent: "center" }}
+                    >
+                      <Icon set="ion" name="close-circle" size={18} color={colors.mutedText} />
+                    </TouchableOpacity>
+                  </Animated.View>
                 ) : null}
-              </View>
+              </Animated.View>
+              {searchFocused || search ? (
+                <Animated.View entering={FadeInRight.duration(motion.duration.base)} exiting={FadeOutRight.duration(motion.duration.fast)}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setSearch("");
+                      searchRef.current?.blur();
+                    }}
+                    accessibilityRole="button"
+                    hitSlop={8}
+                    style={{ paddingLeft: 14 }}
+                  >
+                    <Text maxFontSizeMultiplier={1.3} style={{ fontSize: 15, fontWeight: "600", color: colors.primaryDark, fontFamily: fonts.body }}>
+                      Cancel
+                    </Text>
+                  </TouchableOpacity>
+                </Animated.View>
+              ) : null}
             </View>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={{ marginTop: 10 }}
-              contentContainerStyle={{ paddingHorizontal: gutter }}
-            >
-              <ChoiceChips<Filter> value={typeFilter ?? "all"} onChange={(v) => setTypeFilter(v === "all" ? null : v)} options={filterOptions} />
-            </ScrollView>
+            <FilterChips<Filter>
+              options={filterOptions}
+              value={activeFilter}
+              onChange={(v) => setTypeFilter(v === "all" ? null : (v as DocType))}
+              gutter={gutter}
+              style={{ marginTop: 12, paddingBottom: 10 }}
+            />
           </View>
 
-          {/* Tools: doctor report, summary, chat — one row of equal tiles */}
           {showTools ? (
-            <Animated.View entering={FadeIn.duration(220)} exiting={FadeOut.duration(150)} style={{ paddingHorizontal: gutter, paddingTop: 8 }}>
-              <View style={{ flexDirection: "row", gap: compact ? 8 : 10 }}>
-                {tools.map((tool) => (
-                  <TouchableOpacity
-                    key={tool.key}
-                    activeOpacity={0.8}
-                    onPress={tool.onPress}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${tool.label}. ${tool.hint}${tool.locked ? ". Locked" : ""}`}
-                    style={{
-                      flex: 1,
-                      alignItems: wide ? "flex-start" : "center",
-                      paddingVertical: compact ? 12 : 14,
-                      paddingHorizontal: compact ? 6 : 12,
-                      borderRadius: 20,
-                      backgroundColor: colors.surface,
-                      borderWidth: 1,
-                      borderColor: isDark ? colors.border : "transparent",
-                      ...getShadow(colors, isDark),
-                    }}
-                  >
-                    <View
-                      style={{
-                        width: compact ? 40 : 44,
-                        height: compact ? 40 : 44,
-                        borderRadius: 14,
-                        alignItems: "center",
-                        justifyContent: "center",
-                        backgroundColor: tool.bg,
-                      }}
-                    >
-                      <Ionicons name={tool.icon} size={compact ? 19 : 21} color={tool.color} />
-                      {tool.locked ? (
-                        <View
-                          style={{
-                            position: "absolute",
-                            right: -4,
-                            top: -4,
-                            width: 18,
-                            height: 18,
-                            borderRadius: 9,
-                            alignItems: "center",
-                            justifyContent: "center",
-                            backgroundColor: colors.surface,
-                          }}
-                        >
-                          <Ionicons name="lock-closed" size={10} color={colors.mutedText} />
-                        </View>
-                      ) : null}
-                    </View>
-                    {wide ? (
-                      <>
-                        <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={{ marginTop: 10, fontSize: 15, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>
-                          {tool.label}
-                        </Text>
-                        <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={{ marginTop: 1, fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}>
-                          {tool.hint}
-                        </Text>
-                      </>
-                    ) : (
-                      <ColumnLabel style={{ marginTop: 8, fontSize: 13, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>
-                        {tool.label}
-                      </ColumnLabel>
-                    )}
-                  </TouchableOpacity>
-                ))}
-              </View>
+            <Animated.View entering={FadeIn.duration(motion.duration.base)} exiting={FadeOut.duration(motion.duration.fast)}>
+              <AskDocuments gutter={gutter} onAsk={() => askAI()} />
             </Animated.View>
           ) : null}
 
-          {/* List heading */}
-          <Animated.View
-            layout={LinearTransition.duration(220)}
-            style={{ paddingHorizontal: gutter, paddingTop: 22, paddingBottom: 4, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
+          {/* Count and the sort toggle */}
+          <View
+            style={{ paddingHorizontal: gutter, paddingTop: 24, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 }}
           >
-            <View className="flex-row items-baseline" style={{ gap: 8, flexShrink: 1 }}>
-              <Text accessibilityRole="header" numberOfLines={1} maxFontSizeMultiplier={1.4} style={{ flexShrink: 1, fontSize: 17, fontWeight: "700", color: colors.foreground, fontFamily: fonts.heading }}>
-                {listTitle}
-              </Text>
-              {!loading ? (
-                <Text style={{ fontSize: 13, fontWeight: "600", color: colors.mutedText, fontFamily: fonts.body }}>{count}</Text>
-              ) : null}
-            </View>
+            <Text accessibilityRole="header" maxFontSizeMultiplier={1.4} style={muted}>
+              {loading ? " " : `${count} ${count === 1 ? "file" : "files"}`}
+            </Text>
             <TouchableOpacity
-              activeOpacity={0.7}
               onPress={() => setSortOrder((prev) => (prev === "desc" ? "asc" : "desc"))}
               accessibilityRole="button"
               accessibilityLabel={sortOrder === "desc" ? "Sorted newest first. Tap for oldest first." : "Sorted oldest first. Tap for newest first."}
               hitSlop={8}
-              className="flex-row items-center"
-              style={{ gap: 4, paddingHorizontal: 10, height: 32, borderRadius: 16, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}
+              style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
             >
-              <Ionicons name="swap-vertical" size={14} color={colors.primaryDark} />
-              <Text maxFontSizeMultiplier={1.3} style={{ fontSize: 13, fontWeight: "700", color: colors.primaryDark, fontFamily: fonts.body }}>
-                {sortOrder === "desc" ? "Newest" : "Oldest"}
+              <Text maxFontSizeMultiplier={1.3} style={{ fontSize: 13, fontWeight: "600", color: colors.primaryDark, fontFamily: fonts.body }}>
+                {sortOrder === "desc" ? "Newest first" : "Oldest first"}
               </Text>
+              <SortArrow up={sortOrder === "asc"} color={colors.primaryDark} />
             </TouchableOpacity>
-          </Animated.View>
+          </View>
 
           {/* List, grouped by month */}
           <View style={{ paddingHorizontal: gutter }}>
             {loading ? (
-              <View style={{ paddingTop: 10 }}>
-                <DocumentListSkeleton count={columns === 2 ? 6 : 5} width={columns === 2 ? cardWidth : undefined} />
+              <View style={{ paddingTop: 12 }}>
+                <DocumentListSkeleton count={5} />
               </View>
             ) : visibleDocuments.length === 0 ? (
-              <Animated.View
-                entering={FadeInDown.duration(240)}
-                style={{ marginTop: 10, borderRadius: 22, backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
-              >
-                {searching ? (
-                  <EmptyState
-                    compact
-                    icon="file-search-outline"
-                    title="No matches"
-                    message={hasMoreDocs ? `Nothing loaded matches "${search.trim()}". Show more to search older files.` : `Nothing matches "${search.trim()}".`}
-                    actionLabel="Clear search"
-                    onAction={() => setSearch("")}
-                  />
-                ) : filterLabel ? (
-                  <EmptyState
-                    compact
-                    icon="folder-outline"
-                    title={`No ${DOC_TYPE_META[typeFilter!].plural} yet`}
-                    message="Add one and it will show up here."
-                    actionLabel="Upload a document"
-                    onAction={openUpload}
-                  />
-                ) : (
-                  <EmptyState
-                    compact
-                    icon="folder-open-outline"
-                    title="Keep your health papers in one place"
-                    message="Upload prescriptions, lab reports and bills. Only you can see them."
-                    actionLabel="Upload your first document"
-                    onAction={openUpload}
-                  />
-                )}
-              </Animated.View>
+              <View style={{ paddingTop: 48, paddingHorizontal: 12, alignItems: "center" }}>
+                <Text style={{ fontSize: 16, fontWeight: "700", color: colors.foreground, fontFamily: fonts.heading, textAlign: "center" }}>
+                  {searching ? "No matches" : filterLabel ? `No ${DOC_TYPE_META[typeFilter!].plural} yet` : "No documents yet"}
+                </Text>
+                <Text style={{ ...muted, marginTop: 6, lineHeight: 19, textAlign: "center" }}>
+                  {searching
+                    ? hasMoreDocs
+                      ? `Nothing loaded matches "${search.trim()}". Load more to search older files.`
+                      : `Nothing matches "${search.trim()}".`
+                    : "Add prescriptions, lab reports and bills. Only you can see them."}
+                </Text>
+                <TouchableOpacity onPress={searching ? () => setSearch("") : openUpload} accessibilityRole="button" hitSlop={8} style={{ marginTop: 14 }}>
+                  <Text style={{ fontSize: 14, fontWeight: "700", color: colors.primaryDark, fontFamily: fonts.body }}>
+                    {searching ? "Clear search" : "Upload a document"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             ) : (
               groups.map((group, groupIndex) => (
-                <Animated.View key={group.label} layout={LinearTransition.duration(220)}>
+                // Keyed by tab and sort too, so the list settles in again when either changes.
+                <Animated.View
+                  key={`${activeFilter}-${sortOrder}-${group.label}`}
+                  entering={groupIndex < 4 ? FadeInDown.delay(groupIndex * 70).duration(motion.duration.slow) : undefined}
+                  layout={LinearTransition.duration(220)}
+                >
                   <Text
                     accessibilityRole="header"
                     maxFontSizeMultiplier={1.3}
-                    style={{
-                      marginTop: groupIndex === 0 ? 10 : 20,
-                      marginBottom: 10,
-                      fontSize: 12,
-                      fontWeight: "800",
-                      letterSpacing: 0.6,
-                      textTransform: "uppercase",
-                      color: colors.mutedText,
-                      fontFamily: fonts.body,
-                    }}
+                    style={{ marginTop: 16, marginBottom: 8, marginLeft: 4, fontSize: 13, fontWeight: "600", color: colors.mutedText, fontFamily: fonts.body }}
                   >
                     {group.label}
                   </Text>
-                  <View style={{ flexDirection: columns === 2 ? "row" : "column", flexWrap: "wrap", gap }}>
-                    {group.docs.map((doc) => (
-                      <DocumentCard
-                        key={doc._id}
-                        doc={doc}
-                        index={visibleDocuments.indexOf(doc)}
-                        onOpen={openDocument}
-                        onMore={setActionDoc}
-                        width={columns === 2 ? cardWidth : undefined}
-                      />
-                    ))}
+                  {/* Shadow outside, clipping inside, so a held row's highlight follows the rounded corners. */}
+                  <View style={{ borderRadius: 22, borderCurve: "continuous", backgroundColor: colors.surface, ...getShadow(colors, isDark) }}>
+                    <View style={{ borderRadius: 22, borderCurve: "continuous", overflow: "hidden" }}>
+                      {group.docs.map((doc, i) => (
+                        <DocumentCard
+                          key={doc._id}
+                          doc={doc}
+                          divider={i > 0}
+                          onOpen={openDocument}
+                          onMore={setActionDoc}
+                        />
+                      ))}
+                    </View>
                   </View>
                 </Animated.View>
               ))
@@ -725,59 +704,20 @@ export default function DocumentsScreen() {
               </View>
             ) : null}
             {!loading && documents.length > 0 && !hasMoreDocs ? (
-              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingTop: 20 }}>
-                <Ionicons name="lock-closed-outline" size={13} color={colors.mutedText} />
-                <Text maxFontSizeMultiplier={1.3} style={{ fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}>
-                  Private to you · opened with expiring links
-                </Text>
-              </View>
+              <Text maxFontSizeMultiplier={1.3} style={{ ...muted, paddingTop: 20, textAlign: "center" }}>
+                Only you can see these files.
+              </Text>
             ) : null}
           </View>
         </ScrollView>
-
-        {/* Upload button: extended at the top, shrinks to an icon while scrolling down */}
-        <Animated.View
-          layout={LinearTransition.duration(200)}
-          style={{
-            position: "absolute",
-            right: gutter,
-            bottom: insets.bottom + 20,
-            borderRadius: 27,
-            ...getShadow(colors, isDark),
-            shadowOpacity: isDark ? 0.4 : 0.18,
-          }}
-        >
-          <TouchableOpacity
-            onPress={openUpload}
-            activeOpacity={0.85}
-            accessibilityRole="button"
-            accessibilityLabel="Upload a document"
-            style={{
-              height: 56,
-              minWidth: 56,
-              paddingHorizontal: fabCollapsed ? 0 : 20,
-              borderRadius: 28,
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
-              backgroundColor: colors.primary,
-            }}
-          >
-            <Ionicons name={fabCollapsed ? "add" : "cloud-upload-outline"} size={fabCollapsed ? 26 : 20} color={colors.buttonText} />
-            {!fabCollapsed ? (
-              <Animated.Text
-                entering={FadeIn.duration(160)}
-                exiting={FadeOut.duration(100)}
-                maxFontSizeMultiplier={1.3}
-                style={{ fontSize: 15, fontWeight: "800", color: colors.buttonText, fontFamily: fonts.body }}
-              >
-                Upload
-              </Animated.Text>
-            ) : null}
-          </TouchableOpacity>
-        </Animated.View>
       </SafeAreaView>
+
+      <PrescriptionViewer
+        consultationId={rxViewing?.consultationId ?? ""}
+        doctorName={rxViewing?.doctorName}
+        visible={rxViewing !== null}
+        onClose={() => setRxViewing(null)}
+      />
 
       <UploadSheet visible={uploadVisible} onClose={() => setUploadVisible(false)} onUpload={handleUpload} />
 
@@ -790,6 +730,15 @@ export default function DocumentsScreen() {
         onDelete={handleDelete}
         sharing={sharing}
         deleting={deleting}
+      />
+
+      <ActionSheet
+        visible={toolsOpen}
+        items={[
+          { key: "summary", label: "Summarize my reports", description: "A simple recap of any date range", icon: "book-open", onPress: () => openSummarize() },
+          { key: "report", label: "Report for my doctor", description: "Your cycle and symptom logs as a PDF", icon: "file-text", onPress: openReportSheet },
+        ]}
+        onClose={() => setToolsOpen(false)}
       />
 
       <ActionSheet
@@ -831,5 +780,19 @@ export default function DocumentsScreen() {
         onUnlocked={refreshSubscriptionAccess}
       />
     </>
+  );
+}
+
+/** Small arrow that turns over when the sort order flips. */
+function SortArrow({ up, color }: { up: boolean; color: string }) {
+  const turn = useSharedValue(up ? 180 : 0);
+  useEffect(() => {
+    turn.value = withSpring(up ? 180 : 0, { damping: 14, stiffness: 180 });
+  }, [up, turn]);
+  const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${turn.value}deg` }] }));
+  return (
+    <Animated.View style={style}>
+      <Icon set="ion" name="arrow-down" size={13} color={color} />
+    </Animated.View>
   );
 }

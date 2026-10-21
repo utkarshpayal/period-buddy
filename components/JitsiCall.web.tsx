@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Modal, Text, TouchableOpacity, View } from "react-native";
 import { type VideoJoin } from "../lib/api";
 import {
@@ -9,13 +9,14 @@ import {
   applyJitsiEvent,
   describeJoinError,
   initialCallState,
-  peerMessageCount,
   type CallChat,
   type CallState,
   type JitsiEventData,
 } from "../lib/jitsiCall";
+import { useCallSession } from "../hooks/useCallSession";
 import { CallChatPanel } from "./CallChatPanel";
 import { useTheme } from "./theme";
+import { Icon } from "./Icon";
 
 /**
  * Web build of JitsiCall (see the native file for the design):
@@ -77,27 +78,12 @@ function WebCall({ callKey, peerName, fetchJoin, onAttendance, endedMessage, cha
   const { colors, fonts } = useTheme();
   const hostRef = useRef<View | null>(null);
   const apiRef = useRef<JitsiApi | null>(null);
-  const leavingRef = useRef(false);
-  const joinedRef = useRef(false);
-  const closedRef = useRef(false);
-  // Set once the session ended elsewhere: a join still in flight must not reopen the call.
-  const endedRef = useRef(false);
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
-  const fetchJoinRef = useRef(fetchJoin);
-  fetchJoinRef.current = fetchJoin;
-  const attendanceRef = useRef(onAttendance);
-  attendanceRef.current = onAttendance;
   const [attempt, setAttempt] = useState(0);
   const [loading, setLoading] = useState(true);
   const [problem, setProblem] = useState<{ message: string; canRetry: boolean } | null>(null);
   const [call, setCall] = useState<CallState>(initialCallState());
   const [offline, setOffline] = useState(() => typeof navigator !== "undefined" && !navigator.onLine);
   const [chatOpen, setChatOpen] = useState(false);
-  const peerCount = chat ? peerMessageCount(chat.messages) : 0;
-  const seenPeerCountRef = useRef(peerCount);
-  if (chatOpen) seenPeerCountRef.current = peerCount;
-  const unread = Math.max(0, peerCount - seenPeerCountRef.current);
 
   const dispose = () => {
     const api = apiRef.current;
@@ -109,14 +95,24 @@ function WebCall({ callKey, peerName, fetchJoin, onAttendance, endedMessage, cha
     }
   };
 
-  const finish = useCallback(() => {
-    if (closedRef.current) return;
-    closedRef.current = true;
-    if (joinedRef.current) attendanceRef.current?.("left");
-    joinedRef.current = false;
-    dispose();
-    onCloseRef.current();
-  }, []);
+  const { leavingRef, endedRef, fetchJoinRef, markJoined, finish, finishSoon, unread } = useCallSession({
+    fetchJoin,
+    onAttendance,
+    onClose,
+    endedMessage,
+    call,
+    chat,
+    chatOpen,
+    release: dispose,
+    onEnded: (message) => {
+      dispose();
+      setProblem({ message, canRetry: false });
+    },
+    onFailure: (message) => {
+      dispose();
+      setProblem({ message, canRetry: true });
+    },
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -154,9 +150,8 @@ function WebCall({ callKey, peerName, fetchJoin, onAttendance, endedMessage, cha
             };
             if (name === "videoConferenceJoined") {
               data.count = api.getNumberOfParticipants();
-              joinedRef.current = true;
               setLoading(false);
-              attendanceRef.current?.("joined");
+              markJoined();
             }
             setCall((prev) => applyJitsiEvent(prev, name, data, leavingRef.current));
           });
@@ -175,30 +170,10 @@ function WebCall({ callKey, peerName, fetchJoin, onAttendance, endedMessage, cha
       cancelled = true;
       dispose();
     };
+    // The refs are stable; only a new call or a Retry re-runs this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [callKey, attempt]);
 
-  // The session ended elsewhere: hang up and say why (no Rejoin).
-  useEffect(() => {
-    if (!endedMessage) return;
-    endedRef.current = true;
-    leavingRef.current = true;
-    if (joinedRef.current) attendanceRef.current?.("left");
-    joinedRef.current = false;
-    dispose();
-    setProblem({ message: endedMessage, canRetry: false });
-  }, [endedMessage]);
-
-  useEffect(() => {
-    if (call.closed) finish();
-  }, [call.closed, finish]);
-  useEffect(() => {
-    if (call.failure && !leavingRef.current) {
-      if (joinedRef.current) attendanceRef.current?.("left");
-      joinedRef.current = false;
-      dispose();
-      setProblem({ message: call.failure, canRetry: true });
-    }
-  }, [call.failure]);
   useEffect(() => {
     const on = () => setOffline(false);
     const off = () => setOffline(true);
@@ -214,7 +189,7 @@ function WebCall({ callKey, peerName, fetchJoin, onAttendance, endedMessage, cha
     if (!apiRef.current) return finish();
     leavingRef.current = true;
     apiRef.current.executeCommand("hangup");
-    setTimeout(finish, 1500);
+    finishSoon();
   };
   const cmd = (name: string, arg?: boolean) =>
     arg === undefined ? apiRef.current?.executeCommand(name) : apiRef.current?.executeCommand(name, arg);
@@ -238,7 +213,7 @@ function WebCall({ callKey, peerName, fetchJoin, onAttendance, endedMessage, cha
         <View ref={hostRef} style={{ flex: 1, display: problem ? "none" : "flex" }} />
         {(loading || problem) && (
           <View className="absolute inset-0 items-center justify-center px-8" style={{ backgroundColor: BG }}>
-            {problem ? <Feather name="video-off" size={36} color="#FFFFFF" /> : <ActivityIndicator color="#FFFFFF" />}
+            {problem ? <Icon set="feather" name="video-off" size={36} color="#FFFFFF" /> : <ActivityIndicator color="#FFFFFF" />}
             <Text className="text-base font-extrabold mt-4 text-center" style={{ color: "#FFFFFF", fontFamily: fonts.heading }}>
               {problem ? problem.message : "Opening the video room… Allow camera and microphone when asked."}
             </Text>
@@ -280,7 +255,7 @@ function WebCall({ callKey, peerName, fetchJoin, onAttendance, endedMessage, cha
                 className="h-[56px] w-[56px] rounded-full items-center justify-center"
                 style={{ backgroundColor: c.active ? "#FFFFFF" : "rgba(255,255,255,0.18)", opacity: inCall ? 1 : 0.45 }}
               >
-                <Feather name={c.icon} size={22} color={c.active ? BG : "#FFFFFF"} />
+                <Icon set="feather" name={c.icon} size={22} color={c.active ? BG : "#FFFFFF"} />
               </TouchableOpacity>
             ))}
             {chat && (
@@ -291,7 +266,7 @@ function WebCall({ callKey, peerName, fetchJoin, onAttendance, endedMessage, cha
                 className="h-[56px] w-[56px] rounded-full items-center justify-center"
                 style={{ backgroundColor: "rgba(255,255,255,0.18)" }}
               >
-                <Feather name="message-circle" size={22} color="#FFFFFF" />
+                <Icon set="feather" name="message-circle" size={22} color="#FFFFFF" />
                 {unread > 0 && (
                   <View
                     className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full items-center justify-center"
@@ -311,7 +286,7 @@ function WebCall({ callKey, peerName, fetchJoin, onAttendance, endedMessage, cha
               className="h-[64px] w-[64px] rounded-full items-center justify-center"
               style={{ backgroundColor: colors.danger }}
             >
-              <Feather name="phone-off" size={26} color="#FFFFFF" />
+              <Icon set="feather" name="phone-off" size={26} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
         )}

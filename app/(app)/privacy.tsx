@@ -1,4 +1,3 @@
-import { Feather, Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, ScrollView, StatusBar, Switch, Text, TouchableOpacity, View } from "react-native";
@@ -22,6 +21,7 @@ import {
   setScreenPrivacySetting,
   useScreenPrivacySetting,
 } from "../../lib/screenPrivacy";
+import { Icon } from "../../components/Icon";
 
 const PLATFORM_LABEL = { android: "Android phone", ios: "iPhone", web: "Web browser" } as const;
 
@@ -50,17 +50,28 @@ export default function PrivacySettings() {
   const [savingAi, setSavingAi] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [settings, setSettings] = useState<PrivacySettingsData | null>(null);
+  // A half that failed shows "Couldn't load · Retry" instead of a spinner
+  // that never ends (offline, the AI switch could otherwise never be reached).
+  const [failed, setFailed] = useState({ privacy: false, sessions: false });
   const blockScreenshots = useScreenPrivacySetting("screenshots");
   const blurSwitcher = useScreenPrivacySetting("appSwitcher");
 
   const load = useCallback(async () => {
+    setFailed({ privacy: false, sessions: false });
     const [privacy, sessions] = await Promise.allSettled([authApi.getPrivacy(), authApi.getSessions()]);
     if (privacy.status === "fulfilled") {
       setConsents(privacy.value.consents);
       setSettings(privacy.value.settings ?? null);
     }
     if (sessions.status === "fulfilled") setDevices(sessions.value.sessions);
+    setFailed({ privacy: privacy.status === "rejected", sessions: sessions.status === "rejected" });
   }, []);
+
+  const loadFailed = (
+    <TouchableOpacity accessibilityRole="button" onPress={load} activeOpacity={0.7} hitSlop={8}>
+      <Text style={{ color: colors.primary, fontWeight: "700", fontSize: 13, fontFamily: fonts.body }}>Couldn&apos;t load · Retry</Text>
+    </TouchableOpacity>
+  );
 
   useEffect(() => {
     load();
@@ -219,7 +230,7 @@ export default function PrivacySettings() {
               { icon: "finger-print-outline" as const, text: "Turn on App lock to keep the app private on a shared phone." },
             ].map((item) => (
               <View key={item.icon} className="flex-row" style={{ gap: 12 }}>
-                <Ionicons name={item.icon} size={18} color={colors.accent} style={{ marginTop: 1 }} />
+                <Icon set="ion" name={item.icon} size={18} color={colors.accent} style={{ marginTop: 1 }} />
                 <Text style={[body, { flex: 1 }]}>{item.text}</Text>
               </View>
             ))}
@@ -244,6 +255,8 @@ export default function PrivacySettings() {
                   thumbColor="#FFFFFF"
                   accessibilityLabel="Use AI features"
                 />
+              ) : failed.privacy ? (
+                loadFailed
               ) : (
                 <ActivityIndicator color={colors.primary} />
               )}
@@ -314,12 +327,12 @@ export default function PrivacySettings() {
               className="flex-row items-center"
               style={{ gap: 12 }}
             >
-              <Ionicons name="download-outline" size={20} color={colors.primary} />
+              <Icon set="ion" name="download-outline" size={20} color={colors.primary} />
               <View className="flex-1">
                 <Text style={[body, { fontWeight: "700" }]}>Download my data</Text>
                 <Text style={muted}>A copy of everything The Nura stores about you, as a file.</Text>
               </View>
-              {exporting ? <ActivityIndicator color={colors.primary} /> : <Feather name="chevron-right" size={18} color={colors.mutedText} />}
+              {exporting ? <ActivityIndicator color={colors.primary} /> : <Icon set="feather" name="chevron-right" size={18} color={colors.mutedText} />}
             </TouchableOpacity>
             <Text style={muted}>
               To delete your account and data, use Delete account in Profile. Your data is erased for good 30 days after you delete it.
@@ -329,13 +342,13 @@ export default function PrivacySettings() {
           {section("Signed-in devices")}
           <View style={card}>
             {devices === null ? (
-              <ActivityIndicator color={colors.primary} />
+              failed.sessions ? loadFailed : <ActivityIndicator color={colors.primary} />
             ) : devices.length === 0 ? (
               <Text style={muted}>No other devices.</Text>
             ) : (
               devices.map((d) => (
                 <View key={d.id} className="flex-row items-center" style={{ gap: 12 }}>
-                  <Ionicons
+                  <Icon set="ion"
                     name={d.platform === "web" ? "desktop-outline" : "phone-portrait-outline"}
                     size={20}
                     color={colors.mutedText}
