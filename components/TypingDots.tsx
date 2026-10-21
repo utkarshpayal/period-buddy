@@ -39,7 +39,7 @@ export function TypingDots() {
         gap: 5,
         paddingHorizontal: 16,
         paddingVertical: 14,
-        borderRadius: 20,
+        borderRadius: 20, borderCurve: "continuous",
         borderBottomLeftRadius: 6,
         backgroundColor: colors.surface,
       }}

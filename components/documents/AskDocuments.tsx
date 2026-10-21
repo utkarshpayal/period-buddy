@@ -45,8 +45,6 @@ export function AskDocuments({ gutter, onAsk }: { gutter: number; onAsk: () => v
           paddingRight: 10,
           borderRadius: 30,
           backgroundColor: colors.surface,
-          borderWidth: isDark ? 1 : 0,
-          borderColor: colors.border,
           ...getShadow(colors, isDark),
         }}
       >

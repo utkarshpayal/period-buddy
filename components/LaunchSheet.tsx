@@ -85,7 +85,7 @@ export function LaunchSheet({ request, onClose }: { request: LaunchSheetRequest;
     >
       <View style={{ height: 14 }} />
 
-      <View style={{ width: 64, height: 64, borderRadius: 20, backgroundColor: bg, alignItems: "center", justifyContent: "center" }}>
+      <View style={{ width: 64, height: 64, borderRadius: 20, borderCurve: "continuous", backgroundColor: bg, alignItems: "center", justifyContent: "center" }}>
         <Icon set="ion" name={request.icon as keyof typeof Ionicons.glyphMap} size={28} color={color} />
         {paused ? (
           <View
@@ -198,7 +198,7 @@ function SheetButton({
         alignItems: "center",
         justifyContent: "center",
         gap: 8,
-        borderRadius: 16,
+        borderRadius: 16, borderCurve: "continuous",
         borderWidth: 1,
         paddingVertical: 14,
         backgroundColor: muted ? colors.successLight : secondary ? colors.input : colors.primary,

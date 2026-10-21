@@ -5,6 +5,7 @@ import { SkeletonBlock } from "../Skeleton";
 import { useTheme, type ThemeColors } from "../theme";
 import { getShadow } from "../ui-tokens";
 import { Icon } from "../Icon";
+import { Button } from "../Button";
 
 /**
  * Shared building blocks for the wellbeing screens (health-issues, hygiene,
@@ -130,7 +131,7 @@ export function WellbeingIntro({
 }) {
   const { colors, fonts } = useTheme();
   return (
-    <View style={{ backgroundColor: tone.bg, borderRadius: 24, padding: 18 }}>
+    <View style={{ backgroundColor: tone.bg, borderRadius: 24, borderCurve: "continuous", padding: 18 }}>
       <View className="flex-row items-center" style={{ gap: 14 }}>
         <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" }}>
           <WellbeingGlyph name={icon} size={26} color={tone.fg} />
@@ -372,17 +373,7 @@ export function ConsultNudge({ title, body, onPress, style }: { title: string; b
           </Text>
         </View>
       </View>
-      <TouchableOpacity
-        onPress={onPress}
-        activeOpacity={0.85}
-        accessibilityRole="button"
-        accessibilityLabel="Talk to a gynaecologist"
-        className="flex-row items-center justify-center"
-        style={{ marginTop: 14, height: 48, borderRadius: 16, backgroundColor: colors.primary, gap: 8 }}
-      >
-        <Icon set="ion" name="chatbubbles-outline" size={17} color={colors.buttonText} />
-        <Text maxFontSizeMultiplier={1.3} style={{ color: colors.buttonText, fontSize: 15, fontWeight: "700", fontFamily: fonts.body }}>Talk to a gynaecologist</Text>
-      </TouchableOpacity>
+      <Button label="Talk to a gynaecologist" icon="chatbubbles-outline" size="md" fullWidth onPress={onPress} style={{ marginTop: 14 }} />
     </WellbeingCard>
   );
 }

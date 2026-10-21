@@ -744,7 +744,7 @@ export default function Blogs() {
             marginHorizontal: GUTTER,
             paddingHorizontal: 12,
             paddingVertical: 9,
-            borderRadius: 14,
+            borderRadius: 14, borderCurve: "continuous",
             backgroundColor: colors.surfaceSoft,
           }}
         >

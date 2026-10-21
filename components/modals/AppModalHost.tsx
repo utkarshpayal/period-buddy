@@ -1,11 +1,29 @@
 import React, { useEffect, useState } from "react";
-import { Modal, Pressable, Text, TouchableOpacity, View } from "react-native";
+import { Modal, Pressable, Text, View } from "react-native";
+import Animated, { FadeIn, withSpring, withTiming } from "react-native-reanimated";
+import { Button } from "../Button";
+import { motion } from "../motion";
+import { getShadow } from "../ui-tokens";
 import { openAppSettings, registerModalListener } from "../../lib/modal-host";
 import { AppLockCover } from "../AppLockScreen";
 import { LaunchSheet } from "../LaunchSheet";
 import { useTheme } from "../theme";
 import type { ModalButtonSpec, ModalIconName, ModalRequest, ModalVariant } from "./types";
 import { Icon } from "../Icon";
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+// Dialogs settle in from slightly smaller, with no overshoot.
+function dialogEntering() {
+  "worklet";
+  return {
+    initialValues: { opacity: 0, transform: [{ scale: 0.94 }] },
+    animations: {
+      opacity: withTiming(1, { duration: motion.duration.fast }),
+      transform: [{ scale: withSpring(1, motion.spring) }],
+    },
+  };
+}
 
 const VARIANT_ICON: Record<ModalVariant, ModalIconName> = {
   default: "information-circle",
@@ -28,7 +46,7 @@ const VARIANT_ICON: Record<ModalVariant, ModalIconName> = {
  * draws above the root lock.
  */
 export function AppModalHost({ inline = false }: { inline?: boolean }) {
-  const { colors, fonts } = useTheme();
+  const { colors, fonts, isDark } = useTheme();
   const [request, setRequest] = useState<ModalRequest | null>(null);
 
   useEffect(() => registerModalListener(setRequest), []);
@@ -120,7 +138,8 @@ export function AppModalHost({ inline = false }: { inline?: boolean }) {
             }
       }
     >
-      <Pressable
+      <AnimatedPressable
+        entering={FadeIn.duration(motion.duration.base)}
         accessibilityLabel="Dismiss dialog"
         onPress={handleRequestClose}
         style={{
@@ -133,37 +152,50 @@ export function AppModalHost({ inline = false }: { inline?: boolean }) {
         }}
       />
 
-      <View
+      <Animated.View
+        key={request?.id}
+        entering={dialogEntering}
+        accessibilityViewIsModal
         style={{
+          alignItems: "center",
           backgroundColor: colors.surface,
-          borderColor: colors.border,
-          borderRadius: 20,
-          borderWidth: 1,
+          borderRadius: 28,
+          borderCurve: "continuous",
           maxWidth: 360,
-          padding: 20,
+          paddingHorizontal: 22,
+          paddingTop: 26,
+          paddingBottom: 22,
           width: "100%",
+          ...getShadow(colors, isDark),
         }}
       >
+        {/* Icon in a tinted halo with a faint outer ring, like the empty states. */}
         <View
           style={{
             alignItems: "center",
             backgroundColor: accent.bg,
-            borderRadius: 26,
-            height: 52,
+            borderRadius: 32,
+            height: 64,
             justifyContent: "center",
-            marginBottom: 14,
-            width: 52,
+            marginBottom: 16,
+            width: 64,
+            borderWidth: 6,
+            borderColor: colors.surfaceSoft,
           }}
         >
           <Icon set="ion" name={icon} size={26} color={accent.fg} />
         </View>
 
         <Text
+          accessibilityRole="header"
           style={{
             color: colors.foreground,
             fontFamily: fonts.heading,
-            fontSize: 17,
+            fontSize: 18,
             fontWeight: "800",
+            letterSpacing: -0.3,
+            lineHeight: 24,
+            textAlign: "center",
           }}
         >
           {title}
@@ -174,10 +206,10 @@ export function AppModalHost({ inline = false }: { inline?: boolean }) {
             style={{
               color: colors.mutedText,
               fontFamily: fonts.body,
-              fontSize: 13,
-              fontWeight: "600",
-              lineHeight: 19,
-              marginTop: 6,
+              fontSize: 14,
+              lineHeight: 20,
+              marginTop: 8,
+              textAlign: "center",
             }}
           >
             {message}
@@ -186,20 +218,21 @@ export function AppModalHost({ inline = false }: { inline?: boolean }) {
 
         <View
           style={{
-            flexDirection: buttons.length > 1 ? "row" : "column",
+            alignSelf: "stretch",
+            // Side by side for two actions; stacked (first one on top) for one or three+.
+            flexDirection: buttons.length === 2 ? "row" : "column",
             gap: 10,
-            marginTop: 20,
+            marginTop: 22,
           }}
         >
           {buttons.map((spec, index) => {
-            const buttonColors = buttonStyle(colors, spec.style);
             const isPermissionSettingsButton = request?.kind === "permission" && spec.style !== "cancel";
-
             return (
-              <TouchableOpacity
+              <Button
                 key={`${spec.text}-${index}`}
-                accessibilityRole="button"
-                activeOpacity={0.85}
+                label={spec.text}
+                size="md"
+                variant={spec.style === "cancel" ? "neutral" : spec.style === "destructive" ? "danger" : "primary"}
                 onPress={() =>
                   isPermissionSettingsButton && request?.kind === "permission"
                     ? runOpenSettings(request)
@@ -207,38 +240,12 @@ export function AppModalHost({ inline = false }: { inline?: boolean }) {
                       ? runPermissionCancel(request)
                       : runButton(spec)
                 }
-                style={{
-                  alignItems: "center",
-                  backgroundColor: buttonColors.bg,
-                  borderColor: buttonColors.border,
-                  borderRadius: 14,
-                  borderWidth: 1,
-                  // Only stretch buttons when they share a row. In the
-                  // single-button (column) layout the parent has no fixed
-                  // height, and RN's `flex: 1` means flexBasis 0 — the
-                  // button would collapse to just its padding, leaving a
-                  // pink pill with its label clipped away (on native only;
-                  // web resolves the basis differently, so it looked fine).
-                  flex: buttons.length > 1 ? 1 : undefined,
-                  justifyContent: "center",
-                  paddingVertical: 13,
-                }}
-              >
-                <Text
-                  style={{
-                    color: buttonColors.text,
-                    fontFamily: fonts.body,
-                    fontSize: 14,
-                    fontWeight: "700",
-                  }}
-                >
-                  {spec.text}
-                </Text>
-              </TouchableOpacity>
+                style={buttons.length === 2 ? { flex: 1, paddingHorizontal: 12 } : undefined}
+              />
             );
           })}
         </View>
-      </View>
+      </Animated.View>
     </View>
   );
 
@@ -254,7 +261,7 @@ export function AppModalHost({ inline = false }: { inline?: boolean }) {
   }
 
   return (
-    <Modal transparent animationType="fade" visible={Boolean(request)} onRequestClose={handleRequestClose}>
+    <Modal transparent animationType="none" statusBarTranslucent visible={Boolean(request)} onRequestClose={handleRequestClose}>
       {dialog}
     </Modal>
   );
@@ -273,22 +280,4 @@ function variantColors(colors: ReturnType<typeof useTheme>["colors"], variant: M
     default:
       return { fg: colors.info, bg: colors.infoLight };
   }
-}
-
-function buttonStyle(colors: ReturnType<typeof useTheme>["colors"], style: ModalButtonSpec["style"]) {
-  if (style === "cancel") {
-    return { bg: colors.input, border: colors.border, text: colors.mutedText };
-  }
-  if (style === "destructive") {
-    return {
-      bg: colors.dangerLight,
-      border: colors.danger,
-      text: colors.danger,
-    };
-  }
-  return {
-    bg: colors.primary,
-    border: colors.primary,
-    text: colors.buttonText,
-  };
 }

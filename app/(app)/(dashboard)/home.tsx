@@ -1,6 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
 import { invalidateQueries } from "../../../lib/queryCache";
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -20,7 +19,9 @@ import { ColumnLabel } from "../../../components/ColumnLabel";
 import { SkeletonBlock, SkeletonCard } from "../../../components/Skeleton";
 import StatCard from "../../../components/StatCard";
 import { useTheme } from "../../../components/theme";
-import { getHeroGradient, getShadow } from "../../../components/ui-tokens";
+import { getGlow, getHeroGradient, getShadow } from "../../../components/ui-tokens";
+import Avatar from "../../../components/Avatar";
+import { GradientCard } from "../../../components/GradientCard";
 import { useUserStats } from "../../../hooks/useUserStats";
 import { useDataRefresh } from "../../../hooks/useDataRefresh";
 import {
@@ -54,6 +55,11 @@ import { listEntering } from "../../../components/motion";
 
 // The Cycle length card is narrower than Cycle health, so both peek in.
 const TREND_CARD_WIDTH = 200;
+
+// "Tuesday, 21 October" — the header's quiet eyebrow above the greeting.
+function formatTodayEyebrow(date: Date) {
+  return date.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+}
 
 function getGreeting(hour: number) {
   if (hour < 12) return "Good morning";
@@ -365,53 +371,42 @@ export default function Home() {
     ),
     weekStrip: (
       <>
-      {/* WEEK STRIP — today filled, upcoming days dashed; the dot marks
-          period days (paler when predicted) and fertile days. */}
+      {/* WEEK STRIP: same meanings as the calendar, nothing more: today
+          filled, period days rose, fertile days lavender. No dots or dashes. */}
       <View className="mx-6 mb-5 flex-row">
-        {weekStrip.map((day, idx) => (
-          <View key={idx} className="items-center" style={{ flex: 1, gap: 8 }}>
-            <Text style={{ fontSize: 12, lineHeight: 16, fontWeight: day.isToday ? "700" : "500", color: day.isToday ? colors.primaryDark : colors.mutedText, fontFamily: fonts.body }}>
-              {day.letter}
-            </Text>
-            <View
-              style={{
-                width: 38,
-                height: 38,
-                borderRadius: 19,
-                alignItems: "center",
-                justifyContent: "center",
-                backgroundColor: day.isToday ? colors.primary : "transparent",
-                borderWidth: day.isFuture && day.isPeriod ? 1.5 : 0,
-                borderColor: colors.rose,
-                borderStyle: "dashed",
-                ...(day.isToday
-                  ? { shadowColor: colors.primary, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.32, shadowRadius: 14, elevation: 4 }
-                  : null),
-              }}
-            >
-              <Text
+        {weekStrip.map((day, idx) => {
+          const tint = day.isToday ? null : day.isPeriod ? { bg: colors.roseLight, fg: colors.primaryDark } : day.isFertile ? { bg: colors.secondaryLight, fg: colors.info } : null;
+          return (
+            <View key={idx} className="items-center" style={{ flex: 1, gap: 8 }}>
+              <Text style={{ fontSize: 12, lineHeight: 16, fontWeight: day.isToday ? "800" : "600", letterSpacing: 0.4, color: day.isToday ? colors.primaryDark : colors.mutedText, fontFamily: fonts.body }}>
+                {day.letter}
+              </Text>
+              <View
                 style={{
-                  fontSize: 14,
-                  fontWeight: day.isToday ? "700" : "500",
-                  color: day.isToday ? colors.buttonText : colors.foreground,
-                  fontFamily: fonts.body,
+                  width: 38,
+                  height: 38,
+                  borderRadius: 19,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: day.isToday ? colors.primary : tint?.bg ?? "transparent",
+                  ...(day.isToday ? getGlow(colors.primary, isDark) : null),
                 }}
               >
-                {day.dayNumber}
-              </Text>
+                <Text
+                  style={{
+                    fontSize: 14,
+                    fontWeight: day.isToday || tint ? "800" : "600",
+                    fontVariant: ["tabular-nums"],
+                    color: day.isToday ? colors.buttonText : tint?.fg ?? colors.foreground,
+                    fontFamily: fonts.body,
+                  }}
+                >
+                  {day.dayNumber}
+                </Text>
+              </View>
             </View>
-            {/* Fixed-height slot so the dot (or its absence) never shifts the row. */}
-            <View
-              style={{
-                width: 5,
-                height: 5,
-                borderRadius: 3,
-                backgroundColor: day.isPeriod ? colors.primary : day.isFertile ? colors.secondary : "transparent",
-                opacity: day.isFuture ? 0.4 : 1,
-              }}
-            />
-          </View>
-        ))}
+          );
+        })}
       </View>
       </>
     ),
@@ -424,28 +419,16 @@ export default function Home() {
           <SkeletonBlock width="100%" height={150} radius={24} />
         </View>
       ) : (
-      <View className="mx-6 mb-6">
-        <LinearGradient
-          colors={heroGradient as [string, string, ...string[]]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={{
-            borderRadius: 24,
-            padding: 20,
-            gap: 14,
-            overflow: "hidden",
-            shadowColor: colors.primary,
-            shadowOffset: { width: 0, height: 12 },
-            shadowOpacity: isDark ? 0.3 : 0.25,
-            shadowRadius: 28,
-            elevation: 6,
-          }}
-        >
+      <GradientCard
+        colors={heroGradient}
+        containerStyle={{ marginHorizontal: 24, marginBottom: 24 }}
+        style={{ padding: 22, gap: 16 }}
+      >
           <Icon set="ion"
             name={PHASE_WATERMARK_ICONS[phaseKey] ?? "water"}
-            size={170}
+            size={190}
             color="#fff"
-            style={{ position: "absolute", right: -36, bottom: -48, opacity: 0.12 }}
+            style={{ position: "absolute", right: -40, bottom: -56, opacity: 0.1 }}
           />
           <View className="flex-row items-start justify-between" style={{ gap: 12 }}>
             <View className="flex-1" style={{ gap: 4 }}>
@@ -455,10 +438,10 @@ export default function Home() {
                   lineHeight: 16,
                   fontWeight: "700",
                   color: "#fff",
-                  letterSpacing: 1,
+                  letterSpacing: 1.4,
                   fontFamily: fonts.body,
                   textTransform: "uppercase",
-                  opacity: 0.85,
+                  opacity: 0.8,
                 }}
               >
                 Cycle day {cycleDay}
@@ -466,7 +449,7 @@ export default function Home() {
               <Text
                 numberOfLines={2}
                 maxFontSizeMultiplier={1.3}
-                style={{ fontSize: 24, lineHeight: 32, fontWeight: "700", color: "#fff", fontFamily: fonts.heading }}
+                style={{ fontSize: 27, lineHeight: 34, fontWeight: "800", letterSpacing: -0.7, color: "#fff", fontFamily: fonts.heading }}
               >
                 {phaseLabel} phase
               </Text>
@@ -478,10 +461,10 @@ export default function Home() {
               accessibilityLabel={periodLoggedToday ? "Period logged today. Change flow" : "Log period for today"}
               hitSlop={6}
               style={{
-                width: 36, height: 36, borderRadius: 18,
-                backgroundColor: "rgba(255,255,255,0.22)",
+                width: 40, height: 40, borderRadius: 20,
+                backgroundColor: "rgba(255,255,255,0.2)",
                 borderWidth: 1,
-                borderColor: "rgba(255,255,255,0.35)",
+                borderColor: "rgba(255,255,255,0.4)",
                 alignItems: "center", justifyContent: "center",
               }}
             >
@@ -499,19 +482,18 @@ export default function Home() {
             ].map((item) => (
               <View
                 key={item.label}
-                style={{ flex: 1, backgroundColor: "rgba(255,255,255,0.16)", borderRadius: 14, paddingVertical: 10, paddingHorizontal: 12, gap: 2 }}
+                style={{ flex: 1, backgroundColor: "rgba(255,255,255,0.14)", borderWidth: 1, borderColor: "rgba(255,255,255,0.22)", borderRadius: 16, borderCurve: "continuous", paddingVertical: 11, paddingHorizontal: 13, gap: 2 }}
               >
-                <Text numberOfLines={2} maxFontSizeMultiplier={1.3} style={{ fontSize: 12, lineHeight: 16, color: "#fff", opacity: 0.85, fontFamily: fonts.body }}>
+                <Text numberOfLines={2} maxFontSizeMultiplier={1.3} style={{ fontSize: 12, lineHeight: 16, fontWeight: "600", color: "#fff", opacity: 0.8, fontFamily: fonts.body }}>
                   {item.label}
                 </Text>
-                <Text numberOfLines={2} maxFontSizeMultiplier={1.3} style={{ fontSize: 14, lineHeight: 20, fontWeight: "700", color: "#fff", fontFamily: fonts.body }}>
+                <Text numberOfLines={2} maxFontSizeMultiplier={1.3} style={{ fontSize: 15, lineHeight: 20, fontWeight: "800", letterSpacing: -0.2, color: "#fff", fontFamily: fonts.body }}>
                   {item.value}
                 </Text>
               </View>
             ))}
           </View>
-        </LinearGradient>
-      </View>
+      </GradientCard>
       )}
       </>
     ),
@@ -552,9 +534,7 @@ export default function Home() {
                 alignItems: "center",
                 justifyContent: "center",
                 backgroundColor: action.primary ? colors.primary : colors.surface,
-                ...(action.primary
-                  ? { shadowColor: colors.primary, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 18, elevation: 5 }
-                  : getShadow(colors, isDark)),
+                ...(action.primary ? getGlow(colors.primary, isDark) : getShadow(colors, isDark)),
               }}
             >
               <Icon set="ion"
@@ -583,7 +563,7 @@ export default function Home() {
                 </View>
               ) : null}
             </View>
-            <ColumnLabel lineHeight={18} style={{ fontSize: 13, fontWeight: "500", color: colors.foreground, fontFamily: fonts.body, marginTop: 10 }}>
+            <ColumnLabel lineHeight={18} style={{ fontSize: 13, fontWeight: "600", color: colors.foreground, fontFamily: fonts.body, marginTop: 10 }}>
               {genZLabel(action.label, genZModeEnabled)}
             </ColumnLabel>
           </PressableScale>
@@ -631,14 +611,14 @@ export default function Home() {
           ) : (
           <>
           {/* Cycle health */}
-          <View style={{ width: insightCardWidth, backgroundColor: colors.surface, borderRadius: 22, padding: 18, gap: 16, ...getShadow(colors, isDark) }}>
+          <View style={{ width: insightCardWidth, backgroundColor: colors.surface, borderRadius: 24, borderCurve: "continuous", padding: 18, gap: 16, ...getShadow(colors, isDark) }}>
             <View className="flex-row items-center justify-between">
               <View className="flex-1 pr-4" style={{ gap: 4 }}>
-                <Text style={{ fontSize: 12, lineHeight: 16, fontWeight: "700", color: colors.primaryDark, letterSpacing: 0.7, fontFamily: fonts.body, textTransform: "uppercase" }}>
+                <Text style={{ fontSize: 12, lineHeight: 16, fontWeight: "700", color: colors.primaryDark, letterSpacing: 1.1, fontFamily: fonts.body, textTransform: "uppercase" }}>
                   Cycle health
                 </Text>
                 <View className="flex-row items-center" style={{ gap: 8 }}>
-                  <Text style={{ fontSize: 30, lineHeight: 36, fontWeight: "700", color: colors.foreground, fontFamily: fonts.heading }}>
+                  <Text style={{ fontSize: 32, lineHeight: 38, fontWeight: "800", letterSpacing: -1, fontVariant: ["tabular-nums"], color: colors.foreground, fontFamily: fonts.heading }}>
                     {treeHealth}
                   </Text>
                   <View style={{ backgroundColor: healthTone.bg, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 }}>
@@ -651,7 +631,7 @@ export default function Home() {
 
               <View style={{ position: "relative", width: 60, height: 60 }}>
                 <Svg width={60} height={60} viewBox="0 0 60 60">
-                  <Circle cx="30" cy="30" r="26" fill="none" stroke={colors.primaryLight} strokeWidth={6} />
+                  <Circle cx="30" cy="30" r="26" fill="none" stroke={colors.track} strokeWidth={6} />
                   <Circle cx="30" cy="30" r="26" fill="none" stroke={colors.primary} strokeWidth={6} strokeLinecap="round" strokeDasharray={`${(treeHealth / 100) * 163.4} 163.4`} transform="rotate(-90 30 30)" />
                 </Svg>
                 <View style={{ position: "absolute", inset: 0, justifyContent: "center", alignItems: "center" }}>
@@ -676,7 +656,7 @@ export default function Home() {
                   className="flex-1 items-center"
                   style={{ gap: 2, borderLeftWidth: i === 0 ? 0 : 1, borderColor: colors.track }}
                 >
-                  <Text style={{ fontSize: 18, lineHeight: 24, fontWeight: "700", color: colors.foreground, fontFamily: fonts.heading }}>
+                  <Text style={{ fontSize: 18, lineHeight: 24, fontWeight: "800", letterSpacing: -0.3, fontVariant: ["tabular-nums"], color: colors.foreground, fontFamily: fonts.heading }}>
                     {stat.value}
                   </Text>
                   <ColumnLabel style={{ fontSize: 12, color: colors.mutedText, fontFamily: fonts.body }}>{stat.label}</ColumnLabel>
@@ -686,11 +666,11 @@ export default function Home() {
           </View>
 
           {/* Cycle length: the average plus the last three cycles as bars, newest solid. */}
-          <View style={{ width: TREND_CARD_WIDTH, backgroundColor: colors.surface, borderRadius: 22, padding: 18, gap: 12, ...getShadow(colors, isDark) }}>
-            <Text style={{ fontSize: 12, lineHeight: 16, fontWeight: "700", color: colors.primaryDark, letterSpacing: 0.7, fontFamily: fonts.body, textTransform: "uppercase" }}>
+          <View style={{ width: TREND_CARD_WIDTH, backgroundColor: colors.surface, borderRadius: 24, borderCurve: "continuous", padding: 18, gap: 12, ...getShadow(colors, isDark) }}>
+            <Text style={{ fontSize: 12, lineHeight: 16, fontWeight: "700", color: colors.primaryDark, letterSpacing: 1.1, fontFamily: fonts.body, textTransform: "uppercase" }}>
               Cycle length
             </Text>
-            <Text style={{ fontSize: 30, lineHeight: 36, fontWeight: "700", color: colors.foreground, fontFamily: fonts.heading }}>
+            <Text style={{ fontSize: 32, lineHeight: 38, fontWeight: "800", letterSpacing: -1, fontVariant: ["tabular-nums"], color: colors.foreground, fontFamily: fonts.heading }}>
               {predictions?.cycleLength ?? 28}
               <Text style={{ fontSize: 13, fontWeight: "500", color: colors.mutedText }}> days avg</Text>
             </Text>
@@ -707,9 +687,9 @@ export default function Home() {
                   <View
                     key={idx}
                     style={{
-                      width: 14,
+                      width: 16,
                       height: `${Math.max(20, (length / maxRecentLength) * 100)}%`,
-                      borderRadius: 7,
+                      borderRadius: 8,
                       backgroundColor: idx === recentLengths.length - 1 ? colors.primary : colors.primaryLight,
                     }}
                   />
@@ -751,30 +731,35 @@ export default function Home() {
           className="px-6 pt-3 pb-2 flex-row items-center"
           style={{ backgroundColor: colors.background, gap: 12 }}
         >
-          <View
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: 22,
-              backgroundColor: colors.primaryLight,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
+          <TouchableOpacity
+            onPress={() => router.navigate("/(app)/(dashboard)/profile")}
+            accessibilityRole="button"
+            accessibilityLabel="Your profile"
+            hitSlop={2}
           >
-            <Icon set="ion" name="happy-outline" size={22} color={colors.primaryDark} />
-          </View>
+            <Avatar
+              uri={user?.profilePicture}
+              name={[user?.firstName, user?.lastName].filter(Boolean).join(" ")}
+              size={44}
+              backgroundColor={colors.primaryLight}
+              textColor={colors.primaryDark}
+              fontFamily={fonts.heading}
+            />
+          </TouchableOpacity>
           <View className="flex-1">
             <Text
-              style={{ fontSize: 18, lineHeight: 24, fontWeight: "700", letterSpacing: -0.2, color: colors.foreground, fontFamily: fonts.heading }}
+              style={{ fontSize: 12, lineHeight: 16, fontWeight: "700", letterSpacing: 1.1, textTransform: "uppercase", color: colors.mutedText, fontFamily: fonts.body }}
               numberOfLines={1}
+              maxFontSizeMultiplier={1.3}
             >
-              {greeting}, {user?.firstName || "there"}
+              {formatTodayEyebrow(new Date())}
             </Text>
             <Text
-              style={{ fontSize: 13, lineHeight: 20, color: colors.mutedText, fontFamily: fonts.body }}
+              style={{ fontSize: 21, lineHeight: 27, fontWeight: "800", letterSpacing: -0.5, color: colors.foreground, fontFamily: fonts.heading }}
               numberOfLines={1}
+              maxFontSizeMultiplier={1.3}
             >
-              You&apos;ve got this today
+              {greeting}, {user?.firstName || "there"}
             </Text>
           </View>
 

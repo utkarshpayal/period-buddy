@@ -255,7 +255,7 @@ export default function OptionsModal({
             style={{
               backgroundColor: colors.input,
               borderColor: colors.border,
-              borderRadius: 14,
+              borderRadius: 14, borderCurve: "continuous",
               borderWidth: 1,
               marginTop: 4,
               padding: 12,

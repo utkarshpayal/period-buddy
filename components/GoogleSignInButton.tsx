@@ -3,7 +3,10 @@ import Constants from "expo-constants";
 import * as Google from "expo-auth-session/providers/google";
 import * as WebBrowser from "expo-web-browser";
 import React, { useState } from "react";
-import { ActivityIndicator, Text, TouchableOpacity, View, Platform } from "react-native";
+import { ActivityIndicator, Text, View, Platform } from "react-native";
+import Svg, { Path } from "react-native-svg";
+import { PressableScale } from "./PressableScale";
+import { getShadow } from "./ui-tokens";
 import { googleAuth } from "../lib/auth";
 import type { AuthUser } from "../lib/api";
 import { useTheme } from "./theme";
@@ -47,7 +50,7 @@ export function GoogleSignInButton({
   onBusyChange,
   role,
 }: GoogleSignInButtonProps) {
-  const { colors, fonts } = useTheme();
+  const { colors, fonts, isDark } = useTheme();
   const [isExchanging, setIsExchanging] = useState(false);
 
   const isConfigured = Boolean(WEB_CLIENT_ID || IOS_CLIENT_ID || ANDROID_CLIENT_ID || EXPO_CLIENT_ID);
@@ -164,48 +167,47 @@ export function GoogleSignInButton({
   const isBusy = disabled || isExchanging || !request;
 
   return (
-    <TouchableOpacity
-      activeOpacity={0.85}
+    <PressableScale
       disabled={isBusy}
       onPress={handlePress}
-      className="flex-row items-center justify-center rounded-full border py-3.5"
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: isBusy, busy: isExchanging }}
       style={{
+        height: 54,
+        borderRadius: 27,
+        alignItems: "center",
+        justifyContent: "center",
         backgroundColor: colors.surface,
-        borderColor: colors.border,
-        opacity: isBusy ? 0.65 : 1,
+        opacity: isBusy && !isExchanging ? 0.6 : 1,
+        ...getShadow(colors, isDark),
       }}
     >
       {isExchanging ? (
         <ActivityIndicator color={colors.foreground} />
       ) : (
-        <View className="flex-row items-center gap-2.5">
+        <View className="flex-row items-center" style={{ gap: 12 }}>
           <GoogleGlyph />
           <Text
-            className="text-sm font-bold"
-            style={{ color: colors.foreground, fontFamily: fonts.body }}
+            maxFontSizeMultiplier={1.3}
+            style={{ fontSize: 15, fontWeight: "700", letterSpacing: -0.1, color: colors.foreground, fontFamily: fonts.body }}
           >
             {label}
           </Text>
         </View>
       )}
-    </TouchableOpacity>
+    </PressableScale>
   );
 }
 
-// Minimal 4-color "G" glyph so we don't need to bundle a Google brand asset.
+// Google's four-colour "G" mark (their sign-in branding guidelines ask for it).
 function GoogleGlyph() {
   return (
-    <View
-      style={{
-        width: 18,
-        height: 18,
-        borderRadius: 9,
-        alignItems: "center",
-        justifyContent: "center",
-        backgroundColor: "#fff",
-      }}
-    >
-      <Text style={{ fontSize: 12, fontWeight: "800", color: "#4285F4" }}>G</Text>
-    </View>
+    <Svg width={20} height={20} viewBox="0 0 48 48">
+      <Path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" />
+      <Path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" />
+      <Path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z" />
+      <Path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z" />
+    </Svg>
   );
 }

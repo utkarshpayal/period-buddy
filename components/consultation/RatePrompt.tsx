@@ -19,7 +19,7 @@ export function RatePrompt({
   const { colors, isDark, fonts } = useTheme();
   const name = doctorNameOf(consultation);
   return (
-    <View className="mt-6 rounded-2xl border p-4" style={{ backgroundColor: colors.surface, borderColor: colors.border, ...getShadow(colors, isDark) }}>
+    <View className="mt-6 rounded-2xl p-4" style={{ backgroundColor: colors.surface, ...getShadow(colors, isDark) }}>
       <View className="flex-row items-start justify-between gap-3">
         <Text className="flex-1 text-sm font-extrabold" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
           How was your session with {name}?

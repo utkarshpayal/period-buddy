@@ -82,8 +82,8 @@ export default function PartnerViewLayout() {
             backgroundColor: colors.surface,
             borderTopLeftRadius: 26,
             borderTopRightRadius: 26,
-            // Dark: a shadow can't lift the bar off a dark page, so a hairline edges it.
-            borderTopWidth: isDark ? StyleSheet.hairlineWidth : 0,
+            // A hairline edges the bar; in dark mode it is all that lifts it off the page.
+            borderTopWidth: StyleSheet.hairlineWidth,
             borderColor: colors.border,
             overflow: "visible",
             elevation: 22,

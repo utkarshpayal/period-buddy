@@ -88,7 +88,7 @@ export function BirthdayInput({ value, onChange, autoFocus }: BirthdayInputProps
       <View
         style={{
           height: 64,
-          borderRadius: 18,
+          borderRadius: 18, borderCurve: "continuous",
           borderWidth: focused === segment || isInvalid ? 1.5 : 1,
           borderColor: isInvalid ? colors.danger : focused === segment ? colors.primary : colors.border,
           backgroundColor: colors.surface,

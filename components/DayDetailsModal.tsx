@@ -1,7 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Platform,
   ScrollView,
   Switch,
@@ -28,6 +27,7 @@ import {
   type LogCategoryTint,
 } from "./ui-tokens";
 import { Icon } from "./Icon";
+import { Button } from "./Button";
 
 // Free-form tags stored in DayEntry.symptoms (no backend enum, so these are
 // safe to ship without a server change) for categories the typed fields
@@ -198,6 +198,8 @@ export default function DayDetailsModal({
   day,
   dateKey,
   loaded = true,
+  loadFailed = false,
+  onRetryLoad,
   dateLabel,
   details,
   entry,
@@ -218,6 +220,9 @@ export default function DayDetailsModal({
    * are off: a full save over a log that hasn't loaded would erase it.
    */
   loaded?: boolean;
+  /** The day's saved log couldn't be loaded: Save turns into Try again. */
+  loadFailed?: boolean;
+  onRetryLoad?: () => void;
   dateLabel?: string;
   details?: string;
   entry?: DayEntry;
@@ -553,7 +558,7 @@ export default function DayDetailsModal({
           alignItems: "center",
           backgroundColor: isSelected ? tint.light : colors.input,
           borderColor: isSelected ? tint.color : colors.border,
-          borderRadius: 30,
+          borderRadius: 30, borderCurve: "continuous",
           borderWidth: isSelected ? 1.5 : 1,
           flexDirection: "row",
           gap: 8,
@@ -1136,37 +1141,12 @@ export default function DayDetailsModal({
           paddingBottom: entry && onClearEntry ? 16 : Math.max(16, insets.bottom + 10),
         }}
       >
-        <TouchableOpacity
-          onPress={handleSave}
-          activeOpacity={0.8}
-          disabled={isSaving || !loaded}
-          accessibilityRole="button"
-          accessibilityState={{ disabled: isSaving || !loaded, busy: isSaving || !loaded }}
-          style={{
-            flex: 1,
-            borderRadius: 12,
-            overflow: "hidden",
-            backgroundColor: colors.primary,
-            opacity: isSaving || !loaded ? 0.75 : 1,
-            paddingHorizontal: 16,
-            paddingVertical: 13,
-          }}
-        >
-          {isSaving || !loaded ? (
-            <ActivityIndicator color={colors.buttonText} />
-          ) : (
-            <Text
-              style={{
-                color: colors.buttonText,
-                fontWeight: "700",
-                textAlign: "center",
-                fontFamily: fonts.body,
-              }}
-            >
-              Save Log
-            </Text>
-          )}
-        </TouchableOpacity>
+        {!loaded && loadFailed && onRetryLoad ? (
+          // Saving over a log we couldn't read would erase it, so offer a retry, not an endless spinner.
+          <Button label="Couldn't load · Try again" icon="refresh" variant="secondary" size="md" onPress={onRetryLoad} style={{ flex: 1 }} />
+        ) : (
+          <Button label="Save log" size="md" onPress={handleSave} loading={isSaving || !loaded} style={{ flex: 1 }} />
+        )}
 
         <TouchableOpacity
           onPress={handleLog}

@@ -5,6 +5,7 @@ import { useTheme } from "./theme";
 import { AppLockCover } from "./AppLockScreen";
 import { Icon } from "./Icon";
 import { motion } from "./motion";
+import { Button } from "./Button";
 
 const WEEKDAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
 const MONTH_LABELS = [
@@ -183,7 +184,7 @@ export function CalendarModal({
           style={{
             width: "100%",
             maxWidth: 380,
-            borderRadius: 28,
+            borderRadius: 28, borderCurve: "continuous",
             overflow: "hidden",
             backgroundColor: colors.surface,
             borderWidth: 1,
@@ -274,7 +275,7 @@ export function CalendarModal({
                         accessibilityState={{ disabled: off, selected: on }}
                         style={{
                           height: 48,
-                          borderRadius: 14,
+                          borderRadius: 14, borderCurve: "continuous",
                           alignItems: "center",
                           justifyContent: "center",
                           backgroundColor: on ? colors.primary : colors.surfaceSoft,
@@ -377,33 +378,8 @@ export function CalendarModal({
 
           {/* Actions */}
           <View style={{ flexDirection: "row", gap: 10, padding: 16, paddingTop: 12 }}>
-            <TouchableOpacity
-              onPress={onClose}
-              activeOpacity={0.85}
-              accessibilityRole="button"
-              accessibilityLabel="Cancel"
-              style={{ flex: 1, height: 48, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceSoft }}
-            >
-              <Text style={{ fontSize: 15, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => pending && onSelect(pending)}
-              disabled={!pending}
-              activeOpacity={0.85}
-              accessibilityRole="button"
-              accessibilityLabel="Done"
-              accessibilityState={{ disabled: !pending }}
-              style={{
-                flex: 1,
-                height: 48,
-                borderRadius: 16,
-                alignItems: "center",
-                justifyContent: "center",
-                backgroundColor: pending ? colors.primary : colors.border,
-              }}
-            >
-              <Text style={{ fontSize: 15, fontWeight: "800", color: pending ? colors.buttonText : colors.mutedText, fontFamily: fonts.body }}>Done</Text>
-            </TouchableOpacity>
+            <Button label="Cancel" variant="neutral" size="md" onPress={onClose} style={{ flex: 1 }} />
+            <Button label="Done" size="md" onPress={() => pending && onSelect(pending)} disabled={!pending} style={{ flex: 1 }} />
           </View>
         </Animated.View>
       </View>

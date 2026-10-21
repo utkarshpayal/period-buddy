@@ -12,6 +12,7 @@ import { useTheme } from "../theme";
 import { MediaCover, type MediaTone } from "./MediaTile";
 import { Icon } from "../Icon";
 import { motion } from "../motion";
+import { Button } from "../Button";
 
 const GUTTER = 24;
 
@@ -160,7 +161,7 @@ export function ArticleReader(props: ArticleReaderProps) {
         onScroll={onScroll}
       >
         <View style={{ paddingHorizontal: GUTTER, paddingTop: 4 }}>
-          <View style={{ borderRadius: 24, overflow: "hidden", borderWidth: 1, borderColor: colors.border }}>
+          <View style={{ borderRadius: 24, borderCurve: "continuous", overflow: "hidden", borderWidth: 1, borderColor: colors.border }}>
             <MediaCover imageUrl={imageUrl} tone={tone} aspectRatio={16 / 9} iconSize={44} />
           </View>
 
@@ -271,37 +272,16 @@ export function ArticleReader(props: ArticleReaderProps) {
         ) : null}
 
         <View className="flex-row items-center" style={{ paddingHorizontal: GUTTER, paddingTop: 10, paddingBottom: 10, gap: 10 }}>
-          <TouchableOpacity
+          <Button
+            label={preparingAudio ? "Getting audio ready…" : listening ? "Stop listening" : "Listen"}
+            icon={listening ? "stop" : "play"}
+            variant={listening ? "tonal" : "primary"}
+            size="md"
             onPress={onListen}
-            disabled={preparingAudio}
-            activeOpacity={0.85}
-            accessibilityRole="button"
+            loading={preparingAudio}
             accessibilityLabel={listening ? "Stop listening" : `Listen in ${languageLabel}`}
-            accessibilityState={{ busy: preparingAudio, disabled: preparingAudio }}
-            style={{
-              flex: 1,
-              height: 48,
-              borderRadius: 24,
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
-              backgroundColor: listening ? colors.primaryLight : colors.primary,
-            }}
-          >
-            {preparingAudio ? (
-              <ActivityIndicator size="small" color={colors.buttonText} />
-            ) : (
-              <Icon set="ion" name={listening ? "stop" : "play"} size={18} color={listening ? colors.primaryDark : colors.buttonText} />
-            )}
-            <Text
-              numberOfLines={1}
-              maxFontSizeMultiplier={1.3}
-              style={{ fontSize: 15, fontWeight: "700", color: listening ? colors.primaryDark : colors.buttonText, fontFamily: fonts.body }}
-            >
-              {preparingAudio ? "Getting audio ready…" : listening ? "Stop listening" : "Listen"}
-            </Text>
-          </TouchableOpacity>
+            style={{ flex: 1 }}
+          />
 
           {languages.length > 1 ? (
             <TouchableOpacity

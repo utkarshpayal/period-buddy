@@ -12,7 +12,7 @@ import { SkeletonBlock } from "../../components/Skeleton";
 import { LockedFeatureCard } from "../../components/subscription/LockedFeatureCard";
 import { PaywallModal } from "../../components/subscription/PaywallModal";
 import { useTheme } from "../../components/theme";
-import { getLogCategoryTints, getShadow, getSoftTints } from "../../components/ui-tokens";
+import { getLogCategoryTints, getSoftTints, getGlow } from "../../components/ui-tokens";
 import { usePaginatedList } from "../../hooks/usePaginatedList";
 import { useSubscriptionAccess } from "../../hooks/useSubscriptionAccess";
 import { alert } from "../../lib/alert";
@@ -154,14 +154,15 @@ export default function NuraAiHome() {
             alignItems: "center",
             gap: 14,
             padding: 18,
-            borderRadius: 24,
+            borderRadius: 26,
+            borderCurve: "continuous",
             backgroundColor: colors.primary,
-            ...getShadow(colors, isDark),
+            ...getGlow(colors.primary, isDark, "strong"),
           }}
         >
           <NuraAvatar size={52} style={{ borderWidth: 2, borderColor: colors.buttonText }} />
           <View className="flex-1">
-            <Text style={{ color: colors.buttonText, fontSize: 17, fontWeight: "800", fontFamily: fonts.heading }}>
+            <Text style={{ color: colors.buttonText, fontSize: 18, fontWeight: "800", letterSpacing: -0.4, fontFamily: fonts.heading }}>
               {firstName ? `Ask anything, ${firstName}` : "Ask anything"}
             </Text>
             <Text style={{ color: colors.buttonText, opacity: 0.85, fontSize: 13, marginTop: 2, fontFamily: fonts.body }}>
@@ -192,7 +193,7 @@ export default function NuraAiHome() {
                   }
                   openNewChat(topic.id);
                 }}
-                style={{ width: "47%", flexGrow: 1, padding: 14, borderRadius: 18, backgroundColor: colors.surface, opacity: topicLocked ? 0.55 : 1 }}
+                style={{ width: "47%", flexGrow: 1, padding: 14, borderRadius: 18, borderCurve: "continuous", backgroundColor: colors.surface, opacity: topicLocked ? 0.55 : 1 }}
               >
                 <View className="items-center justify-center rounded-xl" style={{ width: 36, height: 36, backgroundColor: tint.light }}>
                   <Icon set="feather" name={topicLocked ? "lock" : topic.icon} size={17} color={tint.color} />
@@ -215,7 +216,7 @@ export default function NuraAiHome() {
         ) : sessions?.length ? (
           <>
             <SectionHeader title="Recent chats" style={{ marginTop: 28 }} />
-            <View style={{ borderRadius: 20, backgroundColor: colors.surface, overflow: "hidden" }}>
+            <View style={{ borderRadius: 20, borderCurve: "continuous", backgroundColor: colors.surface, overflow: "hidden" }}>
               {sessions.map((session, index) => {
                 const topic = getChatTopic(session.topicId);
                 const tint = topic ? categoryTints[topic.tint] : { color: colors.primary, light: softTints.pink };

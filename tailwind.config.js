@@ -17,6 +17,10 @@ module.exports = {
       // was 12px and read as too small; 13px with a comfortable line height.
       fontSize: {
         xs: ["13px", { lineHeight: "18px" }],
+        // Display sizes track slightly tighter, like inline-styled headings
+        // get from lib/react-native-shim.tsx.
+        xl: ["20px", { lineHeight: "28px", letterSpacing: "-0.4px" }],
+        "2xl": ["24px", { lineHeight: "32px", letterSpacing: "-0.5px" }],
       },
     },
   },

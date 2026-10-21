@@ -20,6 +20,7 @@ import { UPI_APPS, upiAppLaunchUrls, type UpiApp } from "../lib/upiIntent";
 import { BottomSheet } from "./BottomSheet";
 import { Icon } from "./Icon";
 import { haptics } from "../lib/haptics";
+import { Button } from "./Button";
 
 export type PaymentSheetOutcome = { type: "success" } | { type: "failed"; message?: string } | { type: "dismiss" };
 
@@ -519,22 +520,14 @@ export function PaymentSheet({
               We&apos;ll send a payment request to this UPI ID.
             </Text>
           )}
-          <TouchableOpacity
+          <Button
+            label={amountText ? `Send request for ${amountText}` : "Send payment request"}
             onPress={submitUpiId}
-            activeOpacity={0.85}
-            disabled={submitting || !upiId.trim()}
-            accessibilityRole="button"
-            className="rounded-full py-4 items-center mt-5"
-            style={{ backgroundColor: upiId.trim() ? colors.primary : colors.border }}
-          >
-            {submitting ? (
-              <ActivityIndicator color={colors.buttonText} />
-            ) : (
-              <Text className="text-sm font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-                {amountText ? `Send request for ${amountText}` : "Send payment request"}
-              </Text>
-            )}
-          </TouchableOpacity>
+            disabled={!upiId.trim()}
+            loading={submitting}
+            fullWidth
+            style={{ marginTop: 20 }}
+          />
           <PaymentTrustFooter compact />
         </>
       )}
@@ -561,22 +554,7 @@ export function PaymentSheet({
               {notice}
             </Text>
           ) : null}
-          <TouchableOpacity
-            onPress={checkNow}
-            disabled={checking}
-            activeOpacity={0.85}
-            accessibilityRole="button"
-            className="rounded-full py-3.5 items-center mt-5 self-stretch"
-            style={{ backgroundColor: colors.primary }}
-          >
-            {checking ? (
-              <ActivityIndicator color={colors.buttonText} />
-            ) : (
-              <Text className="text-sm font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-                I&apos;ve paid · check status
-              </Text>
-            )}
-          </TouchableOpacity>
+          <Button label="I've paid · check status" onPress={checkNow} loading={checking} fullWidth style={{ marginTop: 20 }} />
           <TouchableOpacity onPress={backToChoose} disabled={checking} accessibilityRole="button" className="items-center mt-3 py-2">
             <Text className="text-sm font-bold" style={{ color: colors.primary, fontFamily: fonts.body }}>
               Try another way to pay
@@ -593,17 +571,7 @@ export function PaymentSheet({
           <Text className="text-sm font-semibold text-center px-2 mb-5" style={{ color: colors.foreground, fontFamily: fonts.body }}>
             {error}
           </Text>
-          <TouchableOpacity
-            onPress={backToChoose}
-            activeOpacity={0.85}
-            accessibilityRole="button"
-            className="rounded-full px-8 py-3.5 items-center"
-            style={{ backgroundColor: colors.primary }}
-          >
-            <Text className="text-sm font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-              Try again
-            </Text>
-          </TouchableOpacity>
+          <Button label="Try again" size="md" onPress={backToChoose} />
         </View>
       )}
     </BottomSheet>

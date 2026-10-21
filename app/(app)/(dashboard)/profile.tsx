@@ -40,6 +40,7 @@ import { SectionHeader, TabHeader } from "../../../components/ScreenHeader";
 import { ColumnLabel } from "../../../components/ColumnLabel";
 import { SupportTicketSheet } from "../../../components/SupportTicketSheet";
 import { Icon } from "../../../components/Icon";
+import { Button } from "../../../components/Button";
 
 // Rotated across earned badge cards, like the hub tiles' per-feature colours.
 const BADGE_TINTS = ["primary", "secondary", "accent", "warning", "sky", "success"] as const;
@@ -273,12 +274,13 @@ export default function Profile() {
   ];
 
   const sectionLabel = (text: string) => <SectionHeader title={text} style={{ marginHorizontal: 24, marginTop: 24 }} />;
-  const card = { marginHorizontal: 24, backgroundColor: colors.surface, borderRadius: 20, overflow: "hidden" as const };
+  // No overflow clipping: the rows have no fill of their own, and clipping would cut the card's shadow.
+  const card = { marginHorizontal: 24, backgroundColor: colors.surface, borderRadius: 24, borderCurve: "continuous" as const, paddingVertical: 4, ...getShadow(colors, isDark) };
   const divider = <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: 16 + 36 + 14 }} />;
   const menuRow = (row: (typeof accountRows)[number], last: boolean, right?: React.ReactNode) => (
     <View key={row.label}>
       <TouchableOpacity activeOpacity={0.6} onPress={row.onPress} accessibilityRole="button" className="flex-row items-center" style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
-        <View className="items-center justify-center rounded-full" style={{ width: 36, height: 36, backgroundColor: row.tint, marginRight: 14 }}>
+        <View className="items-center justify-center" style={{ width: 36, height: 36, borderRadius: 12, borderCurve: "continuous", backgroundColor: row.tint, marginRight: 14 }}>
           <Icon set="ion" name={row.icon} size={18} color={row.color} />
         </View>
         <Text numberOfLines={1} className="flex-1" style={{ color: colors.foreground, fontSize: 15, fontWeight: "600", fontFamily: fonts.body, marginRight: 8 }}>
@@ -292,14 +294,14 @@ export default function Profile() {
 
   const sheetHeader = (title: string, onClose: () => void) => (
     <View className="flex-row items-center justify-between mb-6">
-      <Text style={{ color: colors.foreground, fontSize: 20, fontWeight: "800", fontFamily: fonts.heading }}>{title}</Text>
+      <Text style={{ color: colors.foreground, fontSize: 22, fontWeight: "800", letterSpacing: -0.5, fontFamily: fonts.heading }}>{title}</Text>
       <TouchableOpacity
         onPress={onClose}
         hitSlop={10}
         accessibilityRole="button"
         accessibilityLabel="Close"
         className="items-center justify-center rounded-full"
-        style={{ width: 32, height: 32, backgroundColor: colors.surface }}
+        style={{ width: 36, height: 36, backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
       >
         <Icon set="feather" name="x" size={17} color={colors.foreground} />
       </TouchableOpacity>
@@ -315,27 +317,20 @@ export default function Profile() {
         <Avatar
           uri={user?.profilePicture}
           name={displayName}
-          size={88}
+          size={92}
+          borderWidth={4}
+          borderColor={colors.surface}
           backgroundColor={softTints.pink}
           textColor={colors.primary}
           fontFamily={fonts.heading}
         />
-        <Text numberOfLines={1} style={{ color: colors.foreground, fontSize: 21, fontWeight: "800", fontFamily: fonts.heading, marginTop: 12 }}>
+        <Text numberOfLines={1} style={{ color: colors.foreground, fontSize: 24, fontWeight: "800", letterSpacing: -0.6, fontFamily: fonts.heading, marginTop: 14 }}>
           {displayName}
         </Text>
         <Text numberOfLines={1} style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body, marginTop: 2 }}>
           {displayEmail}
         </Text>
-        <TouchableOpacity
-          accessibilityRole="button"
-          activeOpacity={0.8}
-          onPress={() => router.push("/edit-profile")}
-          className="flex-row items-center rounded-full"
-          style={{ marginTop: 12, gap: 6, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}
-        >
-          <Icon set="feather" name="edit-2" size={13} color={colors.foreground} />
-          <Text style={{ color: colors.foreground, fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}>Edit profile</Text>
-        </TouchableOpacity>
+        <Button label="Edit profile" icon="create-outline" variant="secondary" size="sm" onPress={() => router.push("/edit-profile")} style={{ marginTop: 14 }} />
       </View>
     ),
     // Optional details that used to be onboarding steps.
@@ -345,8 +340,8 @@ export default function Profile() {
         accessibilityRole="button"
         activeOpacity={0.85}
         onPress={() => router.push("/edit-profile")}
-        className="flex-row items-center rounded-2xl"
-        style={{ marginHorizontal: 24, marginTop: 18, padding: 14, gap: 12, backgroundColor: colors.primaryLight }}
+        className="flex-row items-center"
+        style={{ marginHorizontal: 24, marginTop: 20, padding: 14, gap: 12, borderRadius: 20, borderCurve: "continuous", backgroundColor: colors.primaryLight }}
       >
         <View className="items-center justify-center rounded-xl" style={{ width: 38, height: 38, backgroundColor: colors.surface }}>
           <Icon set="ion" name={!user?.profilePicture ? "camera-outline" : "call-outline"} size={18} color={colors.primary} />
@@ -376,8 +371,8 @@ export default function Profile() {
             key={m.label}
             accessible
             accessibilityLabel={`${m.label}: ${m.value}`}
-            className="flex-1 items-center rounded-2xl"
-            style={{ backgroundColor: colors.surface, paddingVertical: 14, paddingHorizontal: 6 }}
+            className="flex-1 items-center"
+            style={{ backgroundColor: colors.surface, borderRadius: 20, borderCurve: "continuous", paddingVertical: 14, paddingHorizontal: 6, ...getShadow(colors, isDark) }}
           >
             <View className="flex-row items-center" style={{ gap: 5, maxWidth: "100%" }}>
               <Icon set="ion" name={m.icon} size={15} color={m.color} />
@@ -387,7 +382,7 @@ export default function Profile() {
                 adjustsFontSizeToFit
                 minimumFontScale={0.7}
                 maxFontSizeMultiplier={1.3}
-                style={{ flexShrink: 1, color: colors.foreground, fontSize: 17, fontWeight: "800", fontFamily: fonts.heading }}
+                style={{ flexShrink: 1, color: colors.foreground, fontSize: 18, fontWeight: "800", letterSpacing: -0.3, fontVariant: ["tabular-nums"], fontFamily: fonts.heading }}
               >
                 {m.value.toLocaleString("en-US")}
               </Text>
@@ -530,8 +525,7 @@ export default function Profile() {
                     return (
                       <View
                         key={b.key}
-                        className="border"
-                        style={{ width: "48%", backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 20, padding: 16, ...getShadow(colors, isDark) }}
+                        style={{ width: "48%", backgroundColor: colors.surface, borderRadius: 20, borderCurve: "continuous", padding: 16, ...getShadow(colors, isDark) }}
                         accessibilityLabel={`${b.title}, earned`}
                       >
                         <View style={{ width: 40, height: 40, borderRadius: 13, backgroundColor: colors[`${tintKey}Light`], alignItems: "center", justifyContent: "center", marginBottom: 12 }}>

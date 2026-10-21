@@ -30,7 +30,7 @@ export const PastSessionCard = memo(function PastSessionCard({
   const completed = session.status === "completed";
 
   return (
-    <View style={{ backgroundColor: colors.surface, borderRadius: 18, ...getShadow(colors, isDark) }}>
+    <View style={{ backgroundColor: colors.surface, borderRadius: 18, borderCurve: "continuous", ...getShadow(colors, isDark) }}>
       <TouchableOpacity
         activeOpacity={0.9}
         onPress={() => onOpenChat(session)}

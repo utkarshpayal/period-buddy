@@ -10,6 +10,7 @@ import { isPeriodFlow, type DayLogPatch } from "../hooks/useTodayLog";
 import { useSecureScreen } from "../lib/screenPrivacy";
 import { BottomSheet } from "./BottomSheet";
 import { Icon } from "./Icon";
+import { Button } from "./Button";
 
 export type QuickLogKind = "flow" | "symptoms" | "mood";
 
@@ -183,7 +184,7 @@ export function QuickLogSheet({
                       alignItems: "center",
                       gap: 8,
                       paddingVertical: 14,
-                      borderRadius: 18,
+                      borderRadius: 18, borderCurve: "continuous",
                       borderWidth: on ? 1.5 : 1,
                       borderColor: on ? tint.color : colors.border,
                       backgroundColor: on ? tint.light : colors.surface,
@@ -243,7 +244,7 @@ export function QuickLogSheet({
                     paddingLeft: 6,
                     paddingRight: 12,
                     paddingVertical: 6,
-                    borderRadius: 30,
+                    borderRadius: 30, borderCurve: "continuous",
                     borderWidth: on ? 1.5 : 1,
                     borderColor: on ? tint.color : colors.border,
                     backgroundColor: on ? tint.light : colors.input,
@@ -260,28 +261,7 @@ export function QuickLogSheet({
             })}
           </ScrollView>
 
-          <TouchableOpacity
-            onPress={save}
-            disabled={!changed || saving}
-            activeOpacity={0.85}
-            accessibilityRole="button"
-            accessibilityState={{ disabled: !changed || saving }}
-            style={{
-              marginTop: 20,
-              height: 52,
-              borderRadius: 26,
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: colors.primary,
-              opacity: !changed || saving ? 0.5 : 1,
-            }}
-          >
-            {saving ? (
-              <ActivityIndicator color={colors.buttonText} />
-            ) : (
-              <Text style={{ fontSize: 15, fontWeight: "800", color: colors.buttonText, fontFamily: fonts.body }}>Save</Text>
-            )}
-          </TouchableOpacity>
+          <Button label="Save" onPress={save} disabled={!changed} loading={saving} fullWidth style={{ marginTop: 20 }} />
         </>
       )}
       <TouchableOpacity

@@ -1,8 +1,9 @@
 import React, { useState } from "react";
-import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
+import { Text, TouchableOpacity, View } from "react-native";
 import type { CommunityPoll } from "../../lib/api";
 import { useTheme } from "../theme";
 import { Icon } from "../Icon";
+import { Button } from "../Button";
 
 // Renders a post's poll. Before voting: tappable options (single-select votes
 // immediately; multi-select accumulates a local selection + a Vote button).
@@ -144,24 +145,7 @@ export function PostPollView({
       </View>
 
       {poll.allowMultiple && !showResults ? (
-        <TouchableOpacity
-          activeOpacity={0.9}
-          disabled={isVoting || selected.length === 0}
-          onPress={() => onVote(selected)}
-          className="mt-3 rounded-full items-center justify-center py-2.5 flex-row gap-2"
-          style={{
-            backgroundColor: colors.primary,
-            opacity: isVoting || selected.length === 0 ? 0.5 : 1,
-          }}
-        >
-          {isVoting ? <ActivityIndicator size="small" color={colors.buttonText} /> : null}
-          <Text
-            className="text-xs font-bold"
-            style={{ color: colors.buttonText, fontFamily: fonts.body }}
-          >
-            Vote
-          </Text>
-        </TouchableOpacity>
+        <Button label="Vote" size="sm" onPress={() => onVote(selected)} disabled={selected.length === 0} loading={isVoting} fullWidth style={{ marginTop: 12 }} />
       ) : null}
 
       <Text

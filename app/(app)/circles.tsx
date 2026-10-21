@@ -27,6 +27,7 @@ import { showAlert } from "../../lib/modal-host";
 import { shareWithAppLink } from "../../lib/share";
 import { useSecureScreen } from "../../lib/screenPrivacy";
 import { Icon } from "../../components/Icon";
+import { Button } from "../../components/Button";
 
 /**
  * Bestie Circles — small private friend groups (period-buddy-be /api/circles).
@@ -122,18 +123,8 @@ function EmojiGrid({ options, value, onChange }: { options: string[]; value: str
 }
 
 function PrimaryButton({ label, onPress, disabled, busy }: { label: string; onPress: () => void; disabled?: boolean; busy?: boolean }) {
-  const { colors, fonts } = useTheme();
   return (
-    <TouchableOpacity
-      onPress={onPress}
-      disabled={disabled || busy}
-      activeOpacity={0.85}
-      accessibilityRole="button"
-      className="items-center justify-center rounded-full mt-6"
-      style={{ height: 52, backgroundColor: colors.primary, opacity: disabled || busy ? 0.5 : 1 }}
-    >
-      <Text style={{ color: colors.buttonText, fontSize: 15, fontFamily: fonts.heading, fontWeight: "800" }}>{busy ? "One sec…" : label}</Text>
-    </TouchableOpacity>
+    <Button label={label} onPress={onPress} disabled={disabled} loading={busy} fullWidth style={{ marginTop: 24 }} />
   );
 }
 

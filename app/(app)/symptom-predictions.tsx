@@ -423,7 +423,7 @@ function SymptomPredictionsContent() {
                 </View>
 
                 {/* How we know, in one paragraph */}
-                <View style={{ marginTop: 16, padding: 16, borderRadius: 20, backgroundColor: colors.surfaceSoft }}>
+                <View style={{ marginTop: 16, padding: 16, borderRadius: 20, borderCurve: "continuous", backgroundColor: colors.surfaceSoft }}>
                   <Text style={{ fontSize: 14, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>How we know this</Text>
                   <Text style={{ marginTop: 6, fontSize: 13.5, lineHeight: 20, color: colors.mutedText, fontFamily: fonts.body }}>
                     {predictions[0]

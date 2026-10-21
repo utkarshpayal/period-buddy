@@ -36,7 +36,7 @@ export function StatePicker({
         className="flex-row items-center"
         style={{
           height: 48,
-          borderRadius: 16,
+          borderRadius: 16, borderCurve: "continuous",
           borderWidth: 1,
           borderColor: open ? colors.primary : colors.border,
           paddingHorizontal: 14,
@@ -57,7 +57,7 @@ export function StatePicker({
         <View
           style={{
             marginTop: 8,
-            borderRadius: 16,
+            borderRadius: 16, borderCurve: "continuous",
             borderWidth: 1,
             borderColor: colors.border,
             backgroundColor: colors.surface,

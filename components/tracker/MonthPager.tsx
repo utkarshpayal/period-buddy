@@ -1,79 +1,38 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FlatList, Text, TouchableOpacity, View } from "react-native";
-import { CalendarDayCell, CalendarLegend, usePhasePalette, type Lookups, type PhasePalette } from "../CycleCalendar";
+import React, { useMemo, useRef } from "react";
+import { PanResponder, Text, TouchableOpacity, View } from "react-native";
+import Animated, { FadeInLeft, FadeInRight, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
+import { CalendarDayGrid, CalendarKeyButton, usePhasePalette, type Lookups } from "../CycleCalendar";
+import { motion } from "../motion";
 import { useTheme } from "../theme";
 import { getShadow } from "../ui-tokens";
-import { MONTH_NAMES, WEEKDAY_LABELS, dayStatus, monthSlots, type DayStatus } from "../../lib/cycleCalendar";
-import { dateFromDayKey, getDateKey, getMonthKey } from "../../lib/format";
+import { MONTH_NAMES, WEEKDAY_LABELS, monthSlots, type DayStatus } from "../../lib/cycleCalendar";
+import { dateFromDayKey } from "../../lib/format";
 import { Icon } from "../Icon";
 
-// Every month page gets 6 rows so swiping never changes the card's height.
+// Every month gets 6 rows so changing month never changes the card's height.
 const CAL_ROWS = 6;
 export const TRACKER_CELL = 46;
-// The month pager is one continuous strip, so swiping crosses years without
-// any re-centering. Only ~3 pages are ever mounted (windowSize).
-const PAGER_START_YEAR = 2020;
-const PAGER_END_YEAR = 2035;
-const PAGER_MONTHS = Array.from(
-  { length: (PAGER_END_YEAR - PAGER_START_YEAR + 1) * 12 },
-  (_, i) => new Date(PAGER_START_YEAR, i, 1),
-);
-const pagerIndexOf = (year: number, month: number) =>
-  Math.min(PAGER_MONTHS.length - 1, Math.max(0, (year - PAGER_START_YEAR) * 12 + month));
+// How far a horizontal drag (or how fast a flick) changes the month.
+const SWIPE_DISTANCE = 56;
+const SWIPE_VELOCITY = 0.35;
 
 /**
- * One month page of the pager. Memoised so a swipe (which only changes the
- * selected month) doesn't rebuild every day cell.
- */
-const CalendarMonthPage = React.memo(function CalendarMonthPage({
-  monthDate,
-  width,
-  lookups,
-  palette,
-  selectedKey,
-  onPressDay,
-}: {
-  monthDate: Date;
-  width: number;
-  lookups: Lookups;
-  palette: PhasePalette;
-  selectedKey: string | null;
-  onPressDay: (s: DayStatus) => void;
-}) {
-  const slots = useMemo(() => monthSlots(monthDate), [monthDate]);
-  const { model, entryFor, noteFor, todayKey } = lookups;
-  return (
-    <View style={{ width, paddingHorizontal: 12, flexDirection: "row", flexWrap: "wrap" }}>
-      {slots.map((date, i) =>
-        date ? (
-          <CalendarDayCell
-            key={i}
-            s={dayStatus(date, model, entryFor, noteFor, todayKey)}
-            selected={selectedKey === getDateKey(date)}
-            palette={palette}
-            height={TRACKER_CELL}
-            onPress={onPressDay}
-          />
-        ) : (
-          <View key={i} style={{ width: `${100 / 7}%`, height: TRACKER_CELL }} />
-        ),
-      )}
-    </View>
-  );
-});
-
-/**
- * The Tracker's calendar card: month title (opens the full Calendar), a
- * "Today" pill once you've moved away, chevrons, the legend, and the months
- * swiped horizontally. The selected month is the parent's (`year`/`month`),
- * so chevrons, "Today" and swipes all go through `onChangeMonth`.
+ * The Tracker's calendar card: month title (opens the full Calendar), an ⓘ
+ * for the colour key, a "Today" pill once you've moved away, chevrons, and
+ * the month itself.
+ *
+ * Only the selected month is drawn. Arrows, Today and a horizontal swipe
+ * change `year`/`month` (through `onChangeMonth`) and the new month slides in.
+ * There is deliberately no long horizontal list of months: that design kept
+ * mis-positioning itself on Android (opening on January 2020, drifting years
+ * back after Today, sliding left and right on its own), and a single month
+ * has nothing to scroll.
  */
 export function MonthPager({
   year,
   month,
   onChangeMonth,
   lookups,
-  selectedKey,
   onPressDay,
   onOpenCalendar,
 }: {
@@ -81,94 +40,70 @@ export function MonthPager({
   month: number;
   onChangeMonth: (year: number, month: number) => void;
   lookups: Lookups;
-  selectedKey: string | null;
   onPressDay: (s: DayStatus) => void;
   onOpenCalendar: () => void;
 }) {
   const { colors, fonts, isDark } = useTheme();
   const palette = usePhasePalette();
-  const monthListRef = useRef<FlatList<Date>>(null);
-  const [calendarWidth, setCalendarWidth] = useState(0);
-  const calendarPositioned = useRef(false);
-  // Set when the user swiped to the month, so the pager isn't scrolled again.
-  const monthFromSwipe = useRef(false);
-  // Pager page last scrolled to, so only one-page moves animate.
-  const pagerIndexRef = useRef(-1);
-
-  // Keeps the month pager on the selected month (chevrons, "Today", year
-  // change). The first positioning is instant; later ones animate.
-  useEffect(() => {
-    if (!calendarWidth) return;
-    const index = pagerIndexOf(year, month);
-    if (monthFromSwipe.current) {
-      monthFromSwipe.current = false;
-      calendarPositioned.current = true;
-      pagerIndexRef.current = index;
-      return;
-    }
-    // One page (chevrons) glides; longer jumps (Today, year picker) land
-    // instantly, so the swipe tracker below never sees the months in between.
-    const animated = calendarPositioned.current && Math.abs(index - pagerIndexRef.current) <= 1;
-    monthListRef.current?.scrollToOffset({ offset: index * calendarWidth, animated });
-    calendarPositioned.current = true;
-    pagerIndexRef.current = index;
-  }, [month, year, calendarWidth]);
-
-  const pagerKey = useCallback((m: Date) => getMonthKey(m), []);
-  const getPagerLayout = useCallback(
-    (_: ArrayLike<Date> | null | undefined, index: number) => ({ length: calendarWidth, offset: calendarWidth * index, index }),
-    [calendarWidth],
-  );
-  // The header follows the swipe: as soon as a month page is mostly on
-  // screen it becomes the selected month. (onMomentumScrollEnd alone isn't
-  // reliable for a nested paging list on Android.) FlatList needs these
-  // callbacks to keep one identity, so the latest values are read via a ref.
-  const latest = useRef({ year, month, onChangeMonth });
-  latest.current = { year, month, onChangeMonth };
-  const selectPagerMonth = useRef((target: Date | undefined) => {
-    if (!target) return;
-    const { year: currentYear, month: currentMonth, onChangeMonth: change } = latest.current;
-    if (target.getFullYear() === currentYear && target.getMonth() === currentMonth) return;
-    monthFromSwipe.current = true;
-    change(target.getFullYear(), target.getMonth());
-  }).current;
-  const pagerViewability = useRef({ itemVisiblePercentThreshold: 60, minimumViewTime: 0 }).current;
-  const onPagerViewable = useRef(({ viewableItems }: { viewableItems: { item: Date }[] }) =>
-    selectPagerMonth(viewableItems[0]?.item),
-  ).current;
-  const onPagerSettled = useCallback(
-    (e: { nativeEvent: { contentOffset: { x: number } } }) => {
-      if (calendarWidth) selectPagerMonth(PAGER_MONTHS[Math.round(e.nativeEvent.contentOffset.x / calendarWidth)]);
-    },
-    [calendarWidth, selectPagerMonth],
-  );
-
-  const renderMonthPage = useCallback(
-    ({ item }: { item: Date }) => (
-      <CalendarMonthPage
-        monthDate={item}
-        width={calendarWidth}
-        lookups={lookups}
-        palette={palette}
-        selectedKey={selectedKey}
-        onPressDay={onPressDay}
-      />
-    ),
-    [calendarWidth, lookups, palette, selectedKey, onPressDay],
-  );
+  const monthDate = useMemo(() => new Date(year, month, 1), [year, month]);
+  const slots = useMemo(() => monthSlots(monthDate), [monthDate]);
+  // Which way the last change went, so the new month slides in from that side.
+  const direction = useRef<1 | -1>(1);
 
   const today = dateFromDayKey(lookups.todayKey);
   const isViewingCurrentMonth = year === today.getFullYear() && month === today.getMonth();
 
-  function shiftMonth(delta: -1 | 1) {
-    const target = PAGER_MONTHS[pagerIndexOf(year, month) + delta];
-    if (target) onChangeMonth(target.getFullYear(), target.getMonth());
-  }
+  // Latest values for the pan handlers, which are created once.
+  const latest = useRef({ year, month, onChangeMonth });
+  latest.current = { year, month, onChangeMonth };
+  const goTo = (target: Date) => {
+    const { year: y, month: m, onChangeMonth: change } = latest.current;
+    direction.current = target.getFullYear() * 12 + target.getMonth() >= y * 12 + m ? 1 : -1;
+    change(target.getFullYear(), target.getMonth());
+  };
+  const shiftMonth = (delta: -1 | 1) => {
+    const { year: y, month: m } = latest.current;
+    goTo(new Date(y, m + delta, 1));
+  };
+
+  // The month follows the finger a little while dragging, then either
+  // changes (far or fast enough) or springs back.
+  const dragX = useSharedValue(0);
+  const dragStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: dragX.value }],
+    opacity: 1 - Math.min(Math.abs(dragX.value) / 240, 0.35),
+  }));
+  const pan = useMemo(
+    () =>
+      PanResponder.create({
+        // Only clearly horizontal drags: vertical ones still scroll the page,
+        // and taps still reach the day cells. Capture, so a swipe that starts
+        // on a date is taken from that date's tap handler.
+        onMoveShouldSetPanResponderCapture: (_, g) => Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderMove: (_, g) => {
+          dragX.value = g.dx * 0.5;
+        },
+        onPanResponderRelease: (_, g) => {
+          dragX.value = withSpring(0, motion.spring);
+          if (g.dx <= -SWIPE_DISTANCE || g.vx <= -SWIPE_VELOCITY) shiftMonth(1);
+          else if (g.dx >= SWIPE_DISTANCE || g.vx >= SWIPE_VELOCITY) shiftMonth(-1);
+        },
+        onPanResponderTerminate: () => {
+          dragX.value = withSpring(0, motion.spring);
+        },
+      }),
+    // Handlers read the latest month through `latest`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  const entering = (direction.current > 0 ? FadeInRight : FadeInLeft).duration(motion.duration.base).easing(motion.easing.enter);
 
   return (
     <View
       className="mx-6 mt-4"
-      style={{ backgroundColor: colors.surface, borderRadius: 24, paddingTop: 20, paddingBottom: 14, ...getShadow(colors, isDark) }}
+      style={{ backgroundColor: colors.surface, borderRadius: 24, borderCurve: "continuous", paddingTop: 20, paddingBottom: 14, ...getShadow(colors, isDark) }}
     >
       <View className="flex-row items-center px-5" style={{ gap: 8 }}>
         <TouchableOpacity
@@ -190,11 +125,12 @@ export function MonthPager({
           </Text>
           <Icon set="mci" name="calendar-month-outline" size={16} color={colors.mutedText} />
         </TouchableOpacity>
+        <CalendarKeyButton />
 
         {!isViewingCurrentMonth && (
           <TouchableOpacity
             activeOpacity={0.7}
-            onPress={() => onChangeMonth(today.getFullYear(), today.getMonth())}
+            onPress={() => goTo(new Date(today.getFullYear(), today.getMonth(), 1))}
             accessibilityRole="button"
             accessibilityLabel="Go to today"
             hitSlop={6}
@@ -220,10 +156,6 @@ export function MonthPager({
         ))}
       </View>
 
-      <View className="px-5 mt-3">
-        <CalendarLegend />
-      </View>
-
       <View className="flex-row px-3 mt-4 mb-1">
         {WEEKDAY_LABELS.map((day, index) => (
           <Text
@@ -236,30 +168,17 @@ export function MonthPager({
         ))}
       </View>
 
-      {/* Swipeable months: one continuous strip, so swipes and chevrons cross years. */}
-      <View onLayout={(e) => setCalendarWidth(e.nativeEvent.layout.width)} style={{ height: CAL_ROWS * TRACKER_CELL }}>
-        {calendarWidth > 0 ? (
-          <FlatList
-            ref={monthListRef}
-            data={PAGER_MONTHS}
-            keyExtractor={pagerKey}
-            horizontal
-            pagingEnabled
-            nestedScrollEnabled
-            decelerationRate="fast"
-            showsHorizontalScrollIndicator={false}
-            initialScrollIndex={pagerIndexOf(year, month)}
-            getItemLayout={getPagerLayout}
-            initialNumToRender={1}
-            maxToRenderPerBatch={2}
-            windowSize={3}
-            extraData={renderMonthPage}
-            viewabilityConfig={pagerViewability}
-            onViewableItemsChanged={onPagerViewable}
-            onMomentumScrollEnd={onPagerSettled}
-            renderItem={renderMonthPage}
-          />
-        ) : null}
+      {/* One month; swipe or use the arrows to change it. */}
+      <View {...pan.panHandlers} style={{ height: CAL_ROWS * TRACKER_CELL, overflow: "hidden" }}>
+        <Animated.View style={dragStyle}>
+          <Animated.View
+            key={`${year}-${month}`}
+            entering={entering}
+            style={{ paddingHorizontal: 12, flexDirection: "row", flexWrap: "wrap" }}
+          >
+            <CalendarDayGrid dates={slots} lookups={lookups} palette={palette} height={TRACKER_CELL} onPressDay={onPressDay} />
+          </Animated.View>
+        </Animated.View>
       </View>
     </View>
   );

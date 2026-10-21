@@ -378,7 +378,7 @@ export default function GovernmentSchemes() {
           {showingSaved ? (
             <View
               className="flex-row items-center"
-              style={{ gap: 8, marginBottom: 14, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 14, backgroundColor: colors.surfaceSoft }}
+              style={{ gap: 8, marginBottom: 14, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 14, borderCurve: "continuous", backgroundColor: colors.surfaceSoft }}
             >
               <Icon set="ion" name="cloud-offline-outline" size={16} color={colors.mutedText} />
               <Text style={{ flex: 1, color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "400", fontFamily: fonts.body }}>

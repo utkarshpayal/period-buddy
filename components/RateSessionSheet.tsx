@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Text,
   TextInput,
   TouchableOpacity,
@@ -12,6 +11,8 @@ import { DoctorPhoto } from "./DoctorPhoto";
 import { useTheme } from "./theme";
 import { BottomSheet } from "./BottomSheet";
 import { Icon } from "./Icon";
+import { Button } from "./Button";
+import { showErrorToast } from "../lib/toast";
 
 const LABELS = ["", "Poor", "Fair", "Good", "Very good", "Excellent"];
 const COMMENT_MAX = 500;
@@ -37,12 +38,10 @@ export function RateSessionSheet({
   const [saving, setSaving] = useState(false);
   // State lags a frame: two quick taps would both pass a `saving` check.
   const savingRef = useRef(false);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setRating(initialRating);
     setComment("");
-    setError(null);
   }, [consultation?._id, initialRating]);
 
   if (!consultation) return null;
@@ -52,12 +51,11 @@ export function RateSessionSheet({
     if (!rating || savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
-    setError(null);
     try {
       const updated = await consultationApi.rateConsultation(consultation._id, rating, comment.trim() || undefined);
       onRated(updated);
     } catch (err) {
-      setError(getFriendlyErrorMessage(err));
+      showErrorToast(getFriendlyErrorMessage(err));
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -148,27 +146,8 @@ export function RateSessionSheet({
         {comment.length}/{COMMENT_MAX} · Your doctor can see this
       </Text>
 
-      {error ? (
-        <Text className="text-sm mt-2 text-center" style={{ color: colors.danger, fontFamily: fonts.body }}>
-          {error}
-        </Text>
-      ) : null}
 
-      <TouchableOpacity
-        activeOpacity={0.85}
-        onPress={submit}
-        disabled={!rating || saving}
-        className="rounded-2xl py-4 items-center mt-4"
-        style={{ backgroundColor: colors.primary, opacity: !rating || saving ? 0.5 : 1 }}
-      >
-        {saving ? (
-          <ActivityIndicator color={colors.buttonText} />
-        ) : (
-          <Text className="text-sm font-extrabold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-            Submit rating
-          </Text>
-        )}
-      </TouchableOpacity>
+      <Button label="Submit rating" onPress={submit} disabled={!rating} loading={saving} fullWidth style={{ marginTop: 16 }} />
     </BottomSheet>
   );
 }

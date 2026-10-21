@@ -1,11 +1,12 @@
 import React from "react";
-import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
+import { Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../theme";
 import { PaymentTrustFooter } from "./PaymentTrustFooter";
 import type { CouponPreview } from "../../lib/api";
 import { BottomSheet } from "../BottomSheet";
 import { Icon } from "../Icon";
+import { Button } from "../Button";
 
 /**
  * "Confirm your purchase" step shown between tapping Buy and the checkout UI
@@ -106,21 +107,7 @@ export function PurchaseConfirmSheet({
         </View>
       </View>
 
-      <TouchableOpacity
-        onPress={onConfirm}
-        activeOpacity={0.9}
-        disabled={confirming}
-        className="mt-5 items-center rounded-full py-4"
-        style={{ backgroundColor: colors.primary, opacity: confirming ? 0.7 : 1 }}
-      >
-        {confirming ? (
-          <ActivityIndicator color={colors.buttonText} />
-        ) : (
-          <Text className="text-sm font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-            {couponPreview?.free ? "Unlock — Free" : `Confirm & Pay ₹${total}`}
-          </Text>
-        )}
-      </TouchableOpacity>
+      <Button label={couponPreview?.free ? "Unlock — free" : `Confirm & pay ₹${total}`} onPress={onConfirm} loading={confirming} fullWidth style={{ marginTop: 20 }} />
 
       <PaymentTrustFooter compact />
     </BottomSheet>

@@ -241,7 +241,7 @@ export function UploadSheet({
       }
     >
       {phase === "source" ? (
-        <View style={{ borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: "hidden" }}>
+        <View style={{ borderRadius: 14, borderCurve: "continuous", borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: "hidden" }}>
           {sources.map((source, i) => (
             <TouchableOpacity
               key={source.key}

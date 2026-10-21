@@ -12,6 +12,7 @@ import { AuthProvider, useAuth } from "../components/auth-context";
 import { GenZModeProvider } from "../components/genz-mode";
 import { IncomingCallOverlay } from "../components/IncomingCallOverlay";
 import { AppModalHost } from "../components/modals/AppModalHost";
+import { ToastHost } from "../components/ToastHost";
 import { ThemeProvider, useTheme } from "../components/theme";
 import {
   clearPendingDeepLink,
@@ -34,6 +35,7 @@ import { MAX_CONTENT_WIDTH } from "../lib/layout";
 import { ScreenPrivacySync } from "../lib/screenPrivacy";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { Image as ExpoImage } from "expo-image";
+import { stackScreenOptions } from "../components/motion";
 
 // The payload's data fields. The type normally arrives in content.data, but
 // on Android a notification displayed by the FCM SDK itself (app
@@ -69,7 +71,7 @@ cssInterop(ExpoImage, { className: "style" });
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync().catch(() => {});
 // Cross-fade from the splash into the first screen instead of cutting to it.
-// The splash colours (app.json: blush #FBF6F8, dark #221A20) are the theme's
+// The splash colour (app.json: blush #FBF6F8) is the light theme's
 // own `background` tokens, so the fade never passes through black or white.
 SplashScreen.setOptions({ fade: true, duration: 350 });
 
@@ -246,7 +248,7 @@ function AppShell() {
             alignSelf: "center",
           }}
         >
-          <Stack screenOptions={{ headerShown: false }} />
+          <Stack screenOptions={stackScreenOptions(colors.background)} />
         </View>
       </View>
       {isLocked && <AppLockScreen />}
@@ -263,6 +265,7 @@ function AppShell() {
         hidden={isLocked}
       />
       <AppModalHost />
+      <ToastHost />
     </>
   );
 }

@@ -519,7 +519,7 @@ export default function DocumentsScreen() {
                   height: 48,
                   paddingLeft: 14,
                   paddingRight: 6,
-                  borderRadius: 16,
+                  borderRadius: 16, borderCurve: "continuous",
                   borderWidth: 1,
                   borderColor: searchFocused ? colors.primary : colors.border,
                   backgroundColor: colors.surface,
@@ -649,8 +649,8 @@ export default function DocumentsScreen() {
                     {group.label}
                   </Text>
                   {/* Shadow outside, clipping inside, so a held row's highlight follows the rounded corners. */}
-                  <View style={{ borderRadius: 22, backgroundColor: colors.surface, borderWidth: isDark ? 1 : 0, borderColor: colors.border, ...getShadow(colors, isDark) }}>
-                    <View style={{ borderRadius: 22, overflow: "hidden" }}>
+                  <View style={{ borderRadius: 22, borderCurve: "continuous", backgroundColor: colors.surface, ...getShadow(colors, isDark) }}>
+                    <View style={{ borderRadius: 22, borderCurve: "continuous", overflow: "hidden" }}>
                       {group.docs.map((doc, i) => (
                         <DocumentCard key={doc._id} doc={doc} divider={i > 0} onOpen={openDocument} onMore={setActionDoc} />
                       ))}

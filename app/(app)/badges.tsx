@@ -17,6 +17,7 @@ import { genzApi, type Badge } from "../../lib/api";
 import { shareViewAsImage } from "../../lib/genz";
 import { Icon } from "../../components/Icon";
 import { CelebrationBurst } from "../../components/celebrations/Lottie";
+import { Button } from "../../components/Button";
 
 /**
  * Streaks & Badges — the logging streak with its next milestone, and every
@@ -100,7 +101,7 @@ function Unlocked({ badges, onDone }: { badges: Badge[]; onDone: () => void }) {
         <Confetti key={badge.key} />
         <Animated.View style={{ width: "100%", transform: [{ scale: pop }] }}>
           <View ref={shareRef} collapsable={false}>
-            <LinearGradient colors={["#FFB547", "#FF5E8A", "#B24BF3"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ borderRadius: 30, padding: 28, alignItems: "center" }}>
+            <LinearGradient colors={["#FFB547", "#FF5E8A", "#B24BF3"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ borderRadius: 30, borderCurve: "continuous", padding: 28, alignItems: "center" }}>
               <Text style={{ color: WHITE, fontSize: 12, letterSpacing: 2, fontFamily: fonts.heading, fontWeight: "800", opacity: 0.9 }}>BADGE UNLOCKED</Text>
               <Text style={{ fontSize: 88, marginTop: 10 }}>{badge.emoji}</Text>
               <Text style={{ color: WHITE, fontSize: 28, fontFamily: fonts.heading, fontWeight: "900", marginTop: 6, textAlign: "center" }}>{badge.title}</Text>
@@ -201,8 +202,8 @@ export default function BadgesScreen() {
               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => reload(true)} tintColor={colors.primary} />}
             >
               <View className="mx-6 mt-3">
-                <View style={{ borderRadius: 24, ...getShadow(colors, isDark) }}>
-                  <LinearGradient colors={["#FF9F1C", "#FF4D6D", "#C9184A"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ borderRadius: 24, padding: 22 }}>
+                <View style={{ borderRadius: 24, borderCurve: "continuous", ...getShadow(colors, isDark) }}>
+                  <LinearGradient colors={["#FF9F1C", "#FF4D6D", "#C9184A"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ borderRadius: 24, borderCurve: "continuous", padding: 22 }}>
                     <View className="flex-row items-center justify-between">
                       <View>
                         <Text style={{ color: WHITE, opacity: 0.9, fontSize: 12, letterSpacing: 2, fontFamily: fonts.heading, fontWeight: "800" }}>CURRENT STREAK</Text>
@@ -242,15 +243,7 @@ export default function BadgesScreen() {
                 </View>
 
                 {streak.current === 0 ? (
-                  <TouchableOpacity
-                    onPress={() => router.push("/(app)/(dashboard)/tracker")}
-                    activeOpacity={0.85}
-                    className="flex-row items-center justify-center rounded-2xl py-3.5 mt-3"
-                    style={{ backgroundColor: colors.primary, gap: 8 }}
-                  >
-                    <Icon set="feather" name="edit-3" size={16} color={colors.buttonText} />
-                    <Text style={{ color: colors.buttonText, fontSize: 14, fontFamily: fonts.heading, fontWeight: "800" }}>Log today to start a streak</Text>
-                  </TouchableOpacity>
+                  <Button label="Log today to start a streak" icon="create-outline" size="md" fullWidth onPress={() => router.push("/(app)/(dashboard)/tracker")} style={{ marginTop: 12 }} />
                 ) : null}
 
                 <View className="flex-row items-baseline justify-between mt-7 mb-1">

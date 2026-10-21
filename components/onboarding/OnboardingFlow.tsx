@@ -375,7 +375,7 @@ export function OnboardingFlow({ userId, firstName, onSubmit, onFinish }: Onboar
                 alignItems: "center",
                 gap: 8,
                 padding: 12,
-                borderRadius: 14,
+                borderRadius: 14, borderCurve: "continuous",
                 backgroundColor: colors.dangerLight,
                 marginBottom: 6,
               }}
@@ -424,7 +424,7 @@ function StepTitle({ title, subtitle }: { title: string; subtitle?: string }) {
     <View style={{ marginBottom: 24 }}>
       <Text
         accessibilityRole="header"
-        style={{ color: colors.foreground, fontSize: 27, lineHeight: 34, fontWeight: "800", letterSpacing: -0.4, fontFamily: fonts.heading }}
+        style={{ color: colors.foreground, fontSize: 27, lineHeight: 34, fontWeight: "800", letterSpacing: -0.7, fontFamily: fonts.heading }}
       >
         {title}
       </Text>
@@ -488,7 +488,7 @@ function ReadyStep({ name, lastPeriodStartDate, cycleLength, periodLength, isEst
       <Animated.View entering={FadeInDown.delay(120).duration(motion.duration.slow)} style={{ alignItems: "center", marginTop: 22 }}>
         <Text
           accessibilityRole="header"
-          style={{ color: colors.foreground, fontSize: 27, lineHeight: 34, fontWeight: "800", textAlign: "center", fontFamily: fonts.heading }}
+          style={{ color: colors.foreground, fontSize: 27, lineHeight: 34, fontWeight: "800", letterSpacing: -0.7, textAlign: "center", fontFamily: fonts.heading }}
         >
           {name ? `You're all set, ${name}` : "You're all set"}
         </Text>
@@ -498,7 +498,7 @@ function ReadyStep({ name, lastPeriodStartDate, cycleLength, periodLength, isEst
       </Animated.View>
 
       <Animated.View entering={FadeInDown.delay(220).duration(motion.duration.slow)} style={{ alignSelf: "stretch", marginTop: 24, gap: 12 }}>
-        <View style={{ backgroundColor: colors.surface, borderRadius: 22, padding: 18, borderWidth: 1, borderColor: colors.border }}>
+        <View style={{ backgroundColor: colors.surface, borderRadius: 22, borderCurve: "continuous", padding: 18, borderWidth: 1, borderColor: colors.border }}>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
             <Text style={{ color: colors.mutedText, fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}>
               {isEstimate ? "Next period (estimate)" : "Next period"}
@@ -522,13 +522,13 @@ function ReadyStep({ name, lastPeriodStartDate, cycleLength, periodLength, isEst
             alignItems: "center",
             gap: 12,
             backgroundColor: colors.surface,
-            borderRadius: 22,
+            borderRadius: 22, borderCurve: "continuous",
             padding: 16,
             borderWidth: 1,
             borderColor: colors.border,
           }}
         >
-          <View style={{ width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: colors.secondaryLight }}>
+          <View style={{ width: 40, height: 40, borderRadius: 14, borderCurve: "continuous", alignItems: "center", justifyContent: "center", backgroundColor: colors.secondaryLight }}>
             <Icon set="ion" name="notifications-outline" size={19} color={colors.info} />
           </View>
           <View style={{ flex: 1 }}>

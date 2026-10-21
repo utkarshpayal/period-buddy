@@ -187,10 +187,9 @@ export default function PartnerViewOverview() {
               <TouchableOpacity
                 activeOpacity={0.85}
                 onPress={() => router.push("/(app)/consultation")}
-                className="flex-row items-center rounded-3xl border p-4 mb-4"
+                className="flex-row items-center rounded-3xl p-4 mb-4"
                 style={{
                   backgroundColor: colors.surface,
-                  borderColor: colors.border,
                   ...getShadow(colors, isDark),
                 }}
               >
@@ -223,7 +222,7 @@ export default function PartnerViewOverview() {
                   colors={[colors.primary, colors.primaryLight]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
-                  style={{ borderRadius: 22, padding: 20, marginBottom: 14 }}
+                  style={{ borderRadius: 22, borderCurve: "continuous", padding: 20, marginBottom: 14 }}
                 >
                   <Text
                     className="text-[12px] font-bold uppercase"
@@ -305,10 +304,9 @@ export default function PartnerViewOverview() {
                 <TouchableOpacity
                   activeOpacity={0.85}
                   onPress={() => router.push("/(app)/(partner-view)/chat?prefill=1")}
-                  className="flex-row items-center justify-between rounded-3xl border p-4 mb-4"
+                  className="flex-row items-center justify-between rounded-3xl p-4 mb-4"
                   style={{
                     backgroundColor: colors.surface,
-                    borderColor: colors.border,
                     ...getShadow(colors, isDark),
                   }}
                 >
@@ -447,7 +445,7 @@ export default function PartnerViewOverview() {
                   <View className="flex-row items-center justify-between mb-3">
                     <View className="flex-row items-center gap-1.5">
                       <Icon set="ion" name="heart-outline" size={15} color={colors.primary} />
-                      <SectionLabel className="">Intimacy Notes</SectionLabel>
+                      <SectionLabel>Intimacy Notes</SectionLabel>
                     </View>
                     <Icon set="ion" name="lock-closed-outline" size={12} color={colors.mutedText} />
                   </View>
@@ -484,7 +482,7 @@ export default function PartnerViewOverview() {
                 <SectionCard>
                   <View className="flex-row items-center gap-1.5 mb-3">
                     <Icon set="ion" name="rose-outline" size={15} color={colors.primary} />
-                    <SectionLabel className="">Partner Caring Guide</SectionLabel>
+                    <SectionLabel>Partner Caring Guide</SectionLabel>
                   </View>
 
                   {data?.careSuggestions?.suggestions && data.careSuggestions.suggestions.length > 0 && (
@@ -639,7 +637,7 @@ export default function PartnerViewOverview() {
                         width: "48%",
                         backgroundColor: colors.surfaceSoft,
                         borderColor: colors.border,
-                        borderRadius: 16,
+                        borderRadius: 16, borderCurve: "continuous",
                         padding: 12,
                       }}
                     >

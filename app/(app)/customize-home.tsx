@@ -404,7 +404,7 @@ export default function CustomizeHome() {
                   alignItems: "flex-start",
                   gap: 12,
                   padding: 14,
-                  borderRadius: 18,
+                  borderRadius: 18, borderCurve: "continuous",
                   borderWidth: on ? 1.5 : 1,
                   borderColor: on ? colors.primary : colors.border,
                   backgroundColor: colors.surface,

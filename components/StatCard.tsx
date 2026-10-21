@@ -48,17 +48,17 @@ export default function StatCard({
     return (
       <View
         className="flex-1 flex-row items-center"
-        style={{ backgroundColor, gap: 12, padding: 14, borderRadius: 20, ...containerStyle }}
+        style={{ backgroundColor, gap: 12, padding: 14, borderRadius: 22, borderCurve: "continuous", ...containerStyle }}
       >
         <View
           className="items-center justify-center"
-          style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: iconBg }}
+          style={{ width: 44, height: 44, borderRadius: 14, borderCurve: "continuous", backgroundColor: iconBg }}
         >
           <Icon set="ion" name={icon} size={20} color={iconColor} />
         </View>
         <View className="flex-1" style={{ minWidth: 0 }}>
           <Text
-            style={{ fontSize: 20, lineHeight: 26, fontWeight: "700", color: valueColor, fontFamily: valueFontFamily }}
+            style={{ fontSize: 20, lineHeight: 26, fontWeight: "800", letterSpacing: -0.4, fontVariant: ["tabular-nums"], color: valueColor, fontFamily: valueFontFamily }}
             numberOfLines={1}
             adjustsFontSizeToFit
             minimumFontScale={0.75}
@@ -87,16 +87,16 @@ export default function StatCard({
     return (
       <View
         className="flex-1 items-center px-2 py-3.5"
-        style={{ backgroundColor, borderRadius: 20, ...containerStyle }}
+        style={{ backgroundColor, borderRadius: 22, borderCurve: "continuous", ...containerStyle }}
       >
         <View
           className="items-center justify-center mb-2"
-          style={{ width: 40, height: 40, borderRadius: 13, backgroundColor: iconBg }}
+          style={{ width: 40, height: 40, borderRadius: 13, borderCurve: "continuous", backgroundColor: iconBg }}
         >
           <Icon set="ion" name={icon} size={18} color={iconColor} />
         </View>
         <Text
-          style={{ fontSize: 18, lineHeight: 24, fontWeight: "700", color: valueColor, fontFamily: valueFontFamily }}
+          style={{ fontSize: 18, lineHeight: 24, fontWeight: "800", letterSpacing: -0.3, fontVariant: ["tabular-nums"], color: valueColor, fontFamily: valueFontFamily }}
           numberOfLines={1}
           adjustsFontSizeToFit
           minimumFontScale={0.75}

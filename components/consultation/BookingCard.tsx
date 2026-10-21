@@ -39,7 +39,7 @@ export const BookingCard = memo(function BookingCard({
   const video = videoJoinState(session, clock);
 
   return (
-    <View style={{ backgroundColor: colors.surface, borderRadius: 22, ...getShadow(colors, isDark) }}>
+    <View style={{ backgroundColor: colors.surface, borderRadius: 22, borderCurve: "continuous", ...getShadow(colors, isDark) }}>
       <TouchableOpacity
         onPress={() => onOpenChat(session)}
         activeOpacity={0.9}
@@ -73,7 +73,7 @@ export const BookingCard = memo(function BookingCard({
       {session.scheduledFor ? (
         <View
           className="flex-row items-center mx-4 mb-3"
-          style={{ gap: 10, backgroundColor: colors.background, borderRadius: 14, paddingVertical: 10, paddingHorizontal: 12 }}
+          style={{ gap: 10, backgroundColor: colors.background, borderRadius: 14, borderCurve: "continuous", paddingVertical: 10, paddingHorizontal: 12 }}
         >
           <View className="items-center justify-center" style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: colors.primaryLight }}>
             <Icon set="feather" name="calendar" size={15} color={colors.primary} />
@@ -96,7 +96,7 @@ export const BookingCard = memo(function BookingCard({
               accessibilityLabel={video.open ? `Join video call with ${name}` : video.note ?? "Video not available"}
               accessibilityState={{ disabled: !video.open }}
               className="flex-1 flex-row items-center justify-center"
-              style={{ gap: 8, height: 44, borderRadius: 14, backgroundColor: video.open ? colors.success : colors.surfaceSoft }}
+              style={{ gap: 8, height: 44, borderRadius: 14, borderCurve: "continuous", backgroundColor: video.open ? colors.success : colors.surfaceSoft }}
             >
               <Icon set="feather" name="video" size={16} color={video.open ? "#FFFFFF" : colors.mutedText} />
               <Text numberOfLines={1} style={{ fontSize: 14, fontWeight: "700", color: video.open ? "#FFFFFF" : colors.mutedText, fontFamily: fonts.body }}>
@@ -110,7 +110,7 @@ export const BookingCard = memo(function BookingCard({
             accessibilityRole="button"
             accessibilityLabel={`Chat with ${name}`}
             className="flex-1 flex-row items-center justify-center border"
-            style={{ gap: 8, height: 44, borderRadius: 14, borderColor: colors.border, backgroundColor: colors.surface }}
+            style={{ gap: 8, height: 44, borderRadius: 14, borderCurve: "continuous", borderColor: colors.border, backgroundColor: colors.surface }}
           >
             <Icon set="feather" name="message-circle" size={16} color={colors.primary} />
             <Text style={{ fontSize: 14, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>Chat</Text>

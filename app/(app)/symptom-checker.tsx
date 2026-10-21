@@ -34,6 +34,8 @@ import {
 } from "../../lib/redFlagScreen";
 import { useSecureScreen } from "../../lib/screenPrivacy";
 import { Icon } from "../../components/Icon";
+import { Button } from "../../components/Button";
+import { showErrorToast } from "../../lib/toast";
 
 // "prescreen" (the "Any of these right now?" red-flag checklist) comes before
 // any questionnaire; "urgent" is the get-care card it leads to.
@@ -98,7 +100,6 @@ export default function SymptomCheckerScreen() {
   const [answers, setAnswers] = useState<Record<string, number | boolean>>({});
   const [loadingQuestions, setLoadingQuestions] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AssessmentResult | null>(null);
   const [paywallVisible, setPaywallVisible] = useState(false);
   const {
@@ -117,7 +118,6 @@ export default function SymptomCheckerScreen() {
 
   async function loadCondition(pick: ScreeningCondition) {
     setCondition(pick);
-    setError(null);
     setLoadingQuestions(true);
     setAnswers({});
     setQuestionIndex(0);
@@ -126,7 +126,7 @@ export default function SymptomCheckerScreen() {
       setQuestions(data.questions ?? []);
       setStep("questions");
     } catch (err) {
-      setError(getFriendlyErrorMessage(err));
+      showErrorToast(getFriendlyErrorMessage(err));
     } finally {
       setLoadingQuestions(false);
     }
@@ -161,7 +161,6 @@ export default function SymptomCheckerScreen() {
     }
     if (!condition) return;
     setSubmitting(true);
-    setError(null);
     try {
       const assessment = await screeningApi.submitAssessment(condition, answers);
       setResult(assessment);
@@ -170,7 +169,7 @@ export default function SymptomCheckerScreen() {
       if (isFeatureLockedError(err)) {
         setPaywallVisible(true);
       } else {
-        setError(getFriendlyErrorMessage(err));
+        showErrorToast(getFriendlyErrorMessage(err));
       }
     } finally {
       setSubmitting(false);
@@ -189,7 +188,6 @@ export default function SymptomCheckerScreen() {
     setAnswers({});
     setQuestionIndex(0);
     setResult(null);
-    setError(null);
   }
 
   async function handleShare() {
@@ -274,7 +272,7 @@ export default function SymptomCheckerScreen() {
                         style={{
                           backgroundColor: checked ? softTints.danger : colors.surface,
                           borderColor: checked ? colors.danger : colors.border,
-                          borderRadius: 18,
+                          borderRadius: 18, borderCurve: "continuous",
                         }}
                       >
                         <Icon set="mci"
@@ -322,7 +320,7 @@ export default function SymptomCheckerScreen() {
             {!locked && step === "urgent" && (
               <>
                 {triageRedFlags(redFlagPicks) === "emergency" ? (
-                  <View className="border p-5 mb-5" style={{ backgroundColor: softTints.danger, borderColor: colors.danger, borderRadius: 24 }}>
+                  <View className="border p-5 mb-5" style={{ backgroundColor: softTints.danger, borderColor: colors.danger, borderRadius: 24, borderCurve: "continuous" }}>
                     <View className="flex-row items-center mb-2" style={{ gap: 10 }}>
                       <Icon set="mci" name="alert-circle" size={24} color={colors.danger} />
                       <Text className="flex-1 text-lg font-black" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
@@ -352,7 +350,7 @@ export default function SymptomCheckerScreen() {
                 {soonRedFlags(redFlagPicks).length > 0 ? (
                   <View
                     className="border p-5 mb-5"
-                    style={{ backgroundColor: colors.surface, borderColor: colors.warning, borderRadius: 24, ...getShadow(colors, isDark) }}
+                    style={{ backgroundColor: colors.surface, borderColor: colors.warning, borderRadius: 24, borderCurve: "continuous", ...getShadow(colors, isDark) }}
                   >
                     <View className="flex-row items-center mb-2" style={{ gap: 10 }}>
                       <Icon set="mci" name="stethoscope" size={22} color={colors.warning} />
@@ -367,16 +365,7 @@ export default function SymptomCheckerScreen() {
                       isn&apos;t usually an emergency, but it isn&apos;t normal either. Please book a check-up in the next few days, even
                       if it&apos;s light or has stopped.
                     </Text>
-                    <TouchableOpacity
-                      onPress={() => router.push("/(app)/consultation" as any)}
-                      activeOpacity={0.85}
-                      className="py-4 rounded-2xl items-center"
-                      style={{ backgroundColor: colors.primary }}
-                    >
-                      <Text className="text-sm font-black" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-                        Talk to a gynaecologist
-                      </Text>
-                    </TouchableOpacity>
+                    <Button label="Talk to a gynaecologist" icon="chatbubbles-outline" onPress={() => router.push("/(app)/consultation" as any)} fullWidth />
                   </View>
                 ) : null}
 
@@ -411,11 +400,6 @@ export default function SymptomCheckerScreen() {
                 <Text className="text-sm font-semibold leading-5 mb-5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                   Pick a condition and answer a few questions. For education, not diagnosis.
                 </Text>
-                {error ? (
-                  <Text className="text-xs font-semibold mb-3" style={{ color: colors.danger, fontFamily: fonts.body }}>
-                    {error}
-                  </Text>
-                ) : null}
                 <View style={{ gap: 12 }}>
                   {CONDITIONS.map((item) => (
                     <TouchableOpacity
@@ -423,8 +407,8 @@ export default function SymptomCheckerScreen() {
                       disabled={loadingQuestions}
                       onPress={() => handlePickCondition(item.id)}
                       activeOpacity={0.75}
-                      className="flex-row items-center border p-4"
-                      style={{ backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 20, ...getShadow(colors, isDark) }}
+                      className="flex-row items-center p-4"
+                      style={{ backgroundColor: colors.surface, borderRadius: 20, borderCurve: "continuous", ...getShadow(colors, isDark) }}
                     >
                       <View className="w-11 h-11 rounded-xl items-center justify-center mr-3.5" style={{ backgroundColor: softTints.pink }}>
                         <Icon set="mci" name={item.icon} size={20} color={colors.primary} />
@@ -466,8 +450,8 @@ export default function SymptomCheckerScreen() {
                 </View>
 
                 <View
-                  className="border p-6 mb-6"
-                  style={{ backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 24, ...getShadow(colors, isDark) }}
+                  className="p-6 mb-6"
+                  style={{ backgroundColor: colors.surface, borderRadius: 24, borderCurve: "continuous", ...getShadow(colors, isDark) }}
                 >
                   <View className="flex-row items-start gap-3 mb-5">
                     <View
@@ -556,27 +540,14 @@ export default function SymptomCheckerScreen() {
                   )}
                 </View>
 
-                {error ? (
-                  <Text className="text-xs font-semibold mb-3" style={{ color: colors.danger, fontFamily: fonts.body }}>
-                    {error}
-                  </Text>
-                ) : null}
 
-                <TouchableOpacity
-                  disabled={!canProceed || submitting}
+                <Button
+                  label={questionIndex < questions.length - 1 ? "Next" : "See results"}
                   onPress={handleNext}
-                  activeOpacity={0.85}
-                  className="py-4 rounded-2xl items-center flex-row justify-center gap-2"
-                  style={{ backgroundColor: canProceed ? colors.primary : colors.border }}
-                >
-                  {submitting ? (
-                    <ActivityIndicator size="small" color={colors.buttonText} />
-                  ) : (
-                    <Text className="text-sm font-black" style={{ color: canProceed ? colors.buttonText : colors.mutedText, fontFamily: fonts.body }}>
-                      {questionIndex < questions.length - 1 ? "Next" : "See results"}
-                    </Text>
-                  )}
-                </TouchableOpacity>
+                  disabled={!canProceed}
+                  loading={submitting}
+                  fullWidth
+                />
               </>
             )}
 
@@ -596,8 +567,8 @@ export default function SymptomCheckerScreen() {
 
                 {/* Single-row result card, mirroring the mockup's condition/risk-pill list */}
                 <View
-                  className="border rounded-2xl px-4 py-3.5 flex-row items-center justify-between mb-5"
-                  style={{ backgroundColor: colors.surface, borderColor: colors.border, ...getShadow(colors, isDark) }}
+                  className="rounded-2xl px-4 py-3.5 flex-row items-center justify-between mb-5"
+                  style={{ backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
                 >
                   <Text className="text-sm font-extrabold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
                     {CONDITIONS.find((c) => c.id === result.condition)?.label ?? result.condition}
@@ -618,7 +589,7 @@ export default function SymptomCheckerScreen() {
                 {hasResultRedFlags(result) ? (
                   <View
                     className="border p-5 mb-5"
-                    style={{ backgroundColor: softTints.danger, borderColor: colors.danger, borderRadius: 24 }}
+                    style={{ backgroundColor: softTints.danger, borderColor: colors.danger, borderRadius: 24, borderCurve: "continuous" }}
                   >
                     <View className="flex-row items-center mb-2" style={{ gap: 10 }}>
                       <Icon set="mci" name="stethoscope" size={22} color={colors.danger} />
@@ -653,8 +624,8 @@ export default function SymptomCheckerScreen() {
                 </View>
 
                 <View
-                  className="border p-5 mb-5"
-                  style={{ backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 24, ...getShadow(colors, isDark) }}
+                  className="p-5 mb-5"
+                  style={{ backgroundColor: colors.surface, borderRadius: 24, borderCurve: "continuous", ...getShadow(colors, isDark) }}
                 >
                   <Text className="text-xs font-black uppercase tracking-wide mb-2" style={{ color: colors.primary, fontFamily: fonts.heading }}>
                     Summary
@@ -665,8 +636,8 @@ export default function SymptomCheckerScreen() {
                 </View>
 
                 <View
-                  className="border p-5 mb-8"
-                  style={{ backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 24, ...getShadow(colors, isDark) }}
+                  className="p-5 mb-8"
+                  style={{ backgroundColor: colors.surface, borderRadius: 24, borderCurve: "continuous", ...getShadow(colors, isDark) }}
                 >
                   <Text className="text-xs font-black uppercase tracking-wide mb-2" style={{ color: colors.accentText, fontFamily: fonts.heading }}>
                     For your doctor visit
@@ -677,27 +648,8 @@ export default function SymptomCheckerScreen() {
                 </View>
 
                 <View style={{ gap: 10 }}>
-                  <TouchableOpacity
-                    onPress={handleShare}
-                    activeOpacity={0.85}
-                    className="py-4 rounded-2xl items-center flex-row justify-center gap-2"
-                    style={{ backgroundColor: colors.primary }}
-                  >
-                    <Icon set="feather" name="share" size={15} color={colors.buttonText} />
-                    <Text className="text-sm font-black" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-                      Save / share for doctor visit
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={handleRestart}
-                    activeOpacity={0.85}
-                    className="py-4 rounded-2xl items-center border"
-                    style={{ backgroundColor: colors.surface, borderColor: colors.border }}
-                  >
-                    <Text className="text-sm font-bold" style={{ color: colors.foreground, fontFamily: fonts.body }}>
-                      Check another condition
-                    </Text>
-                  </TouchableOpacity>
+                  <Button label="Save / share for doctor visit" icon="share-outline" onPress={handleShare} fullWidth />
+                  <Button label="Check another condition" variant="secondary" onPress={handleRestart} fullWidth />
                 </View>
               </>
             )}

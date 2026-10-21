@@ -1,3 +1,4 @@
+import { LinearGradient } from "expo-linear-gradient";
 import React, { memo } from "react";
 import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
 import type { ChatMessage } from "../../hooks/useQaConversation";
@@ -5,6 +6,7 @@ import { URGENT_SAFETY_SOURCE } from "../../lib/qaFallback";
 import { NuraAvatar } from "../NuraAvatar";
 import { useTheme } from "../theme";
 import { Icon } from "../Icon";
+import { getShadow } from "../ui-tokens";
 
 /**
  * One Nura AI message. Memoized: a long thread only redraws the bubbles whose
@@ -28,23 +30,26 @@ export const QaMessageBubble = memo(function QaMessageBubble({
   onRetry: (message: ChatMessage) => void;
   onOpenPrivacy: () => void;
 }) {
-  const { colors, fonts } = useTheme();
+  const { colors, fonts, isDark } = useTheme();
 
   if (message.sender === "user") {
     return (
-      <View
+      <LinearGradient
+        colors={[colors.primary, colors.primaryDark]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
         style={{
           maxWidth: "82%",
           alignSelf: "flex-end",
           paddingHorizontal: 16,
           paddingVertical: 11,
-          borderRadius: 20,
+          borderRadius: 22,
+          borderCurve: "continuous",
           borderBottomRightRadius: 6,
-          backgroundColor: colors.primary,
         }}
       >
         <Text style={{ color: colors.buttonText, fontSize: 15, lineHeight: 22, fontFamily: fonts.body }}>{message.text}</Text>
-      </View>
+      </LinearGradient>
     );
   }
 
@@ -59,11 +64,12 @@ export const QaMessageBubble = memo(function QaMessageBubble({
           paddingHorizontal: 16,
           paddingTop: 12,
           paddingBottom: 10,
-          borderRadius: 20,
+          borderRadius: 22, borderCurve: "continuous",
           borderBottomLeftRadius: 6,
           backgroundColor: isUrgent ? colors.dangerLight : colors.surface,
           borderWidth: isUrgent ? 1 : 0,
           borderColor: colors.danger,
+          ...(isUrgent ? null : getShadow(colors, isDark)),
         }}
       >
         {isUrgent || message.personalized ? (

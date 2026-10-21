@@ -1,6 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, RefreshControl, StatusBar, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { RefreshControl, StatusBar, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader, SectionHeader } from "../../components/ScreenHeader";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
@@ -31,6 +31,7 @@ import {
 } from "../../lib/api";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { Icon } from "../../components/Icon";
+import { Button } from "../../components/Button";
 
 const PERIOD_LABEL: Record<BillingCycle, string> = {
   monthly: "per month",
@@ -324,7 +325,7 @@ export default function SubscriptionScreen() {
               colors={heroGradient}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
-              style={{ borderRadius: 26, padding: 20, overflow: "hidden" }}
+              style={{ borderRadius: 26, borderCurve: "continuous", padding: 20, overflow: "hidden" }}
             >
               <View className="flex-row items-center" style={{ gap: 14 }}>
                 <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: "rgba(255,255,255,0.22)", alignItems: "center", justifyContent: "center" }}>
@@ -342,7 +343,7 @@ export default function SubscriptionScreen() {
               <Text style={{ color: "rgba(255,255,255,0.92)", fontSize: 13.5, lineHeight: 19, marginTop: 12, fontFamily: fonts.body }}>{heroBody}</Text>
 
               {activeEntitlements.length > 0 && !pricingOff ? (
-                <View style={{ marginTop: 14, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.16)", paddingHorizontal: 14, paddingVertical: 4 }}>
+                <View style={{ marginTop: 14, borderRadius: 16, borderCurve: "continuous", backgroundColor: "rgba(255,255,255,0.16)", paddingHorizontal: 14, paddingVertical: 4 }}>
                   {activeEntitlements.map((e, i) => (
                     <View
                       key={e._id}
@@ -384,7 +385,7 @@ export default function SubscriptionScreen() {
                         accessibilityState={{ selected: isSelected, disabled: unlocked }}
                         accessibilityLabel={`${plan.name}, ₹${plan.price} ${PERIOD_LABEL[plan.billingCycle]}${savings ? `, save ${savings}%` : ""}${unlocked ? ", current plan" : ""}`}
                         style={{
-                          borderRadius: 24,
+                          borderRadius: 24, borderCurve: "continuous",
                           padding: 18,
                           paddingTop: isRecommended ? 26 : 18,
                           backgroundColor: isSelected ? colors.primaryLight : colors.surface,
@@ -481,7 +482,7 @@ export default function SubscriptionScreen() {
                   style={{
                     gap: 10,
                     paddingHorizontal: 14,
-                    borderRadius: 18,
+                    borderRadius: 18, borderCurve: "continuous",
                     backgroundColor: colors.surface,
                     borderWidth: 1,
                     borderColor: couponCode.trim() ? colors.primary : colors.border,
@@ -518,7 +519,7 @@ export default function SubscriptionScreen() {
             {premiumFeatures.length > 0 ? (
               <>
                 <SectionHeader title="Or unlock one feature" style={{ marginTop: sectionGap }} />
-                <View style={{ backgroundColor: colors.surface, borderRadius: 22, paddingVertical: 4, ...getShadow(colors, isDark) }}>
+                <View style={{ backgroundColor: colors.surface, borderRadius: 22, borderCurve: "continuous", paddingVertical: 4, ...getShadow(colors, isDark) }}>
                   {premiumFeatures.map((feature, index) => {
                     const unlocked = isUnlocked(feature.key);
                     return (
@@ -586,11 +587,11 @@ export default function SubscriptionScreen() {
             {/* Purchase history */}
             <SectionHeader title="Purchase history" style={{ marginTop: sectionGap }} />
             {history.length === 0 ? (
-              <View style={{ backgroundColor: colors.surface, borderRadius: 22, ...getShadow(colors, isDark) }}>
+              <View style={{ backgroundColor: colors.surface, borderRadius: 22, borderCurve: "continuous", ...getShadow(colors, isDark) }}>
                 <EmptyState icon="receipt" title="No purchases yet" message="Your receipts will show up here." compact />
               </View>
             ) : (
-              <View style={{ backgroundColor: colors.surface, borderRadius: 22, paddingVertical: 4, ...getShadow(colors, isDark) }}>
+              <View style={{ backgroundColor: colors.surface, borderRadius: 22, borderCurve: "continuous", paddingVertical: 4, ...getShadow(colors, isDark) }}>
                 {history.map((e, index) => {
                   const status = historyStatus[e.status] ?? historyStatus.pending;
                   return (
@@ -633,28 +634,14 @@ export default function SubscriptionScreen() {
                 borderTopColor: colors.border,
               }}
             >
-              <TouchableOpacity
+              <Button
+                label={`Continue with ${selectedPlan.name} · ₹${selectedPlan.price}${CYCLE_SUFFIX[selectedPlan.billingCycle]}`}
                 onPress={() => confirmPlan(selectedPlan)}
-                disabled={purchasingKey !== null}
-                activeOpacity={0.85}
-                accessibilityRole="button"
+                loading={purchasingKey === selectedPlan._id}
+                disabled={purchasingKey !== null && purchasingKey !== selectedPlan._id}
                 accessibilityLabel={`Continue with ${selectedPlan.name}, ₹${selectedPlan.price} ${PERIOD_LABEL[selectedPlan.billingCycle]}`}
-                className="flex-row items-center justify-center"
-                style={{ height: 54, borderRadius: 27, gap: 8, backgroundColor: colors.primary, opacity: purchasingKey !== null ? 0.6 : 1 }}
-              >
-                {purchasingKey === selectedPlan._id ? (
-                  <ActivityIndicator color={colors.buttonText} />
-                ) : (
-                  <>
-                    <Text numberOfLines={1} style={{ flexShrink: 1, color: colors.buttonText, fontSize: 15.5, fontWeight: "800", fontFamily: fonts.body }}>
-                      {`Continue with ${selectedPlan.name}`}
-                    </Text>
-                    <Text style={{ color: colors.buttonText, fontSize: 15, fontFamily: fonts.monoSemiBold }}>
-                      {`· ₹${selectedPlan.price}${CYCLE_SUFFIX[selectedPlan.billingCycle]}`}
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
+                fullWidth
+              />
             </View>
           ) : null}
           </View>

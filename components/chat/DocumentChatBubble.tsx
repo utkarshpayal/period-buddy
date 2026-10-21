@@ -1,3 +1,4 @@
+import { LinearGradient } from "expo-linear-gradient";
 import React, { memo } from "react";
 import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
 import Markdown from "react-native-markdown-display";
@@ -71,7 +72,7 @@ export const DocumentChatBubble = memo(function DocumentChatBubble({
                 paddingHorizontal: 16,
                 paddingTop: 12,
                 paddingBottom: 10,
-                borderRadius: 20,
+                borderRadius: 22, borderCurve: "continuous",
                 borderBottomLeftRadius: 6,
                 backgroundColor: colors.surface,
                 ...getShadow(colors, isDark),
@@ -101,23 +102,26 @@ export const DocumentChatBubble = memo(function DocumentChatBubble({
             </View>
           </View>
         ) : (
-          <View
+          <LinearGradient
+            colors={[colors.primary, colors.primaryDark]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
             style={{
               maxWidth: "82%",
               alignSelf: "flex-end",
               paddingHorizontal: 16,
               paddingTop: 11,
               paddingBottom: 8,
-              borderRadius: 20,
+              borderRadius: 22,
+              borderCurve: "continuous",
               borderBottomRightRadius: 6,
-              backgroundColor: colors.primary,
             }}
           >
             <Text style={{ color: colors.buttonText, fontSize: 15, lineHeight: 22, fontFamily: fonts.body }}>{message.text}</Text>
             <Text style={{ color: colors.buttonText, opacity: 0.75, fontSize: 12, textAlign: "right", marginTop: 4, fontFamily: fonts.body }}>
               {message._id.startsWith("pending_") ? "Sending…" : formatTime(message.createdAt)}
             </Text>
-          </View>
+          </LinearGradient>
         )}
       </Animated.View>
     </View>

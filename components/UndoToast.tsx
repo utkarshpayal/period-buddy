@@ -57,7 +57,7 @@ export function UndoToast({ toast, bottom, onHide }: { toast: ToastContent | nul
           paddingRight: 6,
           paddingVertical: 8,
           minHeight: 56,
-          borderRadius: 18,
+          borderRadius: 18, borderCurve: "continuous",
           backgroundColor: bg,
           shadowColor: "#000",
           shadowOpacity: 0.18,

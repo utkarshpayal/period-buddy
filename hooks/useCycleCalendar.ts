@@ -116,6 +116,17 @@ export function useCycleCalendar({ refreshOn = ["cycle"] }: { refreshOn?: DataTo
     [dayEntries, yearStatus],
   );
   const yearFailed = useCallback((year: number) => yearStatus[year] === "error", [yearStatus]);
+  /** `dateKey`'s year failed to load (and nothing local covers the day). */
+  const dayLoadFailed = useCallback(
+    (dateKey: string) => !dayEntries[dateKey] && yearStatus[Number(dateKey.slice(0, 4))] === "error",
+    [dayEntries, yearStatus],
+  );
+  /**
+   * Make sure `dateKey`'s year is loaded or loading: call when a day is opened
+   * or on Try again. A year whose fetch failed is never retried on its own,
+   * which used to leave the day-log Save spinning for good.
+   */
+  const ensureDayLoaded = useCallback((dateKey: string) => loadYear(Number(dateKey.slice(0, 4))), [loadYear]);
 
   /** Patch one day after a save, from the server's copy of the log. */
   const setRemoteEntry = useCallback((dateKey: string, entry: LocalDayEntry) => setRemote((current) => ({ ...current, [dateKey]: entry })), []);
@@ -135,6 +146,8 @@ export function useCycleCalendar({ refreshOn = ["cycle"] }: { refreshOn?: DataTo
     noteFor,
     loadYear,
     isDayLoaded,
+    dayLoadFailed,
+    ensureDayLoaded,
     yearFailed,
     setRemoteEntry,
     removeRemoteEntry,

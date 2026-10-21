@@ -1,9 +1,10 @@
 import React from "react";
-import { ActivityIndicator, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useTheme } from "../theme";
 import { getSoftTints } from "../ui-tokens";
 import type { CouponPreview } from "../../lib/api";
 import { Icon } from "../Icon";
+import { Button } from "../Button";
 
 /**
  * Coupon code input, shared by PaywallModal and the My Subscription pricing
@@ -75,21 +76,7 @@ export function CouponField({
           style={{ color: colors.foreground, fontFamily: fonts.body }}
           onSubmitEditing={onApply}
         />
-        <TouchableOpacity
-          onPress={onApply}
-          activeOpacity={0.8}
-          disabled={!code.trim() || applying}
-          className="rounded-full px-3.5 py-2 ml-1"
-          style={{ backgroundColor: code.trim() ? colors.primary : colors.border }}
-        >
-          {applying ? (
-            <ActivityIndicator size="small" color={colors.buttonText} />
-          ) : (
-            <Text className="text-xs font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-              Apply
-            </Text>
-          )}
-        </TouchableOpacity>
+        <Button label="Apply" size="sm" onPress={onApply} disabled={!code.trim()} loading={applying} style={{ marginLeft: 4 }} />
       </View>
       {error ? (
         <Text className="text-xs font-semibold mt-1.5 ml-1" style={{ color: colors.danger, fontFamily: fonts.body }}>

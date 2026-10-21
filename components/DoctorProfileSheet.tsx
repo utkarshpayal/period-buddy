@@ -7,6 +7,7 @@ import { DoctorPhoto } from "./DoctorPhoto";
 import { useTheme } from "./theme";
 import { AppLockCover } from "./AppLockScreen";
 import { Icon } from "./Icon";
+import { Button } from "./Button";
 
 function doctorDisplayName(doctor: Doctor): string {
   return doctor.name || [doctor.firstName, doctor.lastName].filter(Boolean).join(" ") || "Clinical specialist";
@@ -212,16 +213,7 @@ export function DoctorProfileSheet({
               {price ?? "Not set"}
             </Text>
           </View>
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={onPrimary}
-            className="flex-1 rounded-2xl py-4 items-center"
-            style={{ backgroundColor: colors.primary }}
-          >
-            <Text className="text-sm font-extrabold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-              {hasActiveSession ? "Open consultation chat" : "Choose a time"}
-            </Text>
-          </TouchableOpacity>
+          <Button label={hasActiveSession ? "Open consultation chat" : "Choose a time"} onPress={onPrimary} style={{ flex: 1 }} />
         </View>
       </View>
       <AppLockCover />

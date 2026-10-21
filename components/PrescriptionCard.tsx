@@ -6,6 +6,7 @@ import { prescriptionAction } from "../lib/prescriptionPdf";
 import { PrescriptionViewer } from "./PrescriptionViewer";
 import { useTheme } from "./theme";
 import { Icon } from "./Icon";
+import { Button } from "./Button";
 
 const MAX_LISTED = 3;
 
@@ -98,18 +99,7 @@ export function PrescriptionCard({ consultation, doctorName }: { consultation: C
       </View>
 
       <View className="px-4 pt-4 pb-4 gap-2.5">
-        <TouchableOpacity
-          onPress={() => setViewing(true)}
-          accessibilityRole="button"
-          accessibilityLabel="View full prescription"
-          className="flex-row items-center justify-center gap-2 rounded-full py-3"
-          style={{ backgroundColor: colors.primary }}
-        >
-          <Icon set="feather" name="eye" size={16} color={colors.buttonText} />
-          <Text className="text-sm font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-            View prescription
-          </Text>
-        </TouchableOpacity>
+        <Button label="View prescription" icon="eye-outline" size="md" fullWidth onPress={() => setViewing(true)} accessibilityLabel="View full prescription" />
         <View className="flex-row gap-2.5">
           {(["download", "print"] as const).map((action) => (
             <TouchableOpacity

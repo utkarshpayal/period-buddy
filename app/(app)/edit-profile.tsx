@@ -25,6 +25,7 @@ import { isPlausiblePhone, normalizePhone } from "../../lib/onboarding";
 import { useSecureScreen } from "../../lib/screenPrivacy";
 import { KeyboardAwareScrollView, KeyboardStickyView } from "react-native-keyboard-controller";
 import { Icon } from "../../components/Icon";
+import { showErrorToast } from "../../lib/toast";
 
 /**
  * Name, photo, phone and birthday. Phone and photo used to be onboarding
@@ -67,7 +68,17 @@ export default function EditProfile() {
     normalizePhone(phone) !== normalizePhone(user?.phone ?? "") ||
     dateOfBirth !== initialDob ||
     photoUrl !== (user?.profilePicture ?? "");
-  const canSave = isDirty && firstName.trim().length >= 2 && isPlausiblePhone(phone) && !dobIncomplete && !isUploading;
+  // What's stopping a save, shown as a toast when Save is tapped (the field
+  // itself only turns red, so nothing is printed under the inputs).
+  const invalidMessage =
+    firstName.trim().length < 2
+      ? "Your first name needs at least 2 characters."
+      : !isPlausiblePhone(phone)
+        ? "Enter a valid phone number with country code, e.g. +91 98765 43210."
+        : dobIncomplete
+          ? "Finish your birthday (DD/MM/YYYY), or clear it."
+          : null;
+  const canSave = isDirty && !invalidMessage && !isUploading;
 
   async function pickPhoto() {
     const permission = await requestPhotoLibraryAccess();
@@ -105,6 +116,10 @@ export default function EditProfile() {
 
   async function save() {
     setPhoneTouched(true);
+    if (invalidMessage) {
+      showErrorToast(invalidMessage);
+      return;
+    }
     if (!canSave) return;
     setIsSaving(true);
     try {
@@ -233,7 +248,7 @@ export default function EditProfile() {
         {/* Rides on top of the keyboard while it is open. */}
         <KeyboardStickyView offset={{ opened: insets.bottom }}>
         <View style={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 12 }}>
-          <PrimaryButton label="Save changes" icon="checkmark" disabled={!canSave} loading={isSaving} onPress={save} />
+          <PrimaryButton label="Save changes" icon="checkmark" disabled={!isDirty || isUploading} loading={isSaving} onPress={save} />
         </View>
         </KeyboardStickyView>
       </View>
@@ -271,7 +286,7 @@ function Field({ label, optional, error, hint, onFocus, onBlur, ...inputProps }:
         }}
         style={{
           height: 52,
-          borderRadius: 14,
+          borderRadius: 14, borderCurve: "continuous",
           borderWidth: focused || error ? 1.5 : 1,
           borderColor: error ? colors.danger : focused ? colors.primary : colors.border,
           backgroundColor: colors.input,
@@ -281,11 +296,11 @@ function Field({ label, optional, error, hint, onFocus, onBlur, ...inputProps }:
           fontWeight: "600",
           fontFamily: fonts.body,
         }}
+        // The field turns red; the reason comes as a toast on Save, and screen readers hear it here.
+        accessibilityHint={error || inputProps.accessibilityHint}
         {...inputProps}
       />
-      {error ? (
-        <Text style={{ color: colors.danger, fontSize: 13, fontWeight: "700", marginTop: 6, fontFamily: fonts.body }}>{error}</Text>
-      ) : hint ? (
+      {hint ? (
         <Text style={{ color: colors.mutedText, fontSize: 13, marginTop: 6, fontFamily: fonts.body }}>{hint}</Text>
       ) : null}
     </View>

@@ -40,6 +40,7 @@ import { useSecureScreen } from "../../lib/screenPrivacy";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { Icon } from "../../components/Icon";
 import { motion } from "../../components/motion";
+import { SendButton } from "../../components/SendButton";
 
 // --- STRUCTURAL BACKEND REGISTRY CONTRACTS ---
 interface PeriodBuddy {
@@ -700,7 +701,7 @@ function BuddyNomination() {
                       <View
                         style={{
                           marginTop: 14,
-                          borderRadius: 16,
+                          borderRadius: 16, borderCurve: "continuous",
                           paddingHorizontal: 14,
                           paddingVertical: 12,
                           backgroundColor: colors.surfaceSoft,
@@ -832,7 +833,7 @@ function BuddyNomination() {
                   {/* Buddy header: who, presence, call, more */}
                   <View
                     className="flex-row items-center rounded-3xl px-3.5 py-3 mb-5"
-                    style={{ gap: 12, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, ...getShadow(colors, isDark) }}
+                    style={{ gap: 12, backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
                   >
                     <View>
                       <View className="h-11 w-11 rounded-full items-center justify-center" style={{ backgroundColor: colors.primaryLight }}>
@@ -905,7 +906,7 @@ function BuddyNomination() {
                         flexDirection: "row",
                         alignItems: "center",
                         gap: 12,
-                        borderRadius: 24,
+                        borderRadius: 24, borderCurve: "continuous",
                         paddingHorizontal: 14,
                         paddingVertical: 12,
                         marginBottom: 20,
@@ -1050,17 +1051,7 @@ function BuddyNomination() {
                 fontFamily: fonts.body,
               }}
             />
-            <TouchableOpacity
-              disabled={!typedMessage.trim()}
-              onPress={() => handleSendBuddyMessage()}
-              accessibilityRole="button"
-              accessibilityLabel="Send message"
-              accessibilityState={{ disabled: !typedMessage.trim() }}
-              className="h-11 w-11 rounded-full items-center justify-center"
-              style={{ backgroundColor: typedMessage.trim() ? colors.primary : colors.surfaceSoft }}
-            >
-              <Icon set="feather" name="send" size={18} color={typedMessage.trim() ? colors.buttonText : colors.mutedText} />
-            </TouchableOpacity>
+            <SendButton onPress={() => handleSendBuddyMessage()} disabled={!typedMessage.trim()} size={44} accessibilityLabel="Send message" />
           </View>
         )}
         </KeyboardAvoidingView>

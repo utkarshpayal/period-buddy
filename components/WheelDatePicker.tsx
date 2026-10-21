@@ -154,7 +154,7 @@ export function WheelDatePicker({ dateKey, defaultDate, maximumDate, minimumDate
         style={{
           backgroundColor: colors.primaryLight,
           borderColor: colors.border,
-          borderRadius: 14,
+          borderRadius: 14, borderCurve: "continuous",
           borderWidth: 1,
           height: ITEM_HEIGHT,
           left: 0,

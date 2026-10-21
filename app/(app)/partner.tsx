@@ -2,7 +2,6 @@ import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   RefreshControl,
   ScrollView,
   StatusBar,
@@ -38,6 +37,9 @@ import { LoadingErrorState } from "../../components/LoadingErrorState";
 import { SendStatusLabel } from "../../components/partner-view/SendStatusLabel";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { Icon } from "../../components/Icon";
+import { Button } from "../../components/Button";
+import { SendButton } from "../../components/SendButton";
+import { FilterChips } from "../../components/FilterChips";
 
 const DEFAULT_PERMS: PartnerPermissions = {
   shareCyclePhase: true,
@@ -309,39 +311,16 @@ export default function Partner() {
 
         {/* Tab pills */}
         <View className="mt-5">
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 24, gap: 8 }}
-          >
-            {[
-              { id: "info", label: "Overview" },
-              { id: "invite", label: "Link Partner" },
-              { id: "access", label: "Permissions" },
-              { id: "chat", label: "Private Chat" },
-            ].map((tab) => {
-              const isSelected = activeTab === tab.id;
-              return (
-                <TouchableOpacity
-                  key={tab.id}
-                  onPress={() => setActiveTab(tab.id as any)}
-                  activeOpacity={0.8}
-                  className="rounded-full px-5 py-2.5"
-                  style={{
-                    backgroundColor: isSelected ? colors.primary : colors.surface,
-                    ...getShadow(colors, isDark),
-                  }}
-                >
-                  <Text
-                    className="text-xs font-bold tracking-wide"
-                    style={{ color: isSelected ? colors.buttonText : colors.foreground, fontFamily: fonts.body }}
-                  >
-                    {tab.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
+          <FilterChips
+            options={[
+              { key: "info", label: "Overview" },
+              { key: "invite", label: "Link partner" },
+              { key: "access", label: "Permissions" },
+              { key: "chat", label: "Private chat" },
+            ]}
+            value={activeTab}
+            onChange={(key: string) => setActiveTab(key as any)}
+          />
         </View>
 
         <ScrollView
@@ -431,16 +410,12 @@ export default function Partner() {
                   </View>
                 ))}
 
-                <TouchableOpacity
-                  activeOpacity={0.85}
+                <Button
+                  label={isConnected ? "Manage permissions" : "Set up sync"}
                   onPress={() => setActiveTab(isConnected ? "access" : "invite")}
-                  className="mt-4 rounded-2xl py-4 items-center justify-center"
-                  style={{ backgroundColor: colors.primary, ...getShadow(colors, isDark) }}
-                >
-                  <Text className="text-sm font-bold tracking-wide" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-                    {isConnected ? "Manage Permissions" : "Proceed to Sync Setup"}
-                  </Text>
-                </TouchableOpacity>
+                  fullWidth
+                  style={{ marginTop: 16 }}
+                />
               </View>
             )}
 
@@ -497,21 +472,7 @@ export default function Partner() {
                       </TouchableOpacity>
                     </View>
                   ) : (
-                    <TouchableOpacity
-                      activeOpacity={0.8}
-                      disabled={generatingCode}
-                      onPress={handleGenerateCode}
-                      className="mt-6 w-full rounded-xl py-3.5 items-center justify-center"
-                      style={{ backgroundColor: colors.primary, opacity: generatingCode ? 0.7 : 1 }}
-                    >
-                      {generatingCode ? (
-                        <ActivityIndicator color={colors.buttonText} />
-                      ) : (
-                        <Text className="text-xs font-bold tracking-wide uppercase" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-                          Generate Unique Code
-                        </Text>
-                      )}
-                    </TouchableOpacity>
+                    <Button label="Generate invite code" onPress={handleGenerateCode} loading={generatingCode} fullWidth style={{ marginTop: 24 }} />
                   )}
                       {/* Connect using a code block has been removed, connection is now handled during login/signup */}
                 </View>
@@ -608,13 +569,7 @@ export default function Partner() {
                     <Text className="mt-2 text-xs text-center" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                       Link a partner first to start messaging.
                     </Text>
-                    <TouchableOpacity
-                      onPress={() => setActiveTab("invite")}
-                      className="mt-5 px-6 py-3 rounded-2xl"
-                      style={{ backgroundColor: colors.primary }}
-                    >
-                      <Text className="text-sm font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>Link Partner</Text>
-                    </TouchableOpacity>
+                    <Button label="Link partner" onPress={() => setActiveTab("invite")} size="md" style={{ marginTop: 20 }} />
                   </View>
                 ) : chatMessages.length === 0 ? (
                   <View className="items-center py-12">
@@ -677,16 +632,7 @@ export default function Partner() {
               submitBehavior="submit"
               returnKeyType="send"
             />
-            <TouchableOpacity
-              disabled={!typedMessage.trim()}
-              onPress={handleSendMessage}
-              accessibilityRole="button"
-              accessibilityLabel="Send message"
-              className="p-2.5 rounded-full items-center justify-center"
-              style={{ backgroundColor: typedMessage.trim() ? colors.primary : colors.border }}
-            >
-              <Icon set="feather" name="arrow-up" size={16} color={typedMessage.trim() ? colors.buttonText : colors.mutedText} />
-            </TouchableOpacity>
+            <SendButton onPress={handleSendMessage} disabled={!typedMessage.trim()} size={40} accessibilityLabel="Send message" />
           </View>
         )}
         </KeyboardAvoidingView>

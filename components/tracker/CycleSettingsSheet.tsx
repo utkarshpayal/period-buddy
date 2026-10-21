@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native";
+import { ScrollView, Switch, Text, TouchableOpacity, View } from "react-native";
 import { BottomSheet } from "../BottomSheet";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { cycleApi, getFriendlyErrorMessage, type CycleSettings } from "../../lib/api";
@@ -9,6 +9,8 @@ import { AppModalHost } from "../modals/AppModalHost";
 import { MonthCalendar } from "../onboarding/parts";
 import { useTheme } from "../theme";
 import { Icon } from "../Icon";
+import { Button } from "../Button";
+import { Chip } from "../Chip";
 
 const TRACKING_GOALS: { id: NonNullable<CycleSettings["trackingGoal"]>; label: string }[] = [
   { id: "track_period", label: "Track Period" },
@@ -383,29 +385,7 @@ export function CycleSettingsSheet({
               {TRACKING_GOALS.map((goal) => {
                 const isSelected = trackingGoal === goal.id;
                 return (
-                  <TouchableOpacity
-                    key={goal.id}
-                    activeOpacity={0.8}
-                    onPress={() => setTrackingGoal(goal.id)}
-                    className="rounded-full px-3.5 py-2"
-                    style={{
-                      backgroundColor: isSelected
-                        ? colors.primary
-                        : colors.surface,
-                    }}
-                  >
-                    <Text
-                      className="text-xs font-black"
-                      style={{
-                        color: isSelected
-                          ? colors.buttonText
-                          : colors.foreground,
-                        fontFamily: fonts.body,
-                      }}
-                    >
-                      {goal.label}
-                    </Text>
-                  </TouchableOpacity>
+                  <Chip key={goal.id} label={goal.label} selected={isSelected} onPress={() => setTrackingGoal(goal.id)} accessibilityRole="radio" />
                 );
               })}
             </View>
@@ -482,26 +462,7 @@ export function CycleSettingsSheet({
           </View>
         ) : null}
 
-        <TouchableOpacity
-          activeOpacity={0.9}
-          className="mt-6 rounded-full py-4 flex-row items-center justify-center gap-2"
-          disabled={settingsSaving}
-          onPress={save}
-          style={{
-            backgroundColor: colors.primary,
-            opacity: settingsSaving ? 0.7 : 1,
-          }}
-        >
-          {settingsSaving ? (
-            <ActivityIndicator size="small" color={colors.buttonText} />
-          ) : null}
-          <Text
-            className="text-sm font-black"
-            style={{ color: colors.buttonText, fontFamily: fonts.body }}
-          >
-            {settingsSaving ? "Saving Settings" : "Save Cycle Settings"}
-          </Text>
-        </TouchableOpacity>
+        <Button label="Save cycle settings" onPress={save} loading={settingsSaving} fullWidth style={{ marginTop: 24 }} />
       </ScrollView>
     </BottomSheet>
   );

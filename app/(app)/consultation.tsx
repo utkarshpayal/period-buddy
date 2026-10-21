@@ -41,6 +41,7 @@ import { fetchQuery, peekQuery } from "../../lib/queryCache";
 import { useSecureScreen } from "../../lib/screenPrivacy";
 import { cleanupTempFiles } from "../../lib/tempFiles";
 import { Icon } from "../../components/Icon";
+import { SegmentedControl } from "../../components/SegmentedControl";
 
 // Finished sessions the user tapped "Not now" on, so the rating card moves on.
 const SKIPPED_RATINGS_KEY = "period-buddy.consultation.skipped-ratings";
@@ -355,40 +356,15 @@ export default function ConsultationScreen() {
         >
           <View className="mx-6 mt-4">
             {/* New: doctors to book and live bookings. Past: finished sessions. */}
-            <View
-              className="flex-row"
-              accessibilityRole="tablist"
-              style={{ backgroundColor: colors.surface, borderRadius: 999, borderWidth: 1, borderColor: colors.border, padding: 4, marginBottom: 16 }}
-            >
-              {(
-                [
-                  ["new", "New"],
-                  ["past", pastSessions.length ? `Past (${pastSessions.length})` : "Past"],
-                ] as const
-              ).map(([key, label]) => {
-                const active = listTab === key;
-                return (
-                  <TouchableOpacity
-                    hitSlop={{ top: 4, bottom: 4 }}
-                    key={key}
-                    onPress={() => setListTab(key)}
-                    activeOpacity={0.85}
-                    accessibilityRole="tab"
-                    accessibilityState={{ selected: active }}
-                    className="flex-1 items-center justify-center"
-                    style={{ height: 40, borderRadius: 999, backgroundColor: active ? colors.primary : "transparent" }}
-                  >
-                    <Text
-                      numberOfLines={1}
-                      maxFontSizeMultiplier={1.3}
-                      style={{ fontSize: 14, fontWeight: active ? "700" : "500", color: active ? colors.buttonText : colors.mutedText, fontFamily: fonts.body }}
-                    >
-                      {label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+            <SegmentedControl
+              segments={[
+                { key: "new", label: "New" },
+                { key: "past", label: pastSessions.length ? `Past (${pastSessions.length})` : "Past" },
+              ]}
+              value={listTab}
+              onChange={setListTab}
+              style={{ marginBottom: 16 }}
+            />
 
             {listTab === "new" ? (
               <>

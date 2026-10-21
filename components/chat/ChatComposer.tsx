@@ -3,6 +3,8 @@ import React from "react";
 import { ActivityIndicator, TextInput, TouchableOpacity, View, type StyleProp, type ViewStyle } from "react-native";
 import { useTheme } from "../theme";
 import { Icon } from "../Icon";
+import { SendButton } from "../SendButton";
+import { getShadow, getGlow, withAlpha } from "../ui-tokens";
 
 /**
  * The chat input shared by Nura AI and the Document Assistant: an input pill
@@ -40,7 +42,7 @@ export function ChatComposer({
   idleAction?: { icon: React.ComponentProps<typeof Ionicons>["name"]; label: string; onPress: () => void };
   style?: StyleProp<ViewStyle>;
 }) {
-  const { colors, fonts } = useTheme();
+  const { colors, fonts, isDark } = useTheme();
   const showIdleAction = idleAction && !value.trim();
 
   return (
@@ -49,12 +51,13 @@ export function ChatComposer({
         className="flex-1 flex-row items-center"
         style={{
           minHeight: 48,
-          borderRadius: 24,
+          borderRadius: 24, borderCurve: "continuous",
           paddingLeft: 18,
           paddingRight: 6,
           backgroundColor: colors.surface,
-          borderWidth: 1,
-          borderColor: isRecording ? colors.danger : colors.border,
+          ...getShadow(colors, isDark),
+          // Recording: a red ring outside the field (no border, so nothing shifts).
+          ...(isRecording ? { boxShadow: `0 0 0 1.5px ${colors.danger}, 0 0 0 5px ${withAlpha(colors.danger, 0.14)}` } : null),
         }}
       >
         <TextInput
@@ -96,27 +99,12 @@ export function ChatComposer({
           accessibilityRole="button"
           accessibilityLabel={idleAction.label}
           className="items-center justify-center rounded-full"
-          style={{ width: 48, height: 48, backgroundColor: colors.primary }}
+          style={{ width: 48, height: 48, backgroundColor: colors.primary, ...getGlow(colors.primary, isDark) }}
         >
           <Icon set="ion" name={idleAction.icon} size={21} color={colors.buttonText} />
         </TouchableOpacity>
       ) : (
-        <TouchableOpacity
-          disabled={!canSend}
-          onPress={onSend}
-          activeOpacity={0.8}
-          accessibilityRole="button"
-          accessibilityLabel="Send"
-          accessibilityState={{ disabled: !canSend }}
-          className="items-center justify-center rounded-full"
-          style={{ width: 48, height: 48, backgroundColor: canSend ? colors.primary : colors.primaryLight }}
-        >
-          {sending ? (
-            <ActivityIndicator size="small" color={colors.primary} />
-          ) : (
-            <Icon set="ion" name="arrow-up" size={22} color={canSend ? colors.buttonText : colors.primary} />
-          )}
-        </TouchableOpacity>
+        <SendButton onPress={onSend} disabled={!canSend} loading={sending} size={48} />
       )}
     </View>
   );

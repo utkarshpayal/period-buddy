@@ -38,6 +38,7 @@ import { MedicalReviewBadge } from "../../components/MedicalReviewBadge";
 import { pickMedicalReview } from "../../lib/medicalReview";
 import { computeAge } from "../../lib/chatTopics";
 import { Icon } from "../../components/Icon";
+import { Button } from "../../components/Button";
 
 // The couples decks (conversation "spark" cards and the comfort/position
 // cards) are 18+. Same rule as the 18+ chat topic: an unknown birthday stays
@@ -359,7 +360,7 @@ export default function SexualWellbeing() {
           {loadError && !loadingWellbeing ? (
             <View
               className="flex-row items-center"
-              style={{ gap: 8, marginBottom: 14, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 14, backgroundColor: colors.surfaceSoft }}
+              style={{ gap: 8, marginBottom: 14, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 14, borderCurve: "continuous", backgroundColor: colors.surfaceSoft }}
             >
               <Icon set="ion" name="cloud-offline-outline" size={16} color={colors.mutedText} />
               <Text style={{ flex: 1, color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "500", fontFamily: fonts.body }}>
@@ -447,7 +448,7 @@ export default function SexualWellbeing() {
               </View>
 
               <View
-                style={{ marginTop: 16, minHeight: 168, borderRadius: 20, backgroundColor: openDeck.tone.bg, paddingHorizontal: 22, paddingVertical: 24, justifyContent: "center" }}
+                style={{ marginTop: 16, minHeight: 168, borderRadius: 20, borderCurve: "continuous", backgroundColor: openDeck.tone.bg, paddingHorizontal: 22, paddingVertical: 24, justifyContent: "center" }}
               >
                 <Icon set="ion"
                   name={openDeck.mode === "spark" ? "chatbubble-ellipses-outline" : "heart-outline"}
@@ -474,17 +475,14 @@ export default function SexualWellbeing() {
                 ) : null}
               </View>
 
-              <TouchableOpacity
+              <Button
+                label="Next card"
+                iconRight="arrow-forward"
+                size="md"
+                fullWidth
                 onPress={openDeck.mode === "spark" ? handleNextSparkCard : handleNextPositionCard}
-                activeOpacity={0.85}
-                accessibilityRole="button"
-                accessibilityLabel="Next card"
-                className="flex-row items-center justify-center"
-                style={{ marginTop: 14, height: 48, borderRadius: 16, backgroundColor: colors.primary, gap: 8 }}
-              >
-                <Text maxFontSizeMultiplier={1.3} style={{ color: colors.buttonText, fontSize: 15, fontWeight: "700", fontFamily: fonts.body }}>Next card</Text>
-                <Icon set="feather" name="arrow-right" size={16} color={colors.buttonText} />
-              </TouchableOpacity>
+                style={{ marginTop: 14 }}
+              />
             </WellbeingCard>
           ) : (
             <View className="flex-row" style={{ gap: 12 }}>

@@ -95,12 +95,10 @@ function SectionCard({
         backgroundColor: colors.surface,
         borderColor: isDark ? colors.surfaceStrong : colors.border,
         borderWidth: 1.5,
-        borderRadius: 24,
+        borderRadius: 24, borderCurve: "continuous",
         padding: 20,
         marginBottom: 14,
         ...getShadow(colors, isDark),
-        shadowOpacity: isDark ? 0.4 : 0.1,
-        elevation: 4,
       }}
     >
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 16 }}>
@@ -170,7 +168,7 @@ export default function SymptomReportScreen() {
                     alignItems: "center",
                     gap: 10,
                     padding: 14,
-                    borderRadius: 18,
+                    borderRadius: 18, borderCurve: "continuous",
                     backgroundColor: softTints.pink,
                     marginBottom: 18,
                   }}
@@ -242,7 +240,7 @@ export default function SymptomReportScreen() {
                               flex: 1,
                               paddingVertical: 12,
                               paddingHorizontal: 10,
-                              borderRadius: 16,
+                              borderRadius: 16, borderCurve: "continuous",
                               backgroundColor: softTints.sky,
                               borderWidth: 1,
                               borderColor: `${colors.sky}33`,
@@ -281,7 +279,7 @@ export default function SymptomReportScreen() {
                     alignItems: "flex-start",
                     gap: 10,
                     padding: 14,
-                    borderRadius: 18,
+                    borderRadius: 18, borderCurve: "continuous",
                     backgroundColor: colors.surface,
                     borderWidth: 1,
                     borderColor: colors.border,

@@ -10,6 +10,7 @@ import { useTheme } from "../theme";
 import { getShadow } from "../ui-tokens";
 import { Icon } from "../Icon";
 import { motion } from "../motion";
+import { Button } from "../Button";
 
 /** Creator profile (page sheet): stats from the loaded reels, follow, their videos. */
 export function CreatorSheet({
@@ -103,22 +104,14 @@ export function CreatorSheet({
               <Text className="mt-2 text-xs font-semibold leading-5" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                 Follow to keep their cycle education videos and polls close in your feed.
               </Text>
-              <TouchableOpacity
-                activeOpacity={0.85}
-                accessibilityRole="button"
-                accessibilityLabel={following ? `Unfollow ${creator.creatorName}` : `Follow ${creator.creatorName}`}
-                className="mt-5 items-center justify-center rounded-full py-3.5"
+              <Button
+                label={following ? "Following" : "Follow creator"}
+                variant={following ? "secondary" : "primary"}
                 onPress={() => onToggleFollow(creator)}
-                style={{
-                  backgroundColor: following ? colors.input : colors.primary,
-                  borderColor: colors.border,
-                  borderWidth: following ? 1 : 0,
-                }}
-              >
-                <Text className="text-sm font-black" style={{ color: following ? colors.foreground : colors.buttonText, fontFamily: fonts.body }}>
-                  {following ? "Following" : "Follow creator"}
-                </Text>
-              </TouchableOpacity>
+                accessibilityLabel={following ? `Unfollow ${creator.creatorName}` : `Follow ${creator.creatorName}`}
+                fullWidth
+                style={{ marginTop: 20 }}
+              />
             </View>
 
             <View className="mx-6 mt-6">
@@ -298,8 +291,8 @@ export function FeedPicker({
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable className="flex-1 items-center justify-center px-8" style={{ backgroundColor: "rgba(0,0,0,0.6)" }} onPress={onClose}>
         <View
-          className="w-full max-w-[300px] rounded-3xl border p-4"
-          style={{ backgroundColor: colors.surface, borderColor: colors.border, ...getShadow(colors, isDark) }}
+          className="w-full max-w-[300px] rounded-3xl p-4"
+          style={{ backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
         >
           <Text className="mb-3 text-center text-base font-extrabold" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
             Show reels

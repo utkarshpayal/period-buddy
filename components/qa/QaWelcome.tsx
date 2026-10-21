@@ -64,7 +64,7 @@ export function QaWelcome({
             onPress={() => onAsk(question)}
             accessibilityRole="button"
             className="flex-row items-center"
-            style={{ gap: 12, paddingHorizontal: 16, paddingVertical: 14, borderRadius: 16, backgroundColor: colors.surface }}
+            style={{ gap: 12, paddingHorizontal: 16, paddingVertical: 14, borderRadius: 16, borderCurve: "continuous", backgroundColor: colors.surface }}
           >
             <Icon set="ion" name="chatbubble-ellipses-outline" size={18} color={activeTopic ? categoryTints[activeTopic.tint].color : colors.primary} />
             <Text style={{ flex: 1, color: colors.foreground, fontSize: 14.5, fontWeight: "600", fontFamily: fonts.body }}>{question}</Text>

@@ -1,9 +1,9 @@
 import React, { useMemo } from "react";
 import { Text, View } from "react-native";
-import { CalendarDayCell, usePhasePalette, type Lookups } from "../CycleCalendar";
+import { CalendarDayGrid, usePhasePalette, type Lookups } from "../CycleCalendar";
 import { SkeletonBlock } from "../Skeleton";
 import { useTheme } from "../theme";
-import { WEEKDAY_LABELS, dayStatus, weekDates, type DayStatus } from "../../lib/cycleCalendar";
+import { WEEKDAY_LABELS, weekDates, type DayStatus } from "../../lib/cycleCalendar";
 import { dateFromDayKey, getDateKey } from "../../lib/format";
 import { TRACKER_CELL } from "./MonthPager";
 
@@ -14,19 +14,16 @@ import { TRACKER_CELL } from "./MonthPager";
  */
 export function WeekStrip({
   lookups,
-  selectedKey,
   onPressDay,
   loading,
 }: {
   lookups: Lookups;
-  selectedKey: string | null;
   onPressDay: (s: DayStatus) => void;
   loading: boolean;
 }) {
   const { colors, fonts } = useTheme();
   const palette = usePhasePalette();
   const dates = useMemo(() => weekDates(dateFromDayKey(lookups.todayKey)), [lookups.todayKey]);
-  const { model, entryFor, noteFor, todayKey } = lookups;
 
   return (
     <>
@@ -41,23 +38,13 @@ export function WeekStrip({
         ))}
       </View>
       <View className="flex-row pb-2" style={{ paddingHorizontal: 12 }}>
-        {dates.map((date) => {
-          const key = getDateKey(date);
-          return loading ? (
-            <View key={key} style={{ width: `${100 / 7}%`, height: TRACKER_CELL, alignItems: "center", justifyContent: "center" }}>
-              <SkeletonBlock width={38} height={38} radius={19} />
-            </View>
-          ) : (
-            <CalendarDayCell
-              key={key}
-              s={dayStatus(date, model, entryFor, noteFor, todayKey)}
-              selected={selectedKey === key}
-              palette={palette}
-              height={TRACKER_CELL}
-              onPress={onPressDay}
-            />
-          );
-        })}
+        {loading
+          ? dates.map((date) => (
+              <View key={getDateKey(date)} style={{ width: `${100 / 7}%`, height: TRACKER_CELL, alignItems: "center", justifyContent: "center" }}>
+                <SkeletonBlock width={38} height={38} radius={19} />
+              </View>
+            ))
+          : <CalendarDayGrid dates={dates} lookups={lookups} palette={palette} height={TRACKER_CELL} onPressDay={onPressDay} />}
       </View>
     </>
   );

@@ -265,7 +265,7 @@ export default function Hygiene() {
         accessibilityLabel={`${topic.label}: ${subtitle}`}
         style={{
           flex: 1,
-          borderRadius: 24,
+          borderRadius: 24, borderCurve: "continuous",
           padding: 16,
           backgroundColor: isSelected ? tone.bg : colors.surface,
           borderWidth: isSelected ? 1.5 : 1,
@@ -318,7 +318,7 @@ export default function Hygiene() {
           {usingOfflineTips && !loading && (
             <View
               className="flex-row items-center"
-              style={{ gap: 8, marginBottom: 14, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 14, backgroundColor: colors.surfaceSoft }}
+              style={{ gap: 8, marginBottom: 14, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 14, borderCurve: "continuous", backgroundColor: colors.surfaceSoft }}
             >
               <Icon set="ion" name="cloud-offline-outline" size={16} color={colors.mutedText} />
               <Text style={{ flex: 1, color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "500", fontFamily: fonts.body }}>
