@@ -1,8 +1,24 @@
-import React from "react";
-import { Text, View } from "react-native";
+import React, { useEffect } from "react";
+import { View } from "react-native";
+import Animated, {
+  Easing,
+  FadeInDown,
+  FadeOutUp,
+  useAnimatedProps,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withDelay,
+  withTiming,
+} from "react-native-reanimated";
 import Svg, { Circle } from "react-native-svg";
 import { getCyclePhase } from "../../lib/cycle";
 import { useTheme } from "../theme";
+
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+// Values roll: the old one lifts out as the new one rises in.
+const rollIn = FadeInDown.duration(340).easing(Easing.out(Easing.cubic));
+const rollOut = FadeOutUp.duration(200);
 
 const RING_SIZE = 196;
 const daysLabel = (n: number) => `${n} ${n === 1 ? "day" : "days"}`;
@@ -11,7 +27,11 @@ const RING_RADIUS = 43;
 const RING_STROKE_WIDTH = 7;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
-/** Read-only ring showing where today sits in the current cycle. */
+/**
+ * Read-only ring showing where today sits in the current cycle. The arc
+ * draws itself on first show and glides to a new day; today's marker rides
+ * its tip, and the centre text rolls when it changes.
+ */
 export function CycleRing({
   activeCycleLength,
   activePeriodLength,
@@ -64,19 +84,62 @@ export function CycleRing({
       (displayDay >= ovulationDayPivot - 5 && displayDay <= ovulationDayPivot));
 
   const handleFraction = Math.min(displayDay / activeCycleLength, 1);
-  const handleAngleRad = (handleFraction * 360 - 90) * (Math.PI / 180);
   const scale = RING_SIZE / 100;
-  const handleLeft = (50 + RING_RADIUS * Math.cos(handleAngleRad)) * scale;
-  const handleTop = (50 + RING_RADIUS * Math.sin(handleAngleRad)) * scale;
+  const reduceMotion = useReducedMotion();
+  const progress = useSharedValue(reduceMotion ? handleFraction : 0);
+  useEffect(() => {
+    progress.value = reduceMotion
+      ? handleFraction
+      : withDelay(120, withTiming(handleFraction, { duration: 1100, easing: Easing.out(Easing.cubic) }));
+  }, [handleFraction, reduceMotion, progress]);
+  // A full-length dash slid back by the unfilled share draws the arc.
+  const arcProps = useAnimatedProps(() => ({
+    strokeDashoffset: RING_CIRCUMFERENCE * (1 - progress.value),
+  }));
+  const markerStyle = useAnimatedStyle(() => {
+    const angle = (progress.value * 360 - 90) * (Math.PI / 180);
+    return {
+      left: (50 + RING_RADIUS * Math.cos(angle)) * scale - 10,
+      top: (50 + RING_RADIUS * Math.sin(angle)) * scale - 10,
+      opacity: progress.value > 0.004 ? 1 : 0,
+    };
+  });
   // The estimated fertile window (5 days before ovulation through the day
   // after) as a soft lavender band on the track.
   const fertileStart = (ovulationDayPivot - 6) / activeCycleLength;
   const fertileLength = (6 / activeCycleLength) * RING_CIRCUMFERENCE;
 
+  // While late the big value is "N days late", so never "PERIOD IN".
+  const label =
+    daysLate > 0 || displayPhase === "period"
+      ? "PERIOD"
+      : displayPhase === "ovulation"
+        ? "OVULATION"
+        : displayDay >= activePeriodLength + 1 && displayDay < ovulationDayPivot - 5
+          ? "FERTILE IN"
+          : "PERIOD IN";
+  const value =
+    daysLate > 0
+      ? `${daysLate} ${daysLate === 1 ? "day" : "days"} late`
+      : displayPhase === "period"
+        ? `Day ${displayDay}`
+        : displayPhase === "ovulation"
+          ? "Today"
+          : displayDay >= activePeriodLength + 1 && displayDay < ovulationDayPivot - 5
+            ? daysLabel(Math.max(1, ovulationDayPivot - 5 - displayDay))
+            : nextPeriodDaysAway <= 0
+              ? "Today"
+              : daysLabel(nextPeriodDaysAway);
+  const sub = isHighFertility
+    ? { text: "High fertility", color: colors.success, bold: true }
+    : nextPeriodDate && displayPhase === "period"
+      ? { text: `Next period ${nextPeriodDate}`, color: colors.mutedText, bold: false }
+      : null;
+
   return (
     <View
       accessible
-      accessibilityLabel={`Cycle day ${displayDay} of ${activeCycleLength}`}
+      accessibilityLabel={`Cycle day ${displayDay} of ${activeCycleLength}. ${label.toLowerCase()} ${value}`}
       style={{ position: "relative", width: RING_SIZE, height: RING_SIZE }}
     >
       <Svg width={RING_SIZE} height={RING_SIZE} viewBox="0 0 100 100">
@@ -94,7 +157,7 @@ export function CycleRing({
             transform="rotate(-90 50 50)"
           />
         ) : null}
-        <Circle
+        <AnimatedCircle
           cx="50"
           cy="50"
           r={RING_RADIUS}
@@ -102,25 +165,24 @@ export function CycleRing({
           stroke={ringColor}
           strokeWidth={RING_STROKE_WIDTH}
           strokeLinecap="round"
-          strokeDasharray={`${handleFraction * RING_CIRCUMFERENCE} ${RING_CIRCUMFERENCE}`}
+          strokeDasharray={`${RING_CIRCUMFERENCE} ${RING_CIRCUMFERENCE}`}
+          animatedProps={arcProps}
           transform="rotate(-90 50 50)"
         />
       </Svg>
 
       {/* Marker for today's position in the cycle */}
-      <View
+      <Animated.View
         pointerEvents="none"
-        style={{
+        style={[{
           position: "absolute",
-          left: handleLeft - 10,
-          top: handleTop - 10,
           width: 20,
           height: 20,
           borderRadius: 10,
           backgroundColor: colors.surface,
           borderWidth: 4,
           borderColor: ringColor,
-        }}
+        }, markerStyle]}
       />
 
       <View
@@ -137,47 +199,34 @@ export function CycleRing({
           gap: 2,
         }}
       >
-        {/* While late the big value is "N days late", so never "PERIOD IN". */}
-        <Text
-          numberOfLines={1}
-          style={{ color: labelColor, fontSize: 12, lineHeight: 16, fontWeight: "700", letterSpacing: 1.2, fontFamily: fonts.body }}
-        >
-          {daysLate > 0 || displayPhase === "period"
-            ? "PERIOD"
-            : displayPhase === "ovulation"
-              ? "OVULATION"
-              : displayDay >= activePeriodLength + 1 && displayDay < ovulationDayPivot - 5
-                ? "FERTILE IN"
-                : "PERIOD IN"}
-        </Text>
-        <Text
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          minimumFontScale={0.75}
-          style={{ color: colors.foreground, fontSize: 40, lineHeight: 46, fontWeight: "800", letterSpacing: -1.2, fontVariant: ["tabular-nums"], fontFamily: fonts.heading }}
-        >
-          {daysLate > 0
-            ? `${daysLate} ${daysLate === 1 ? "day" : "days"} late`
-            : displayPhase === "period"
-            ? `Day ${displayDay}`
-            : displayPhase === "ovulation"
-              ? "Today"
-              : displayDay >= activePeriodLength + 1 && displayDay < ovulationDayPivot - 5
-                ? daysLabel(Math.max(1, ovulationDayPivot - 5 - displayDay))
-                : nextPeriodDaysAway <= 0
-                  ? "Today"
-                  : daysLabel(nextPeriodDaysAway)}
-        </Text>
-        {isHighFertility ? (
-          <Text numberOfLines={1} style={{ color: colors.success, fontSize: 12, lineHeight: 16, fontWeight: "700", fontFamily: fonts.body }}>
-            High fertility
-          </Text>
-        ) : nextPeriodDate && displayPhase === "period" ? (
-          <Text numberOfLines={1} style={{ color: colors.mutedText, fontSize: 12, lineHeight: 16, fontFamily: fonts.body }}>
-            {`Next period ${nextPeriodDate}`}
-          </Text>
-        ) : null}
+        <Roll text={label} height={16} style={{ color: labelColor, fontSize: 12, fontWeight: "700", letterSpacing: 1.2, fontFamily: fonts.body }} />
+        <Roll
+          text={value}
+          height={46}
+          fit
+          style={{ color: colors.foreground, fontSize: 40, fontWeight: "800", letterSpacing: -1.2, fontVariant: ["tabular-nums"], fontFamily: fonts.heading }}
+        />
+        {sub ? <Roll text={sub.text} height={16} style={{ color: sub.color, fontSize: 12, fontWeight: sub.bold ? "700" : "400", fontFamily: fonts.body }} /> : null}
       </View>
+    </View>
+  );
+}
+
+/** One line of the centre text in a fixed-height slot, rolling when `text` changes. */
+function Roll({ text, height, fit, style }: { text: string; height: number; fit?: boolean; style: object }) {
+  return (
+    <View style={{ height, alignSelf: "stretch", overflow: "hidden" }}>
+      <Animated.Text
+        key={text}
+        entering={rollIn}
+        exiting={rollOut}
+        numberOfLines={1}
+        adjustsFontSizeToFit={fit}
+        minimumFontScale={fit ? 0.75 : undefined}
+        style={[{ position: "absolute", left: 0, right: 0, textAlign: "center", lineHeight: height }, style]}
+      >
+        {text}
+      </Animated.Text>
     </View>
   );
 }

@@ -18,6 +18,7 @@ import { ListGroup, ListRow } from "../../../components/ListGroup";
 import { ColumnLabel } from "../../../components/ColumnLabel";
 import { SkeletonBlock, SkeletonCard } from "../../../components/Skeleton";
 import StatCard from "../../../components/StatCard";
+import { StatStrip } from "../../../components/StatStrip";
 import { useTheme } from "../../../components/theme";
 import { getGlow, getHeroGradient, getShadow } from "../../../components/ui-tokens";
 import Avatar from "../../../components/Avatar";
@@ -39,17 +40,16 @@ import { PromoBanners } from "../../../components/PromoBanners";
 import { useContentWidth } from "../../../lib/layout";
 import { useHomeLayout } from "../../../components/home-layout";
 import { STAT_OPTIONS, applyHomeLayout, blockItems, blockTitle, styledShortcuts } from "../../../lib/homeLayout";
-import { LOG_FOCUS } from "../../../lib/logFocus";
 import { useQuickLog } from "../../../hooks/useQuickLog";
 import { HeaderIconButton, SectionHeader } from "../../../components/ScreenHeader";
 import { HomeShortcuts } from "../../../components/HomeShortcuts";
+import { QuickLogButtons } from "../../../components/QuickLogButtons";
 import { EmptyState } from "../../../components/EmptyState";
 import { buildCurrentWeekStrip } from "../../../lib/weekStrip";
 import { dateFromDayKey } from "../../../lib/format";
 import { useTodayKey } from "../../../hooks/useTodayKey";
 import { useSecureScreen } from "../../../lib/screenPrivacy";
 import { Icon } from "../../../components/Icon";
-import { PressableScale } from "../../../components/PressableScale";
 import Animated from "react-native-reanimated";
 import { listEntering } from "../../../components/motion";
 
@@ -341,32 +341,43 @@ export default function Home() {
   const homeSections: Record<HomeSectionKey, React.ReactNode> = {
     statPills: (
       <>
-      {/* STAT PILLS ROW — which stats, in what order, is the person's pick
-          (Profile → Customize Home, lib/homeLayout.ts STAT_OPTIONS). */}
-      <View className="mx-6 mt-3 mb-6 flex-row" style={{ gap: 12 }}>
-        {blockItems(homeLayout, "statPills").map((key, _i, picked) => {
-          const stat = statValues[key];
-          if (!stat) return null;
-          return (
-            <StatCard
-              key={key}
-              // Three across leaves no room beside the icon: stack them instead.
-              variant={picked.length >= 3 || screenWidth < 360 ? "tile-stack" : "tile"}
-              icon={stat.icon}
-              iconColor={stat.color}
-              iconBg={stat.bg}
-              value={stat.value}
-              label={STAT_OPTIONS.find((o) => o.key === key)?.label ?? stat.label}
-              valueColor={colors.foreground}
-              labelColor={colors.mutedText}
-              valueFontFamily={fonts.heading}
-              labelFontFamily={fonts.body}
-              backgroundColor={colors.surface}
-              containerStyle={getShadow(colors, isDark)}
-            />
-          );
-        })}
-      </View>
+      {/* STATS — which stats, in what order, is the person's pick (Profile →
+          Customize Home, lib/homeLayout.ts STAT_OPTIONS). One or two get
+          their own tiles; three (or two on a narrow phone) share one card
+          split into columns, so nothing is squeezed. */}
+      {(() => {
+        const picked = blockItems(homeLayout, "statPills")
+          .map((key) => {
+            const stat = statValues[key];
+            return stat ? { key, ...stat, label: STAT_OPTIONS.find((o) => o.key === key)?.label ?? stat.label } : null;
+          })
+          .filter((s): s is NonNullable<typeof s> => s !== null);
+        if (picked.length === 0) return null;
+        if (picked.length >= 3 || (picked.length === 2 && screenWidth < 360)) {
+          return <StatStrip stats={picked} style={{ marginHorizontal: 24, marginTop: 12, marginBottom: 24 }} />;
+        }
+        return (
+          <View className="mx-6 mt-3 mb-6 flex-row" style={{ gap: 12 }}>
+            {picked.map((stat) => (
+              <StatCard
+                key={stat.key}
+                variant="tile"
+                icon={stat.icon}
+                iconColor={stat.color}
+                iconBg={stat.bg}
+                value={stat.value}
+                label={stat.label}
+                valueColor={colors.foreground}
+                labelColor={colors.mutedText}
+                valueFontFamily={fonts.heading}
+                labelFontFamily={fonts.body}
+                backgroundColor={colors.surface}
+                containerStyle={getShadow(colors, isDark)}
+              />
+            ))}
+          </View>
+        );
+      })()}
       </>
     ),
     weekStrip: (
@@ -503,72 +514,13 @@ export default function Home() {
       {blockTitle(homeLayout, "quickActions") ? (
         <SectionHeader title={blockTitle(homeLayout, "quickActions")!} style={{ marginHorizontal: 24 }} />
       ) : null}
-      {/* Equal columns (1–4), so long labels wrap within their own column. */}
-      <View className="mx-6 mb-7 flex-row justify-center">
-        {blockItems(homeLayout, "quickActions")
-          .map((key) => LOG_FOCUS.find((f) => f.key === key))
-          .filter((f): f is (typeof LOG_FOCUS)[number] => Boolean(f))
-          .map((f, idx) => {
-            const done = f.key === "flow" && periodLoggedToday;
-            return {
-              key: f.key,
-              label: done ? "Period logged" : f.label,
-              icon: done ? "checkmark" : f.icon,
-              primary: idx === 0,
-              count: loggedCount(f.key),
-            };
-          })
-          .map((action) => (
-          <PressableScale
-            key={action.key}
-            accessibilityLabel={action.count ? `${action.label}, ${action.count} logged today` : action.label}
-            accessibilityRole="button"
-            onPress={() => onQuickAction(action.key)}
-            style={{ alignItems: "center", flex: 1, maxWidth: 110, paddingHorizontal: 3 }}
-          >
-            <View
-              style={{
-                width: 60,
-                height: 60,
-                borderRadius: 30,
-                alignItems: "center",
-                justifyContent: "center",
-                backgroundColor: action.primary ? colors.primary : colors.surface,
-                ...(action.primary ? getGlow(colors.primary, isDark) : getShadow(colors, isDark)),
-              }}
-            >
-              <Icon set="ion"
-                name={action.icon as any}
-                size={24}
-                color={action.primary ? colors.buttonText : colors.primary}
-              />
-              {action.count > 0 ? (
-                <View
-                  style={{
-                    position: "absolute",
-                    top: -4,
-                    right: -4,
-                    minWidth: 22,
-                    height: 22,
-                    paddingHorizontal: 6,
-                    borderRadius: 11,
-                    alignItems: "center",
-                    justifyContent: "center",
-                    backgroundColor: colors.primary,
-                    borderWidth: 2,
-                    borderColor: colors.background,
-                  }}
-                >
-                  <Text style={{ color: colors.buttonText, fontSize: 11, fontWeight: "700", fontFamily: fonts.body }}>{action.count}</Text>
-                </View>
-              ) : null}
-            </View>
-            <ColumnLabel lineHeight={18} style={{ fontSize: 13, fontWeight: "600", color: colors.foreground, fontFamily: fonts.body, marginTop: 10 }}>
-              {genZLabel(action.label, genZModeEnabled)}
-            </ColumnLabel>
-          </PressableScale>
-        ))}
-      </View>
+      <QuickLogButtons
+        keys={blockItems(homeLayout, "quickActions")}
+        periodLoggedToday={periodLoggedToday}
+        loggedCount={loggedCount}
+        onPress={onQuickAction}
+        style={{ marginHorizontal: 24, marginBottom: 28 }}
+      />
       </>
     ),
     shortcuts:
@@ -755,7 +707,7 @@ export default function Home() {
               {formatTodayEyebrow(new Date())}
             </Text>
             <Text
-              style={{ fontSize: 21, lineHeight: 27, fontWeight: "800", letterSpacing: -0.5, color: colors.foreground, fontFamily: fonts.heading }}
+              style={{ fontSize: 18, lineHeight: 24, fontWeight: "800", letterSpacing: -0.3, color: colors.foreground, fontFamily: fonts.heading }}
               numberOfLines={1}
               maxFontSizeMultiplier={1.3}
             >

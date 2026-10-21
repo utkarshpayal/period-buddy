@@ -123,12 +123,12 @@ export const DoctorCard = memo(function DoctorCard({
           </Text>
         )}
         <Button
-          label={existing ? "Open chat" : "See times"}
+          label={existing ? "Open chat" : "Available slots"}
           icon={existing ? "chatbubble-outline" : "calendar-outline"}
           size="md"
           onPress={() => (existing ? onOpenChat(existing) : onSeeTimes(doctor))}
           disabled={actionDisabled}
-          accessibilityLabel={existing ? `Chat with ${name}` : fee ? `See open times for ${name}` : `${name} isn't bookable yet`}
+          accessibilityLabel={existing ? `Chat with ${name}` : fee ? `See available slots for ${name}` : `${name} isn't bookable yet`}
         />
       </View>
     </View>

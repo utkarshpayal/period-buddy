@@ -53,7 +53,8 @@ export function DocumentCard({
   /** Hairline above the row (every row but a group's first). */
   divider: boolean;
   onOpen: (doc: MedicalDocument) => void;
-  onMore: (doc: MedicalDocument) => void;
+  /** Rename/delete/share actions; left out for rows that have none (doctors' prescriptions). */
+  onMore?: (doc: MedicalDocument) => void;
 }) {
   const { colors, fonts } = useTheme();
   const meta = DOC_TYPE_META[doc.docType] ?? DOC_TYPE_META.other;
@@ -65,11 +66,11 @@ export function DocumentCard({
   return (
     <PressableFeedback
       onPress={() => onOpen(doc)}
-      onLongPress={() => onMore(doc)}
+      onLongPress={onMore ? () => onMore(doc) : undefined}
       delayLongPress={350}
       accessibilityRole="button"
       accessibilityLabel={`${doc.title}, ${badge}, ${meta.label}, ${formatDateLabel(doc.documentDate)}`}
-      accessibilityHint="Opens the document. Long-press for more actions."
+      accessibilityHint={onMore ? "Opens the document. Long-press for more actions." : "Opens the document."}
       // Rows highlight while held, like a native list.
       style={({ pressed }) => ({
         flexDirection: "row",
@@ -113,6 +114,7 @@ export function DocumentCard({
             </Text>
           ) : null}
         </View>
+        {onMore ? (
         <TouchableOpacity
           onPress={() => onMore(doc)}
           accessibilityRole="button"
@@ -122,6 +124,11 @@ export function DocumentCard({
         >
           <Icon set="ion" name="ellipsis-horizontal" size={18} color={colors.mutedText} />
         </TouchableOpacity>
+        ) : (
+          <View style={{ width: 40, height: 40, alignItems: "center", justifyContent: "center" }}>
+            <Icon set="ion" name="chevron-forward" size={16} color={colors.mutedText} />
+          </View>
+        )}
       </View>
     </PressableFeedback>
   );

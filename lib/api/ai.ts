@@ -226,6 +226,10 @@ export type MedicalDocument = {
   title: string;
   updatedAt: string;
   userId: string;
+  /** "consultation": a Nura doctor's prescription the server saved here; can't be deleted. */
+  source?: "upload" | "consultation";
+  /** The consultation it came from, when `source` is "consultation". */
+  consultationId?: string;
 };
 
 export type DocumentChatMessage = {
@@ -468,6 +472,16 @@ export const screeningApi = {
       method: "POST",
     }),
 
+  /** Past checks, newest first (`GET /api/screening/history`). */
+  getHistory: () => apiRequest<ScreeningHistoryItem[]>("/api/screening/history"),
+};
+
+export type ScreeningHistoryItem = {
+  _id: string;
+  condition: ScreeningCondition;
+  score: number;
+  riskLevel: ScreeningRiskLevel;
+  createdAt: string;
 };
 
 /* ──────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildCalendarModel, dayLogSubtitle, dayStatus, getCycleDay, replaceYearEntries, weekDates } from "../cycleCalendar";
+import { buildCalendarModel, continuesLoggedPeriod, dayLogSubtitle, dayStatus, getCycleDay, replaceYearEntries, weekDates } from "../cycleCalendar";
 import type { Predictions } from "../api";
 import { getDateKey } from "../format";
 
@@ -62,4 +62,40 @@ test("a late period counts on past cycleLength up to today, not as a new period"
 test("replaceYearEntries drops that year's deleted days and keeps other years", () => {
   const current = { "2024-12-31": "a", "2025-01-02": "b", "2025-03-04": "c" };
   assert.deepEqual(replaceYearEntries(current, 2025, { "2025-03-04": "c2" }), { "2024-12-31": "a", "2025-03-04": "c2" });
+});
+
+test("logging a period day shows the rest of the usual period as predicted", () => {
+  // Server still thinks the cycle started on 25 December (today is day 20, no period due).
+  const predictions = { cycleLength: 28, periodLength: 5, currentPeriodStartDateISO: "2024-12-25T00:00:00.000Z" } as Predictions;
+  const today = new Date(2025, 0, 13);
+  const model = buildCalendarModel(predictions, null, today);
+  const todayKey = getDateKey(today);
+  const logs: Record<string, { flow: string; note: string; symptoms: string[] }> = {
+    "2025-01-12": { flow: "medium", note: "", symptoms: [] },
+  };
+  const entryFor = ((key: string) => logs[key]) as never;
+  const none = () => undefined;
+  const at = (day: number) => dayStatus(new Date(2025, 0, day), model, entryFor, none, todayKey);
+  // Started yesterday: today and the next three days (5 in all) are predicted.
+  assert.equal(at(13).isPredictedPeriod, true);
+  assert.equal(at(16).isPredictedPeriod, true);
+  assert.equal(at(17).isPredictedPeriod, false);
+  // The logged day itself is a period day, not a prediction.
+  assert.equal(at(12).isPredictedPeriod, false);
+  assert.equal(at(12).hasFlow, true);
+});
+
+test("continuesLoggedPeriod counts from the start of the run and stops at 'not on my period'", () => {
+  const logs: Record<string, { flow: string }> = {
+    "2025-03-01": { flow: "heavy" },
+    "2025-03-02": { flow: "medium" },
+    "2025-03-03": { flow: "light" },
+  };
+  const entryFor = ((key: string) => logs[key]) as never;
+  // Run started 1 Mar, so with 5 days it covers up to 5 Mar.
+  assert.equal(continuesLoggedPeriod(new Date(2025, 2, 5), 5, entryFor), true);
+  assert.equal(continuesLoggedPeriod(new Date(2025, 2, 6), 5, entryFor), false);
+  logs["2025-03-04"] = { flow: "none" };
+  assert.equal(continuesLoggedPeriod(new Date(2025, 2, 5), 5, entryFor), false);
+  assert.equal(continuesLoggedPeriod(new Date(2025, 2, 20), 5, entryFor), false);
 });

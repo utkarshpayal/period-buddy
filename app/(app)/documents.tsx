@@ -55,6 +55,10 @@ import { generateAndShareHealthReport } from "../../lib/healthReport";
 import { useContentWidth } from "../../lib/layout";
 import { useSecureScreen } from "../../lib/screenPrivacy";
 import { cleanupTempFiles } from "../../lib/tempFiles";
+import { consultationIdOfDoc } from "../../lib/prescriptionDocs";
+import { PrescriptionViewer } from "../../components/PrescriptionViewer";
+import { prescriptionAction } from "../../lib/prescriptionPdf";
+import { computeAge } from "../../lib/chatTopics";
 import { Icon } from "../../components/Icon";
 import { motion } from "../../components/motion";
 
@@ -168,6 +172,10 @@ export default function DocumentsScreen() {
     }
   }, [loadingMoreDocs, hasMoreDocs, docPage, fetchDocumentsPage]);
 
+  // A doctor's prescription (saved into Documents by the server) opens in
+  // the prescription viewer: id of its consultation, and the doctor's name.
+  const [rxViewing, setRxViewing] = useState<{ consultationId: string; doctorName?: string } | null>(null);
+
   useEffect(() => {
     if (locked) return;
     setLoading(true);
@@ -270,6 +278,12 @@ export default function DocumentsScreen() {
   // Links expire after 10 minutes, so each open asks for a fresh one; the
   // list's copy is only a fallback if that request fails.
   const openDocument = useCallback(async (doc: MedicalDocument) => {
+    // A doctor's prescription opens in the prescription viewer, not as a file.
+    const consultationId = consultationIdOfDoc(doc);
+    if (consultationId) {
+      setRxViewing({ consultationId, doctorName: doc.title.match(/^Prescription from (Dr\. .+)$/)?.[1] });
+      return;
+    }
     setPreviewReady(false);
     setPreviewDoc(doc);
     try {
@@ -334,7 +348,22 @@ export default function DocumentsScreen() {
     }
   }
 
-  const actionItems: ActionSheetItem[] = actionDoc
+  // A doctor's prescription: AI and save/print, but never delete (it's the doctor's record).
+  const actionConsultationId = actionDoc ? consultationIdOfDoc(actionDoc) : null;
+  const runPrescriptionAction = (action: "download" | "print", consultationId: string) =>
+    prescriptionAction(action, { consultationId }).catch((err) =>
+      alert(action === "print" ? "Couldn't print" : "Couldn't download", getFriendlyErrorMessage(err)),
+    );
+
+  const actionItems: ActionSheetItem[] = actionDoc && actionConsultationId
+    ? [
+        { key: "view", label: "Open", onPress: () => openDocument(actionDoc) },
+        { key: "ask", label: "Ask about this prescription", onPress: () => askAI(actionDoc) },
+        { key: "summary", label: "Summarize this prescription", onPress: () => openSummarize(actionDoc) },
+        { key: "download", label: Platform.OS === "web" ? "Open printable copy" : "Save as PDF", onPress: () => runPrescriptionAction("download", actionConsultationId) },
+        ...(Platform.OS !== "web" ? [{ key: "print", label: "Print", onPress: () => runPrescriptionAction("print", actionConsultationId) }] : []),
+      ]
+    : actionDoc
     ? [
         { key: "view", label: "Open", onPress: () => openDocument(actionDoc) },
         { key: "ask", label: "Ask about this document", onPress: () => askAI(actionDoc) },
@@ -350,8 +379,11 @@ export default function DocumentsScreen() {
   const [summaryResult, setSummaryResult] = useState<{ documentCount: number; summary: string } | null>(null);
   const [summaryLanguage, setSummaryLanguage] = useState<LanguageCode>("en-IN");
 
-  function openSummarize() {
-    setSummaryRange(lastDaysRange(90));
+  /** The last 90 days, or just the day of `doc` (a prescription's "Summarize"). */
+  function openSummarize(doc?: MedicalDocument) {
+    // The UTC calendar day, which is what the server's date range is built on.
+    const day = doc?.documentDate.slice(0, 10);
+    setSummaryRange(day ? { start: day, end: day } : lastDaysRange(90));
     setSummaryResult(null);
     setSummarizeVisible(true);
   }
@@ -419,7 +451,8 @@ export default function DocumentsScreen() {
         startDate: reportRange.start,
         endDate: reportRange.end,
         language: reportLanguage,
-        userName: user?.firstName,
+        userName: [user?.firstName, user?.lastName].filter(Boolean).join(" ") || undefined,
+        age: computeAge(user?.dateOfBirth),
       });
       setReportVisible(false);
     } catch (error) {
@@ -652,7 +685,13 @@ export default function DocumentsScreen() {
                   <View style={{ borderRadius: 22, borderCurve: "continuous", backgroundColor: colors.surface, ...getShadow(colors, isDark) }}>
                     <View style={{ borderRadius: 22, borderCurve: "continuous", overflow: "hidden" }}>
                       {group.docs.map((doc, i) => (
-                        <DocumentCard key={doc._id} doc={doc} divider={i > 0} onOpen={openDocument} onMore={setActionDoc} />
+                        <DocumentCard
+                          key={doc._id}
+                          doc={doc}
+                          divider={i > 0}
+                          onOpen={openDocument}
+                          onMore={setActionDoc}
+                        />
                       ))}
                     </View>
                   </View>
@@ -673,6 +712,13 @@ export default function DocumentsScreen() {
         </ScrollView>
       </SafeAreaView>
 
+      <PrescriptionViewer
+        consultationId={rxViewing?.consultationId ?? ""}
+        doctorName={rxViewing?.doctorName}
+        visible={rxViewing !== null}
+        onClose={() => setRxViewing(null)}
+      />
+
       <UploadSheet visible={uploadVisible} onClose={() => setUploadVisible(false)} onUpload={handleUpload} />
 
       <DocumentPreview
@@ -689,7 +735,7 @@ export default function DocumentsScreen() {
       <ActionSheet
         visible={toolsOpen}
         items={[
-          { key: "summary", label: "Summarize my reports", description: "A simple recap of any date range", icon: "book-open", onPress: openSummarize },
+          { key: "summary", label: "Summarize my reports", description: "A simple recap of any date range", icon: "book-open", onPress: () => openSummarize() },
           { key: "report", label: "Report for my doctor", description: "Your cycle and symptom logs as a PDF", icon: "file-text", onPress: openReportSheet },
         ]}
         onClose={() => setToolsOpen(false)}
