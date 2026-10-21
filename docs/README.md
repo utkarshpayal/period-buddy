@@ -9,6 +9,7 @@ there.
 | Doc | For |
 |---|---|
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | **The system-wide picture**: all five repos, the API, database, AWS, roles, deploys. The only copy; other repos link here. |
+| [WORKFLOW.md](./WORKFLOW.md) | **How changes move** in every repo: environments, branches, PRs, checks, secrets, releases, cross-repo contracts, and the rules for Claude Code. |
 | [SETUP.md](./SETUP.md) | Run the app and backend locally; every environment variable. |
 | [API_REFERENCE.md](./API_REFERENCE.md) | Every backend endpoint the app calls, grouped by `lib/api/` object. |
 | [security-implementation.md](./security-implementation.md) | How the app side of security and privacy works (keystore, screen privacy, sessions, AI consent, exports). |

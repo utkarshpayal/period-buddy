@@ -118,7 +118,9 @@ eas.json                 EAS build profiles
 
 ## Contributing
 
-1. Branch from `main`, open a PR. CI runs `npm ci` + `npm run lint`.
+Full flow: [docs/WORKFLOW.md](docs/WORKFLOW.md).
+
+1. Branch from `staging`, open a PR to `staging`. Releases are `staging` → `main` PRs. CI runs `npm ci` + `npm run lint`; run `npm test` too.
 2. Run `npx tsc --noEmit` before pushing.
 3. New screen? Add a file under `app/`; the route follows the path.
 4. Never commit `.env*`, `credentials.json`, `credentials/` or `*.jks` (they're gitignored).
