@@ -19,6 +19,7 @@ import { BottomSheet } from "../BottomSheet";
 import { AppModalHost } from "../modals/AppModalHost";
 import { useTheme } from "../theme";
 import { Icon } from "../Icon";
+import { SendButton } from "../SendButton";
 
 const PAGE_SIZE = 20;
 
@@ -365,17 +366,7 @@ export function CommentsSheet({
             </Text>
           ) : null}
         </View>
-        <TouchableOpacity
-          hitSlop={4}
-          accessibilityRole="button"
-          accessibilityLabel="Post comment"
-          disabled={!text.trim() || sending}
-          onPress={send}
-          className="h-10 w-10 items-center justify-center rounded-full"
-          style={{ backgroundColor: text.trim() ? colors.primary : colors.surfaceSoft }}
-        >
-          <Icon set="ion" name="arrow-up" size={20} color={text.trim() ? colors.buttonText : colors.mutedText} />
-        </TouchableOpacity>
+        <SendButton onPress={send} disabled={!text.trim()} loading={sending} size={40} accessibilityLabel="Post comment" />
       </View>
     </BottomSheet>
   );

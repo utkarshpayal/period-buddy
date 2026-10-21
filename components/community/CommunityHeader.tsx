@@ -5,6 +5,7 @@ import { useTheme } from "../theme";
 import { getShadow } from "../ui-tokens";
 import { COMMUNITY_CATEGORIES } from "./types";
 import { Icon } from "../Icon";
+import { Chip } from "../Chip";
 
 /** Title row, the optional search field and the tag/category filter chips. */
 export function CommunityHeader({
@@ -91,49 +92,12 @@ export function CommunityHeader({
         className="mt-4"
       >
         {activeTag && (
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={onClearTag}
-            accessibilityRole="button"
-            accessibilityLabel={`Clear tag filter ${activeTag}`}
-            className="rounded-full pl-4 pr-3 py-2 flex-row items-center gap-1"
-            style={{ backgroundColor: colors.primary }}
-          >
-            <Text
-              className="text-xs font-bold"
-              style={{ color: colors.buttonText, fontFamily: fonts.body }}
-            >
-              #{activeTag}
-            </Text>
-            <Icon set="ion" name="close" size={14} color={colors.buttonText} />
-          </TouchableOpacity>
+          <Chip label={`#${activeTag}`} selected trailingIcon="close" onPress={onClearTag} accessibilityLabel={`Clear tag filter ${activeTag}`} />
         )}
         {["All", ...COMMUNITY_CATEGORIES].map((chip) => {
           const isActive = chip === "All" ? activeCategory === null : activeCategory === chip;
           return (
-            <TouchableOpacity
-              key={chip}
-              activeOpacity={0.85}
-              onPress={() => onCategoryChange(chip === "All" ? null : chip)}
-              accessibilityRole="button"
-              accessibilityState={{ selected: isActive }}
-              className="rounded-full px-4 py-2"
-              style={{
-                backgroundColor: isActive ? colors.primary : colors.surface,
-                borderWidth: isActive ? 0 : 1,
-                borderColor: colors.border,
-              }}
-            >
-              <Text
-                className="text-xs font-bold"
-                style={{
-                  color: isActive ? colors.buttonText : colors.foreground,
-                  fontFamily: fonts.body,
-                }}
-              >
-                {chip}
-              </Text>
-            </TouchableOpacity>
+            <Chip key={chip} label={chip} selected={isActive} onPress={() => onCategoryChange(chip === "All" ? null : chip)} />
           );
         })}
       </ScrollView>

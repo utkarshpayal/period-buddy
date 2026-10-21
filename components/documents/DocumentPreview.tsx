@@ -265,7 +265,7 @@ function PreviewAction({
       style={{
         flex: primary ? 1.6 : 1,
         height: 48,
-        borderRadius: 14,
+        borderRadius: 14, borderCurve: "continuous",
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "center",

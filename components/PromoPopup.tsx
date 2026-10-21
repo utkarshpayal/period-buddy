@@ -11,6 +11,7 @@ import { PromoBanner, bannersFor } from "../lib/appConfig";
 import { runTapAction } from "../lib/tapAction";
 import { Icon } from "./Icon";
 import { motion } from "./motion";
+import { Button } from "./Button";
 
 // A beat after Home settles, so it never lands on top of the first paint
 // or a permission prompt.
@@ -69,7 +70,7 @@ export function PromoPopup() {
       <Pressable onPress={close} style={{ flex: 1, backgroundColor: colors.overlay, alignItems: "center", justifyContent: "center", padding: 28 }}>
         <Pressable
           onPress={() => undefined}
-          style={{ width: "100%", maxWidth: 380, backgroundColor: bg, borderRadius: 26, overflow: "hidden" }}
+          style={{ width: "100%", maxWidth: 380, backgroundColor: bg, borderRadius: 28, borderCurve: "continuous", overflow: "hidden" }}
           accessibilityViewIsModal
         >
           {banner.imageUrl ? (
@@ -84,14 +85,8 @@ export function PromoPopup() {
             </View>
           ) : null}
           <View style={{ flexDirection: "row", gap: 10, paddingHorizontal: 22, paddingBottom: 20, paddingTop: banner.layout === "image" ? 16 : 0 }}>
-            <TouchableOpacity onPress={close} activeOpacity={0.8} style={{ flex: 1, borderRadius: 999, paddingVertical: 12, alignItems: "center", borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface }}>
-              <Text style={{ color: colors.foreground, fontWeight: "800", fontFamily: fonts.body }}>{tappable ? "Not now" : "Close"}</Text>
-            </TouchableOpacity>
-            {tappable ? (
-              <TouchableOpacity onPress={onPress} activeOpacity={0.85} style={{ flex: 1.4, borderRadius: 999, paddingVertical: 12, alignItems: "center", backgroundColor: colors.button }}>
-                <Text style={{ color: colors.buttonText, fontWeight: "800", fontFamily: fonts.body }}>{banner.ctaLabel ?? "Open"}</Text>
-              </TouchableOpacity>
-            ) : null}
+            <Button label={tappable ? "Not now" : "Close"} variant="neutral" size="md" onPress={close} style={{ flex: 1 }} />
+            {tappable ? <Button label={banner.ctaLabel ?? "Open"} size="md" onPress={onPress} style={{ flex: 1.4 }} /> : null}
           </View>
           <TouchableOpacity
             onPress={close}

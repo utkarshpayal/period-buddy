@@ -108,49 +108,53 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       colors: {
         ...(isDark
         ? {
-            // Buddy dark — warm plum-black with soft rose, lavender & mint accents.
-            background: "#221A20",
-            surface: "#2E2530",
-            surfaceSoft: "#3A2C34",
-            surfaceStrong: "#4A2E3A",
-            primary: "#F28FB0",
-            primaryDark: "#E8618F",
-            primaryLight: "rgba(242, 143, 176, 0.18)",
-            secondary: "#C7B8E8",         // lavender
-            secondaryLight: "rgba(199, 184, 232, 0.14)",
-            accent: "#8FCDBB",            // mint
-            accentLight: "rgba(143, 205, 187, 0.14)",
-            // Dark-mode accent already clears ~8:1 on both surface and
-            // background as text, so no separate darkened variant is needed.
-            accentText: "#8FCDBB",
-            foreground: "#F3E8ED",
-            border: "#3D2E36",
-            button: "#F28FB0",
-            buttonText: "#221A20",
-            text: "#F3E8ED",
-            mutedText: "#B39AA6",
-            input: "#2E2530",
-            success: "#8FD1A8",
-            successLight: "rgba(143, 209, 168, 0.16)",
-            warning: "#F0C377",
-            warningLight: "rgba(240, 195, 119, 0.14)",
-            danger: "#E88098",
-            dangerLight: "rgba(232, 128, 152, 0.16)",
-            info: "#C7B8E8",
-            infoLight: "rgba(199, 184, 232, 0.16)",
-            rose: "#F28FB0",
-            roseLight: "rgba(242, 143, 176, 0.16)",
-            lavender: "#C7B8E8",
-            lavenderLight: "rgba(199, 184, 232, 0.16)",
-            mint: "#8FCDBB",
-            mintLight: "rgba(143, 205, 187, 0.16)",
-            sky: "#8FB3E0",
-            skyLight: "rgba(143, 179, 224, 0.16)",
-            gold: "#E0BE6F",
-            goldLight: "rgba(224, 190, 111, 0.18)",
-            shadow: "rgba(0, 0, 0, 0.5)",
-            overlay: "rgba(34, 26, 32, 0.72)",
-            track: "#4A2E3A",
+            // Plum night — dark doesn't mean black: layered shades of one deep
+            // aubergine, each step clearly lighter (page → card → raised →
+            // borders), so every surface and edge is easy to see. Bright but
+            // not pure-white text, and clear accents that stay soft (no neon).
+            // Every text token clears ≥5.4:1 on surfaceStrong, ≥4.8:1 on its tint.
+            background: "#1B1424",
+            surface: "#2A2136",
+            surfaceSoft: "#322840",
+            surfaceStrong: "#3D3149",
+            primary: "#F48FB5",
+            primaryDark: "#F9A9C7",
+            primaryLight: "rgba(244, 143, 181, 0.18)",
+            secondary: "#C3B3F5",         // lavender
+            secondaryLight: "rgba(195, 179, 245, 0.16)",
+            accent: "#8FD9C4",            // mint
+            accentLight: "rgba(143, 217, 196, 0.16)",
+            // Dark-mode accent already clears ~9:1 on surface as text, so no
+            // separate darkened variant is needed.
+            accentText: "#8FD9C4",
+            foreground: "#F5EFF8",
+            border: "#4A3D58",
+            button: "#F48FB5",
+            buttonText: "#2A1020",
+            text: "#F5EFF8",
+            mutedText: "#C2B5CC",
+            input: "#30263D",
+            success: "#8ED6A8",
+            successLight: "rgba(142, 214, 168, 0.17)",
+            warning: "#F2C87E",
+            warningLight: "rgba(242, 200, 126, 0.16)",
+            danger: "#F48C9F",
+            dangerLight: "rgba(244, 140, 159, 0.17)",
+            info: "#B6A6F0",
+            infoLight: "rgba(182, 166, 240, 0.17)",
+            rose: "#F48FB5",
+            roseLight: "rgba(244, 143, 181, 0.18)",
+            lavender: "#C3B3F5",
+            lavenderLight: "rgba(195, 179, 245, 0.17)",
+            mint: "#8FD9C4",
+            mintLight: "rgba(143, 217, 196, 0.17)",
+            sky: "#92BDF0",
+            skyLight: "rgba(146, 189, 240, 0.17)",
+            gold: "#E9C97A",
+            goldLight: "rgba(233, 201, 122, 0.18)",
+            shadow: "rgba(8, 4, 14, 0.6)",
+            overlay: "rgba(12, 8, 18, 0.7)",
+            track: "#3D3149",
           }
         : {
             // Buddy light — soft blush with lavender & mint accents (the
@@ -277,10 +281,9 @@ export function ThemeToggle() {
       accessibilityRole="button"
       activeOpacity={0.9}
       onPress={toggleTheme}
-      className="flex-row items-center relative rounded-full p-1 border"
+      className="flex-row items-center relative rounded-full p-1"
       style={{
-        backgroundColor: colors.surface,
-        borderColor: colors.border,
+        backgroundColor: isDark ? colors.surface : colors.track,
         width: 74,
         height: 38,
       }}
@@ -288,10 +291,14 @@ export function ThemeToggle() {
       <View
         className="absolute top-1 bottom-1 rounded-full"
         style={{
-          backgroundColor: colors.primary,
-          left: isDark ? 38 : 6,
-          width: 28,
-          height: 28,
+          // Raised thumb, like components/SegmentedControl.tsx.
+          backgroundColor: isDark ? colors.surfaceStrong : colors.surface,
+          boxShadow: isDark
+            ? "0 0 0 1px rgba(255, 255, 255, 0.06), 0 2px 6px rgba(0, 0, 0, 0.4)"
+            : "0 0 0 1px rgba(60, 20, 40, 0.04), 0 2px 6px rgba(60, 20, 40, 0.12)",
+          left: isDark ? 40 : 4,
+          width: 30,
+          height: 30,
         }}
       />
 
@@ -299,7 +306,7 @@ export function ThemeToggle() {
         <Icon set="ion"
           name="sunny"
           size={16}
-          color={!isDark ? colors.buttonText : colors.mutedText}
+          color={!isDark ? colors.primary : colors.mutedText}
         />
       </View>
 
@@ -307,7 +314,7 @@ export function ThemeToggle() {
         <Icon set="ion"
           name="moon"
           size={16}
-          color={isDark ? colors.buttonText : colors.mutedText}
+          color={isDark ? colors.primary : colors.mutedText}
         />
       </View>
     </TouchableOpacity>

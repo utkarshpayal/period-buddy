@@ -173,7 +173,7 @@ export default function Habits() {
                 colors={heroGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
-                style={{ borderRadius: 22, padding: 18 }}
+                style={{ borderRadius: 22, borderCurve: "continuous", padding: 18 }}
                 className="flex-row items-center justify-between"
               >
                 <View className="flex-1 shrink pr-3">

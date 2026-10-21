@@ -56,7 +56,7 @@ export function TabBarItem({
       <Animated.View style={iconWrapStyle}>
         <View
           style={{
-            borderRadius: 16,
+            borderRadius: 16, borderCurve: "continuous",
             paddingHorizontal: 18,
             paddingVertical: 6,
             alignItems: "center",

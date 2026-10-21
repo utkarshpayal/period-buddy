@@ -15,6 +15,7 @@ import { dateFromDayKey } from "../../lib/format";
 import { useSecureScreen } from "../../lib/screenPrivacy";
 import { Icon } from "../../components/Icon";
 import { motion } from "../../components/motion";
+import { Button } from "../../components/Button";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -186,14 +187,7 @@ export default function Predictions() {
             <Text style={{ marginTop: 6, fontSize: 14, lineHeight: 20, textAlign: "center", color: colors.mutedText, fontFamily: fonts.body }}>
               {needsSetup ? "Add when your last period started and we'll predict the next one." : "Check your connection and try again."}
             </Text>
-            <TouchableOpacity
-              onPress={() => (needsSetup ? router.push("/(app)/(dashboard)/tracker") : load())}
-              activeOpacity={0.85}
-              accessibilityRole="button"
-              style={{ marginTop: 20, paddingHorizontal: 24, height: 48, borderRadius: 16, justifyContent: "center", backgroundColor: colors.primary }}
-            >
-              <Text style={{ fontSize: 15, fontWeight: "700", color: colors.buttonText, fontFamily: fonts.body }}>{needsSetup ? "Go to tracker" : "Try again"}</Text>
-            </TouchableOpacity>
+            <Button label={needsSetup ? "Go to tracker" : "Try again"} size="md" onPress={() => (needsSetup ? router.push("/(app)/(dashboard)/tracker") : load())} style={{ marginTop: 20 }} />
           </View>
         ) : data && view ? (
           <ScrollView
@@ -210,7 +204,7 @@ export default function Predictions() {
                   gap: 12,
                   padding: 16,
                   marginBottom: 16,
-                  borderRadius: 20,
+                  borderRadius: 20, borderCurve: "continuous",
                   backgroundColor: colors.warningLight,
                 }}
               >
@@ -248,15 +242,12 @@ export default function Predictions() {
                       ? "If there's any chance you could be pregnant, take a home pregnancy test now. It's most reliable from the day your period was due. If it's negative and your period still doesn't come, test again in a few days or see a doctor."
                       : "A few days late is common. Stress, illness, travel or a change in routine can delay ovulation. If there's any chance you could be pregnant, a home test is reliable from the day your period was due."}
                 </Text>
-                <TouchableOpacity
-                  hitSlop={4}
+                <Button
+                  label="It started: log period"
+                  size="sm"
                   onPress={() => router.push({ pathname: "/(app)/(dashboard)/tracker", params: { log: "today", focus: "flow" } })}
-                  activeOpacity={0.85}
-                  accessibilityRole="button"
-                  style={{ marginTop: 14, alignSelf: "flex-start", paddingHorizontal: 16, height: 40, borderRadius: 14, justifyContent: "center", backgroundColor: colors.primary }}
-                >
-                  <Text style={{ fontSize: 14, fontWeight: "700", color: colors.buttonText, fontFamily: fonts.body }}>It started: log period</Text>
-                </TouchableOpacity>
+                  style={{ marginTop: 14, alignSelf: "flex-start" }}
+                />
               </Animated.View>
             ) : null}
 
@@ -520,7 +511,7 @@ export default function Predictions() {
                   { label: "Usual cycle", value: `${view.cycleLength} days`, icon: "repeat" as const },
                   { label: "Usual period", value: `${view.periodLength} days`, icon: "droplet" as const },
                 ].map((s) => (
-                  <View key={s.label} style={{ flex: 1, padding: 14, borderRadius: 16, backgroundColor: colors.surfaceSoft }}>
+                  <View key={s.label} style={{ flex: 1, padding: 14, borderRadius: 16, borderCurve: "continuous", backgroundColor: colors.surfaceSoft }}>
                     <Icon set="feather" name={s.icon} size={15} color={colors.mutedText} />
                     <Text style={{ marginTop: 8, fontSize: 18, fontWeight: "700", color: colors.foreground, fontFamily: fonts.monoSemiBold ?? fonts.mono }}>{s.value}</Text>
                     <Text style={{ marginTop: 1, fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}>{s.label}</Text>

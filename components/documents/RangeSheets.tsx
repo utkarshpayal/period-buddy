@@ -167,7 +167,7 @@ export function SummarizeSheet({
             onPress={onReset}
             activeOpacity={0.8}
             accessibilityRole="button"
-            style={{ height: 50, borderRadius: 14, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border }}
+            style={{ height: 50, borderRadius: 14, borderCurve: "continuous", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border }}
           >
             <Text style={{ fontSize: 15, fontWeight: "600", color: colors.foreground, fontFamily: fonts.body }}>Change dates</Text>
           </TouchableOpacity>

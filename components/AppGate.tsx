@@ -14,6 +14,7 @@ import { gateState, type UpdatePrompt } from "../lib/appConfig";
 import { openStoreLink } from "../lib/notifications";
 import { hideUpdatePreview, useUpdatePreview } from "../lib/updatePreview";
 import { Icon } from "./Icon";
+import { Button } from "./Button";
 
 // Holds the last closed prompt's key: its `promptId`, else the
 // `latestVersion` (the only thing builds before promptId stored here).
@@ -98,11 +99,9 @@ function AppIconBadge({ icon, tint }: { icon: keyof typeof Ionicons.glyphMap; ti
         style={{
           width: 80,
           height: 80,
-          borderRadius: 24,
+          borderRadius: 24, borderCurve: "continuous",
           overflow: "hidden",
           backgroundColor: colors.surface,
-          borderWidth: 1,
-          borderColor: colors.border,
           ...getShadow(colors, isDark),
         }}
       >
@@ -137,7 +136,7 @@ function WhatsNew({ highlights }: { highlights: string[] }) {
       style={{
         alignSelf: "stretch",
         marginTop: 18,
-        borderRadius: 18,
+        borderRadius: 18, borderCurve: "continuous",
         backgroundColor: colors.surfaceSoft,
         borderWidth: 1,
         borderColor: colors.border,
@@ -172,32 +171,8 @@ function WhatsNew({ highlights }: { highlights: string[] }) {
 }
 
 function PrimaryButton({ label, icon, onPress, disabled }: { label: string; icon?: keyof typeof Ionicons.glyphMap; onPress: () => void; disabled?: boolean }) {
-  const { colors, fonts } = useTheme();
   return (
-    <TouchableOpacity
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      disabled={disabled}
-      onPress={onPress}
-      activeOpacity={0.85}
-      style={{
-        alignSelf: "stretch",
-        minHeight: 52,
-        borderRadius: 999,
-        backgroundColor: colors.button,
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 8,
-        paddingHorizontal: 24,
-        opacity: disabled ? 0.6 : 1,
-      }}
-    >
-      {icon ? <Icon set="ion" name={icon} size={18} color={colors.buttonText} /> : null}
-      <Text numberOfLines={1} maxFontSizeMultiplier={1.4} style={{ color: colors.buttonText, fontSize: 15.5, fontWeight: "800", fontFamily: fonts.body }}>
-        {label}
-      </Text>
-    </TouchableOpacity>
+    <Button label={label} icon={icon} onPress={onPress} disabled={disabled} fullWidth />
   );
 }
 

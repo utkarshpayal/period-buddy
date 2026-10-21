@@ -6,7 +6,6 @@ import {
   StatusBar,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -20,6 +19,8 @@ import { partnerDisplayName } from "../../../lib/partnerChat";
 import { useSecureScreen } from "../../../lib/screenPrivacy";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { Icon } from "../../../components/Icon";
+import { Button } from "../../../components/Button";
+import { SendButton } from "../../../components/SendButton";
 
 export default function PartnerViewChat() {
   useSecureScreen("partner-chat");
@@ -124,16 +125,7 @@ export default function PartnerViewChat() {
                   >
                     {getFriendlyErrorMessage(loadError)}
                   </Text>
-                  <TouchableOpacity
-                    onPress={loadMessages}
-                    accessibilityRole="button"
-                    className="mt-4 px-5 py-2.5 rounded-full"
-                    style={{ backgroundColor: colors.primary }}
-                  >
-                    <Text className="text-xs font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-                      Try again
-                    </Text>
-                  </TouchableOpacity>
+                  <Button label="Try again" size="sm" onPress={loadMessages} style={{ marginTop: 16 }} />
                 </View>
               ) : chatMessages.length === 0 ? (
                 <View className="flex-1 items-center justify-center px-8">
@@ -205,17 +197,7 @@ export default function PartnerViewChat() {
                     fontFamily: fonts.body,
                   }}
                 />
-                <TouchableOpacity
-                  hitSlop={6}
-                  disabled={!typedMessage.trim()}
-                  onPress={handleSendMessage}
-                  accessibilityRole="button"
-                  accessibilityLabel="Send message"
-                  className="w-9 h-9 rounded-full items-center justify-center"
-                  style={{ backgroundColor: typedMessage.trim() ? colors.primary : colors.border }}
-                >
-                  <Icon set="feather" name="arrow-up" size={16} color={typedMessage.trim() ? colors.buttonText : colors.mutedText} />
-                </TouchableOpacity>
+                <SendButton onPress={handleSendMessage} disabled={!typedMessage.trim()} size={36} accessibilityLabel="Send message" />
               </View>
             </>
           )}

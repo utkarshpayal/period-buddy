@@ -1,6 +1,9 @@
 import { Feather } from "@expo/vector-icons";
-import React from "react";
-import { Modal, Pressable, Text, View } from "react-native";
+import React, { useRef } from "react";
+import { StyleSheet, Text, View } from "react-native";
+import { BottomSheet } from "./BottomSheet";
+import { Button } from "./Button";
+import { getShadow } from "./ui-tokens";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import PressableFeedback from "./PressableFeedback";
 import { useTheme } from "./theme";
@@ -35,122 +38,99 @@ export function ActionSheet({
   items: ActionSheetItem[];
   onClose: () => void;
 }) {
-  const { colors, fonts } = useTheme();
+  const { colors, fonts, isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  // The tapped action runs once the sheet has slid away (onDismissed), so it
+  // may open a dialog: iOS won't present one over a closing Modal.
+  const pending = useRef<(() => void) | null>(null);
 
   const run = (item: ActionSheetItem) => {
+    pending.current = item.onPress;
     onClose();
-    // Let the sheet finish closing first: iOS won't present a dialog over a closing Modal.
-    setTimeout(item.onPress, 280);
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
-      <Pressable
-        onPress={onClose}
-        accessibilityRole="button"
-        accessibilityLabel="Close menu"
-        style={{ flex: 1, backgroundColor: "rgba(15, 10, 20, 0.45)", justifyContent: "flex-end" }}
-      >
-        <Pressable
-          // Taps inside the sheet don't close it.
-          onPress={() => undefined}
-          accessibilityViewIsModal
-          style={{
-            backgroundColor: colors.background,
-            borderTopLeftRadius: 28,
-            borderTopRightRadius: 28,
-            paddingTop: 10,
-            paddingHorizontal: 16,
-            paddingBottom: Math.max(insets.bottom, 12) + 8,
-            width: "100%",
-            maxWidth: 640,
-            alignSelf: "center",
-          }}
-        >
-          <View style={{ alignSelf: "center", width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, marginBottom: 14 }} />
+    <BottomSheet
+      visible={visible}
+      onClose={onClose}
+      backdropLabel="Close menu"
+      onDismissed={() => {
+        const next = pending.current;
+        pending.current = null;
+        next?.();
+      }}
+      style={{ paddingHorizontal: 16, paddingBottom: Math.max(insets.bottom, 12) + 8, width: "100%", maxWidth: 640, alignSelf: "center" }}
+    >
+      {(title || subtitle) && (
+        <View style={{ paddingHorizontal: 8, marginTop: 4, marginBottom: 14 }}>
+          {title ? (
+            <Text numberOfLines={1} accessibilityRole="header" style={{ fontSize: 17, fontWeight: "800", letterSpacing: -0.3, color: colors.foreground, fontFamily: fonts.heading }}>
+              {title}
+            </Text>
+          ) : null}
+          {subtitle ? (
+            <Text numberOfLines={1} style={{ fontSize: 13, marginTop: 2, color: colors.mutedText, fontFamily: fonts.body }}>
+              {subtitle}
+            </Text>
+          ) : null}
+        </View>
+      )}
 
-          {(title || subtitle) && (
-            <View style={{ paddingHorizontal: 8, marginBottom: 12 }}>
-              {title ? (
-                <Text numberOfLines={1} accessibilityRole="header" style={{ fontSize: 16, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>
-                  {title}
-                </Text>
-              ) : null}
-              {subtitle ? (
-                <Text numberOfLines={1} style={{ fontSize: 13, marginTop: 2, color: colors.mutedText, fontFamily: fonts.body }}>
-                  {subtitle}
-                </Text>
-              ) : null}
-            </View>
-          )}
-
-          <View style={{ borderRadius: 20, overflow: "hidden", backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}>
-            {items.map((item, i) => {
-              const tint = item.destructive ? colors.danger : colors.foreground;
-              return (
-                <PressableFeedback
-                  key={item.key}
-                  onPress={() => run(item)}
-                  accessibilityRole="button"
-                  accessibilityLabel={item.description ? `${item.label}. ${item.description}` : item.label}
-                  style={({ pressed }) => ({
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 14,
-                    paddingHorizontal: 16,
-                    paddingVertical: 14,
-                    minHeight: 60,
-                    backgroundColor: pressed ? colors.surfaceSoft : colors.surface,
-                    borderTopWidth: i === 0 ? 0 : 1,
-                    borderTopColor: colors.border,
-                  })}
-                >
-                  {item.icon ? (
+      <View style={{ borderRadius: 24, borderCurve: "continuous", backgroundColor: colors.surface, ...getShadow(colors, isDark) }}>
+        <View style={{ borderRadius: 24, borderCurve: "continuous", overflow: "hidden" }}>
+          {items.map((item, i) => {
+            const tint = item.destructive ? colors.danger : colors.foreground;
+            return (
+              <PressableFeedback
+                key={item.key}
+                onPress={() => run(item)}
+                accessibilityRole="button"
+                accessibilityLabel={item.description ? `${item.label}. ${item.description}` : item.label}
+                style={({ pressed }) => ({
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 14,
+                  paddingHorizontal: 16,
+                  paddingVertical: 14,
+                  minHeight: 60,
+                  backgroundColor: pressed ? colors.surfaceSoft : colors.surface,
+                })}
+              >
+                {i > 0 ? (
+                  <View
+                    pointerEvents="none"
+                    style={{ position: "absolute", top: 0, right: 0, left: item.icon ? 68 : 16, height: StyleSheet.hairlineWidth, backgroundColor: colors.border }}
+                  />
+                ) : null}
+                {item.icon ? (
                   <View
                     style={{
-                      width: 38,
-                      height: 38,
-                      borderRadius: 19,
+                      width: 40,
+                      height: 40,
+                      borderRadius: 13,
+                      borderCurve: "continuous",
                       alignItems: "center",
                       justifyContent: "center",
                       backgroundColor: item.destructive ? colors.dangerLight : colors.primaryLight,
                     }}
                   >
-                    <Icon set="feather" name={item.icon} size={17} color={item.destructive ? colors.danger : colors.primary} />
+                    <Icon set="feather" name={item.icon} size={18} color={item.destructive ? colors.danger : colors.primaryDark} />
                   </View>
+                ) : null}
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 15, fontWeight: "700", letterSpacing: -0.15, color: tint, fontFamily: fonts.body }}>{item.label}</Text>
+                  {item.description ? (
+                    <Text style={{ fontSize: 13, marginTop: 1, color: colors.mutedText, fontFamily: fonts.body }}>{item.description}</Text>
                   ) : null}
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 15, fontWeight: "700", color: tint, fontFamily: fonts.body }}>{item.label}</Text>
-                    {item.description ? (
-                      <Text style={{ fontSize: 13, marginTop: 1, color: colors.mutedText, fontFamily: fonts.body }}>{item.description}</Text>
-                    ) : null}
-                  </View>
-                  {!item.destructive && item.icon && <Icon set="feather" name="chevron-right" size={18} color={colors.mutedText} />}
-                </PressableFeedback>
-              );
-            })}
-          </View>
+                </View>
+                {!item.destructive && item.icon && <Icon set="feather" name="chevron-right" size={17} color={colors.mutedText} style={{ opacity: 0.7 }} />}
+              </PressableFeedback>
+            );
+          })}
+        </View>
+      </View>
 
-          <PressableFeedback
-            onPress={onClose}
-            accessibilityRole="button"
-            accessibilityLabel="Cancel"
-            style={({ pressed }) => ({
-              marginTop: 10,
-              height: 52,
-              borderRadius: 18,
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: pressed ? colors.surfaceSoft : colors.surface,
-              borderWidth: 1,
-              borderColor: colors.border,
-            })}
-          >
-            <Text style={{ fontSize: 15, fontWeight: "800", color: colors.foreground, fontFamily: fonts.body }}>Cancel</Text>
-          </PressableFeedback>
-        </Pressable>
-      </Pressable>
-    </Modal>
+      <Button label="Cancel" variant="secondary" size="md" fullWidth onPress={onClose} style={{ marginTop: 12 }} />
+    </BottomSheet>
   );
 }

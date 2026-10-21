@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   ScrollView,
   Text,
   TextInput,
@@ -16,6 +15,7 @@ import { AppModalHost } from "../modals/AppModalHost";
 import { useTheme } from "../theme";
 import { StatePicker } from "./StatePicker";
 import { Icon } from "../Icon";
+import { Button } from "../Button";
 
 export type EligibilityAnswers = { age?: number; isPregnant?: boolean; state?: string };
 
@@ -111,7 +111,7 @@ export function EligibilityCheckerSheet({
           maxFontSizeMultiplier={1.4}
           style={{
             height: 48,
-            borderRadius: 16,
+            borderRadius: 16, borderCurve: "continuous",
             borderWidth: 1,
             borderColor: colors.border,
             paddingHorizontal: 14,
@@ -144,7 +144,7 @@ export function EligibilityCheckerSheet({
                 className="flex-1 items-center justify-center"
                 style={{
                   height: 48,
-                  borderRadius: 16,
+                  borderRadius: 16, borderCurve: "continuous",
                   borderWidth: 1,
                   borderColor: active ? colors.primary : colors.border,
                   backgroundColor: active ? colors.primary : colors.surface,
@@ -167,27 +167,7 @@ export function EligibilityCheckerSheet({
         </Text>
         <StatePicker value={stateInput} onChange={setStateInput} open={statePickerOpen} onOpenChange={setStatePickerOpen} />
 
-        <TouchableOpacity
-          activeOpacity={0.85}
-          onPress={submit}
-          disabled={checking}
-          accessibilityRole="button"
-          accessibilityLabel="See my result"
-          accessibilityState={{ disabled: checking, busy: checking }}
-          className="items-center justify-center"
-          style={{ marginTop: 22, height: 48, borderRadius: 16, backgroundColor: colors.primary }}
-        >
-          {checking ? (
-            <ActivityIndicator size="small" color={colors.buttonText} />
-          ) : (
-            <Text
-              maxFontSizeMultiplier={1.3}
-              style={{ fontSize: 15, fontWeight: "700", color: colors.buttonText, fontFamily: fonts.heading }}
-            >
-              See my result
-            </Text>
-          )}
-        </TouchableOpacity>
+        <Button label="See my result" onPress={submit} loading={checking} fullWidth style={{ marginTop: 22 }} />
       </ScrollView>
     </BottomSheet>
   );

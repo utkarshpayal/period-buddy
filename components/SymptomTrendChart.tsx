@@ -21,7 +21,7 @@ import { motion } from "./motion";
  *   light → dark), so every value is reachable without the chart.
  *
  * Series colours are validated categorical steps (dataviz validate_palette):
- * light on #FFFFFF, dark on #2E2530. Each series also has its own marker
+ * light on #FFFFFF, dark on #2E2530 (today's darker #1A1418 surface only adds contrast). Each series also has its own marker
  * shape, so identity is never colour alone.
  */
 
@@ -387,7 +387,7 @@ export const SymptomTrendChart = React.memo(function SymptomTrendChart({
             paddingVertical: 22,
             paddingHorizontal: 16,
             alignItems: "center",
-            borderRadius: 16,
+            borderRadius: 16, borderCurve: "continuous",
             borderWidth: 1,
             borderStyle: "dashed",
             borderColor: colors.border,

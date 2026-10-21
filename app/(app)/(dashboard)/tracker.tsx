@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { RefreshControl, ScrollView, StatusBar, Text, TouchableOpacity, View } from "react-native";
+import { RefreshControl, ScrollView, StatusBar, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import DayDetailsModal from "../../../components/DayDetailsModal";
 import { LoadingErrorState } from "../../../components/LoadingErrorState";
@@ -24,7 +24,7 @@ import { invalidateQueries } from "../../../lib/queryCache";
 import { useSecureScreen } from "../../../lib/screenPrivacy";
 import { runTapAction } from "../../../lib/tapAction";
 import type { TrackerSearchAction } from "../../../lib/trackerSearch";
-import { Icon } from "../../../components/Icon";
+import { Button } from "../../../components/Button";
 
 export default function Tracker() {
   useSecureScreen("tracker");
@@ -44,7 +44,7 @@ export default function Tracker() {
   const focusSection = isLogFocus(focusParam) ? focusParam : undefined;
 
   const data = useTrackerData();
-  const { model, predictions, dashboard, settings, setSettings, entryFor, noteFor, todayKey, loadYear, isDayLoaded } = data;
+  const { model, predictions, dashboard, settings, setSettings, entryFor, noteFor, todayKey, loadYear, isDayLoaded, dayLoadFailed, ensureDayLoaded } = data;
   const { save, clear, logSymptoms } = useDayLogActions(data);
 
   const [selected, setSelected] = useState<DayStatus | null>(null);
@@ -76,9 +76,10 @@ export default function Tracker() {
   const openDay = useCallback((st: DayStatus) => {
     // Future days can't be logged; their cells are disabled too.
     if (st.isFuture) return;
+    ensureDayLoaded(st.dateKey);
     setSelected(st);
     setDayDetailsVisible(true);
-  }, []);
+  }, [ensureDayLoaded]);
   const openDayFromCalendar = useCallback(
     (st: DayStatus) => {
       setModalFocusSection(undefined);
@@ -126,7 +127,6 @@ export default function Tracker() {
   }
 
   const calendarMonthParam = `${selectedYear}-${String(selectedMonthIndex + 1).padStart(2, "0")}`;
-  const selectedKey = dayDetailsVisible ? (selected?.dateKey ?? null) : null;
 
   return (
     <>
@@ -145,7 +145,7 @@ export default function Tracker() {
               </>
             }
           />
-          <WeekStrip lookups={lookups} selectedKey={selectedKey} onPressDay={openDayFromCalendar} loading={data.loading} />
+          <WeekStrip lookups={lookups} onPressDay={openDayFromCalendar} loading={data.loading} />
         </View>
 
         <ScrollView
@@ -164,9 +164,9 @@ export default function Tracker() {
             {/* Today · Cycle day N — surface card framing the ring */}
             <View
               className="mx-6 mt-4 items-center"
-              style={{ backgroundColor: colors.surface, borderRadius: 24, padding: 20, gap: 18, ...getShadow(colors, isDark) }}
+              style={{ backgroundColor: colors.surface, borderRadius: 28, borderCurve: "continuous", padding: 20, gap: 18, ...getShadow(colors, isDark) }}
             >
-              <Text style={{ color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "500", fontFamily: fonts.body }}>
+              <Text style={{ color: colors.mutedText, fontSize: 12, lineHeight: 16, fontWeight: "700", letterSpacing: 1.1, textTransform: "uppercase", fontFamily: fonts.body }}>
                 {`Today · Cycle day ${cycleDay} of ${model.cycleLength}`}
               </Text>
 
@@ -185,42 +185,22 @@ export default function Tracker() {
 
               {/* "Log period" / "Symptoms" quick-entry buttons */}
               <View className="w-full flex-row" style={{ gap: 10 }}>
-                <TouchableOpacity
-                  activeOpacity={0.85}
+                <Button
+                  label={quickLog.periodLoggedToday ? "Period logged" : "Log period"}
+                  icon={quickLog.periodLoggedToday ? "checkmark" : "add"}
+                  size="md"
                   onPress={() => void quickLog.logPeriodNow()}
-                  accessibilityRole="button"
                   accessibilityLabel={quickLog.periodLoggedToday ? "Period logged today. Change flow" : "Log period for today"}
-                  className="flex-1 flex-row items-center justify-center"
-                  style={{
-                    height: 48,
-                    borderRadius: 16,
-                    gap: 8,
-                    backgroundColor: colors.primary,
-                    shadowColor: colors.primary,
-                    shadowOffset: { width: 0, height: 6 },
-                    shadowOpacity: 0.28,
-                    shadowRadius: 14,
-                    elevation: 4,
-                  }}
-                >
-                  <Icon set="feather" name={quickLog.periodLoggedToday ? "check" : "plus"} size={18} color={colors.buttonText} />
-                  <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={{ fontSize: 14, fontWeight: "700", color: colors.buttonText, fontFamily: fonts.body }}>
-                    {quickLog.periodLoggedToday ? "Period logged" : "Log period"}
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  activeOpacity={0.85}
+                  style={{ flex: 1, paddingHorizontal: 12 }}
+                />
+                <Button
+                  label="Log symptoms"
+                  icon="pulse-outline"
+                  variant="secondary"
+                  size="md"
                   onPress={() => void quickLog.openSheet("symptoms")}
-                  accessibilityRole="button"
-                  className="flex-1 flex-row items-center justify-center border"
-                  style={{ height: 48, borderRadius: 16, gap: 8, backgroundColor: colors.surface, borderColor: colors.border }}
-                >
-                  <Icon set="feather" name="activity" size={18} color={colors.primary} />
-                  <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={{ fontSize: 14, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>
-                    Log symptoms
-                  </Text>
-                </TouchableOpacity>
+                  style={{ flex: 1, paddingHorizontal: 12 }}
+                />
               </View>
             </View>
 
@@ -232,7 +212,7 @@ export default function Tracker() {
                 setSelectedMonthIndex(month);
               }}
               lookups={lookups}
-              selectedKey={selectedKey}
+             
               onPressDay={openDayFromCalendar}
               onOpenCalendar={() => router.push({ pathname: "/(app)/calendar", params: { month: calendarMonthParam } })}
             />
@@ -256,6 +236,8 @@ export default function Tracker() {
         day={selected?.day}
         dateKey={selected?.dateKey}
         loaded={selected ? isDayLoaded(selected.dateKey) : true}
+        loadFailed={selected ? dayLoadFailed(selected.dateKey) : false}
+        onRetryLoad={() => selected && ensureDayLoaded(selected.dateKey)}
         dateLabel={selected?.date.toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" })}
         phaseLabel={selected ? dayLogSubtitle(selected) : undefined}
         entry={selected ? entryFor(selected.dateKey) : undefined}

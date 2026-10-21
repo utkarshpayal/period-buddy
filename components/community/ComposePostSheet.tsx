@@ -1,6 +1,5 @@
 import React, { useRef, useState } from "react";
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -34,6 +33,8 @@ import {
 } from "./types";
 import { AppLockCover } from "../AppLockScreen";
 import { Icon } from "../Icon";
+import { Button } from "../Button";
+import { Chip } from "../Chip";
 
 /**
  * The "New Thread" sheet. It owns its draft, so the feed doesn't re-render
@@ -238,20 +239,7 @@ export function ComposePostSheet({
             >
               New Thread
             </Text>
-            <TouchableOpacity
-              onPress={publish}
-              disabled={isPublishing}
-              className="px-4 py-1.5 rounded-full flex-row items-center gap-2"
-              style={{ backgroundColor: colors.primary, opacity: isPublishing ? 0.7 : 1 }}
-            >
-              {isPublishing && <ActivityIndicator size="small" color={colors.buttonText} />}
-              <Text
-                className="text-xs font-bold"
-                style={{ color: colors.buttonText, fontFamily: fonts.body }}
-              >
-                {isPublishing ? "Posting..." : "Post"}
-              </Text>
-            </TouchableOpacity>
+            <Button label="Post" size="sm" onPress={publish} loading={isPublishing} />
           </View>
 
           <View className="flex-row gap-4">
@@ -279,31 +267,12 @@ export function ComposePostSheet({
             {COMMUNITY_CATEGORIES.map((category) => {
               const isActive = newPostCategory === category;
               return (
-                <TouchableOpacity
+                <Chip
                   key={category}
-                  activeOpacity={0.85}
-                  onPress={() =>
-                    setNewPostCategory((current) =>
-                      current === category ? null : category,
-                    )
-                  }
-                  className="rounded-full px-3 py-1.5"
-                  style={{
-                    backgroundColor: isActive ? colors.primary : colors.surfaceSoft,
-                    borderWidth: isActive ? 0 : 1,
-                    borderColor: colors.border,
-                  }}
-                >
-                  <Text
-                    className="text-xs font-bold"
-                    style={{
-                      color: isActive ? colors.buttonText : colors.mutedText,
-                      fontFamily: fonts.body,
-                    }}
-                  >
-                    {category}
-                  </Text>
-                </TouchableOpacity>
+                  label={category}
+                  selected={isActive}
+                  onPress={() => setNewPostCategory((current) => (current === category ? null : category))}
+                />
               );
             })}
 

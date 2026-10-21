@@ -2,6 +2,7 @@
 // screen: `fast` for press and toggle feedback, `base` for fades and small
 // moves, `slow` for sheets and larger reveals. Reanimated skips or shortens
 // these by itself when the phone's "reduce motion" setting is on.
+import { Platform } from "react-native";
 import { Easing, FadeIn, FadeInDown } from "react-native-reanimated";
 
 export const motion = {
@@ -30,3 +31,19 @@ export function listEntering(index: number, maxStaggered = 8) {
 
 /** Plain fade for content swapping in place (tab or filter changes). */
 export const fadeIn = FadeIn.duration(motion.duration.base);
+
+/**
+ * Screen transitions for every Stack. Android gets the iOS-style push (the
+ * new screen slides in over a slight parallax of the old one) instead of the
+ * plain system fade; iOS keeps its native push, with swipe-back from anywhere
+ * on the screen. The page colour behind each screen stops a white flash
+ * mid-transition in dark mode.
+ */
+export function stackScreenOptions(background: string) {
+  return {
+    headerShown: false,
+    animation: Platform.OS === "android" ? ("ios_from_right" as const) : ("default" as const),
+    fullScreenGestureEnabled: true,
+    contentStyle: { backgroundColor: background },
+  };
+}

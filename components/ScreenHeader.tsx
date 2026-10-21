@@ -113,7 +113,7 @@ function HeaderTitle({
       <Text
         accessibilityRole="header"
         numberOfLines={1}
-        style={{ color: colors.foreground, fontSize: size, lineHeight: size + 6, fontWeight: "700", letterSpacing: -0.2, fontFamily: fonts.heading }}
+        style={{ color: colors.foreground, fontSize: size, lineHeight: size + 6, fontWeight: size >= 24 ? "800" : "700", letterSpacing: size >= 24 ? -0.6 : -0.3, fontFamily: fonts.heading }}
       >
         {title}
       </Text>
@@ -148,7 +148,7 @@ export function SectionHeader({
         <Text
           accessibilityRole="header"
           numberOfLines={1}
-          style={{ fontSize: 17, lineHeight: 24, fontWeight: "700", color: colors.foreground, fontFamily: fonts.heading }}
+          style={{ fontSize: 17, lineHeight: 24, fontWeight: "700", letterSpacing: -0.3, color: colors.foreground, fontFamily: fonts.heading }}
         >
           {title}
         </Text>

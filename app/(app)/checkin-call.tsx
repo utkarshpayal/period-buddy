@@ -33,6 +33,8 @@ import { isPlausiblePhone, normalizePhone } from "../../lib/onboarding";
 import { useSecureScreen } from "../../lib/screenPrivacy";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { Icon } from "../../components/Icon";
+import { Button } from "../../components/Button";
+import { SegmentedControl } from "../../components/SegmentedControl";
 
 const DAY_OFFSET_MIN = -5;
 const DAY_OFFSET_MAX = 5;
@@ -334,7 +336,7 @@ export default function CheckinCallScreen() {
                 style={{
                   width: 44,
                   height: 44,
-                  borderRadius: 14,
+                  borderRadius: 14, borderCurve: "continuous",
                   backgroundColor: colors.skyLight,
                   alignItems: "center",
                   justifyContent: "center",
@@ -428,37 +430,16 @@ export default function CheckinCallScreen() {
 
             {!scheduleLoading && scheduleAvailable && scheduleEnabled ? (
               <View className="mt-4" style={{ gap: 12 }}>
-                <View className="flex-row rounded-2xl border p-1" style={rowStyle}>
-                  {(
-                    [
-                      { value: "period_daily", label: "Every period day" },
-                      { value: "once", label: "Once a cycle" },
-                    ] as { value: CheckinCallMode; label: string }[]
-                  ).map((option) => {
-                    const selected = mode === option.value;
-                    return (
-                      <TouchableOpacity
-                        key={option.value}
-                        activeOpacity={0.8}
-                        disabled={isSavingSchedule}
-                        onPress={() => setMode(option.value)}
-                        className="flex-1 items-center rounded-xl py-2"
-                        style={{ backgroundColor: selected ? colors.primary : "transparent" }}
-                      >
-                        <Text
-                          style={{
-                            fontSize: 12.5,
-                            fontWeight: "700",
-                            fontFamily: fonts.body,
-                            color: selected ? colors.buttonText : colors.foreground,
-                          }}
-                        >
-                          {option.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
+                <SegmentedControl
+                  segments={[
+                    { key: "period_daily", label: "Every period day" },
+                    { key: "once", label: "Once a cycle" },
+                  ]}
+                  value={mode}
+                  onChange={(next) => {
+                    if (!isSavingSchedule) setMode(next as CheckinCallMode);
+                  }}
+                />
 
                 {mode === "period_daily" ? (
                   <Text style={{ fontSize: 12.5, color: colors.mutedText, fontFamily: fonts.body, lineHeight: 16 }}>
@@ -518,21 +499,7 @@ export default function CheckinCallScreen() {
                   </Text>
                 </View>
 
-                <TouchableOpacity
-                  activeOpacity={0.9}
-                  disabled={isSavingSchedule}
-                  onPress={() => saveSchedule(true)}
-                  className="flex-row items-center justify-center rounded-full py-3"
-                  style={{ backgroundColor: colors.primary, opacity: isSavingSchedule ? 0.65 : 1 }}
-                >
-                  {isSavingSchedule ? (
-                    <ActivityIndicator color={colors.buttonText} />
-                  ) : (
-                    <Text style={{ fontSize: 13, fontWeight: "700", color: colors.buttonText, fontFamily: fonts.body }}>
-                      Save schedule
-                    </Text>
-                  )}
-                </TouchableOpacity>
+                <Button label="Save schedule" size="md" fullWidth loading={isSavingSchedule} onPress={() => saveSchedule(true)} />
               </View>
             ) : null}
           </View>

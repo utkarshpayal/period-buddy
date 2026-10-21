@@ -8,6 +8,8 @@ import { useContentWidth } from "../../lib/layout";
 import { useTheme } from "../theme";
 import { Icon } from "../Icon";
 import { motion } from "../motion";
+import { Button } from "../Button";
+import { Chip } from "../Chip";
 
 /**
  * Bottom sheet used by the Documents feature (upload, summarize, doctor
@@ -178,31 +180,8 @@ export function SheetButton({
   loading?: boolean;
   loadingLabel?: string;
 }) {
-  const { colors, fonts } = useTheme();
-  const off = disabled || loading;
   return (
-    <TouchableOpacity
-      onPress={onPress}
-      disabled={off}
-      activeOpacity={0.85}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ disabled: Boolean(off), busy: Boolean(loading) }}
-      style={{
-        height: 50,
-        borderRadius: 14,
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 8,
-        backgroundColor: disabled && !loading ? colors.border : colors.primary,
-        opacity: loading ? 0.85 : 1,
-      }}
-    >
-      <Text style={{ fontSize: 15, fontWeight: "700", color: disabled && !loading ? colors.mutedText : colors.buttonText, fontFamily: fonts.body }}>
-        {loading ? loadingLabel ?? label : label}
-      </Text>
-    </TouchableOpacity>
+    <Button label={loading ? loadingLabel ?? label : label} size="md" onPress={onPress} disabled={disabled && !loading} loading={loading} accessibilityLabel={label} fullWidth />
   );
 }
 
@@ -218,36 +197,10 @@ export function ChoiceChips<T extends string>({
   onChange: (value: T) => void;
   scroll?: boolean;
 }) {
-  const { colors, fonts } = useTheme();
   const chips = options.map((option) => {
     const on = value === option.value;
     return (
-      <TouchableOpacity
-        hitSlop={{ top: 6, bottom: 6 }}
-        key={option.value}
-        onPress={() => onChange(option.value)}
-        activeOpacity={0.8}
-        accessibilityRole="radio"
-        accessibilityState={{ selected: on }}
-        accessibilityLabel={option.label}
-        style={{
-          justifyContent: "center",
-          paddingHorizontal: 14,
-          height: 36,
-          borderRadius: 18,
-          borderWidth: 1,
-          borderColor: on ? colors.primary : colors.border,
-          backgroundColor: on ? colors.primary : colors.surface,
-        }}
-      >
-        <Text
-          numberOfLines={1}
-          maxFontSizeMultiplier={1.3}
-          style={{ fontSize: 13, fontWeight: "700", color: on ? colors.buttonText : colors.foreground, fontFamily: fonts.body }}
-        >
-          {option.label}
-        </Text>
-      </TouchableOpacity>
+      <Chip key={option.value} label={option.label} selected={on} onPress={() => onChange(option.value)} accessibilityRole="radio" />
     );
   });
   if (scroll) {

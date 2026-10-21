@@ -19,6 +19,7 @@ import type { CyclePhase } from "../../lib/cycle";
 import { shareViewAsImage } from "../../lib/genz";
 import { useSecureScreen } from "../../lib/screenPrivacy";
 import { Icon } from "../../components/Icon";
+import { SegmentedControl } from "../../components/SegmentedControl";
 
 /**
  * Your Era — today's cycle phase as a Gen Z "era" with its aura, how long
@@ -168,12 +169,12 @@ export default function EraScreen() {
               >
                 <View style={{ marginHorizontal: SIDE, marginTop: 12 }}>
                   {/* Aura card (also the share image, so no buttons inside it). */}
-                  <View ref={shareRef} collapsable={false} style={{ borderRadius: 24, ...getShadow(colors, isDark) }}>
+                  <View ref={shareRef} collapsable={false} style={{ borderRadius: 24, borderCurve: "continuous", ...getShadow(colors, isDark) }}>
                     <LinearGradient
                       colors={data.era.era.aura}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 1 }}
-                      style={{ borderRadius: 24, padding: 22, overflow: "hidden" }}
+                      style={{ borderRadius: 24, borderCurve: "continuous", padding: 22, overflow: "hidden" }}
                     >
                       <View className="flex-row items-center" style={{ gap: 14 }}>
                         <View className="items-center justify-center rounded-full" style={{ width: 60, height: 60, backgroundColor: "rgba(255,255,255,0.25)" }}>
@@ -271,33 +272,20 @@ export default function EraScreen() {
                   ) : null}
 
                   {/* Category switcher: one segmented control. */}
-                  <View className="flex-row rounded-full mt-4" style={{ backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, padding: 4 }}>
-                    {CATEGORIES.map((c) => {
-                      const active = c.key === category;
+                  <SegmentedControl
+                    segments={CATEGORIES.map((c) => {
                       const inCategory = allTips.filter((t) => t.category === c.key);
                       const done = inCategory.filter((t) => tried.has(t.key)).length;
-                      return (
-                        <TouchableOpacity
-                          hitSlop={{ top: 6, bottom: 6 }}
-                          key={c.key}
-                          onPress={() => setCategory(c.key)}
-                          activeOpacity={0.85}
-                          accessibilityRole="tab"
-                          accessibilityState={{ selected: active }}
-                          accessibilityLabel={`${c.label}, ${done} of ${inCategory.length} tried`}
-                          className="flex-1 items-center justify-center rounded-full"
-                          style={{ height: 36, backgroundColor: active ? colors.primary : "transparent" }}
-                        >
-                          <Text style={{ color: active ? colors.buttonText : colors.mutedText, fontSize: 13, fontFamily: fonts.body, fontWeight: "700" }} numberOfLines={1}>
-                            {c.label}
-                          </Text>
-                        </TouchableOpacity>
-                      );
+                      return { key: c.key, label: c.label, accessibilityLabel: `${c.label}, ${done} of ${inCategory.length} tried` };
                     })}
-                  </View>
+                    value={category}
+                    onChange={setCategory}
+                    height={40}
+                    style={{ marginTop: 16 }}
+                  />
                 </View>
 
-                <View style={{ marginTop: 12, marginHorizontal: SIDE, backgroundColor: colors.surface, borderRadius: 22, paddingVertical: 4, ...getShadow(colors, isDark) }}>
+                <View style={{ marginTop: 12, marginHorizontal: SIDE, backgroundColor: colors.surface, borderRadius: 22, borderCurve: "continuous", paddingVertical: 4, ...getShadow(colors, isDark) }}>
                   {data.era.tips[category].length ? (
                     allTips
                       .filter((t) => t.category === category)

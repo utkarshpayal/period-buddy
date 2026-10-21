@@ -1,8 +1,9 @@
 import React from "react";
-import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Text, View } from "react-native";
 import { formatSessionWhen } from "../../lib/consultationFormat";
 import { PaymentTrustFooter } from "../subscription/PaymentTrustFooter";
 import { useTheme } from "../theme";
+import { Button } from "../Button";
 
 /** The sticky Book button under the time picker, with the payment-confirming note. */
 export function BookingBar({
@@ -43,23 +44,7 @@ export function BookingBar({
           </Text>
         </View>
       ) : null}
-      <TouchableOpacity
-        activeOpacity={0.85}
-        disabled={booking || !canBook}
-        onPress={onBook}
-        accessibilityRole="button"
-        accessibilityState={{ disabled: booking || !canBook }}
-        className="rounded-2xl py-4 items-center justify-center"
-        style={{ backgroundColor: colors.primary, opacity: booking ? 0.75 : canBook ? 1 : 0.5 }}
-      >
-        {booking ? (
-          <ActivityIndicator color={colors.buttonText} />
-        ) : (
-          <Text className="text-sm font-extrabold tracking-wide text-center" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-            {label}
-          </Text>
-        )}
-      </TouchableOpacity>
+      <Button label={label} onPress={onBook} loading={booking} disabled={!canBook} fullWidth />
       {fee ? <PaymentTrustFooter compact /> : null}
     </View>
   );

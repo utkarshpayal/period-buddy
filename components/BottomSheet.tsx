@@ -20,6 +20,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { AppLockCover } from "./AppLockScreen";
+import { ToastHost } from "./ToastHost";
 import { motion } from "./motion";
 import { useTheme } from "./theme";
 
@@ -178,8 +179,9 @@ export function BottomSheet({
       style={[
         {
           backgroundColor: colors.background,
-          borderTopLeftRadius: 28,
-          borderTopRightRadius: 28,
+          borderTopLeftRadius: 32,
+          borderTopRightRadius: 32,
+          borderCurve: "continuous",
           // Dark: a hairline lifts the sheet off the dimmed page.
           borderWidth: isDark ? 1 : 0,
           borderBottomWidth: 0,
@@ -196,7 +198,7 @@ export function BottomSheet({
           // Full width even when the sheet centres its content, so the whole top edge drags.
           style={{ alignSelf: "stretch", alignItems: "center", justifyContent: "center", height: 22, marginBottom: 2 }}
         >
-          <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border }} />
+          <View style={{ width: 36, height: 5, borderRadius: 3, backgroundColor: colors.mutedText, opacity: 0.28 }} />
         </View>
       </GestureDetector>
       {children}
@@ -230,6 +232,8 @@ export function BottomSheet({
           {sheet}
         </KeyboardAvoidingView>
         {overlay}
+        {/* Toasts raised while the sheet is open (form errors) draw over it. */}
+        <ToastHost />
         <AppLockCover />
       </GestureHandlerRootView>
     </Modal>

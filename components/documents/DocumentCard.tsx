@@ -131,7 +131,7 @@ export function DocumentCard({
 export function DocumentListSkeleton({ count = 5 }: { count?: number }) {
   const { colors, isDark } = useTheme();
   return (
-    <View accessibilityLabel="Loading documents" style={{ borderRadius: 22, backgroundColor: colors.surface, borderWidth: isDark ? 1 : 0, borderColor: colors.border, ...getShadow(colors, isDark) }}>
+    <View accessibilityLabel="Loading documents" style={{ borderRadius: 22, borderCurve: "continuous", backgroundColor: colors.surface, ...getShadow(colors, isDark) }}>
       {Array.from({ length: count }).map((_, i) => (
         <View key={i} style={{ flexDirection: "row", alignItems: "center", gap: 14, paddingLeft: 16 }}>
           <SkeletonBlock width={36} height={44} radius={10} />

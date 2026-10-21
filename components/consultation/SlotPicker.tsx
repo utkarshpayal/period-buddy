@@ -10,6 +10,7 @@ import { EmptyState } from "../EmptyState";
 import { SkeletonRow } from "../Skeleton";
 import { useTheme } from "../theme";
 import { Icon } from "../Icon";
+import { Button } from "../Button";
 
 type Slot = { start: string };
 type SlotDay = { key: string; slots: Slot[] };
@@ -286,27 +287,7 @@ export function SlotPicker({
             {fee ? `${fee} · 1 session` : "Booking isn't open yet"}
           </Text>
         </View>
-        <TouchableOpacity
-          activeOpacity={0.85}
-          disabled={!canContinue}
-          onPress={onContinue}
-          accessibilityRole="button"
-          accessibilityState={{ disabled: !canContinue }}
-          style={{
-            height: 48,
-            paddingHorizontal: 28,
-            borderRadius: 14,
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: canContinue ? colors.primary : colors.surfaceStrong,
-          }}
-        >
-          <Text
-            style={{ ...body, fontSize: 15, fontWeight: "700", color: canContinue ? colors.buttonText : colors.mutedText }}
-          >
-            Continue
-          </Text>
-        </TouchableOpacity>
+        <Button label="Continue" size="md" onPress={onContinue} disabled={!canContinue} />
       </View>
     </BottomSheet>
   );

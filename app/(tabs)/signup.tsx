@@ -16,7 +16,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../components/auth-context";
 import {
   AuthDivider,
-  AuthErrorBanner,
   AuthField,
   AuthPrimaryButton,
   AuthTopBar,
@@ -33,6 +32,7 @@ import { getScreenGradient, getShadow } from "../../components/ui-tokens";
 import { getFriendlyErrorMessage } from "../../lib/api";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { Icon } from "../../components/Icon";
+import { showErrorToast } from "../../lib/toast";
 
 const TERMS_URL = "https://thenura.care/terms";
 const PRIVACY_URL = "https://thenura.care/privacy";
@@ -47,7 +47,6 @@ export default function SignUp() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const role: "user" | "partner" = partnerCode ? "partner" : "user";
-  const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isOtpModalVisible, setIsOtpModalVisible] = useState(false);
   // The rule checklist appears once the user starts on the password, so the
@@ -75,21 +74,20 @@ export default function SignUp() {
   }, [fadeAnim, slideAnim]);
 
   async function handleSignup() {
-    setErrorMessage("");
 
     if (firstName.trim().length < 2) {
-      setErrorMessage("Please enter your first name.");
+      showErrorToast("Please enter your first name.");
       return;
     }
 
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) {
-      setErrorMessage("Please enter a valid email address.");
+      showErrorToast("Please enter a valid email address.");
       return;
     }
 
     if (!isStrongPassword(password)) {
       setShowPasswordRules(true);
-      setErrorMessage("Your password needs a few more things — see the checklist.");
+      showErrorToast("Your password needs a few more things — see the checklist.");
       return;
     }
 
@@ -112,7 +110,7 @@ export default function SignUp() {
 
       setIsOtpModalVisible(true);
     } catch (error) {
-      setErrorMessage(
+      showErrorToast(
         error instanceof Error
           ? error.message
           : "Unable to create your account right now.",
@@ -130,7 +128,7 @@ export default function SignUp() {
       await connectPartnerAndResolveRoute(partnerCode);
 
     // A modal alert survives this screen unmounting on the router.replace()
-    // below — an inline banner (setErrorMessage) would just flash and
+    // below — an inline error would just flash and
     // disappear, leaving no trace of why the partner connection failed.
     if (connectError) {
       alert("Couldn't connect as a partner", connectError);
@@ -158,18 +156,17 @@ export default function SignUp() {
       await finishSignIn(signedInUser);
     } catch (error) {
       setIsFinishing(false);
-      setErrorMessage(getFriendlyErrorMessage(error));
+      showErrorToast(getFriendlyErrorMessage(error));
     }
   }
 
   async function handleGoogleSignInSuccess({ token, user }: { token: string; user: AuthUser }) {
-    setErrorMessage("");
     try {
       await signIn({ token, user });
       await finishSignIn(user);
     } catch (error) {
       setIsFinishing(false);
-      setErrorMessage(
+      showErrorToast(
         getFriendlyErrorMessage(error),
       );
     }
@@ -244,7 +241,7 @@ export default function SignUp() {
               <GoogleSignInButton
                 disabled={isSubmitting}
                 onBusyChange={setIsFinishing}
-                onError={setErrorMessage}
+                onError={showErrorToast}
                 onSuccess={handleGoogleSignInSuccess}
                 role={role}
               />
@@ -256,10 +253,7 @@ export default function SignUp() {
                   icon="person-outline"
                   autoCapitalize="words"
                   autoComplete="given-name"
-                  onChangeText={(text) => {
-                    setErrorMessage("");
-                    setFirstName(text);
-                  }}
+                  onChangeText={setFirstName}
                   onSubmitEditing={() => emailRef.current?.focus()}
                   placeholder="First name"
                   returnKeyType="next"
@@ -274,10 +268,7 @@ export default function SignUp() {
                   autoCapitalize="none"
                   autoComplete="email"
                   keyboardType="email-address"
-                  onChangeText={(text) => {
-                    setErrorMessage("");
-                    setEmail(text);
-                  }}
+                  onChangeText={setEmail}
                   onSubmitEditing={() => passwordRef.current?.focus()}
                   placeholder="Email address"
                   returnKeyType="next"
@@ -292,10 +283,7 @@ export default function SignUp() {
                   isPassword
                   autoComplete="new-password"
                   onFocus={() => setShowPasswordRules(true)}
-                  onChangeText={(text) => {
-                    setErrorMessage("");
-                    setPassword(text);
-                  }}
+                  onChangeText={setPassword}
                   onSubmitEditing={handleSignup}
                   placeholder="Create a password"
                   returnKeyType="done"
@@ -358,12 +346,6 @@ export default function SignUp() {
                   onPress={handleSignup}
                 />
               </View>
-
-              {errorMessage ? (
-                <View style={{ marginTop: 14 }}>
-                  <AuthErrorBanner message={errorMessage} />
-                </View>
-              ) : null}
 
               <Text
                 className="text-center"

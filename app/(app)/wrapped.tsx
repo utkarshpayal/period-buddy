@@ -241,7 +241,7 @@ function PersonaCard({ w }: { w: CycleWrapped }) {
       colors={["#FF5E8A", "#B24BF3", "#3A0CA3"]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
-      style={{ borderRadius: 28, padding: 26 }}
+      style={{ borderRadius: 28, borderCurve: "continuous", padding: 26 }}
     >
       <Kicker>{`${w.label} Wrapped`}</Kicker>
       <Text style={{ fontSize: 72, marginTop: 18 }}>{w.persona.emoji}</Text>

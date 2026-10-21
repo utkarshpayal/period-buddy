@@ -13,6 +13,9 @@ import { useTheme } from "./theme";
 import { AppLockCover } from "./AppLockScreen";
 import { getFriendlyErrorMessage } from "../lib/api";
 import { Icon } from "./Icon";
+import { Button } from "./Button";
+import { showErrorToast } from "../lib/toast";
+import { ToastHost } from "./ToastHost";
 
 const OTP_LENGTH = 6;
 const OTP_VALIDITY_SECONDS = 10 * 60; // 10 minutes, mirrors backend OTP_EXPIRY_MINUTES
@@ -37,7 +40,6 @@ const secondsUntil = (deadline: number) => Math.max(0, Math.ceil((deadline - Dat
 export function OtpModal({ email, onClose, onVerified, visible }: OtpModalProps) {
   const { colors, fonts } = useTheme();
   const [digits, setDigits] = useState<string[]>(Array(OTP_LENGTH).fill(""));
-  const [errorMessage, setErrorMessage] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
   const [isResending, setIsResending] = useState(false);
   // Deadlines, not counters: JS timers stop while the app is in the
@@ -60,7 +62,6 @@ export function OtpModal({ email, onClose, onVerified, visible }: OtpModalProps)
   useEffect(() => {
     if (!visible) return;
     setDigits(Array(OTP_LENGTH).fill(""));
-    setErrorMessage("");
     restartTimers();
   }, [visible]);
 
@@ -74,7 +75,6 @@ export function OtpModal({ email, onClose, onVerified, visible }: OtpModalProps)
 
   function handleChangeDigit(text: string, index: number) {
     const clean = text.replace(/[^0-9]/g, "");
-    setErrorMessage("");
 
     if (clean.length > 1) {
       // Handles pasting the full code into one box.
@@ -110,26 +110,25 @@ export function OtpModal({ email, onClose, onVerified, visible }: OtpModalProps)
     if (verifyingRef.current) return;
     const code = digits.join("");
     if (code.length !== OTP_LENGTH) {
-      setErrorMessage("Enter the full 6-digit code.");
+      showErrorToast("Enter the full 6-digit code.");
       return;
     }
     if (isExpired) {
-      setErrorMessage("This code has expired. Request a new one.");
+      showErrorToast("This code has expired. Request a new one.");
       return;
     }
 
     verifyingRef.current = true;
     try {
       setIsVerifying(true);
-      setErrorMessage("");
       const response = await verifyOtp({ email, otp: code });
       if (!response.token || !response.data) {
-        setErrorMessage("Verification succeeded but no session was returned.");
+        showErrorToast("Verification succeeded but no session was returned.");
         return;
       }
       onVerified({ token: response.token, user: response.data });
     } catch (error) {
-      setErrorMessage(
+      showErrorToast(
         getFriendlyErrorMessage(error),
       );
     } finally {
@@ -143,13 +142,12 @@ export function OtpModal({ email, onClose, onVerified, visible }: OtpModalProps)
 
     try {
       setIsResending(true);
-      setErrorMessage("");
       await resendOtp({ email });
       setDigits(Array(OTP_LENGTH).fill(""));
       restartTimers();
       inputRefs.current[0]?.focus();
     } catch (error) {
-      setErrorMessage(
+      showErrorToast(
         getFriendlyErrorMessage(error),
       );
     } finally {
@@ -231,37 +229,8 @@ export function OtpModal({ email, onClose, onVerified, visible }: OtpModalProps)
             {isExpired ? "Code expired" : `Expires in ${formatTime(secondsLeft)}`}
           </Text>
 
-          {errorMessage ? (
-            <View
-              className="mt-4 rounded-2xl border px-4 py-3"
-              style={{ backgroundColor: colors.dangerLight, borderColor: colors.danger }}
-            >
-              <Text
-                className="text-center text-xs font-bold"
-                style={{ color: colors.danger }}
-              >
-                {errorMessage}
-              </Text>
-            </View>
-          ) : null}
 
-          <TouchableOpacity
-            activeOpacity={0.9}
-            className="mt-5 rounded-full items-center justify-center py-4"
-            disabled={isVerifying}
-            onPress={handleVerify}
-            style={{
-              backgroundColor: colors.primary,
-              opacity: isVerifying ? 0.7 : 1,
-            }}
-          >
-            <Text
-              className="text-sm font-bold"
-              style={{ color: colors.buttonText, fontFamily: fonts.body }}
-            >
-              {isVerifying ? "Verifying..." : "Verify & Continue"}
-            </Text>
-          </TouchableOpacity>
+          <Button label="Verify & continue" onPress={handleVerify} loading={isVerifying} fullWidth style={{ marginTop: 20 }} />
 
           <View className="flex-row justify-center items-center mt-5 gap-1">
             <Text
@@ -289,6 +258,8 @@ export function OtpModal({ email, onClose, onVerified, visible }: OtpModalProps)
         </View>
       </KeyboardAvoidingView>
       <AppLockCover />
+      {/* Errors show as a toast over this Modal (the root host draws behind it). */}
+      <ToastHost />
     </Modal>
   );
 }

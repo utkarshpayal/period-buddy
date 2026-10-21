@@ -110,7 +110,7 @@ export function TrackerSearchModal({
               >
                 {results.length} result{results.length === 1 ? "" : "s"}
               </Text>
-              <View style={{ marginHorizontal: 12, borderRadius: 14, overflow: "hidden", backgroundColor: colors.surface }}>
+              <View style={{ marginHorizontal: 12, borderRadius: 14, borderCurve: "continuous", overflow: "hidden", backgroundColor: colors.surface }}>
                 {results.map((item, idx) => (
                   <TouchableOpacity
                     key={item.key}

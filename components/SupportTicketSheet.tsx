@@ -3,7 +3,6 @@ import Constants from "expo-constants";
 import * as Device from "expo-device";
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   Platform,
   ScrollView,
   Switch,
@@ -18,6 +17,8 @@ import { MESSAGE_MAX, SUBJECT_MAX, SUPPORT_CATEGORIES, validateTicketForm } from
 import { useTheme } from "./theme";
 import { BottomSheet } from "./BottomSheet";
 import { Icon } from "./Icon";
+import { Button } from "./Button";
+import { showErrorToast } from "../lib/toast";
 
 /** What "Attach app info" sends: no identifiers, just enough to reproduce a bug. */
 function collectAppInfo(): SupportTicketMeta {
@@ -64,7 +65,6 @@ export function SupportTicketSheet({
   const [message, setMessage] = useState("");
   const [attachInfo, setAttachInfo] = useState(true);
   const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [createdNumber, setCreatedNumber] = useState<string | null>(null);
   const appInfo = useMemo(collectAppInfo, []);
 
@@ -75,7 +75,6 @@ export function SupportTicketSheet({
     setSubject("");
     setMessage("");
     setAttachInfo(true);
-    setError(null);
     setCreatedNumber(null);
   }, [visible]);
 
@@ -84,11 +83,10 @@ export function SupportTicketSheet({
   const submit = async () => {
     if (sending) return;
     if (problem) {
-      setError(problem);
+      showErrorToast(problem);
       return;
     }
     setSending(true);
-    setError(null);
     try {
       const { ticket } = await supportApi.createTicket({
         category: category as SupportCategoryId,
@@ -99,7 +97,7 @@ export function SupportTicketSheet({
       });
       setCreatedNumber(ticket.ticketNumber);
     } catch (err) {
-      setError(getFriendlyErrorMessage(err));
+      showErrorToast(getFriendlyErrorMessage(err));
     } finally {
       setSending(false);
     }
@@ -178,14 +176,7 @@ export function SupportTicketSheet({
           <Text className="mt-3 text-center" style={{ color: colors.mutedText, fontSize: 13.5, lineHeight: 20, fontFamily: fonts.body }}>
             We&apos;ve emailed you a copy. You&apos;ll get a notification when we reply.
           </Text>
-          <TouchableOpacity
-            onPress={openTickets}
-            activeOpacity={0.85}
-            className="items-center justify-center rounded-full mt-6 w-full"
-            style={{ height: 52, backgroundColor: colors.primary }}
-          >
-            <Text style={{ color: colors.buttonText, fontSize: 15, fontWeight: "800", fontFamily: fonts.body }}>View my tickets</Text>
-          </TouchableOpacity>
+          <Button label="View my tickets" onPress={openTickets} fullWidth style={{ marginTop: 24 }} />
           <TouchableOpacity onPress={onClose} activeOpacity={0.7} className="items-center justify-center mt-3 w-full" style={{ height: 44 }}>
             <Text style={{ color: colors.foreground, fontSize: 14.5, fontWeight: "700", fontFamily: fonts.body }}>Done</Text>
           </TouchableOpacity>
@@ -218,10 +209,7 @@ export function SupportTicketSheet({
                 <TouchableOpacity
                   hitSlop={{ top: 5, bottom: 5 }}
                   key={c.id}
-                  onPress={() => {
-                    setCategory(c.id);
-                    setError(null);
-                  }}
+                  onPress={() => setCategory(c.id)}
                   activeOpacity={0.8}
                   accessibilityRole="button"
                   accessibilityState={{ selected }}
@@ -302,26 +290,8 @@ export function SupportTicketSheet({
             />
           </View>
 
-          {error ? (
-            <Text className="mt-3 text-center" style={{ color: colors.danger, fontSize: 13.5, fontFamily: fonts.body }}>
-              {error}
-            </Text>
-          ) : null}
 
-          <TouchableOpacity
-            onPress={submit}
-            disabled={sending}
-            activeOpacity={0.85}
-            accessibilityRole="button"
-            className="items-center justify-center rounded-full mt-4"
-            style={{ height: 52, backgroundColor: colors.primary, opacity: problem || sending ? 0.55 : 1 }}
-          >
-            {sending ? (
-              <ActivityIndicator color={colors.buttonText} />
-            ) : (
-              <Text style={{ color: colors.buttonText, fontSize: 15, fontWeight: "800", fontFamily: fonts.body }}>Send to support</Text>
-            )}
-          </TouchableOpacity>
+          <Button label="Send to support" onPress={submit} loading={sending} fullWidth style={{ marginTop: 16 }} />
         </ScrollView>
       )}
     </BottomSheet>

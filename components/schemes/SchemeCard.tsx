@@ -27,9 +27,7 @@ export function SchemeCard({ scheme }: { scheme: GovernmentBenefit }) {
       accessibilityLabel={`${scheme.name}. ${levelLabel}. ${actionLabel}`}
       style={{
         backgroundColor: colors.surface,
-        borderColor: colors.border,
-        borderWidth: 1,
-        borderRadius: 24,
+        borderRadius: 24, borderCurve: "continuous",
         padding: 16,
         marginBottom: 12,
         ...getShadow(colors, isDark),
@@ -38,7 +36,7 @@ export function SchemeCard({ scheme }: { scheme: GovernmentBenefit }) {
       <View className="flex-row items-start" style={{ gap: 12 }}>
         <View
           className="items-center justify-center"
-          style={{ width: 42, height: 42, borderRadius: 14, backgroundColor: softTints.pink }}
+          style={{ width: 42, height: 42, borderRadius: 14, borderCurve: "continuous", backgroundColor: softTints.pink }}
         >
           <Icon set="ion" name="ribbon-outline" size={20} color={colors.primaryDark} />
         </View>

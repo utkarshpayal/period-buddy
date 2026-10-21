@@ -24,9 +24,7 @@ export function SchemeSection({
     <View
       style={{
         backgroundColor: colors.surface,
-        borderColor: colors.border,
-        borderWidth: 1,
-        borderRadius: 24,
+        borderRadius: 24, borderCurve: "continuous",
         padding: 18,
         marginBottom: 16,
         ...getShadow(colors, isDark),

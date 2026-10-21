@@ -17,6 +17,7 @@ import { usePaymentCheckout } from "../../hooks/usePaymentCheckout";
 import { getFriendlyErrorMessage, subscriptionApi, type CouponPreview, type FeatureLockInfo } from "../../lib/api";
 import { AppLockCover } from "../AppLockScreen";
 import { Icon } from "../Icon";
+import { Button } from "../Button";
 
 // How long to wait for iOS's onDismiss before presenting the next sheet anyway.
 const DISMISS_FALLBACK_MS = 700;
@@ -271,7 +272,14 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
             >
               <LockedFeatureHeading title={info.feature.name} description={info.feature.description} />
 
-              <TouchableOpacity
+              <Button
+                label={
+                  couponPreview
+                    ? couponPreview.free
+                      ? "Unlock — free"
+                      : `Buy just this — ₹${couponPreview.finalAmount}`
+                    : `Buy just this — ₹${info.feature.price}${CYCLE_SUFFIX[info.feature.billingCycle]}`
+                }
                 onPress={() =>
                   setConfirmTarget({
                     key: "feature",
@@ -283,21 +291,9 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
                     couponPreview,
                   })
                 }
-                activeOpacity={0.85}
-                className="mt-5 flex-row items-center rounded-full px-6 py-3"
-                style={{ backgroundColor: colors.gold ?? colors.primary }}
-              >
-                {couponPreview ? (
-                  <Text className="text-sm font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-                    {couponPreview.free ? "Unlock — Free" : `Buy just this — ₹${couponPreview.finalAmount}`}
-                  </Text>
-                ) : (
-                  <Text className="text-sm font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-                    Buy just this — ₹{info.feature.price}
-                    {CYCLE_SUFFIX[info.feature.billingCycle]}
-                  </Text>
-                )}
-              </TouchableOpacity>
+                size="md"
+                style={{ marginTop: 20 }}
+              />
 
               <View className="w-full mt-5">
                 <CouponField
@@ -357,7 +353,9 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
                           {CYCLE_SUFFIX[plan.billingCycle]}
                         </Text>
                       </View>
-                      <TouchableOpacity
+                      <Button
+                        label="Choose"
+                        size="sm"
                         onPress={() =>
                           setConfirmTarget({
                             key: plan._id,
@@ -371,17 +369,7 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
                               : undefined,
                           })
                         }
-                        activeOpacity={0.85}
-                        className="rounded-full px-4 py-2.5"
-                        style={{ backgroundColor: colors.primary }}
-                      >
-                        <Text
-                          className="text-xs font-bold"
-                          style={{ color: colors.buttonText, fontFamily: fonts.body }}
-                        >
-                          Choose
-                        </Text>
-                      </TouchableOpacity>
+                      />
                     </View>
                   ))}
                 </View>

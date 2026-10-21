@@ -11,7 +11,6 @@ export function SectionCard({ children, compact = false }: { children: React.Rea
       className={`rounded-3xl border ${compact ? "p-4" : "p-5"} mb-4`}
       style={{
         backgroundColor: colors.surface,
-        borderColor: colors.border,
         ...getShadow(colors, isDark),
       }}
     >

@@ -154,7 +154,7 @@ export function CycleRing({
           numberOfLines={1}
           adjustsFontSizeToFit
           minimumFontScale={0.75}
-          style={{ color: colors.foreground, fontSize: 36, lineHeight: 44, fontWeight: "700", letterSpacing: -0.5, fontFamily: fonts.heading }}
+          style={{ color: colors.foreground, fontSize: 40, lineHeight: 46, fontWeight: "800", letterSpacing: -1.2, fontVariant: ["tabular-nums"], fontFamily: fonts.heading }}
         >
           {daysLate > 0
             ? `${daysLate} ${daysLate === 1 ? "day" : "days"} late`

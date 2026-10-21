@@ -322,7 +322,7 @@ export default function HealthIssues() {
             {showingSaved ? (
               <View
                 className="flex-row items-center"
-                style={{ gap: 8, marginBottom: 14, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 14, backgroundColor: colors.surfaceSoft }}
+                style={{ gap: 8, marginBottom: 14, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 14, borderCurve: "continuous", backgroundColor: colors.surfaceSoft }}
               >
                 <Icon set="ion" name="cloud-offline-outline" size={16} color={colors.mutedText} />
                 <Text style={{ flex: 1, color: colors.mutedText, fontSize: 13, lineHeight: 18, fontWeight: "500", fontFamily: fonts.body }}>
@@ -423,7 +423,7 @@ export default function HealthIssues() {
               >
                 {/* Hero: the CMS image when there is one, else a tinted header in the condition's tone (never a stock photo). */}
                 {selectedIssueData.imageUrl ? (
-                  <View style={{ aspectRatio: 16 / 9, borderRadius: 24, overflow: "hidden", backgroundColor: selectedTone.bg }}>
+                  <View style={{ aspectRatio: 16 / 9, borderRadius: 24, borderCurve: "continuous", overflow: "hidden", backgroundColor: selectedTone.bg }}>
                     <Image
                       source={{ uri: selectedIssueData.imageUrl }}
                       style={{ width: "100%", height: "100%" }}
@@ -435,7 +435,7 @@ export default function HealthIssues() {
                   <View
                     accessibilityElementsHidden
                     importantForAccessibility="no-hide-descendants"
-                    style={{ height: 112, borderRadius: 24, backgroundColor: selectedTone.bg, alignItems: "center", justifyContent: "center" }}
+                    style={{ height: 112, borderRadius: 24, borderCurve: "continuous", backgroundColor: selectedTone.bg, alignItems: "center", justifyContent: "center" }}
                   >
                     <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" }}>
                       <WellbeingGlyph name={selectedIssueData.icon} size={30} color={selectedTone.fg} fallback="medkit-outline" />

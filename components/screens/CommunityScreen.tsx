@@ -6,7 +6,6 @@ import { useAppState } from "../../components/AppState";
 import { useAuth } from "../../components/auth-context";
 import OptionsModal from "../../components/OptionsModal";
 import { useTheme } from "../../components/theme";
-import { getShadow } from "../../components/ui-tokens";
 import { useCommunityFeed } from "../../hooks/useCommunityFeed";
 import { useCommunityRealtime } from "../../hooks/useCommunityRealtime";
 import { useSubscriptionAccess } from "../../hooks/useSubscriptionAccess";
@@ -27,6 +26,7 @@ import { Icon } from "../Icon";
 import Animated from "react-native-reanimated";
 import { listEntering } from "../motion";
 import { haptics } from "../../lib/haptics";
+import { getGlow } from "../ui-tokens";
 
 // How long the paywall's slide-down takes before compose may present: iOS
 // can't present one Modal while another is still dismissing.
@@ -546,11 +546,10 @@ export default function CommunityScreen() {
               }}
               accessibilityRole="button"
               accessibilityLabel="Create a new post"
-              className="absolute bottom-28 right-6 w-14 h-14 rounded-full items-center justify-center border"
+              className="absolute bottom-28 right-6 w-14 h-14 rounded-full items-center justify-center"
               style={{
                 backgroundColor: colors.primary,
-                borderColor: colors.background,
-                ...getShadow(colors, isDark),
+                ...getGlow(colors.primary, isDark, "strong"),
               }}
             >
               <Icon set="ion" name="add" size={26} color={colors.buttonText} />

@@ -1,6 +1,7 @@
 import React from "react";
 import { TextInput, TouchableOpacity, View, type StyleProp, type ViewStyle } from "react-native";
 import { useTheme } from "./theme";
+import { getShadow, withAlpha } from "./ui-tokens";
 import { Icon } from "./Icon";
 
 /** 48px search field with a labelled clear button, shared by content screens. */
@@ -17,7 +18,8 @@ export function SearchBar({
   onSubmit?: () => void;
   style?: StyleProp<ViewStyle>;
 }) {
-  const { colors, fonts } = useTheme();
+  const { colors, fonts, isDark } = useTheme();
+  const [focused, setFocused] = React.useState(false);
   return (
     <View
       style={[
@@ -29,14 +31,15 @@ export function SearchBar({
           paddingLeft: 14,
           paddingRight: 6,
           borderRadius: 16,
-          borderWidth: 1,
-          borderColor: colors.border,
+          borderCurve: "continuous",
           backgroundColor: colors.surface,
+          ...getShadow(colors, isDark),
+          ...(focused ? { boxShadow: `0 0 0 1.5px ${colors.primary}, 0 0 0 5px ${withAlpha(colors.primary, 0.12)}` } : null),
         },
         style,
       ]}
     >
-      <Icon set="ion" name="search" size={18} color={colors.mutedText} />
+      <Icon set="ion" name="search" size={18} color={focused ? colors.primary : colors.mutedText} />
       <TextInput
         value={value}
         onChangeText={onChangeText}
@@ -44,6 +47,8 @@ export function SearchBar({
         placeholderTextColor={colors.mutedText}
         returnKeyType="search"
         onSubmitEditing={onSubmit}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         autoCorrect={false}
         accessibilityLabel={placeholder}
         maxFontSizeMultiplier={1.4}

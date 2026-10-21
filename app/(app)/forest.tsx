@@ -49,6 +49,7 @@ import Svg, { Path } from "react-native-svg";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSecureScreen } from "../../lib/screenPrivacy";
 import { Icon } from "../../components/Icon";
+import { Button } from "../../components/Button";
 
 // Your Forest: one tree grows from a seed to full bloom as you do three
 // small tasks a day (log your day, finish a habit, water the tree). Each
@@ -269,7 +270,7 @@ function ForestSkeleton() {
   const card = { borderRadius: 24, backgroundColor: colors.surface, ...getShadow(colors, isDark) };
   return (
     <View accessibilityLabel="Loading your forest" accessible>
-      <View style={{ ...card, borderRadius: 28, overflow: "hidden" }}>
+      <View style={{ ...card, borderRadius: 28, borderCurve: "continuous", overflow: "hidden" }}>
         <LinearGradient
           colors={isDark ? ["#1E3345", "#22382E", "#2C5236"] : ["#DDF0FA", "#EAF6F0", "#CFE9C4"]}
           style={{ height: SCENE_HEIGHT, alignItems: "center", justifyContent: "center" }}
@@ -624,15 +625,7 @@ export default function Forest() {
               <Text style={{ color: colors.mutedText, fontSize: 13.5, marginTop: 6, fontFamily: fonts.body, textAlign: "center" }}>
                 {loadError.offline ? "Your trees are safe. Connect to the internet and try again." : loadError.message}
               </Text>
-              <TouchableOpacity
-                onPress={retry}
-                accessibilityRole="button"
-                activeOpacity={0.85}
-                style={{ marginTop: 20, flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 22, height: 46, borderRadius: 23, backgroundColor: colors.primary }}
-              >
-                <Icon set="ion" name="refresh" size={16} color={colors.buttonText} />
-                <Text style={{ color: colors.buttonText, fontSize: 14.5, fontWeight: "800", fontFamily: fonts.body }}>Try again</Text>
-              </TouchableOpacity>
+              <Button label="Try again" icon="refresh" size="md" onPress={retry} style={{ marginTop: 20 }} />
             </View>
           ) : !hasLoaded || !sceneReady ? (
             <ForestSkeleton />
@@ -651,7 +644,7 @@ export default function Forest() {
             </View>
           ) : null}
           {/* The living scene */}
-          <View style={{ borderRadius: 28, overflow: "hidden", backgroundColor: colors.surface, ...getShadow(colors, isDark) }}>
+          <View style={{ borderRadius: 28, borderCurve: "continuous", overflow: "hidden", backgroundColor: colors.surface, ...getShadow(colors, isDark) }}>
             {(
               <View>
                 <TweenedHabitat
@@ -711,7 +704,7 @@ export default function Forest() {
                     pointerEvents="none"
                     style={{ position: "absolute", left: 0, right: 0, bottom: 16, alignItems: "center" }}
                   >
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 18, backgroundColor: "rgba(20,32,24,0.62)" }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 18, borderCurve: "continuous", backgroundColor: "rgba(20,32,24,0.62)" }}>
                       <Icon set="ion" name="hand-left-outline" size={14} color="#FFFFFF" />
                       <Text style={{ color: "#FFFFFF", fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}>Drag to look around · tap your tree</Text>
                     </View>
@@ -726,7 +719,7 @@ export default function Forest() {
                   >
                     <View
                       accessibilityLiveRegion="polite"
-                      style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, backgroundColor: "rgba(31,59,36,0.92)" }}
+                      style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, borderCurve: "continuous", backgroundColor: "rgba(31,59,36,0.92)" }}
                     >
                       <Icon set="ion" name="leaf" size={15} color="#A5D6A7" />
                       <Text style={{ color: "#FFFFFF", fontSize: 14, fontWeight: "700", fontFamily: fonts.body }}>{toast}</Text>
@@ -792,7 +785,7 @@ export default function Forest() {
 
           {/* Today's care */}
           <SectionHeader title="Today's care" style={{ marginTop: 28 }} />
-          <View style={{ borderRadius: 24, backgroundColor: colors.surface, overflow: "hidden", ...getShadow(colors, isDark) }}>
+          <View style={{ borderRadius: 24, borderCurve: "continuous", backgroundColor: colors.surface, overflow: "hidden", ...getShadow(colors, isDark) }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12 }}>
               <CareRing done={doneToday} size={58} color={colors.success} track={colors.surfaceSoft} textColor={colors.foreground} font={fonts.mono} />
               <View style={{ flex: 1 }}>
@@ -881,7 +874,7 @@ export default function Forest() {
           {growth?.week.length ? (
             <>
               <SectionHeader title="This week" style={{ marginTop: 28 }} />
-              <View style={{ borderRadius: 24, backgroundColor: colors.surface, paddingHorizontal: 16, paddingVertical: 16, ...getShadow(colors, isDark) }}>
+              <View style={{ borderRadius: 24, borderCurve: "continuous", backgroundColor: colors.surface, paddingHorizontal: 16, paddingVertical: 16, ...getShadow(colors, isDark) }}>
                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                     <View style={{ width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: streak ? colors.warningLight : colors.surfaceSoft }}>
@@ -932,7 +925,7 @@ export default function Forest() {
                   key={tree.number}
                   accessible
                   accessibilityLabel={`Tree ${tree.number}, grown ${formatShortDate(`${tree.grownOn}T12:00:00`)}`}
-                  style={{ width: "31%", flexGrow: 1, maxWidth: "32%", borderRadius: 20, overflow: "hidden", backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
+                  style={{ width: "31%", flexGrow: 1, maxWidth: "32%", borderRadius: 20, borderCurve: "continuous", overflow: "hidden", backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
                 >
                   <LinearGradient colors={isDark ? ["#1E3345", "#2A4A3A"] : ["#DDF0FA", "#E9F6E4"]} style={{ alignItems: "center", paddingTop: 10 }}>
                     <LivingTree growth={1} seed={tree.number} size={76} lowDetail showSoil={false} />
@@ -958,8 +951,8 @@ export default function Forest() {
             </TouchableOpacity>
           ) : null}
           {grown.length ? null : (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 14, borderRadius: 24, padding: 16, backgroundColor: colors.surface, ...getShadow(colors, isDark) }}>
-              <View style={{ width: 64, height: 64, borderRadius: 18, alignItems: "center", justifyContent: "flex-end", overflow: "hidden", backgroundColor: colors.successLight }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 14, borderRadius: 24, borderCurve: "continuous", padding: 16, backgroundColor: colors.surface, ...getShadow(colors, isDark) }}>
+              <View style={{ width: 64, height: 64, borderRadius: 18, borderCurve: "continuous", alignItems: "center", justifyContent: "flex-end", overflow: "hidden", backgroundColor: colors.successLight }}>
                 <LivingTree growth={0.16} seed={1} size={58} lowDetail />
               </View>
               <View style={{ flex: 1 }}>

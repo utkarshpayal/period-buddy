@@ -176,7 +176,7 @@ export function MediaTile({
         accessibilityRole="button"
         accessibilityLabel={`${isVideo ? "Video" : "Article"}: ${title}. ${meta}`}
         accessibilityHint={isVideo ? "Plays the video" : "Opens the article"}
-        style={{ borderRadius: 24, borderWidth: 1, borderColor: colors.border, overflow: "hidden", backgroundColor: colors.surface }}
+        style={{ borderRadius: 24, borderCurve: "continuous", borderWidth: 1, borderColor: colors.border, overflow: "hidden", backgroundColor: colors.surface }}
       >
         <MediaCover imageUrl={imageUrl} tone={tone} aspectRatio={featured ? 16 / 9 : 16 / 10} iconSize={featured ? 40 : 28}>
           {isVideo ? <VideoBadges duration={duration} large={featured} /> : null}

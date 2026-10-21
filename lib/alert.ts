@@ -1,5 +1,6 @@
 import { showAlert } from "./modal-host";
 import { getFriendlyErrorMessage } from "./api";
+import { showErrorToast } from "./toast";
 
 type AlertButton = {
   text?: string;
@@ -30,5 +31,7 @@ export function alert(title: string, message?: string, buttons?: AlertButton[]) 
  * offline quietly vanished on the next launch.
  */
 export function alertLogNotSaved(err: unknown) {
-  alert("Log not saved", `${getFriendlyErrorMessage(err)}\nPlease try saving it again.`);
+  // A toast, not a dialog: it draws over the log sheets (ToastHost is inside
+  // BottomSheet), where a root dialog could end up hidden behind them.
+  showErrorToast(`${getFriendlyErrorMessage(err)} Please try again.`, "Log not saved");
 }

@@ -23,6 +23,7 @@ import { PrescriptionCard } from "../PrescriptionCard";
 import { SkeletonRow } from "../Skeleton";
 import { useTheme } from "../theme";
 import { Icon } from "../Icon";
+import { SendButton } from "../SendButton";
 
 /**
  * A consultation's chat, as a page sheet: header with the session's state and
@@ -257,21 +258,7 @@ export function ConsultationChatSheet({
                 submitBehavior="submit"
                 returnKeyType="send"
               />
-              <TouchableOpacity
-                hitSlop={4}
-                disabled={!typed.trim() || sending}
-                onPress={send}
-                accessibilityRole="button"
-                accessibilityLabel="Send message"
-                className="h-10 w-10 rounded-full items-center justify-center"
-                style={{ backgroundColor: typed.trim() ? colors.primary : colors.surfaceSoft }}
-              >
-                {sending ? (
-                  <ActivityIndicator size="small" color={colors.buttonText} />
-                ) : (
-                  <Icon set="feather" name="arrow-right" size={16} color={typed.trim() ? colors.buttonText : colors.mutedText} />
-                )}
-              </TouchableOpacity>
+              <SendButton onPress={send} disabled={!typed.trim()} loading={sending} size={40} accessibilityLabel="Send message" />
             </View>
           ) : consultation ? (
             <View

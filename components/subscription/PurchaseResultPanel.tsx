@@ -1,9 +1,10 @@
 import React, { useRef, useState } from "react";
-import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
+import { Text, TouchableOpacity, View } from "react-native";
 import { useTheme } from "../theme";
 import { getSoftTints } from "../ui-tokens";
 import type { PurchaseResult } from "../../hooks/usePaymentCheckout";
 import { Icon } from "../Icon";
+import { Button } from "../Button";
 
 /**
  * In-app success/failure/pending state rendered in place of a native OS
@@ -55,16 +56,7 @@ export function PurchaseResultPanel({
           {itemLabel ? `${itemLabel} is active on your account.` : "Your purchase is active."}
         </Text>
 
-        <TouchableOpacity
-          onPress={onDone}
-          activeOpacity={0.9}
-          className="mt-7 w-full items-center rounded-full py-4"
-          style={{ backgroundColor: colors.primary }}
-        >
-          <Text className="text-sm font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-            Great, continue
-          </Text>
-        </TouchableOpacity>
+        <Button label="Great, continue" onPress={onDone} fullWidth style={{ marginTop: 28 }} />
 
         {onViewHistory ? (
           <TouchableOpacity onPress={onViewHistory} activeOpacity={0.7} className="mt-3 py-1">
@@ -90,21 +82,7 @@ export function PurchaseResultPanel({
           {result.message ?? "Payment is still processing. Tap below to check again."}
         </Text>
 
-        <TouchableOpacity
-          onPress={handleRecheck}
-          activeOpacity={0.9}
-          disabled={checking}
-          className="mt-7 w-full flex-row items-center justify-center rounded-full py-4"
-          style={{ backgroundColor: colors.primary, opacity: checking ? 0.7 : 1 }}
-        >
-          {checking ? (
-            <ActivityIndicator color={colors.buttonText} />
-          ) : (
-            <Text className="text-sm font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-              Check payment status
-            </Text>
-          )}
-        </TouchableOpacity>
+        <Button label="Check payment status" onPress={handleRecheck} loading={checking} fullWidth style={{ marginTop: 28 }} />
 
         {onViewHistory ? (
           <TouchableOpacity onPress={onViewHistory} activeOpacity={0.7} className="mt-3 py-1">
@@ -129,16 +107,7 @@ export function PurchaseResultPanel({
         {result.message}
       </Text>
 
-      <TouchableOpacity
-        onPress={onDismissFailure}
-        activeOpacity={0.9}
-        className="mt-7 w-full items-center rounded-full py-4"
-        style={{ backgroundColor: colors.primary }}
-      >
-        <Text className="text-sm font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-          Try again
-        </Text>
-      </TouchableOpacity>
+      <Button label="Try again" onPress={onDismissFailure} fullWidth style={{ marginTop: 28 }} />
     </View>
   );
 }

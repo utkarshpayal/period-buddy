@@ -148,9 +148,7 @@ export default function SchemeApplications() {
                     key={app._id}
                     style={{
                       backgroundColor: colors.surface,
-                      borderColor: colors.border,
-                      borderWidth: 1,
-                      borderRadius: 24,
+                      borderRadius: 24, borderCurve: "continuous",
                       marginBottom: 12,
                       overflow: "hidden",
                       ...getShadow(colors, isDark),
@@ -169,7 +167,7 @@ export default function SchemeApplications() {
                       <View className="flex-row items-start" style={{ gap: 12 }}>
                         <View
                           className="items-center justify-center"
-                          style={{ width: 42, height: 42, borderRadius: 14, backgroundColor: softTints.pink }}
+                          style={{ width: 42, height: 42, borderRadius: 14, borderCurve: "continuous", backgroundColor: softTints.pink }}
                         >
                           <Icon set="ion"
                             name="document-attach-outline"

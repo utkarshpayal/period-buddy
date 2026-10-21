@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -26,6 +25,7 @@ import { mapCommunityComment } from "./mapCommunityPost";
 import type { Comment, Post } from "./types";
 import { AppLockCover } from "../AppLockScreen";
 import { Icon } from "../Icon";
+import { SendButton } from "../SendButton";
 
 /**
  * A post's thread with the reply composer. The reply draft and its
@@ -318,31 +318,7 @@ export function CommunityCommentsSheet({
                 onSubmitEditing={publishReply}
                 returnKeyType="send"
               />
-              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Send comment"
-                disabled={!newCommentContent.trim() || isPublishingComment}
-                onPress={publishReply}
-                className="p-2.5 rounded-full items-center justify-center"
-                style={{
-                  backgroundColor: newCommentContent.trim()
-                    ? colors.primary
-                    : colors.border,
-                  opacity: isPublishingComment ? 0.7 : 1,
-                }}
-              >
-                {isPublishingComment ? (
-                  <ActivityIndicator size="small" color={colors.buttonText} />
-                ) : (
-                  <Icon set="feather"
-                    name="arrow-up"
-                    size={16}
-                    color={
-                      newCommentContent.trim()
-                        ? colors.buttonText
-                        : colors.mutedText
-                    }
-                  />
-                )}
-              </TouchableOpacity>
+              <SendButton onPress={publishReply} disabled={!newCommentContent.trim()} loading={isPublishingComment} size={40} accessibilityLabel="Send comment" />
             </View>
           </View>
           )}

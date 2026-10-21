@@ -91,7 +91,7 @@ function StatCard({
   return (
     <View
       style={{
-        borderRadius: 24,
+        borderRadius: 24, borderCurve: "continuous",
         marginBottom: 14,
         backgroundColor: colors.surface,
         borderWidth: 1.5,
@@ -99,15 +99,13 @@ function StatCard({
         // mode too (where the pale *Light washes are nearly invisible).
         borderColor: `${tint.accent}${isDark ? "59" : "47"}`,
         ...getShadow(colors, isDark),
-        shadowOpacity: isDark ? 0.4 : 0.1,
-        elevation: 4,
       }}
     >
       <LinearGradient
         colors={[isDark ? `${tint.accent}33` : tint.light, colors.surface]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={{ padding: 18, minHeight: 124, borderRadius: 22.5, overflow: "hidden" }}
+        style={{ padding: 18, minHeight: 124, borderRadius: 22.5, borderCurve: "continuous", overflow: "hidden" }}
       >
         {/* Decorative watermark icon, bottom-right — purely visual. */}
         <View pointerEvents="none" style={{ position: "absolute", right: 12, bottom: 8, opacity: isDark ? 0.12 : 0.1 }}>
@@ -252,16 +250,14 @@ function ReportRow({
         alignItems: "center",
         gap: 14,
         padding: 16,
-        borderRadius: 20,
+        borderRadius: 20, borderCurve: "continuous",
         backgroundColor: colors.surface,
-        borderWidth: 1,
-        borderColor: colors.border,
         marginBottom: 12,
         ...getShadow(colors, isDark),
       }}
     >
       <View
-        style={{ width: 46, height: 46, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: iconBg }}
+        style={{ width: 46, height: 46, borderRadius: 14, borderCurve: "continuous", alignItems: "center", justifyContent: "center", backgroundColor: iconBg }}
       >
         <Icon set="ion" name={icon} size={22} color={iconColor} />
       </View>

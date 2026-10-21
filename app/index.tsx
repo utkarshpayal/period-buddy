@@ -20,6 +20,7 @@ import { Loader } from "../components/Loader";
 import { ThemeToggle, useTheme, type ThemeColors } from "../components/theme";
 import { getScreenGradient, getShadow } from "../components/ui-tokens";
 import { useContentWidth } from "../lib/layout";
+import { Button } from "../components/Button";
 import { Icon } from "../components/Icon";
 
 type Slide = {
@@ -224,39 +225,14 @@ export default function Index() {
               ))}
             </View>
 
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => router.push("/(tabs)/signup")}
-              style={({ pressed }) => ({
-                height: 56,
-                borderRadius: 18,
-                backgroundColor: colors.primary,
-                alignItems: "center",
-                justifyContent: "center",
-                transform: [{ scale: pressed ? 0.98 : 1 }],
-                ...getShadow(colors, isDark),
-              })}
-            >
-              <Text style={{ color: colors.buttonText, fontSize: 19, fontWeight: "800", letterSpacing: 0.2, fontFamily: fonts.body }}>
-                Get started
-              </Text>
-            </Pressable>
-
-            <Pressable
-              accessibilityRole="button"
+            <Button label="Get started" iconRight="arrow-forward" onPress={() => router.push("/(tabs)/signup")} fullWidth />
+            <Button
+              label="I already have an account"
+              variant="ghost"
+              size="md"
               onPress={() => router.push("/(tabs)/login")}
-              style={({ pressed }) => ({
-                height: 52,
-                alignItems: "center",
-                justifyContent: "center",
-                marginTop: 6,
-                opacity: pressed ? 0.6 : 1,
-              })}
-            >
-              <Text style={{ color: colors.foreground, fontSize: 15, fontWeight: "700", fontFamily: fonts.body }}>
-                I already have an account
-              </Text>
-            </Pressable>
+              style={{ marginTop: 8, alignSelf: "center" }}
+            />
 
             <Pressable
               accessibilityRole="button"

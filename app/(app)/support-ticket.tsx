@@ -1,13 +1,11 @@
 import { useLocalSearchParams } from "expo-router";
 import React, { useRef, useState } from "react";
 import {
-  ActivityIndicator,
   RefreshControl,
   ScrollView,
   StatusBar,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -21,6 +19,7 @@ import { useSecureScreen } from "../../lib/screenPrivacy";
 import { REPLY_MAX, ticketTimeLabel } from "../../lib/support";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { Icon } from "../../components/Icon";
+import { SendButton } from "../../components/SendButton";
 
 /** One support ticket: the original message, the reply thread and a composer. */
 export default function SupportTicketScreen() {
@@ -69,7 +68,7 @@ export default function SupportTicketScreen() {
         <View
           style={{
             maxWidth: "86%",
-            borderRadius: 18,
+            borderRadius: 18, borderCurve: "continuous",
             borderBottomRightRadius: mine ? 6 : 18,
             borderBottomLeftRadius: mine ? 18 : 6,
             paddingHorizontal: 14,
@@ -169,22 +168,7 @@ export default function SupportTicketScreen() {
                       paddingBottom: 12,
                     }}
                   />
-                  <TouchableOpacity
-                    onPress={send}
-                    disabled={!draft.trim() || sending}
-                    accessibilityRole="button"
-                    accessibilityLabel="Send reply"
-                    className="items-center justify-center"
-                    style={{
-                      width: 46,
-                      height: 46,
-                      borderRadius: 23,
-                      backgroundColor: colors.primary,
-                      opacity: !draft.trim() || sending ? 0.5 : 1,
-                    }}
-                  >
-                    {sending ? <ActivityIndicator color={colors.buttonText} /> : <Icon set="ion" name="send" size={18} color={colors.buttonText} />}
-                  </TouchableOpacity>
+                  <SendButton onPress={send} disabled={!draft.trim()} loading={sending} size={46} accessibilityLabel="Send reply" />
                 </View>
               </View>
             ) : (

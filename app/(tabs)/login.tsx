@@ -16,7 +16,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../components/auth-context";
 import {
   AuthDivider,
-  AuthErrorBanner,
   AuthField,
   AuthPrimaryButton,
   AuthTopBar,
@@ -30,6 +29,7 @@ import { alert } from "../../lib/alert";
 import { getScreenGradient, getShadow } from "../../components/ui-tokens";
 import { getFriendlyErrorMessage } from "../../lib/api";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
+import { showErrorToast } from "../../lib/toast";
 
 const SUPPORT_EMAIL = "hello@thenura.care";
 
@@ -41,7 +41,6 @@ export default function Login() {
   const { width } = useWindowDimensions();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleBusy, setIsGoogleBusy] = useState(false);
   const passwordRef = useRef<TextInput>(null);
@@ -88,7 +87,7 @@ export default function Login() {
       await connectPartnerAndResolveRoute(partnerCode);
 
     // A modal alert survives this screen unmounting on the router.replace()
-    // below — an inline banner (setErrorMessage) would just flash and
+    // below — an inline error would just flash and
     // disappear, leaving no trace of why the partner connection failed.
     if (connectError) {
       alert("Couldn't connect as a partner", connectError);
@@ -105,23 +104,21 @@ export default function Login() {
   }
 
   async function handleGoogleSignInSuccess({ token, user }: { token: string; user: AuthUser }) {
-    setErrorMessage("");
     try {
       await signIn({ token, user });
       await finishSignIn(user);
     } catch (error) {
       setIsGoogleBusy(false);
-      setErrorMessage(
+      showErrorToast(
         getFriendlyErrorMessage(error),
       );
     }
   }
 
   async function handleLogin() {
-    setErrorMessage("");
 
     if (!email.trim() || !password) {
-      setErrorMessage("Please enter your email and password.");
+      showErrorToast("Please enter your email and password.");
       return;
     }
 
@@ -134,7 +131,7 @@ export default function Login() {
       });
 
       if (!response.token) {
-        setErrorMessage("Login succeeded, but no auth token was returned.");
+        showErrorToast("Login succeeded, but no auth token was returned.");
         return;
       }
 
@@ -151,7 +148,7 @@ export default function Login() {
       });
       await finishSignIn(user, normalizedEmail);
     } catch (error) {
-      setErrorMessage(
+      showErrorToast(
         getFriendlyErrorMessage(error),
       );
     } finally {
@@ -215,10 +212,7 @@ export default function Login() {
                   autoCapitalize="none"
                   autoComplete="email"
                   keyboardType="email-address"
-                  onChangeText={(text) => {
-                    setErrorMessage("");
-                    setEmail(text);
-                  }}
+                  onChangeText={setEmail}
                   onSubmitEditing={() => passwordRef.current?.focus()}
                   placeholder="Email address"
                   returnKeyType="next"
@@ -231,10 +225,7 @@ export default function Login() {
                   ref={passwordRef}
                   icon="lock-closed-outline"
                   isPassword
-                  onChangeText={(text) => {
-                    setErrorMessage("");
-                    setPassword(text);
-                  }}
+                  onChangeText={setPassword}
                   onSubmitEditing={handleLogin}
                   placeholder="Password"
                   returnKeyType="done"
@@ -273,18 +264,12 @@ export default function Login() {
                 />
               </View>
 
-              {errorMessage ? (
-                <View style={{ marginTop: 16 }}>
-                  <AuthErrorBanner message={errorMessage} />
-                </View>
-              ) : null}
-
               <AuthDivider />
 
               <GoogleSignInButton
                 disabled={isSubmitting}
                 onBusyChange={setIsGoogleBusy}
-                onError={setErrorMessage}
+                onError={showErrorToast}
                 onSuccess={handleGoogleSignInSuccess}
               />
 

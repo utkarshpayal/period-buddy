@@ -1,12 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import Pressable from "../PressableFeedback";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { getDateKey } from "../../lib/format";
 import { addDays, parseDateKey } from "../../lib/onboarding";
 import { useTheme } from "../theme";
+import { Button } from "../Button";
 import { Icon } from "../Icon";
+import { getShadow } from "../ui-tokens";
 
 // Building blocks for components/onboarding/OnboardingFlow.tsx. Kept
 // presentational: every value comes in through props.
@@ -43,37 +45,7 @@ type PrimaryButtonProps = {
 
 /** Full-width bottom call to action. */
 export function PrimaryButton({ label, onPress, disabled, loading, icon = "arrow-forward" }: PrimaryButtonProps) {
-  const { colors, fonts } = useTheme();
-  const inactive = Boolean(disabled || loading);
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ disabled: inactive, busy: Boolean(loading) }}
-      disabled={inactive}
-      onPress={onPress}
-      style={({ pressed }) => ({
-        height: 56,
-        borderRadius: 18,
-        backgroundColor: colors.primary,
-        opacity: disabled ? 0.45 : 1,
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 8,
-        transform: [{ scale: pressed ? 0.98 : 1 }],
-      })}
-    >
-      {loading ? (
-        <ActivityIndicator color={colors.buttonText} />
-      ) : (
-        <>
-          <Text style={{ color: colors.buttonText, fontSize: 16, fontWeight: "800", fontFamily: fonts.body }}>{label}</Text>
-          {icon ? <Icon set="ion" name={icon} size={18} color={colors.buttonText} /> : null}
-        </>
-      )}
-    </Pressable>
-  );
+  return <Button label={label} onPress={onPress} disabled={disabled} loading={loading} iconRight={icon} fullWidth />;
 }
 
 /** Low-emphasis text action (Skip, Not sure, ...). */
@@ -102,7 +74,7 @@ type OptionCardProps = {
 
 /** Tappable answer row: icon, label, optional hint, and a check. */
 export function OptionCard({ icon, label, hint, selected, onPress, multi }: OptionCardProps) {
-  const { colors, fonts } = useTheme();
+  const { colors, fonts, isDark } = useTheme();
 
   return (
     <Pressable
@@ -116,10 +88,13 @@ export function OptionCard({ icon, label, hint, selected, onPress, multi }: Opti
         gap: 14,
         paddingVertical: 14,
         paddingHorizontal: 14,
-        borderRadius: 18,
+        borderRadius: 20,
+        borderCurve: "continuous",
+        // Constant width so picking an answer never shifts the row.
         borderWidth: 1.5,
-        borderColor: selected ? colors.primary : colors.border,
+        borderColor: selected ? colors.primary : "transparent",
         backgroundColor: selected ? colors.primaryLight : colors.surface,
+        ...(selected ? null : getShadow(colors, isDark)),
         transform: [{ scale: pressed ? 0.985 : 1 }],
       })}
     >
@@ -127,7 +102,7 @@ export function OptionCard({ icon, label, hint, selected, onPress, multi }: Opti
         style={{
           width: 42,
           height: 42,
-          borderRadius: 14,
+          borderRadius: 14, borderCurve: "continuous",
           alignItems: "center",
           justifyContent: "center",
           backgroundColor: selected ? colors.surface : colors.surfaceSoft,
@@ -136,7 +111,7 @@ export function OptionCard({ icon, label, hint, selected, onPress, multi }: Opti
         <Icon set="ion" name={icon} size={20} color={colors.primary} />
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={{ color: colors.foreground, fontSize: 15.5, fontWeight: "800", fontFamily: fonts.body }}>{label}</Text>
+        <Text style={{ color: colors.foreground, fontSize: 15.5, fontWeight: "700", letterSpacing: -0.2, fontFamily: fonts.body }}>{label}</Text>
         {hint ? (
           <Text style={{ color: colors.mutedText, fontSize: 13, marginTop: 2, fontFamily: fonts.body }}>{hint}</Text>
         ) : null}
@@ -321,7 +296,7 @@ export function MonthCalendar({ selectedKey, onSelect, highlightLength, minDate,
   );
 
   return (
-    <View style={{ backgroundColor: colors.surface, borderRadius: 22, padding: 14, borderWidth: 1, borderColor: colors.border }}>
+    <View style={{ backgroundColor: colors.surface, borderRadius: 22, borderCurve: "continuous", padding: 14, borderWidth: 1, borderColor: colors.border }}>
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
         {navButton(-1, canGoBack)}
         <Text style={{ color: colors.foreground, fontSize: 15, fontWeight: "800", fontFamily: fonts.heading }}>{monthLabel}</Text>

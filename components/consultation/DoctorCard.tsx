@@ -1,5 +1,5 @@
 import React, { memo } from "react";
-import { Text, TouchableOpacity, View } from "react-native";
+import { Text, View } from "react-native";
 import type { Consultation, Doctor } from "../../lib/api";
 import { formatINR } from "../../lib/consultationFormat";
 import { experienceLabel, getDoctorDisplayName, languagesLabel } from "../../lib/consultationModel";
@@ -9,6 +9,7 @@ import { useTheme } from "../theme";
 import { getShadow } from "../ui-tokens";
 import { Icon } from "../Icon";
 import { PressableScale } from "../PressableScale";
+import { Button } from "../Button";
 
 /**
  * One doctor in the list. The profile tap area and the action button are
@@ -49,7 +50,7 @@ export const DoctorCard = memo(function DoctorCard({
     <View
       style={{
         backgroundColor: colors.surface,
-        borderRadius: 22,
+        borderRadius: 22, borderCurve: "continuous",
         borderWidth: 1.5,
         borderColor: selected ? colors.primary : "transparent",
         ...getShadow(colors, isDark),
@@ -121,20 +122,14 @@ export const DoctorCard = memo(function DoctorCard({
             {existing ? "You have a booking" : "Not bookable yet"}
           </Text>
         )}
-        <TouchableOpacity
-          activeOpacity={0.85}
-          disabled={actionDisabled}
+        <Button
+          label={existing ? "Open chat" : "See times"}
+          icon={existing ? "chatbubble-outline" : "calendar-outline"}
+          size="md"
           onPress={() => (existing ? onOpenChat(existing) : onSeeTimes(doctor))}
-          accessibilityRole="button"
+          disabled={actionDisabled}
           accessibilityLabel={existing ? `Chat with ${name}` : fee ? `See open times for ${name}` : `${name} isn't bookable yet`}
-          className="flex-row items-center"
-          style={{ gap: 8, paddingHorizontal: 18, height: 44, borderRadius: 14, backgroundColor: colors.primary, opacity: actionDisabled ? 0.5 : 1 }}
-        >
-          <Icon set="feather" name={existing ? "message-circle" : "calendar"} size={16} color={colors.buttonText} />
-          <Text style={{ fontSize: 14, fontWeight: "700", color: colors.buttonText, fontFamily: fonts.body }}>
-            {existing ? "Open chat" : "See times"}
-          </Text>
-        </TouchableOpacity>
+        />
       </View>
     </View>
   );

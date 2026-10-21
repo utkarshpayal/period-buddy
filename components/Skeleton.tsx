@@ -156,7 +156,7 @@ export function SkeletonMediaCard({ style }: { style?: ViewStyle }) {
       className="overflow-hidden"
       style={{
         backgroundColor: colors.surface,
-        borderRadius: 24,
+        borderRadius: 24, borderCurve: "continuous",
         borderWidth: 1,
         borderColor: colors.border,
         ...style,

@@ -9,6 +9,7 @@ import { AppModalHost } from "./modals/AppModalHost";
 import { PrescriptionDocumentView } from "./PrescriptionDocumentView";
 import { useTheme } from "./theme";
 import { Icon } from "./Icon";
+import { Button } from "./Button";
 
 type Busy = "download" | "print" | null;
 
@@ -99,16 +100,7 @@ export function PrescriptionViewer({
               <Text className="text-center text-sm" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
                 {error}
               </Text>
-              <TouchableOpacity
-                onPress={load}
-                accessibilityRole="button"
-                className="rounded-full px-5 py-2.5"
-                style={{ backgroundColor: colors.primary }}
-              >
-                <Text className="text-sm font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-                  Try again
-                </Text>
-              </TouchableOpacity>
+              <Button label="Try again" size="sm" onPress={load} />
             </View>
           ) : (
             <View className="flex-1 items-center justify-center gap-3" style={{ backgroundColor: colors.surfaceSoft }}>
@@ -121,20 +113,16 @@ export function PrescriptionViewer({
         </View>
 
         <View className="flex-row gap-3 px-4 pt-3 pb-4">
-          <TouchableOpacity
+          <Button
+            label={busy === "download" ? "Preparing…" : "Download PDF"}
+            icon="download-outline"
+            size="md"
             onPress={() => run("download")}
-            disabled={!doc || busy !== null}
-            accessibilityRole="button"
+            loading={busy === "download"}
+            disabled={!doc || (busy !== null && busy !== "download")}
             accessibilityLabel="Download prescription as PDF"
-            accessibilityState={{ busy: busy === "download", disabled: !doc || busy !== null }}
-            className="flex-1 flex-row items-center justify-center gap-2 rounded-full py-3.5"
-            style={{ backgroundColor: colors.primary, opacity: !doc || (busy && busy !== "download") ? 0.6 : 1 }}
-          >
-            {busy === "download" ? <ActivityIndicator size="small" color={colors.buttonText} /> : <Icon set="feather" name="download" size={16} color={colors.buttonText} />}
-            <Text className="text-sm font-bold" style={{ color: colors.buttonText, fontFamily: fonts.body }}>
-              {busy === "download" ? "Preparing…" : "Download PDF"}
-            </Text>
-          </TouchableOpacity>
+            style={{ flex: 1 }}
+          />
           <TouchableOpacity
             onPress={() => run("print")}
             disabled={!doc || busy !== null}

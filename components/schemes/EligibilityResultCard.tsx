@@ -15,7 +15,7 @@ export function EligibilityResultCard({ eligibility }: { eligibility: SchemeElig
       accessibilityLiveRegion="polite"
       style={{
         marginTop: 12,
-        borderRadius: 16,
+        borderRadius: 16, borderCurve: "continuous",
         padding: 14,
         backgroundColor: mayBeEligible ? softTints.emerald : softTints.amber,
       }}

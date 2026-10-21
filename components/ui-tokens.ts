@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Platform, type ViewStyle } from "react-native";
 import type { MoodValue } from "../lib/api";
 import type { CyclePhase } from "../lib/cycle";
 import type { ThemeColors } from "./theme";
@@ -74,7 +75,7 @@ export const HABIT_CATEGORY_COLORS = {
 
 export function getScreenGradient(colors: ThemeColors, isDark: boolean) {
   return isDark
-    ? [colors.background, "#1b1522", colors.background]
+    ? [colors.background, "#251B31", colors.background]
     : [colors.background, colors.primaryLight, colors.background];
 }
 
@@ -89,9 +90,11 @@ export function getHeroGradient(colors: ThemeColors, isDark: boolean) {
   // can't use the pale *Light tint tokens (dark mode already avoided that;
   // light mode used to use them and the text became unreadable).
   // Light: rose into a deeper berry, so the card stays one warm colour.
+  // Dark: jewel tones (berry → plum → indigo), never the pastel accent
+  // tokens, which made white text unreadable (white clears 6.4:1+ on each).
   return isDark
-    ? [colors.primaryDark, colors.primary, colors.secondary]
-    : [colors.primary, colors.primaryDark, "#B23D80"];
+    ? ["#9C3D68", "#71347A", "#463A8A"]
+    : [colors.primary, colors.primaryDark, "#9C3A86"];
 }
 
 export function getActionGradient(colors: ThemeColors) {
@@ -154,7 +157,27 @@ export function getSeverityColor(
   return colors.success;
 }
 
-export function getShadow(colors: ThemeColors, isDark: boolean) {
+// Android drew `boxShadow` only from API 28 (Android 9); older budget phones
+// keep the legacy elevation shadow.
+const LAYERED_SHADOWS = Platform.OS !== "android" || Number(Platform.Version) >= 28;
+// Inset shadows came a version later (API 29).
+const INSET_SHADOWS = Platform.OS !== "android" || Number(Platform.Version) >= 29;
+
+// The card shadow: a hairline ring (an edge without a border, so layouts don't
+// move), a tight contact shadow and a wide, soft, plum-tinted ambient one. In
+// dark mode the ring is a faint light edge, since a shadow can't lift a card
+// off a dark page.
+const CARD_SHADOW = {
+  light: "0 0 0 1px rgba(60, 20, 40, 0.035), 0 1px 2px rgba(60, 20, 40, 0.05), 0 10px 28px -6px rgba(60, 20, 40, 0.10)",
+  dark: "0 0 0 1px rgba(255, 255, 255, 0.07), 0 1px 2px rgba(8, 4, 14, 0.4), 0 14px 32px -10px rgba(8, 4, 14, 0.6)",
+};
+// Dark cards also catch light on their top edge: a 1px inner highlight.
+const DARK_TOP_LIGHT = "inset 0 1px 0 rgba(255, 255, 255, 0.07)";
+
+export function getShadow(colors: ThemeColors, isDark: boolean): ViewStyle {
+  if (LAYERED_SHADOWS) {
+    return { boxShadow: isDark ? (INSET_SHADOWS ? `${DARK_TOP_LIGHT}, ${CARD_SHADOW.dark}` : CARD_SHADOW.dark) : CARD_SHADOW.light };
+  }
   return {
     shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 8 },
@@ -162,4 +185,31 @@ export function getShadow(colors: ThemeColors, isDark: boolean) {
     shadowRadius: 24,
     elevation: 3,
   };
+}
+
+/**
+ * A coloured glow under a filled accent element (the hero card, today's day,
+ * the primary quick action): a tight shadow plus a wide soft one in `color`.
+ * Dark mode gets a plain soft shadow instead: coloured halos on a dark page
+ * read as neon and strain the eyes at night.
+ */
+export function getGlow(color: string, isDark: boolean, strength: "soft" | "strong" = "soft"): ViewStyle {
+  if (isDark) {
+    if (LAYERED_SHADOWS) return { boxShadow: `0 2px 6px rgba(0, 0, 0, 0.35), 0 ${strength === "strong" ? 14 : 8}px ${strength === "strong" ? 28 : 18}px -8px rgba(0, 0, 0, 0.55)` };
+    return { shadowColor: "#000000", shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.4, shadowRadius: 14, elevation: 4 };
+  }
+  const [near, far] = strength === "strong" ? [0.28, 0.32] : [0.22, 0.26];
+  if (LAYERED_SHADOWS) {
+    return { boxShadow: `0 2px 6px ${withAlpha(color, near)}, 0 ${strength === "strong" ? 16 : 10}px ${strength === "strong" ? 32 : 22}px -8px ${withAlpha(color, far)}` };
+  }
+  return { shadowColor: color, shadowOffset: { width: 0, height: 8 }, shadowOpacity: far, shadowRadius: 18, elevation: 5 };
+}
+
+/** "#D22E66" (or "#D26") + 0.3 → "rgba(210, 46, 102, 0.3)"; other colour strings pass through. */
+export function withAlpha(color: string, alpha: number): string {
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color.trim())?.[1];
+  if (!hex) return color;
+  const full = hex.length === 3 ? hex.split("").map((c) => c + c).join("") : hex;
+  const n = parseInt(full, 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
 }
