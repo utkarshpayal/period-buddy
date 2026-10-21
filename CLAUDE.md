@@ -2,6 +2,20 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Working rules (all Nura repos)
+
+The full flow is in docs/WORKFLOW.md. The guard hook in `.claude/hooks/guard.mjs` enforces the 🔒 rules.
+
+1. **Branch first:** `git switch -c <type>/<name> origin/staging` (`feat`, `fix`, `chore`, `docs`, `refactor`). 🔒 No commits on `main`.
+2. 🔒 **Never push to `main` or force-push `main`/`staging`.** Push your branch only when asked, then a PR goes to `staging`. `main` changes only through a reviewed `staging` → `main` release PR, or a hotfix PR (branch from `origin/main`, then merge `main` back into `staging`).
+3. **Leave other people's uncommitted changes alone.** Don't commit, stash, reset or discard them; use a `git worktree` from `origin/staging` instead.
+4. 🔒 **Secrets:** never read, print, copy or commit `.env*` (except `.env.example`), keystores or credentials, or read secret values from AWS. Name the key and let the person set the value. A new env var goes in `.env.example` and in every environment (prod and staging).
+5. 🔒 **Production is opt-in:** read-only checks are fine. Changing AWS, Vercel, EAS production or live data needs the person's explicit go-ahead, and the hook asks each time. Do it on staging first.
+6. **Verify before done:** run `npm run lint` and `npm test`, the same checks CI runs. Report failures with their output.
+7. **Docs in the same change:** keep this file, the API docs and the cross-repo contracts (WORKFLOW.md §7) in sync with the code.
+8. **Stay in scope**, and list other problems you spot instead of fixing them unasked. Work inline: no subagents unless asked.
+9. **Commits and PR titles:** `<type>(<scope>): <summary>`, imperative, lowercase, ≤ 72 characters. Fill in the PR template.
+
 @AGENTS.md
 
 ## Keeping this file current
@@ -263,4 +277,4 @@ Some components have a `.web.tsx` variant for APIs that differ between native an
 
 - Expo SDK has changed significantly — check `https://docs.expo.dev/versions/v54.0.0/` before writing Expo API code rather than relying on older training data.
 - Sensitive local files present but gitignored: `.env` and every `.env.*` variant except `.env.example` — never print or commit their contents.
-- All docs live in `docs/`, indexed by `docs/README.md` (which also links every Nura repo's docs). `docs/ARCHITECTURE.md` is the **only system-wide architecture doc** for all five repos (the others link to it), and `docs/API_REFERENCE.md` lists every endpoint `lib/api/` calls — update both in the same change when the system shape or the API surface changes. Security facts live in the backend's `docs/SECURITY.md`; the website's `/security` page must match it.
+- All docs live in `docs/`, indexed by `docs/README.md` (which also links every Nura repo's docs). `docs/ARCHITECTURE.md` is the **only system-wide architecture doc** for all five repos (the others link to it), `docs/WORKFLOW.md` the one flow for branches, releases and secrets (with the guard hook `.claude/hooks/guard.mjs`, a copy of which lives in every repo), and `docs/API_REFERENCE.md` lists every endpoint `lib/api/` calls — update both in the same change when the system shape or the API surface changes. Security facts live in the backend's `docs/SECURITY.md`; the website's `/security` page must match it.
