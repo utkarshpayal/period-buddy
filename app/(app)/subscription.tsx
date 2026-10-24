@@ -31,16 +31,19 @@ import {
   type PricingSummary,
   type SubscriptionFeature,
 } from "../../lib/api";
-import { addOnPrice, formatRupees, pricingFromCatalog, type Period } from "../../lib/pricing";
+import { addOnPrice, formatRupees, pricingFromCatalog, usageLines, type Period } from "../../lib/pricing";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { Icon } from "../../components/Icon";
 import { Button } from "../../components/Button";
 
+// Prepaid periods, worded the same as the Premium card ("for 30 days").
 const PERIOD_LABEL: Record<BillingCycle, string> = {
-  monthly: "per month",
-  yearly: "per year",
+  monthly: "for 30 days",
+  yearly: "for 12 months",
   one_time: "one-time",
 };
+
+const plural = (n: number | undefined, one: string, many: string) => `${n ?? "–"} ${n === 1 ? one : many}`;
 
 type ConfirmTarget = {
   key: string;
@@ -226,7 +229,9 @@ export default function SubscriptionScreen() {
   const comparison = premium?.yearly?.comparison ?? null;
   const founding = premium?.founding ?? null;
   const addOns = pricing?.allowFeatureWisePurchase === false ? [] : (pricing?.addOns ?? []);
-  const hasYearly = Boolean(premium?.yearly) || addOns.some((a) => a.yearlyPrice);
+  // The Monthly / Yearly switch lives on the Premium card, so it shows only
+  // when Premium is sold both ways.
+  const showPeriodSwitch = Boolean(premium?.monthly && premium?.yearly);
 
   const confirmPremium = (card: NonNullable<typeof premiumCard>, extra: Partial<ConfirmTarget> = {}) =>
     openConfirm({
@@ -267,7 +272,7 @@ export default function SubscriptionScreen() {
           {
             icon: "speedometer-outline",
             title: "Fair use",
-            body: `Premium includes up to ${fairUse.aiMessagesPerDay?.premium ?? "–"} Nura AI messages a day, ${fairUse.documentsPerMonth?.premium ?? "–"} documents a month (up to ${fairUse.maxPagesPerDocument?.premium ?? "–"} pages each) and ${fairUse.doctorReportsPerMonth?.premium ?? "–"} doctor report a month.`,
+            body: `Free: up to ${plural(fairUse.aiMessagesPerDay?.free, "Nura AI message", "Nura AI messages")} a day. Premium: up to ${plural(fairUse.aiMessagesPerDay?.premium, "message", "messages")} a day, ${plural(fairUse.documentsPerMonth?.premium, "document", "documents")} a month (up to ${plural(fairUse.maxPagesPerDocument?.premium, "page", "pages")} each) and ${plural(fairUse.doctorReportsPerMonth?.premium, "doctor report", "doctor reports")} a month. Urgent health questions are never limited.`,
           },
         ]
       : []),
@@ -279,7 +284,12 @@ export default function SubscriptionScreen() {
     {
       icon: "lock-closed-outline",
       title: "Your health data stays yours",
-      body: "Paying doesn't change who can see your data. Help with a payment: Profile → Help & support.",
+      body: "Paying never changes who can see your health data.",
+    },
+    {
+      icon: "help-circle-outline",
+      title: "Need help with a payment?",
+      body: "Go to Profile → Help & support and pick Payments / Subscription.",
     },
   ];
 
@@ -301,6 +311,7 @@ export default function SubscriptionScreen() {
         ? "Get every Premium feature in one plan."
         : "Tracking, predictions and safety guidance are always free.";
   const heroGradient = getHeroGradient(colors, isDark) as [string, string, string];
+  const usage = usageLines(me?.usage);
 
   const historyStatus: Record<Entitlement["status"], { icon: string; tone: { fg: string; bg: string }; label: string }> = {
     active: { icon: "checkmark-circle-outline", tone: { fg: colors.success, bg: colors.successLight }, label: "Active" },
@@ -393,12 +404,39 @@ export default function SubscriptionScreen() {
               ) : null}
             </LinearGradient>
 
+            {/* Your usage (only while fair use is on) */}
+            {usage.length > 0 ? (
+              <>
+                <SectionHeader title="Your usage" style={{ marginTop: sectionGap }} />
+                <View style={{ backgroundColor: colors.surface, borderRadius: 22, borderCurve: "continuous", paddingVertical: 4, ...getShadow(colors, isDark) }}>
+                  {usage.map((line, index) => (
+                    <View key={line.key} style={{ paddingHorizontal: 16, paddingVertical: 13 }}>
+                      {index > 0 ? <View style={{ position: "absolute", top: 0, left: 16, right: 0, height: 1, backgroundColor: colors.track }} /> : null}
+                      <View className="flex-row items-center justify-between" style={{ gap: 10 }}>
+                        <Text numberOfLines={1} style={{ flexShrink: 1, color: colors.foreground, fontSize: 14.5, fontWeight: "700", fontFamily: fonts.body }}>{line.label}</Text>
+                        <Text style={{ color: line.low ? colors.warning : colors.mutedText, fontSize: 13, fontWeight: line.low ? "700" : "400", fontFamily: fonts.body }}>{line.text}</Text>
+                      </View>
+                      <View
+                        style={{ height: 6, borderRadius: 3, backgroundColor: colors.track, marginTop: 8, overflow: "hidden" }}
+                        accessibilityLabel={`${line.label}: ${line.text}`}
+                      >
+                        <View style={{ width: `${Math.min(100, (line.used / Math.max(1, line.limit)) * 100)}%`, height: 6, borderRadius: 3, backgroundColor: line.low ? colors.warning : colors.primary }} />
+                      </View>
+                      <Text style={{ color: colors.mutedText, fontSize: 13, marginTop: 6, fontFamily: fonts.body }}>
+                        {`Resets ${formatShortDate(line.resetsAt)}`}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </>
+            ) : null}
+
             {/* Nura Premium */}
             {!pricingOff && premiumCard ? (
               <>
                 <SectionHeader title="Nura Premium" style={{ marginTop: sectionGap }} />
                 <View style={{ borderRadius: 24, borderCurve: "continuous", padding: 18, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, ...getShadow(colors, isDark) }}>
-                  {premium?.monthly && premium?.yearly ? (
+                  {showPeriodSwitch && premium?.monthly && premium?.yearly ? (
                     <SegmentedControl<Period>
                       segments={[
                         { key: "monthly", label: `Monthly ${formatRupees(premium.monthly.price)}`, accessibilityLabel: `Monthly, ${formatRupees(premium.monthly.price)} for 30 days` },
@@ -534,7 +572,11 @@ export default function SubscriptionScreen() {
               <>
                 <SectionHeader
                   title="Or pick single features"
-                  subtitle={hasYearly ? `Prices for ${period === "yearly" ? "12 months" : "30 days"}. Switch above.` : undefined}
+                  subtitle={
+                    showPeriodSwitch && addOns.some((a) => a.yearlyPrice)
+                      ? `Prices ${period === "yearly" ? "for 12 months" : "for 30 days"}, matching the switch above.`
+                      : undefined
+                  }
                   style={{ marginTop: sectionGap }}
                 />
                 <View style={{ backgroundColor: colors.surface, borderRadius: 22, borderCurve: "continuous", paddingVertical: 4, ...getShadow(colors, isDark) }}>
@@ -647,8 +689,8 @@ export default function SubscriptionScreen() {
                           {`${formatShortDate(e.createdAt)} · ${status.label}`}
                         </Text>
                       </View>
-                      <Text style={{ color: e.status === "failed" ? colors.mutedText : colors.foreground, fontSize: 14, fontFamily: fonts.monoSemiBold, textDecorationLine: e.status === "failed" ? "line-through" : "none" }}>
-                        {`₹${e.amount}`}
+                      <Text style={{ color: e.status === "failed" || e.status === "refunded" ? colors.mutedText : colors.foreground, fontSize: 14, fontFamily: fonts.monoSemiBold, textDecorationLine: e.status === "failed" || e.status === "refunded" ? "line-through" : "none" }}>
+                        {formatRupees(e.amount)}
                       </Text>
                     </View>
                   );

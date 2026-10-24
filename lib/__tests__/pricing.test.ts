@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { SubscriptionFeature, SubscriptionPlan } from "../api/subscription";
-import { addOnPrice, annualComparison, formatRupees, pricingFromCatalog, purchaseDisclosure, taxBreakdown } from "../pricing";
+import { addOnPrice, aiMessagesLeft, annualComparison, formatRupees, pricingFromCatalog, purchaseDisclosure, taxBreakdown, usageLines } from "../pricing";
 
 test("yearly Premium: ₹799 vs 12 × ₹99 saves ₹389 (32.7%), about ₹66.58 a month", () => {
   assert.deepEqual(annualComparison(99, 799), { twelveMonthly: 1188, monthlyEquivalent: 66.58, saving: 389, savingPercent: 32.7 });
@@ -80,4 +80,32 @@ test("summary from an old backend: Premium plans, add-ons, never a promo plan", 
   assert.equal(summary.premium.founding, null);
   assert.deepEqual(summary.premium.features, [{ key: "ai_assistant", name: "Saved AI chats" }]);
   assert.deepEqual(summary.addOns.map((a) => [a.key, a.includedInPremium, a.yearlyPrice]), [["ai_assistant", true, 290]]);
+});
+
+test("usage lines show what's used of each allowance, only while fair use is on", () => {
+  const usage = {
+    tier: "free" as const,
+    fairUseEnabled: true,
+    items: [
+      { key: "ai_message" as const, period: "day" as const, used: 17, limit: 20, remaining: 3, resetsAt: "2026-10-24T18:30:00.000Z" },
+      { key: "document_upload" as const, period: "month" as const, used: 0, limit: 2, remaining: 2, resetsAt: "2026-10-31T18:30:00.000Z" },
+      { key: "doctor_report" as const, period: "month" as const, used: 1, limit: null, remaining: null, resetsAt: "2026-10-31T18:30:00.000Z" },
+    ],
+  };
+  const lines = usageLines(usage);
+  assert.deepEqual(lines.map((l) => [l.key, l.text, l.low]), [
+    ["ai_message", "17 of 20 used today", true],
+    ["document_upload", "0 of 2 used this month", false],
+  ]);
+  assert.deepEqual(usageLines({ ...usage, fairUseEnabled: false }), []);
+  assert.deepEqual(usageLines(undefined), []);
+});
+
+test("Nura AI's line counts down and says urgent questions still work at zero", () => {
+  const base = { tier: "free" as const, fairUseEnabled: true };
+  const at = (used: number) => ({ ...base, items: [{ key: "ai_message" as const, period: "day" as const, used, limit: 20, remaining: 20 - used, resetsAt: "x" }] });
+  assert.deepEqual(aiMessagesLeft(at(3)), { text: "17 of 20 Nura AI messages left today", low: false, none: false });
+  assert.equal(aiMessagesLeft(at(18))?.low, true);
+  assert.match(aiMessagesLeft(at(20))?.text ?? "", /used all 20 .* Urgent questions still get an answer/);
+  assert.equal(aiMessagesLeft({ ...base, fairUseEnabled: false, items: [] }), null);
 });

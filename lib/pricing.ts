@@ -8,11 +8,13 @@
 import type {
   AnnualComparison,
   BillingCycle,
+  MySubscription,
   PricingAddOn,
   PricingSummary,
   SubscriptionFeature,
   SubscriptionPlan,
   TaxSettings,
+  UsageItem,
 } from "./api/subscription";
 
 export const DEFAULT_TAX: TaxSettings = { ratePercent: 18, pricesIncludeTax: true };
@@ -156,5 +158,62 @@ export function pricingFromCatalog(plans: SubscriptionPlan[], features: Subscrip
         includedInPremium: premiumKeys.has(f.key),
       })),
     fairUse: { enabled: false },
+  };
+}
+
+const USAGE_LABELS: Record<UsageItem["key"], { label: string; unit: string; period: string }> = {
+  ai_message: { label: "Nura AI messages", unit: "messages", period: "today" },
+  document_upload: { label: "Documents uploaded", unit: "documents", period: "this month" },
+  doctor_report: { label: "Doctor report summaries", unit: "summaries", period: "this month" },
+};
+
+export type UsageLine = {
+  key: UsageItem["key"];
+  label: string;
+  used: number;
+  limit: number;
+  remaining: number;
+  /** "3 of 20 used today" */
+  text: string;
+  /** "Resets tomorrow" / "Resets on 1 Nov" (caller formats the date). */
+  resetsAt: string;
+  /** Nothing left, or close to it. */
+  low: boolean;
+};
+
+/** What a person has used of each fair-use allowance, for My Subscription.
+ * Empty while fair use is off or on a backend that doesn't report usage. */
+export function usageLines(usage: MySubscription["usage"] | undefined): UsageLine[] {
+  if (!usage?.fairUseEnabled) return [];
+  return usage.items
+    .filter((item): item is UsageItem & { limit: number } => item.limit != null)
+    .map((item) => {
+      const meta = USAGE_LABELS[item.key];
+      const remaining = Math.max(0, item.limit - item.used);
+      return {
+        key: item.key,
+        label: meta.label,
+        used: item.used,
+        limit: item.limit,
+        remaining,
+        text: `${Math.min(item.used, item.limit)} of ${item.limit} used ${meta.period}`,
+        resetsAt: item.resetsAt,
+        low: remaining <= Math.max(1, Math.floor(item.limit * 0.15)),
+      };
+    });
+}
+
+/** The line under Nura AI's composer: "17 of 20 messages left today", or
+ * null while fair use is off. */
+export function aiMessagesLeft(usage: MySubscription["usage"] | undefined): { text: string; low: boolean; none: boolean } | null {
+  const line = usageLines(usage).find((l) => l.key === "ai_message");
+  if (!line) return null;
+  return {
+    text:
+      line.remaining === 0
+        ? `You've used all ${line.limit} Nura AI messages for today. Urgent questions still get an answer.`
+        : `${line.remaining} of ${line.limit} Nura AI messages left today`,
+    low: line.low,
+    none: line.remaining === 0,
   };
 }

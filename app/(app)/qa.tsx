@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../components/auth-context";
 import { ChatComposer } from "../../components/chat/ChatComposer";
+import { AiUsageNote } from "../../components/qa/AiUsageNote";
 import { ChatSkeleton } from "../../components/chat/ChatSkeleton";
 import { ChatVoiceLayer } from "../../components/chat/ChatVoiceLayer";
 import { SuggestionChips } from "../../components/chat/SuggestionChips";
@@ -130,6 +131,8 @@ export default function QA() {
   // pinned above the composer.
   const isWelcome = !isLoadingSession && chatLog.length === 1 && chatLog[0].sender === "companion" && !isCompanionTyping;
   const lastMessage = chatLog[chatLog.length - 1];
+  // Every answer uses one of today's messages: re-read the allowance after each.
+  const answerCount = chatLog.filter((m) => m.sender === "companion").length;
   const quickReplies =
     !isWelcome && !isCompanionTyping && lastMessage?.sender === "companion" ? (lastMessage.suggestedQuestions ?? []).slice(0, 3) : [];
   const starterQuestions = (
@@ -248,6 +251,7 @@ export default function QA() {
             onMicPress={mic.handleMicPress}
             idleAction={{ icon: "headset", label: "Talk with Nura", onPress: () => setVoiceMode(true) }}
           />
+          <AiUsageNote refreshKey={answerCount} style={{ paddingBottom: 6 }} />
         </KeyboardAvoidingView>
 
         <ChatVoiceLayer voice={voice} part="languages" />
