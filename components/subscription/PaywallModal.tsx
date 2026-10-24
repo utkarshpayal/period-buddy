@@ -7,14 +7,24 @@ import { SkeletonBlock } from "../Skeleton";
 import { useTheme } from "../theme";
 import { CouponField } from "./CouponField";
 import { CYCLE_SUFFIX } from "./billing";
-import { LockedFeatureHeading } from "./LockedFeatureHeading";
 import { PaymentTrustFooter } from "./PaymentTrustFooter";
 import { PurchaseConfirmSheet } from "./PurchaseConfirmSheet";
 import { PurchaseResultPanel } from "./PurchaseResultPanel";
 import { CashfreeCheckoutModal } from "../CashfreeCheckoutModal";
 import { PaymentSheet } from "../PaymentSheet";
 import { usePaymentCheckout } from "../../hooks/usePaymentCheckout";
-import { getFriendlyErrorMessage, subscriptionApi, type BillingCycle, type CouponPreview, type FeatureLockInfo } from "../../lib/api";
+import {
+  getFriendlyErrorMessage,
+  subscriptionApi,
+  type BillingCycle,
+  type CouponPreview,
+  type FeatureLockInfo,
+  type PricingSummary,
+} from "../../lib/api";
+import { formatRupees, type Period } from "../../lib/pricing";
+import { GradientCard } from "../GradientCard";
+import { SegmentedControl } from "../SegmentedControl";
+import { getHeroGradient, getShadow } from "../ui-tokens";
 import { AppLockCover } from "../AppLockScreen";
 import { Icon } from "../Icon";
 import { Button } from "../Button";
@@ -24,7 +34,7 @@ const DISMISS_FALLBACK_MS = 700;
 
 type ConfirmTarget = {
   key: string;
-  payload: { source: "plan"; planId: string } | { source: "feature"; featureKey: string };
+  payload: { source: "plan"; planId: string } | { source: "feature"; featureKey: string; billingCycle?: "monthly" | "yearly" };
   label: string;
   description?: string;
   price: number;
@@ -56,8 +66,13 @@ type Props = {
  * hosted checkout (or, if the user opts in, native UPI-ID collect) → verify.
  */
 export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }: Props) {
-  const { colors, fonts } = useTheme();
+  const { colors, fonts, isDark } = useTheme();
   const router = useRouter();
+  // Premium monthly/yearly and add-on yearly prices (null on older backends:
+  // the lock payload's plans are shown instead).
+  const [pricing, setPricing] = useState<PricingSummary | null>(null);
+  const [period, setPeriod] = useState<Period>("monthly");
+  const [showCoupon, setShowCoupon] = useState(false);
   const [info, setInfo] = useState<FeatureLockInfo | null>(lock ?? null);
   const [loadingInfo, setLoadingInfo] = useState(!lock);
   // Bumped by the error state's Retry to re-run the pricing fetch below.
@@ -109,6 +124,18 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
     return () => clearTimeout(fallback);
   }, [covered]);
   const sheetsReady = visible && paywallGone;
+
+  useEffect(() => {
+    if (!visible) return;
+    let live = true;
+    subscriptionApi
+      .getPricing()
+      .then((p) => live && setPricing(p))
+      .catch(() => live && setPricing(null));
+    return () => {
+      live = false;
+    };
+  }, [visible]);
 
   useEffect(() => {
     if (lock) {
@@ -170,6 +197,7 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
         code: couponCode.trim(),
         source: "feature",
         featureKey,
+        ...(featureOffer?.billingCycle === "yearly" ? { billingCycle: "yearly" as const } : {}),
       });
       setCouponPreview(preview);
     } catch (err) {
@@ -207,6 +235,32 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
     onClose();
   }
 
+  // Premium for the chosen period: from /pricing, else the lock payload's plans.
+  const premiumMonthly = pricing?.premium.monthly ?? null;
+  const premiumYearly = pricing?.premium.yearly ?? null;
+  const fallbackPlan = info?.plans.find((p) => p.billingCycle === (period === "yearly" ? "yearly" : "monthly")) ?? info?.plans[0];
+  const premiumOffer =
+    (period === "yearly" ? premiumYearly ?? premiumMonthly : premiumMonthly ?? premiumYearly) ??
+    (fallbackPlan ? { planId: fallbackPlan._id, name: fallbackPlan.name, price: fallbackPlan.price, billingCycle: fallbackPlan.billingCycle } : null);
+  const showPeriodSwitch = Boolean(premiumMonthly && premiumYearly);
+  const premiumFeatures = pricing?.premium.features ?? [];
+  const comparison = premiumYearly?.comparison ?? null;
+
+  // This feature on its own, for the chosen period when it's sold yearly.
+  const addOn = pricing?.addOns.find((a) => a.key === featureKey);
+  const featureOffer = info
+    ? period === "yearly" && addOn?.yearlyPrice
+      ? { price: addOn.yearlyPrice, billingCycle: "yearly" as BillingCycle }
+      : { price: info.feature.price, billingCycle: info.feature.billingCycle }
+    : null;
+  const periodWords = (cycle: BillingCycle) => (cycle === "yearly" ? "for 12 months" : cycle === "monthly" ? "for 30 days" : "one-time");
+  const taxLine = pricing?.tax
+    ? pricing.tax.pricesIncludeTax
+      ? `Prices include ${pricing.tax.ratePercent}% GST.`
+      : `Plus ${pricing.tax.ratePercent}% GST at checkout.`
+    : "Prices include GST.";
+  const card = { backgroundColor: colors.surface, borderRadius: 24, borderCurve: "continuous" as const, ...getShadow(colors, isDark) };
+
   return (
     <>
     <Modal
@@ -219,15 +273,12 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
       presentationStyle="pageSheet"
     >
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
-        <View className="flex-row items-center justify-between px-6 pt-4 pb-2">
-          <Text className="text-lg font-bold" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-            Unlock Premium
-          </Text>
+        <View className="flex-row items-center justify-end px-5 pt-3 pb-1">
           <TouchableOpacity hitSlop={6} accessibilityRole="button" accessibilityLabel="Close"
             onPress={handleClose}
             activeOpacity={0.7}
             className="h-9 w-9 items-center justify-center rounded-full"
-            style={{ backgroundColor: colors.surface }}
+            style={{ backgroundColor: colors.surface, ...getShadow(colors, isDark) }}
           >
             <Icon set="mci" name="close" size={18} color={colors.mutedText} />
           </TouchableOpacity>
@@ -264,42 +315,162 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
           />
         ) : (
           <ScrollView
-            className="px-6"
             automaticallyAdjustKeyboardInsets
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ paddingBottom: 32 }}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 4, paddingBottom: 36 }}
           >
-            <View
-              className="items-center rounded-3xl px-6 py-8 mt-2"
-              style={{ backgroundColor: colors.goldLight ?? colors.surfaceSoft }}
-            >
-              <LockedFeatureHeading title={info.feature.name} description={info.feature.description} />
+            {/* What's locked */}
+            <GradientCard colors={getHeroGradient(colors, isDark)} style={{ padding: 22 }} containerStyle={{ marginBottom: 18 }}>
+              <View className="flex-row items-center" style={{ gap: 10 }}>
+                <View style={{ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.2)" }}>
+                  <Icon set="mci" name="crown-outline" size={22} color="#FFFFFF" />
+                </View>
+                <Text style={{ color: "rgba(255,255,255,0.88)", fontSize: 12, fontWeight: "800", letterSpacing: 1, textTransform: "uppercase", fontFamily: fonts.body }}>
+                  Nura Premium
+                </Text>
+              </View>
+              <Text maxFontSizeMultiplier={1.3} style={{ color: "#FFFFFF", fontSize: 25, lineHeight: 31, fontWeight: "800", letterSpacing: -0.5, marginTop: 14, fontFamily: fonts.heading }}>
+                {`Unlock ${info.feature.name}`}
+              </Text>
+              {info.feature.description ? (
+                <Text style={{ color: "rgba(255,255,255,0.92)", fontSize: 14, lineHeight: 20, marginTop: 6, fontFamily: fonts.body }}>
+                  {info.feature.description}
+                </Text>
+              ) : null}
+              <View className="flex-row flex-wrap" style={{ gap: 8, marginTop: 16 }}>
+                {["Paid ahead", "No auto-renewal", "Tracking stays free"].map((chip) => (
+                  <View key={chip} className="flex-row items-center" style={{ gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.16)" }}>
+                    <Icon set="ion" name="checkmark" size={13} color="#FFFFFF" />
+                    <Text style={{ color: "#FFFFFF", fontSize: 12.5, fontWeight: "700", fontFamily: fonts.body }}>{chip}</Text>
+                  </View>
+                ))}
+              </View>
+            </GradientCard>
 
-              <Button
-                label={
-                  couponPreview
-                    ? couponPreview.free
-                      ? "Unlock — free"
-                      : `Buy just this — ₹${couponPreview.finalAmount}`
-                    : `Buy just this — ₹${info.feature.price}${CYCLE_SUFFIX[info.feature.billingCycle]}`
-                }
-                onPress={() =>
-                  setConfirmTarget({
-                    key: "feature",
-                    payload: { source: "feature", featureKey },
-                    label: info.feature.name,
-                    description: info.feature.description,
-                    price: info.feature.price,
-                    cycleSuffix: CYCLE_SUFFIX[info.feature.billingCycle],
-                    billingCycle: info.feature.billingCycle,
-                    couponPreview,
-                  })
-                }
-                size="md"
-                style={{ marginTop: 20 }}
-              />
+            {/* Premium: the recommended option */}
+            {premiumOffer ? (
+              <View style={{ ...card, padding: 18, borderWidth: 2, borderColor: colors.primary, marginTop: 6 }}>
+                <View style={{ position: "absolute", top: -12, left: 18, paddingHorizontal: 10, height: 24, borderRadius: 12, justifyContent: "center", backgroundColor: colors.primary }}>
+                  <Text style={{ color: colors.buttonText, fontSize: 11.5, fontWeight: "800", letterSpacing: 0.5, textTransform: "uppercase", fontFamily: fonts.body }}>Best value</Text>
+                </View>
+                <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "800", marginTop: 6, fontFamily: fonts.heading }}>Nura Premium</Text>
+                <Text style={{ color: colors.mutedText, fontSize: 13.5, marginTop: 2, fontFamily: fonts.body }}>
+                  {premiumFeatures.length ? `All ${premiumFeatures.length} Premium features, one price` : "Every Premium feature, one price"}
+                </Text>
 
-              <View className="w-full mt-5">
+                {showPeriodSwitch && premiumMonthly && premiumYearly ? (
+                  <SegmentedControl<Period>
+                    segments={[
+                      { key: "monthly", label: "Monthly", accessibilityLabel: `Monthly, ${formatRupees(premiumMonthly.price)} for 30 days` },
+                      { key: "yearly", label: comparison?.saving ? `Yearly · save ${formatRupees(comparison.saving)}` : "Yearly", accessibilityLabel: `Yearly, ${formatRupees(premiumYearly.price)} for 12 months` },
+                    ]}
+                    value={period}
+                    onChange={setPeriod}
+                    style={{ marginTop: 14 }}
+                  />
+                ) : null}
+
+                <View className="flex-row items-end flex-wrap" style={{ gap: 8, marginTop: 14 }}>
+                  <Text style={{ color: colors.foreground, fontSize: 34, lineHeight: 38, fontFamily: fonts.monoSemiBold }}>{formatRupees(premiumOffer.price)}</Text>
+                  <Text style={{ color: colors.mutedText, fontSize: 14, marginBottom: 5, fontFamily: fonts.body }}>{periodWords(premiumOffer.billingCycle)}</Text>
+                </View>
+                {premiumOffer.billingCycle === "yearly" && comparison ? (
+                  <Text style={{ color: colors.success, fontSize: 13.5, fontWeight: "700", marginTop: 2, fontFamily: fonts.body }}>
+                    {`About ${formatRupees(comparison.monthlyEquivalent)} a month, paid once`}
+                  </Text>
+                ) : null}
+
+                {premiumFeatures.length ? (
+                  <View style={{ marginTop: 14, gap: 4 }}>
+                    {premiumFeatures.map((f) => {
+                      const current = f.key === featureKey;
+                      return (
+                        <View
+                          key={f.key}
+                          className="flex-row items-center"
+                          style={{ gap: 10, paddingVertical: 6, paddingHorizontal: current ? 10 : 0, marginHorizontal: current ? -10 : 0, borderRadius: 12, backgroundColor: current ? colors.primaryLight : "transparent" }}
+                        >
+                          <Icon set="ion" name="checkmark-circle" size={18} color={colors.success} />
+                          <Text numberOfLines={2} style={{ flex: 1, color: colors.foreground, fontSize: 14, fontWeight: current ? "700" : "400", fontFamily: fonts.body }}>{f.name}</Text>
+                          {current ? <Text style={{ color: colors.primaryDark, fontSize: 12, fontWeight: "800", fontFamily: fonts.body }}>Unlocks this</Text> : null}
+                        </View>
+                      );
+                    })}
+                  </View>
+                ) : null}
+
+                <Button
+                  label={`Get Premium · ${formatRupees(premiumOffer.price)}`}
+                  fullWidth
+                  style={{ marginTop: 16 }}
+                  onPress={() =>
+                    setConfirmTarget({
+                      key: premiumOffer.planId,
+                      payload: { source: "plan", planId: premiumOffer.planId },
+                      label: premiumOffer.name,
+                      price: premiumOffer.price,
+                      cycleSuffix: CYCLE_SUFFIX[premiumOffer.billingCycle],
+                      billingCycle: premiumOffer.billingCycle,
+                      couponPreview: null,
+                      couponNote: couponCode.trim() ? `Coupon "${couponCode.trim().toUpperCase()}" will be checked at checkout.` : undefined,
+                    })
+                  }
+                />
+              </View>
+            ) : null}
+
+            {/* Just this feature */}
+            {featureOffer && featureOffer.price > 0 ? (
+              <>
+                {premiumOffer ? (
+                  <View className="flex-row items-center" style={{ gap: 12, marginVertical: 18 }}>
+                    <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+                    <Text style={{ color: colors.mutedText, fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}>or</Text>
+                    <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+                  </View>
+                ) : null}
+                <View style={{ ...card, padding: 16 }}>
+                  <View className="flex-row items-center" style={{ gap: 12 }}>
+                    <View style={{ width: 42, height: 42, borderRadius: 14, borderCurve: "continuous", alignItems: "center", justifyContent: "center", backgroundColor: colors.goldLight }}>
+                      <Icon set="mci" name="lock-open-variant-outline" size={20} color={colors.gold} />
+                    </View>
+                    <View className="flex-1" style={{ minWidth: 0 }}>
+                      <Text numberOfLines={1} style={{ color: colors.foreground, fontSize: 15, fontWeight: "700", fontFamily: fonts.heading }}>Just this feature</Text>
+                      <Text numberOfLines={1} style={{ color: colors.mutedText, fontSize: 13, marginTop: 1, fontFamily: fonts.body }}>{info.feature.name}</Text>
+                    </View>
+                    <View style={{ alignItems: "flex-end" }}>
+                      <Text style={{ color: colors.foreground, fontSize: 17, fontFamily: fonts.monoSemiBold }}>
+                        {couponPreview && !couponPreview.free ? formatRupees(couponPreview.finalAmount) : couponPreview?.free ? "₹0" : formatRupees(featureOffer.price)}
+                      </Text>
+                      <Text style={{ color: colors.mutedText, fontSize: 12.5, fontFamily: fonts.body }}>{periodWords(featureOffer.billingCycle)}</Text>
+                    </View>
+                  </View>
+                  <Button
+                    label={couponPreview?.free ? "Unlock for free" : "Buy just this"}
+                    variant={premiumOffer ? "tonal" : "primary"}
+                    fullWidth
+                    style={{ marginTop: 14 }}
+                    onPress={() =>
+                      setConfirmTarget({
+                        key: "feature",
+                        payload: { source: "feature", featureKey, ...(featureOffer.billingCycle === "yearly" ? { billingCycle: "yearly" as const } : {}) },
+                        label: info.feature.name,
+                        description: info.feature.description,
+                        price: featureOffer.price,
+                        cycleSuffix: CYCLE_SUFFIX[featureOffer.billingCycle],
+                        billingCycle: featureOffer.billingCycle,
+                        couponPreview,
+                      })
+                    }
+                  />
+                </View>
+              </>
+            ) : null}
+
+            {/* Coupon, out of the way until asked for */}
+            {showCoupon || couponPreview ? (
+              <View style={{ marginTop: 14 }}>
                 <CouponField
                   code={couponCode}
                   onChangeCode={(v) => {
@@ -313,74 +484,20 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
                   onRemove={handleRemoveCoupon}
                 />
               </View>
-            </View>
-
-            {info.plans.length > 0 && (
-              <>
-                <Text
-                  className="mt-8 mb-3 text-xs font-bold uppercase text-center"
-                  style={{ color: colors.mutedText, fontFamily: fonts.body, letterSpacing: 0.5 }}
-                >
-                  Or get more with a plan
-                </Text>
-                <View style={{ gap: 12 }}>
-                  {info.plans.map((plan) => (
-                    <View
-                      key={plan._id}
-                      className="rounded-2xl px-5 py-4 flex-row items-center justify-between"
-                      style={{ backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}
-                    >
-                      <View className="flex-1 pr-3">
-                        <View className="flex-row items-center" style={{ gap: 8 }}>
-                          <Text
-                            className="text-sm font-bold"
-                            style={{ color: colors.foreground, fontFamily: fonts.heading }}
-                          >
-                            {plan.name}
-                          </Text>
-                          {plan.badge ? (
-                            <View
-                              className="rounded-full px-2 py-0.5"
-                              style={{ backgroundColor: colors.primaryLight }}
-                            >
-                              <Text
-                                className="text-xs font-bold"
-                                style={{ color: colors.primaryDark, fontFamily: fonts.body }}
-                              >
-                                {plan.badge}
-                              </Text>
-                            </View>
-                          ) : null}
-                        </View>
-                        <Text className="text-xs mt-1" style={{ color: colors.mutedText, fontFamily: fonts.body }}>
-                          ₹{plan.price}
-                          {CYCLE_SUFFIX[plan.billingCycle]}
-                        </Text>
-                      </View>
-                      <Button
-                        label="Choose"
-                        size="sm"
-                        onPress={() =>
-                          setConfirmTarget({
-                            key: plan._id,
-                            payload: { source: "plan", planId: plan._id },
-                            label: plan.name,
-                            price: plan.price,
-                            cycleSuffix: CYCLE_SUFFIX[plan.billingCycle],
-                            billingCycle: plan.billingCycle,
-                            couponPreview: null,
-                            couponNote: couponCode.trim()
-                              ? `Coupon "${couponCode.trim().toUpperCase()}" will be validated at checkout.`
-                              : undefined,
-                          })
-                        }
-                      />
-                    </View>
-                  ))}
-                </View>
-              </>
+            ) : (
+              <TouchableOpacity
+                onPress={() => setShowCoupon(true)}
+                accessibilityRole="button"
+                hitSlop={{ top: 12, bottom: 12 }}
+                style={{ alignSelf: "center", marginTop: 16 }}
+              >
+                <Text style={{ color: colors.primary, fontSize: 14, fontWeight: "700", fontFamily: fonts.body }}>Have a coupon?</Text>
+              </TouchableOpacity>
             )}
 
+            <Text style={{ color: colors.mutedText, fontSize: 13, lineHeight: 18, textAlign: "center", marginTop: 18, fontFamily: fonts.body }}>
+              {`${taxLine} Nothing renews by itself. Doctor consultations are paid separately.`}
+            </Text>
             <PaymentTrustFooter />
           </ScrollView>
         )}
