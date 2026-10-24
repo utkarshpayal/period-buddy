@@ -67,6 +67,8 @@ the shared `ApiError` shape (`kind`: `network`/`timeout`/`server`/
 | Method | Endpoint | Purpose |
 |---|---|---|
 | GET | `/api/habits` | List habits |
+| GET | `/api/habits/suggestions` | Today's personalized suggestions (AI or rules, made once per local day and stored) |
+| POST | `/api/habits/suggestions/:key/dismiss` | "Not for me": hide a suggestion today and for the next 14 days |
 | POST | `/api/habits` | Create a habit |
 | PATCH | `/api/habits/:id/toggle` | Toggle today's completion (race-safe token award) |
 | DELETE | `/api/habits/:id` | Soft-delete a habit |
