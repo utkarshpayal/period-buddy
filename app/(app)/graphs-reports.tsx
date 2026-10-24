@@ -44,7 +44,7 @@ async function loadGraphsData(): Promise<GraphsData> {
       }),
     ),
     reportApi
-      .getHealthReport({ startDate: getDateKey(rangeStart), endDate: getDateKey(today) })
+      .getHealthReport({ startDate: getDateKey(rangeStart), endDate: getDateKey(today), includeAnalysis: false })
       .then((res) => res.cycle)
       .catch<HealthReportCycleStats | null>(() => null),
   ]);

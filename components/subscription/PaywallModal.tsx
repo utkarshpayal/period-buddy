@@ -14,7 +14,7 @@ import { PurchaseResultPanel } from "./PurchaseResultPanel";
 import { CashfreeCheckoutModal } from "../CashfreeCheckoutModal";
 import { PaymentSheet } from "../PaymentSheet";
 import { usePaymentCheckout } from "../../hooks/usePaymentCheckout";
-import { getFriendlyErrorMessage, subscriptionApi, type CouponPreview, type FeatureLockInfo } from "../../lib/api";
+import { getFriendlyErrorMessage, subscriptionApi, type BillingCycle, type CouponPreview, type FeatureLockInfo } from "../../lib/api";
 import { AppLockCover } from "../AppLockScreen";
 import { Icon } from "../Icon";
 import { Button } from "../Button";
@@ -29,6 +29,7 @@ type ConfirmTarget = {
   description?: string;
   price: number;
   cycleSuffix: string;
+  billingCycle: BillingCycle;
   /** Only set for the primary "buy this feature" purchase — the one thing this modal previews a coupon against. */
   couponPreview: CouponPreview | null;
   couponNote?: string;
@@ -136,8 +137,10 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
                 billingCycle: feature.billingCycle,
               }
             : { key: featureKey, name: featureKey, price: 0, billingCycle: "monthly" },
+          // Promo plans (the founding offer) are only offered on My
+          // Subscription, where eligibility is checked.
           plans: plans
-            .filter((p) => p.features.includes(featureKey))
+            .filter((p) => p.features.includes(featureKey) && !p.promo?.kind)
             .map((p) => ({
               _id: p._id,
               name: p.name,
@@ -288,6 +291,7 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
                     description: info.feature.description,
                     price: info.feature.price,
                     cycleSuffix: CYCLE_SUFFIX[info.feature.billingCycle],
+                    billingCycle: info.feature.billingCycle,
                     couponPreview,
                   })
                 }
@@ -363,6 +367,7 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
                             label: plan.name,
                             price: plan.price,
                             cycleSuffix: CYCLE_SUFFIX[plan.billingCycle],
+                            billingCycle: plan.billingCycle,
                             couponPreview: null,
                             couponNote: couponCode.trim()
                               ? `Coupon "${couponCode.trim().toUpperCase()}" will be validated at checkout.`
@@ -392,6 +397,7 @@ export function PaywallModal({ visible, onClose, featureKey, lock, onUnlocked }:
         itemDescription={confirmTarget?.description}
         originalAmount={confirmTarget?.price ?? 0}
         cycleSuffix={confirmTarget?.cycleSuffix ?? ""}
+        billingCycle={confirmTarget?.billingCycle}
         couponPreview={confirmTarget?.couponPreview ?? null}
         couponNote={confirmTarget?.couponNote}
         confirming={confirmTarget !== null && purchasingKey === confirmTarget.key}

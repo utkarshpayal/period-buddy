@@ -103,15 +103,20 @@ Consultations from `/api/consultation/my` carry `videoCall` (`{ available, joinO
 |---|---|---|
 | GET | `/api/subscriptions/plans` | Active bundles (public) |
 | GET | `/api/subscriptions/features` | Feature prices/free-or-premium status (public) |
-| GET | `/api/subscriptions/me` | My current entitlements |
+| GET | `/api/subscriptions/pricing` | Premium monthly/yearly with the yearly saving, founding offer (only if live and eligible), add-ons with yearly prices, GST, fair use (optional auth). Shared with the website |
+| GET | `/api/subscriptions/me` | My current entitlements, Premium status (`premium`) and this period's fair-use usage (`usage`) |
 | GET | `/api/subscriptions/history` | Purchase history |
 | POST | `/api/subscriptions/coupons/apply` | Preview a coupon's discount |
-| POST | `/api/subscriptions/order` | Create an order (or instant-activate on a 100%-off coupon) |
+| POST | `/api/subscriptions/order` | Create an order (or instant-activate on a 100%-off coupon). `billingCycle: "yearly"` buys an add-on's yearly price; `403 OFFER_NOT_ELIGIBLE`, `409 ALREADY_INCLUDED` |
 | POST | `/api/subscriptions/verify` | Verify payment, activate the entitlement |
 
 A `402 FEATURE_LOCKED` response from *any* endpoint (not just these) parses
 into `ApiError.kind === "featureLocked"` with a `.lock` payload — see
 `hooks/useSubscriptionAccess.ts` and `components/subscription/FeatureGate.tsx`.
+AI endpoints can answer `429 FAIR_USE_LIMIT` while fair use is on (never for a
+red-flag message), and `POST /api/documents` `400 DOCUMENT_TOO_LONG`.
+`reportApi.getHealthReport` takes `includeAnalysis` (send `false` where the AI
+summary isn't shown) and returns `analysisLocked` / `analysisLimit`.
 
 ## `partnerApi`
 

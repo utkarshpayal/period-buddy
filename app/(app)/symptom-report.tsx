@@ -23,6 +23,8 @@ async function loadReport(): Promise<HealthReportCycleStats> {
   const result = await reportApi.getHealthReport({
     startDate: getDateKey(start),
     endDate: getDateKey(today),
+    // Only the counts are shown here; skip the AI summary.
+    includeAnalysis: false,
   });
   return result.cycle;
 }

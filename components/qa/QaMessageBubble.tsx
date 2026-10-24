@@ -1,8 +1,10 @@
 import { LinearGradient } from "expo-linear-gradient";
 import React, { memo } from "react";
-import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Linking, Text, TouchableOpacity, View } from "react-native";
 import type { ChatMessage } from "../../hooks/useQaConversation";
 import { URGENT_SAFETY_SOURCE } from "../../lib/qaFallback";
+import { EMERGENCY_NUMBER, TELE_MANAS_NUMBER } from "../../lib/urgentSafety";
+import { Button } from "../Button";
 import { NuraAvatar } from "../NuraAvatar";
 import { useTheme } from "../theme";
 import { Icon } from "../Icon";
@@ -81,6 +83,27 @@ export const QaMessageBubble = memo(function QaMessageBubble({
           </View>
         ) : null}
         <Text style={{ color: colors.foreground, fontSize: 15, lineHeight: 22, fontFamily: fonts.body }}>{message.text}</Text>
+        {isUrgent ? (
+          // The reply says "call 112": make that one tap, not a number to remember.
+          <View className="flex-row flex-wrap" style={{ gap: 8, marginTop: 12 }}>
+            <Button
+              label={`Call ${EMERGENCY_NUMBER}`}
+              icon="call"
+              variant="danger"
+              size="sm"
+              onPress={() => Linking.openURL(`tel:${EMERGENCY_NUMBER}`).catch(() => {})}
+              accessibilityLabel={`Call ${EMERGENCY_NUMBER}, emergency services`}
+            />
+            <Button
+              label={`Tele-MANAS ${TELE_MANAS_NUMBER}`}
+              icon="call"
+              variant="secondary"
+              size="sm"
+              onPress={() => Linking.openURL(`tel:${TELE_MANAS_NUMBER}`).catch(() => {})}
+              accessibilityLabel={`Call Tele-MANAS on ${TELE_MANAS_NUMBER}, free mental health helpline`}
+            />
+          </View>
+        ) : null}
         {isUrgent && message.disclaimer ? (
           <Text style={{ color: colors.mutedText, fontSize: 12.5, lineHeight: 17, marginTop: 8, fontFamily: fonts.body }}>{message.disclaimer}</Text>
         ) : null}
