@@ -60,6 +60,8 @@ const MUTATION_TOPICS: [RegExp, DataTopic[] | null][] = [
   [/^\/api\/auth\/profile/, ["profile", "dashboard"]],
   [/^\/api\/(auth\/|logout)/, null],
   [/^\/api\/cycle\//, ["cycle", "dashboard"]],
+  // "Not for me" only changes the Habits screen's own picks.
+  [/^\/api\/habits\/suggestions\//, null],
   [/^\/api\/habits/, ["habits", "dashboard"]],
   [/^\/api\/forest\//, ["forest", "dashboard"]],
   [/^\/api\/consultation/, ["consultations"]],

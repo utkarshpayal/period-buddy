@@ -71,6 +71,8 @@ export const HABIT_CATEGORY_COLORS = {
   sleep: "#7c3aed",
   nutrition: "#d97706",
   movement: "#0f766e",
+  mind: "#0284c7",
+  care: "#e8618f",
 };
 
 export function getScreenGradient(colors: ThemeColors, isDark: boolean) {
