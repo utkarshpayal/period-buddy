@@ -21,6 +21,7 @@ import { CHAT_TOPICS, getChatTopic, isTopicLocked } from "../../lib/chatTopics";
 import { formatShortDate } from "../../lib/format";
 import { useSecureScreen } from "../../lib/screenPrivacy";
 import { Icon } from "../../components/Icon";
+import { AiUsageNote } from "../../components/qa/AiUsageNote";
 
 /**
  * Nura AI home — the entry to the assistant. One primary action (start a new
@@ -173,6 +174,8 @@ export default function NuraAiHome() {
             <Icon set="ion" name="add" size={22} color={colors.primary} />
           </View>
         </TouchableOpacity>
+
+        <AiUsageNote style={{ marginTop: 10 }} />
 
         {/* Topics */}
         <SectionHeader title="Start with a topic" style={{ marginTop: 28 }} />

@@ -1,12 +1,15 @@
-import React, { useMemo, useState } from "react";
-import { LayoutAnimation, RefreshControl, ScrollView, StatusBar, Text, TouchableOpacity, View } from "react-native";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { RefreshControl, ScrollView, StatusBar, Text, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { EmptyState } from "../../components/EmptyState";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
+import { BodyMapSection } from "../../components/body-map/BodyMapSection";
 import { ScreenHeader } from "../../components/ScreenHeader";
+import { SegmentedControl } from "../../components/SegmentedControl";
+import { useSubscriptionAccess } from "../../hooks/useSubscriptionAccess";
 import { SkeletonCard } from "../../components/Skeleton";
-import { SymptomTrendChart } from "../../components/SymptomTrendChart";
+import { SymptomTrendChart, type TrendPhase } from "../../components/SymptomTrendChart";
 import { FeatureGate } from "../../components/subscription/FeatureGate";
 import { symptomOptions } from "../../components/logOptions";
 import { useTheme } from "../../components/theme";
@@ -87,19 +90,68 @@ type ScreenData = {
   totalCycles: number;
 };
 
+/**
+ * Symptom Trends: one place for "what's going on with my symptoms", as two
+ * tabs so there's one thing on screen at a time: "Through your cycle"
+ * (when: the cycle-phase trends, behind `symptom_predictions`) and "On your
+ * body" (where: components/body-map/BodyMapSection.tsx, free). Neither
+ * repeats the other. Opens on the cycle, or on the body when the trends are
+ * locked for this person.
+ */
+type Tab = "cycle" | "body";
+const TABS: { key: Tab; label: string }[] = [
+  { key: "cycle", label: "Through your cycle" },
+  { key: "body", label: "On your body" },
+];
+
 export default function SymptomPredictionsScreen() {
+  useSecureScreen("symptom-predictions");
+  const { colors, isDark } = useTheme();
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const { hasAccess, isLoading } = useSubscriptionAccess();
+  const [picked, setPicked] = useState<Tab | null>(null);
+  const tab: Tab = picked ?? (!isLoading && !hasAccess("symptom_predictions") ? "body" : "cycle");
+  const onRefresh = () => {
+    setRefreshing(true);
+    setRefreshKey((k) => k + 1);
+    setTimeout(() => setRefreshing(false), 900);
+  };
   return (
-    <FeatureGate featureKey="symptom_predictions" title="Symptom Predictions" description="Symptoms to expect in each phase.">
-      <SymptomPredictionsContent />
-    </FeatureGate>
+    <>
+      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
+      <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
+        <ScreenHeader title="Symptom Trends" />
+        {tab === "body" ? (
+          // The body fills the rest of the page.
+          <>
+            <View style={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 12 }}>
+              <SegmentedControl segments={TABS} value={tab} onChange={setPicked} />
+            </View>
+            <BodyMapSection refreshKey={refreshKey} />
+          </>
+        ) : (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 60 }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+        >
+          <SegmentedControl segments={TABS} value={tab} onChange={setPicked} style={{ marginBottom: 16 }} />
+          <FeatureGate featureKey="symptom_predictions" title="Symptom Predictions" description="Symptoms to expect in each phase.">
+            <SymptomPredictionsContent refreshKey={refreshKey} />
+          </FeatureGate>
+        </ScrollView>
+        )}
+      </SafeAreaView>
+    </>
   );
 }
 
-function SymptomPredictionsContent() {
-  useSecureScreen("symptom-predictions");
+function SymptomPredictionsContent({ refreshKey }: { refreshKey: number }) {
   const { colors, isDark, fonts } = useTheme();
+  const firstRefresh = useRef(true);
 
-  const { data, loading, refreshing, error, offline, reload } = useAsyncLoad<ScreenData>(
+  const { data, loading, error, offline, reload } = useAsyncLoad<ScreenData>(
     async () => {
       // Today's stage is a nice-to-have: the screen still works without it.
       const [result, cycle] = await Promise.all([cycleApi.getSymptomPredictions(), cycleApi.getPredictions().catch(() => null)]);
@@ -131,6 +183,14 @@ function SymptomPredictionsContent() {
     [],
     { refreshOn: ["cycle"] }
   );
+  // The screen's pull-to-refresh.
+  useEffect(() => {
+    if (firstRefresh.current) {
+      firstRefresh.current = false;
+      return;
+    }
+    reload(true);
+  }, [refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps -- only when the screen is pulled
 
   const predictions = useMemo(() => data?.predictions ?? [], [data]);
   const currentPhase = data?.currentPhase ?? null;
@@ -157,17 +217,21 @@ function SymptomPredictionsContent() {
     return map;
   }, [predictions]);
 
-  // Stable props for the chart, so a scrub (which re-renders this screen)
-  // doesn't rebuild every series and path in it.
-  const chartPhases = useMemo(() => PHASE_ORDER.filter((p) => byPhase.has(p)), [byPhase]);
-  const chartPhaseLabels = useMemo(() => Object.fromEntries(PHASE_ORDER.map((p) => [p, STAGES[p].chart])), []);
-  const chartPhaseColors = useMemo(
-    () => Object.fromEntries(PHASE_ORDER.map((p) => [p, stageColors[p].solid])),
-    [stageColors],
+  // The chart's columns: the four phases in cycle order, with their days.
+  const gridPhases = useMemo<TrendPhase[]>(
+    () =>
+      PHASE_ORDER.map((p) => {
+        const r = ranges[p];
+        return {
+          key: p,
+          label: STAGES[p].chart,
+          title: STAGES[p].title.toLowerCase(),
+          days: r ? (r.from === r.to ? `${r.from}` : `${r.from}–${r.to}`) : undefined,
+          tint: stageColors[p].solid,
+        };
+      }),
+    [ranges, stageColors],
   );
-
-  const [chartOpen, setChartOpen] = useState(false);
-  const [chartPhase, setChartPhase] = useState<string | null>(null);
 
   const card = {
     backgroundColor: colors.surface,
@@ -176,6 +240,7 @@ function SymptomPredictionsContent() {
     borderRadius: 24,
     ...getShadow(colors, isDark),
   } as const;
+
 
   const daysLabel = (phase: CyclePhase) => {
     const r = ranges[phase];
@@ -188,10 +253,6 @@ function SymptomPredictionsContent() {
 
   return (
     <>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
-      <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
-        <ScreenHeader title="Symptom Predictions" subtitle={data?.sample ? "Sample data · dev builds only" : undefined} />
-
         <LoadingErrorState
           loading={loading}
           error={error}
@@ -201,18 +262,16 @@ function SymptomPredictionsContent() {
           errorIcon="chart-line-variant"
           errorTitle="Couldn't load predictions"
           skeleton={
-            <View className="gap-4 px-6 pt-4">
-              <SkeletonCard />
+            <View className="gap-4 pt-2">
               <SkeletonCard />
               <SkeletonCard />
             </View>
           }
         >
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 60 }}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => reload(true)} tintColor={colors.primary} />}
-          >
+          <View>
+            {data?.sample ? (
+              <Text style={{ fontSize: 13, color: colors.mutedText, marginBottom: 8 }}>Sample data · dev builds only</Text>
+            ) : null}
             {predictions.length === 0 ? (
               <View style={{ ...card, padding: 20, marginTop: 8 }}>
                 <EmptyState
@@ -312,7 +371,7 @@ function SymptomPredictionsContent() {
                         <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 8 }}>
                           <View style={{ flex: 1, minWidth: 0 }}>
                             <Text style={{ fontSize: 16, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>{STAGES[phase].title}</Text>
-                            <Text style={{ marginTop: 2, fontSize: 12.5, color: colors.mutedText, fontFamily: fonts.body }}>
+                            <Text style={{ marginTop: 2, fontSize: 13.5, color: colors.mutedText, fontFamily: fonts.body }}>
                               {[daysLabel(phase), STAGES[phase].medical].filter(Boolean).join(" · ")}
                             </Text>
                           </View>
@@ -357,7 +416,7 @@ function SymptomPredictionsContent() {
                                     <Text numberOfLines={1} style={{ fontSize: 15, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>
                                       {item.symptom}
                                     </Text>
-                                    <Text style={{ marginTop: 1, fontSize: 12.5, color: colors.mutedText, fontFamily: fonts.body }}>
+                                    <Text style={{ marginTop: 1, fontSize: 13.5, color: colors.mutedText, fontFamily: fonts.body }}>
                                       {`${often.words} · ${item.occurrences} of ${item.cyclesAnalyzed}`}
                                     </Text>
                                   </View>
@@ -385,41 +444,10 @@ function SymptomPredictionsContent() {
                   );
                 })}
 
-                {/* Detailed chart, for people who want it */}
-                <View style={{ marginTop: 28 }}>
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    onPress={() => {
-                      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                      setChartOpen((v) => !v);
-                    }}
-                    accessibilityRole="button"
-                    accessibilityState={{ expanded: chartOpen }}
-                    style={{ ...card, flexDirection: "row", alignItems: "center", gap: 12, padding: 16, marginBottom: chartOpen ? 12 : 0 }}
-                  >
-                    <View style={{ width: 34, height: 34, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceSoft }}>
-                      <Icon set="feather" name="bar-chart-2" size={16} color={colors.foreground} />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 15, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>
-                        {chartOpen ? "Hide detailed chart" : "See detailed chart"}
-                      </Text>
-                      <Text style={{ marginTop: 1, fontSize: 12.5, color: colors.mutedText, fontFamily: fonts.body }}>Compare symptoms across your cycle</Text>
-                    </View>
-                    <Icon set="feather" name={chartOpen ? "chevron-up" : "chevron-down"} size={18} color={colors.mutedText} />
-                  </TouchableOpacity>
-                  {chartOpen ? (
-                    <SymptomTrendChart
-                      predictions={predictions}
-                      phases={chartPhases}
-                      phaseLabels={chartPhaseLabels}
-                      phaseColors={chartPhaseColors}
-                      selectedPhase={chartPhase ?? currentPhase}
-                      onSelectPhase={setChartPhase}
-                      sample={data?.sample}
-                      showHeadline={false}
-                    />
-                  ) : null}
+                {/* The graph: every symptom × phase, at a glance */}
+                <View style={{ ...card, padding: 16, marginTop: 28, marginBottom: 20 }}>
+                  <Text style={{ fontSize: 17, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading, marginBottom: 10 }}>When your symptoms show up</Text>
+                  <SymptomTrendChart predictions={predictions} phases={gridPhases} currentPhase={currentPhase} />
                 </View>
 
                 {/* How we know, in one paragraph */}
@@ -439,9 +467,8 @@ function SymptomPredictionsContent() {
                 </View>
               </>
             )}
-          </ScrollView>
+          </View>
         </LoadingErrorState>
-      </SafeAreaView>
     </>
   );
 }

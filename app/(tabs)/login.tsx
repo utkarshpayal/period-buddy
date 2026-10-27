@@ -201,7 +201,7 @@ export default function Login() {
                   className="mt-2 text-center text-sm font-semibold"
                   style={{ color: colors.mutedText, fontFamily: fonts.body, maxWidth: 280 }}
                 >
-                  Buddy missed you. Let&apos;s pick up your cycle where you left off.
+                  Good to see you. Let&apos;s pick up your cycle where you left off.
                 </Text>
               </View>
 
@@ -240,7 +240,7 @@ export default function Login() {
               >
                 <Text
                   style={{
-                    fontSize: 12,
+                    fontSize: 13,
                     fontWeight: "700",
                     color: colors.primary,
                     fontFamily: fonts.body,
@@ -290,7 +290,7 @@ export default function Login() {
                   <TouchableOpacity>
                     <Text
                       style={{
-                        fontSize: 12.5,
+                        fontSize: 13.5,
                         fontWeight: "800",
                         color: colors.primary,
                         fontFamily: fonts.body,
@@ -304,7 +304,11 @@ export default function Login() {
 
               {/* Partner Connect Link */}
               <Link href="/(tabs)/partner-connect" asChild>
-                <TouchableOpacity className="mt-4 flex-row justify-center items-center">
+                <TouchableOpacity
+                  className="mt-4 flex-row justify-center items-center"
+                  accessibilityRole="link"
+                  hitSlop={{ top: 12, bottom: 12 }}
+                >
                   <Text
                     style={{
                       fontSize: 13,
@@ -313,7 +317,7 @@ export default function Login() {
                       fontFamily: fonts.body,
                     }}
                   >
-                    Connecting as a partner? Tap here
+                    Joining a partner? Use your invite code
                   </Text>
                 </TouchableOpacity>
               </Link>

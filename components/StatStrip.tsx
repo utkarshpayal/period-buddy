@@ -45,7 +45,7 @@ export function StatStrip({ stats, style }: { stats: StripStat[]; style?: StyleP
           >
             {stat.value}
           </Text>
-          <ColumnLabel style={{ fontSize: 12.5, fontWeight: "600", color: colors.mutedText, fontFamily: fonts.body }}>{stat.label}</ColumnLabel>
+          <ColumnLabel style={{ fontSize: 13.5, fontWeight: "600", color: colors.mutedText, fontFamily: fonts.body }}>{stat.label}</ColumnLabel>
         </View>
       ))}
     </View>

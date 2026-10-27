@@ -585,7 +585,7 @@ export default function DayDetailsModal({
         <Text
           style={{
             color: isSelected ? tint.color : colors.foreground,
-            fontSize: 12.5,
+            fontSize: 13.5,
             fontWeight: isSelected ? "800" : "700",
             fontFamily: fonts.body,
           }}
@@ -1039,7 +1039,7 @@ export default function DayDetailsModal({
                 <Text
                   style={{
                     color: isSelected ? colors.buttonText : colors.foreground,
-                    fontSize: 12,
+                    fontSize: 13,
                     fontWeight: "bold",
                     fontFamily: fonts.mono,
                   }}
@@ -1090,7 +1090,7 @@ export default function DayDetailsModal({
             style={{
               flex: 1,
               color: colors.mutedText,
-              fontSize: 12.5,
+              fontSize: 13.5,
               lineHeight: 16,
               marginRight: 12,
               fontFamily: fonts.body,

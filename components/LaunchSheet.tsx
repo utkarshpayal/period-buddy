@@ -147,7 +147,7 @@ export function LaunchSheet({ request, onClose }: { request: LaunchSheetRequest;
         ) : null}
         {hasAlternative ? <SheetButton label={sheet.alternativeLabel ?? alternativeLabel(sheet.alternative)} onPress={openAlternative} /> : null}
         {failed ? (
-          <Text style={{ fontSize: 12, color: colors.danger, fontFamily: fonts.body, textAlign: "center" }}>
+          <Text style={{ fontSize: 13, color: colors.danger, fontFamily: fonts.body, textAlign: "center" }}>
             Couldn&apos;t add you just now. Please try again.
           </Text>
         ) : null}

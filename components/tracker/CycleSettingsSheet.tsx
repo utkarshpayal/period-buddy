@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { router } from "expo-router";
 import { ScrollView, Switch, Text, TouchableOpacity, View } from "react-native";
 import { BottomSheet } from "../BottomSheet";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -198,10 +199,6 @@ export function CycleSettingsSheet({
   const [lastPeriodStartDate, setLastPeriodStartDate] = useState(() => getDateKey(new Date()));
   const [cycleLengthInput, setCycleLengthInput] = useState(String(DEFAULT_CYCLE_LENGTH));
   const [periodLengthInput, setPeriodLengthInput] = useState("5");
-  const [remindersEnabled, setRemindersEnabled] = useState(true);
-  const [reminderDaysBeforeInput, setReminderDaysBeforeInput] = useState("2");
-  const [ovulationReminder, setOvulationReminder] = useState(false);
-  const [fertilityReminder, setFertilityReminder] = useState(false);
   const [pregnancyMode, setPregnancyMode] = useState(false);
   const [trackingGoal, setTrackingGoal] = useState<CycleSettings["trackingGoal"]>("track_period");
 
@@ -214,10 +211,6 @@ export function CycleSettingsSheet({
     setLastPeriodStartDate(formatSettingsDate(s?.lastPeriodStartDate));
     setCycleLengthInput(String(s?.cycleLength ?? DEFAULT_CYCLE_LENGTH));
     setPeriodLengthInput(String(s?.periodLength ?? 5));
-    setRemindersEnabled(s?.remindersEnabled ?? true);
-    setReminderDaysBeforeInput(String(s?.reminderDaysBefore ?? 2));
-    setOvulationReminder(s?.ovulationReminder ?? false);
-    setFertilityReminder(s?.fertilityReminder ?? false);
     setPregnancyMode(s?.pregnancyMode ?? false);
     setTrackingGoal(s?.trackingGoal ?? "track_period");
   }, [visible]);
@@ -227,7 +220,6 @@ export function CycleSettingsSheet({
     const cleanedDate = lastPeriodStartDate.trim();
     const cycleLength = Number.parseInt(cycleLengthInput, 10);
     const periodLength = Number.parseInt(periodLengthInput, 10);
-    const reminderDaysBefore = Number.parseInt(reminderDaysBeforeInput, 10);
 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanedDate)) {
       setSettingsError("Pick the day your last period started.");
@@ -241,10 +233,6 @@ export function CycleSettingsSheet({
       setSettingsError("Period length should be between 1 and 10 days.");
       return;
     }
-    if (Number.isNaN(reminderDaysBefore) || reminderDaysBefore < 0 || reminderDaysBefore > 10) {
-      setSettingsError("Reminder timing should be between 0 and 10 days.");
-      return;
-    }
 
     savingRef.current = true;
     setSettingsSaving(true);
@@ -254,10 +242,8 @@ export function CycleSettingsSheet({
         cycleLength,
         lastPeriodStartDate: cleanedDate,
         periodLength,
-        reminderDaysBefore,
-        remindersEnabled,
-        ovulationReminder,
-        fertilityReminder,
+        // Reminder switches live on the Notifications screen, which saves
+        // them itself; leaving them out here keeps this save from undoing them.
         pregnancyMode,
         trackingGoal,
       });
@@ -394,52 +380,27 @@ export function CycleSettingsSheet({
           {/* Notifications */}
           <SettingsSectionCard title="Notifications">
             <View style={{ gap: 16 }}>
-              <SettingsToggleRow
-                label="Period reminders"
-                onValueChange={setRemindersEnabled}
-                value={remindersEnabled}
-              />
-
-              {remindersEnabled ? (
-                <View
-                  className="flex-row items-center justify-between rounded-2xl px-4 py-3"
-                  style={{ backgroundColor: colors.surface }}
-                >
-                  <Text
-                    className="text-xs font-bold"
-                    style={{
-                      color: colors.foreground,
-                      fontFamily: fonts.body,
-                    }}
-                  >
-                    Remind me before
-                  </Text>
-                  <PillStepper
-                    max={10}
-                    min={0}
-                    onChange={setReminderDaysBeforeInput}
-                    size="sm"
-                    suffix="days"
-                    value={reminderDaysBeforeInput}
-                  />
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel="Choose your reminders"
+                onPress={() => {
+                  onClose();
+                  router.push("/notification-settings");
+                }}
+                className="flex-row items-center rounded-2xl px-4 py-3.5"
+                style={{ backgroundColor: colors.surface, gap: 12 }}
+              >
+                <Icon set="ion" name="notifications-outline" size={20} color={colors.primary} />
+                <View className="flex-1">
+                  <Text style={{ fontSize: 15, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>Choose your reminders</Text>
+                  <Text style={{ fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}>Period, phase, symptom and health alerts</Text>
                 </View>
-              ) : null}
+                <Icon set="ion" name="chevron-forward" size={17} color={colors.mutedText} />
+              </TouchableOpacity>
 
+              {/* Pregnancy Mode */}
               <SettingsToggleRow
-                label="Ovulation reminders"
-                onValueChange={setOvulationReminder}
-                value={ovulationReminder}
-              />
-
-              <SettingsToggleRow
-                label="Fertility window reminders"
-                onValueChange={setFertilityReminder}
-                value={fertilityReminder}
-              />
-
-              {/* Pregnancy Mode — kept here, below Fertility reminders */}
-              <SettingsToggleRow
-                description="Pauses period and fertility reminders."
+                description="Pauses period, fertility and cycle reminders."
                 label="Pregnancy Mode"
                 onValueChange={setPregnancyMode}
                 value={pregnancyMode}

@@ -79,6 +79,8 @@ the shared `ApiError` shape (`kind`: `network`/`timeout`/`server`/
 |---|---|---|
 | GET | `/api/forest/status` | Current tree growth stage/health |
 | POST | `/api/forest/care` | Log care for today (race-safe "new day" bonus) |
+| GET | `/api/forest/garden` | The tree-care game state (moisture, food, health, weeds, bugs, dry leaves, supplies, level) |
+| POST | `/api/forest/garden/action` | A care action: water (seconds), weed/shoo/prune (id), fertilize, mulch |
 | GET | `/api/forest/logs` | Cycle Tree Logs history |
 
 ## `consultationApi` — doctor booking
@@ -105,15 +107,20 @@ Consultations from `/api/consultation/my` carry `videoCall` (`{ available, joinO
 |---|---|---|
 | GET | `/api/subscriptions/plans` | Active bundles (public) |
 | GET | `/api/subscriptions/features` | Feature prices/free-or-premium status (public) |
-| GET | `/api/subscriptions/me` | My current entitlements |
+| GET | `/api/subscriptions/pricing` | Premium monthly/yearly with the yearly saving, founding offer (only if live and eligible), add-ons with yearly prices, GST, fair use (optional auth). Shared with the website |
+| GET | `/api/subscriptions/me` | My current entitlements, Premium status (`premium`) and this period's fair-use usage (`usage`) |
 | GET | `/api/subscriptions/history` | Purchase history |
 | POST | `/api/subscriptions/coupons/apply` | Preview a coupon's discount |
-| POST | `/api/subscriptions/order` | Create an order (or instant-activate on a 100%-off coupon) |
+| POST | `/api/subscriptions/order` | Create an order (or instant-activate on a 100%-off coupon). `billingCycle: "yearly"` buys an add-on's yearly price; `403 OFFER_NOT_ELIGIBLE`, `409 ALREADY_INCLUDED` |
 | POST | `/api/subscriptions/verify` | Verify payment, activate the entitlement |
 
 A `402 FEATURE_LOCKED` response from *any* endpoint (not just these) parses
 into `ApiError.kind === "featureLocked"` with a `.lock` payload — see
 `hooks/useSubscriptionAccess.ts` and `components/subscription/FeatureGate.tsx`.
+AI endpoints can answer `429 FAIR_USE_LIMIT` while fair use is on (never for a
+red-flag message), and `POST /api/documents` `400 DOCUMENT_TOO_LONG`.
+`reportApi.getHealthReport` takes `includeAnalysis` (send `false` where the AI
+summary isn't shown) and returns `analysisLocked` / `analysisLimit`.
 
 ## `partnerApi`
 
@@ -130,6 +137,8 @@ into `ApiError.kind === "featureLocked"` with a `.lock` payload — see
 | GET | `/api/partner/notifications?page=&limit=` | In-app notification list, paged, with `unreadCount` on the envelope (lives here for historical reasons) |
 | POST | `/api/partner/notifications/:id/read` | Mark a notification read |
 | POST | `/api/partner/notifications/read-all` | Mark all read |
+| GET | `/api/notifications/preferences` | Automatic notification settings (`notificationsApi.getPreferences`) |
+| PUT | `/api/notifications/preferences` | Save push / time / days before / categories (`notificationsApi.savePreferences`) |
 
 ## `buddyApi` — anonymous peer support
 
@@ -232,10 +241,10 @@ match → AI → fallback) documented in the backend's `AI_ML_OVERVIEW.md`.
 | Method | Endpoint | Purpose |
 |---|---|---|
 | POST | `/api/voice-agent/converse` | One turn of the in-app voice/text agent (structured JSON reply) |
-| POST | `/api/voice-agent/checkin-call` | Trigger an outbound "call me now" (no longer called from the UI) |
+| POST | `/api/voice-agent/checkin-call` | An on-demand outbound check-in call (not called from the app) |
 | GET | `/api/voice-agent/checkin-call/schedule` | Get the recurring-call schedule |
 | PUT | `/api/voice-agent/checkin-call/schedule` | Save the recurring-call schedule |
-| GET | `/api/voice-agent/checkin-call/history?limit=` | Past check-in calls |
+| GET | `/api/voice-agent/checkin-call/history?limit=` | Past check-in calls (each with `failureKind` when it failed) |
 
 ## `uploadApi`, `documentApi`, `speechApi`
 

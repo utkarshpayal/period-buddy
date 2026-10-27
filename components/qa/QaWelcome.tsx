@@ -51,7 +51,7 @@ export function QaWelcome({
         </Text>
         <View className="flex-row items-center" style={{ gap: 5, marginTop: 10 }}>
           <Icon set="ion" name="lock-closed" size={12} color={colors.success} />
-          <Text style={{ color: colors.success, fontSize: 12.5, fontWeight: "700", fontFamily: fonts.body }}>Private & anonymous</Text>
+          <Text style={{ color: colors.success, fontSize: 13.5, fontWeight: "700", fontFamily: fonts.body }}>Private & anonymous</Text>
         </View>
       </View>
 
@@ -116,7 +116,7 @@ export function QaWelcome({
         </>
       ) : null}
 
-      <Text style={{ color: colors.mutedText, fontSize: 12.5, lineHeight: 18, textAlign: "center", marginTop: 24, fontFamily: fonts.body }}>
+      <Text style={{ color: colors.mutedText, fontSize: 13.5, lineHeight: 18, textAlign: "center", marginTop: 24, fontFamily: fonts.body }}>
         {DEFAULT_COMPANION_DISCLAIMER}
       </Text>
     </View>

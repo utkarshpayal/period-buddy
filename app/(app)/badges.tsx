@@ -236,7 +236,7 @@ export default function BadgesScreen() {
                     ) : (
                       <Text style={{ color: WHITE, fontSize: 13, fontFamily: fonts.body, fontWeight: "700", marginTop: 10 }}>Every milestone cleared. Actual legend 👑</Text>
                     )}
-                    <Text style={{ color: WHITE, opacity: 0.85, fontSize: 12, fontFamily: fonts.body, fontWeight: "600", marginTop: 6 }}>
+                    <Text style={{ color: WHITE, opacity: 0.85, fontSize: 13, fontFamily: fonts.body, fontWeight: "600", marginTop: 6 }}>
                       {`Longest ever: ${streak.longest} ${streak.longest === 1 ? "day" : "days"}`}
                     </Text>
                   </LinearGradient>
@@ -296,7 +296,7 @@ export default function BadgesScreen() {
                               {b.title}
                             </ColumnLabel>
                             {b.earned ? (
-                              <Text style={{ color: colors.mutedText, fontSize: 12, lineHeight: 16, fontFamily: fonts.body, marginTop: 3, textAlign: "center" }} numberOfLines={2} maxFontSizeMultiplier={1.3}>
+                              <Text style={{ color: colors.mutedText, fontSize: 13, lineHeight: 16, fontFamily: fonts.body, marginTop: 3, textAlign: "center" }} numberOfLines={2} maxFontSizeMultiplier={1.3}>
                                 {b.description}
                               </Text>
                             ) : (
@@ -304,7 +304,7 @@ export default function BadgesScreen() {
                                 <View className="mt-2.5 w-full overflow-hidden rounded-full" style={{ height: 4, backgroundColor: colors.track }}>
                                   <View style={{ height: 4, width: `${pct}%`, backgroundColor: colors.primary }} />
                                 </View>
-                                <Text style={{ color: colors.mutedText, fontSize: 12, fontFamily: fonts.mono, marginTop: 4 }}>
+                                <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.mono, marginTop: 4 }}>
                                   {`${b.progress.current}/${b.progress.target}`}
                                 </Text>
                               </>

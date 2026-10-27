@@ -181,7 +181,7 @@ export default function EraScreen() {
                           <Text style={{ fontSize: 32 }}>{data.era.era.emoji}</Text>
                         </View>
                         <View className="flex-1">
-                          <Text style={{ color: WHITE, opacity: 0.9, fontSize: 12, fontFamily: fonts.body, fontWeight: "700" }}>
+                          <Text style={{ color: WHITE, opacity: 0.9, fontSize: 13, fontFamily: fonts.body, fontWeight: "700" }}>
                             {`Day ${data.era.cycleDay} · ${PHASE_NAMES[data.era.phase]} phase${data.era.isEstimate ? " · estimated" : ""}`}
                           </Text>
                           <Text style={{ color: WHITE, fontSize: 24, lineHeight: 30, fontFamily: fonts.heading, fontWeight: "900", marginTop: 2 }}>
@@ -199,14 +199,14 @@ export default function EraScreen() {
                           <Text style={{ color: WHITE, fontSize: 16, fontFamily: fonts.monoSemiBold }}>
                             {data.era.daysLeftInPhase === 0 ? "Last day" : `${data.era.daysLeftInPhase} ${data.era.daysLeftInPhase === 1 ? "day" : "days"}`}
                           </Text>
-                          <ColumnLabel style={{ color: WHITE, opacity: 0.85, fontSize: 12.5, fontFamily: fonts.body, fontWeight: "600", textAlign: "left" }}>left in this era</ColumnLabel>
+                          <ColumnLabel style={{ color: WHITE, opacity: 0.85, fontSize: 13.5, fontFamily: fonts.body, fontWeight: "600", textAlign: "left" }}>left in this era</ColumnLabel>
                         </View>
                         <View style={{ width: 1, alignSelf: "stretch", backgroundColor: "rgba(255,255,255,0.35)", marginHorizontal: 14 }} />
                         <View className="flex-1">
                           <Text style={{ color: WHITE, fontSize: 14.5, fontFamily: fonts.body, fontWeight: "700" }} numberOfLines={1}>
                             {`${data.era.nextEra.emoji} ${data.era.nextEra.name.replace(" Era", "")}`}
                           </Text>
-                          <ColumnLabel style={{ color: WHITE, opacity: 0.85, fontSize: 12.5, fontFamily: fonts.body, fontWeight: "600", textAlign: "left" }}>up next</ColumnLabel>
+                          <ColumnLabel style={{ color: WHITE, opacity: 0.85, fontSize: 13.5, fontFamily: fonts.body, fontWeight: "600", textAlign: "left" }}>up next</ColumnLabel>
                         </View>
                       </View>
 
@@ -240,7 +240,7 @@ export default function EraScreen() {
                             <ColumnLabel
                               style={{
                                 color: active ? colors.foreground : colors.mutedText,
-                                fontSize: 12.5,
+                                fontSize: 13.5,
                                 fontFamily: fonts.body,
                                 fontWeight: active ? "800" : "600",
                                 marginTop: 5,
@@ -297,7 +297,7 @@ export default function EraScreen() {
                   )}
                 </View>
 
-                <Text className="mt-6 text-center" style={{ color: colors.mutedText, fontSize: 12.5, fontFamily: fonts.body, lineHeight: 16, paddingHorizontal: 32 }}>
+                <Text className="mt-6 text-center" style={{ color: colors.mutedText, fontSize: 13.5, fontFamily: fonts.body, lineHeight: 16, paddingHorizontal: 32 }}>
                   General wellness ideas, not medical advice. Ticks reset every day.
                 </Text>
               </ScrollView>

@@ -12,6 +12,7 @@ there.
 | [WORKFLOW.md](./WORKFLOW.md) | **How changes move** in every repo: environments, branches, PRs, checks, secrets, releases, cross-repo contracts, and the rules for Claude Code. |
 | [SETUP.md](./SETUP.md) | Run the app and backend locally; every environment variable. |
 | [API_REFERENCE.md](./API_REFERENCE.md) | Every backend endpoint the app calls, grouped by `lib/api/` object. |
+| [BODY_MAP.md](./BODY_MAP.md) | The Body Map: data sources, the CC0 3D model and how to regenerate it, rendering, safety. |
 | [security-implementation.md](./security-implementation.md) | How the app side of security and privacy works (keystore, screen privacy, sessions, AI consent, exports). |
 | [../CLAUDE.md](../CLAUDE.md) | The most detailed, always-current technical notes for this repo. |
 
@@ -24,6 +25,21 @@ there.
 | [PAGE-BY-PAGE-FEATURES.md](./PAGE-BY-PAGE-FEATURES.md) | Screen-by-screen breakdown. |
 | [FEATURES-AND-PITCH.md](./FEATURES-AND-PITCH.md) | The feature list written as a pitch. |
 | [FEATURES.html](./FEATURES.html) | Printable export of the product guide (from 2026-09-21; FEATURES.md is newer). |
+
+## Audit and plan (2026-10)
+
+| Doc | For |
+|---|---|
+| [product-audit.md](./product-audit.md) | What exists, gaps, risks, ranked recommendations. |
+| [improvement-roadmap.md](./improvement-roadmap.md) | The backlog: problem, evidence, files, effort, risk, tests per item. |
+| [implementation-report.md](./implementation-report.md) | What was changed and what wasn't. |
+| [testing-report.md](./testing-report.md) | Checks actually run, and what still needs a device. |
+
+## Pricing
+
+| Doc | For |
+|---|---|
+| [pricing-2026.md](./pricing-2026.md) | The 2026 pricing across backend, app and website: what was built, what isn't sold and why, blockers, and the staging/production rollout checklist. |
 
 ## History
 

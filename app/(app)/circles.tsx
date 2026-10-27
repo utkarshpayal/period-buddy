@@ -75,7 +75,7 @@ function Sheet({
     >
       <View className="flex-row items-center justify-between mb-4" style={{ marginTop: 8 }}>
         <Text style={{ color: colors.foreground, fontSize: 18, fontFamily: fonts.heading, fontWeight: "800" }}>{title}</Text>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           onPress={onClose}
           hitSlop={12}
           accessibilityLabel="Close"
@@ -255,7 +255,7 @@ function CircleList({ initialCode }: { initialCode?: string }) {
         title="Bestie Circles"
         right={
           data?.circles.length ? (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               onPress={startNew}
               hitSlop={10}
               accessibilityLabel="Start a new circle"
@@ -426,11 +426,11 @@ function MemberBubble({ m, onPress }: { m: CircleMember; onPress: (m: CircleMemb
             className="absolute items-center justify-center rounded-full"
             style={{ right: -4, bottom: -2, width: 24, height: 24, backgroundColor: colors.surface, borderColor: colors.background, borderWidth: 2 }}
           >
-            <Text style={{ fontSize: 12 }}>{m.vibe.emoji}</Text>
+            <Text style={{ fontSize: 13 }}>{m.vibe.emoji}</Text>
           </View>
         ) : null}
       </View>
-      <Text style={{ color: colors.foreground, fontSize: 12, fontFamily: fonts.body, fontWeight: "600", marginTop: 6 }} numberOfLines={1}>
+      <Text style={{ color: colors.foreground, fontSize: 13, fontFamily: fonts.body, fontWeight: "600", marginTop: 6 }} numberOfLines={1}>
         {m.isYou ? "You" : m.name.split(" ")[0]}
         {m.isOwner ? " 👑" : ""}
       </Text>
@@ -471,7 +471,7 @@ function VibeRow({
       style={{ paddingHorizontal: 9, height: 28, backgroundColor: mine ? colors.primaryLight : colors.surface, borderColor: mine ? colors.primary : "transparent", borderWidth: 1, gap: 4 }}
     >
       <Text style={{ fontSize: 13 }}>{e}</Text>
-      {count ? <Text style={{ color: colors.foreground, fontSize: 12, fontFamily: fonts.body, fontWeight: "700" }}>{count}</Text> : null}
+      {count ? <Text style={{ color: colors.foreground, fontSize: 13, fontFamily: fonts.body, fontWeight: "700" }}>{count}</Text> : null}
     </TouchableOpacity>
   );
 
@@ -491,7 +491,7 @@ function VibeRow({
               {timeAgo(v.createdAt)}
             </Text>
             {v.isMine ? (
-              <TouchableOpacity onPress={() => onDelete(v)} hitSlop={10} accessibilityLabel="Delete vibe">
+              <TouchableOpacity accessibilityRole="button" onPress={() => onDelete(v)} hitSlop={10} accessibilityLabel="Delete vibe">
                 <Icon set="feather" name="more-horizontal" size={18} color={colors.mutedText} />
               </TouchableOpacity>
             ) : null}
@@ -500,7 +500,7 @@ function VibeRow({
           {v.askForSupport ? (
             <View className="flex-row items-center self-start rounded-full mt-2" style={{ backgroundColor: colors.primaryLight, paddingHorizontal: 10, paddingVertical: 4, gap: 5 }}>
               <Text style={{ fontSize: 12 }}>🫂</Text>
-              <Text style={{ color: colors.primary, fontSize: 12, fontFamily: fonts.body, fontWeight: "700" }}>Could use some love</Text>
+              <Text style={{ color: colors.primary, fontSize: 13, fontFamily: fonts.body, fontWeight: "700" }}>Could use some love</Text>
             </View>
           ) : null}
 
@@ -657,7 +657,7 @@ function CircleView({ id }: { id: string }) {
         title={circle ? `${circle.emoji} ${circle.name}` : "Circle"}
         right={
           circle ? (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               onPress={() => setMenuOpen(true)}
               hitSlop={10}
               accessibilityLabel="Circle options"

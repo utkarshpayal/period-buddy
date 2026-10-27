@@ -11,6 +11,10 @@
 export function cleanForSpeech(text: string): string {
   return (
     text
+      // Rich content (lib/richText.ts): chart data, images and styling tags aren't read.
+      .replace(/```chart[^\n]*\n[\s\S]*?```/g, " ")
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+      .replace(/<[^>]*>/g, "")
       // [label](url) → label, then bare URLs.
       .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
       .replace(/https?:\/\/\S+/g, "")

@@ -31,7 +31,7 @@ export function WeekStrip({
         {WEEKDAY_LABELS.map((label, index) => (
           <Text
             key={`wk-label-${index}`}
-            style={{ width: `${100 / 7}%`, textAlign: "center", color: colors.mutedText, fontSize: 12.5, fontWeight: "700", fontFamily: fonts.body }}
+            style={{ width: `${100 / 7}%`, textAlign: "center", color: colors.mutedText, fontSize: 13.5, fontWeight: "700", fontFamily: fonts.body }}
           >
             {label}
           </Text>
