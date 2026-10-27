@@ -44,7 +44,9 @@ export type GenerateHealthReportParams = {
  * turns it into a PDF, then hands it to the OS share sheet (native) or a
  * dedicated print window (web) so the user can save/download it.
  */
-export async function generateAndShareHealthReport(params: GenerateHealthReportParams): Promise<void> {
+export async function generateAndShareHealthReport(
+  params: GenerateHealthReportParams,
+): Promise<{ summaryLimit: { limit: number; resetsAt: string } | null }> {
   const { startDate, endDate, language, userName, age } = params;
 
   // Must happen before the first `await` below — see openWebReportWindow.
@@ -58,7 +60,7 @@ export async function generateAndShareHealthReport(params: GenerateHealthReportP
 
   let report;
   try {
-    report = await reportApi.getHealthReport({ endDate, language, startDate });
+    report = await reportApi.getHealthReport({ endDate, includeAnalysis: true, language, startDate });
   } catch (error) {
     webReportWindow?.close();
     throw error;
@@ -75,9 +77,13 @@ export async function generateAndShareHealthReport(params: GenerateHealthReportP
     documents: report.documents,
   });
 
+  // This month's AI summaries used up: the PDF still has the logs, and the
+  // caller says why the summary is missing.
+  const summaryLimit = report.analysisLimit ?? null;
+
   if (Platform.OS === "web") {
     writeHtmlToWebWindow(webReportWindow as Window, html);
-    return;
+    return { summaryLimit };
   }
 
   const { uri } = await Print.printToFileAsync({ html, base64: false });
@@ -89,4 +95,5 @@ export async function generateAndShareHealthReport(params: GenerateHealthReportP
       UTI: "com.adobe.pdf",
     });
   }
+  return { summaryLimit };
 }

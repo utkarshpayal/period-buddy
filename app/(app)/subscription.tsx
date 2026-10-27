@@ -12,6 +12,7 @@ import { IconCircle } from "../../components/wellbeing/WellbeingUI";
 import { CashfreeCheckoutModal } from "../../components/CashfreeCheckoutModal";
 import { PaymentSheet } from "../../components/PaymentSheet";
 import { CYCLE_SUFFIX } from "../../components/subscription/billing";
+import { SegmentedControl } from "../../components/SegmentedControl";
 import { PaymentTrustFooter } from "../../components/subscription/PaymentTrustFooter";
 import { PurchaseConfirmSheet } from "../../components/subscription/PurchaseConfirmSheet";
 import { PurchaseResultPanel } from "../../components/subscription/PurchaseResultPanel";
@@ -20,55 +21,66 @@ import { useDataRefresh } from "../../hooks/useDataRefresh";
 import { alert } from "../../lib/alert";
 import { formatShortDate } from "../../lib/format";
 import {
+  ApiError,
   getFriendlyErrorMessage,
   subscriptionApi,
   type BillingCycle,
   type CouponPreview,
   type Entitlement,
   type MySubscription,
+  type PricingSummary,
   type SubscriptionFeature,
-  type SubscriptionPlan,
 } from "../../lib/api";
+import { addOnPrice, formatRupees, pricingFromCatalog, usageLines, type Period } from "../../lib/pricing";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { Icon } from "../../components/Icon";
 import { Button } from "../../components/Button";
 
+// Prepaid periods, worded the same as the Premium card ("for 30 days").
 const PERIOD_LABEL: Record<BillingCycle, string> = {
-  monthly: "per month",
-  yearly: "per year",
+  monthly: "for 30 days",
+  yearly: "for 12 months",
   one_time: "one-time",
 };
 
+const plural = (n: number | undefined, one: string, many: string) => `${n ?? "–"} ${n === 1 ? one : many}`;
+
 type ConfirmTarget = {
   key: string;
-  payload: { source: "plan"; planId: string } | { source: "feature"; featureKey: string };
+  payload:
+    | { source: "plan"; planId: string }
+    | { source: "feature"; featureKey: string; billingCycle?: "monthly" | "yearly" };
   label: string;
   description?: string;
   price: number;
   cycleSuffix: string;
+  billingCycle: BillingCycle;
+  renewalPrice?: number | null;
+  startsAt?: string | null;
 };
 
 /**
- * Profile → My Subscription. Shows what's currently active, and a full
- * pricing grid (plans + individual features) to browse/upgrade any time —
- * not just when a screen hits a lock (see components/subscription/
- * PaywallModal.tsx for that flow). Purchase mechanics are identical to it,
- * sharing hooks/usePaymentCheckout.ts's state machine.
+ * Profile → My Subscription. Shows what's currently active, then the
+ * pricing from GET /api/subscriptions/pricing (one summary shared with the
+ * website): Nura Premium with a Monthly / Yearly switch, the founding offer
+ * only while it's live and this account is eligible, single features
+ * (hidden behind "In Premium" for members, who never pay twice) and a short
+ * "Good to know". Purchase mechanics are identical to PaywallModal, sharing
+ * hooks/usePaymentCheckout.ts's state machine.
  */
 export default function SubscriptionScreen() {
   const { colors, isDark, fonts } = useTheme();
 
   const [me, setMe] = useState<MySubscription | null>(null);
-  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [features, setFeatures] = useState<SubscriptionFeature[]>([]);
   const [history, setHistory] = useState<Entitlement[]>([]);
+  const [pricing, setPricing] = useState<PricingSummary | null>(null);
+  const [period, setPeriod] = useState<Period>("monthly");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [couponCode, setCouponCode] = useState("");
-  // The plan the sticky CTA buys; null = the recommended one.
-  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [confirmTarget, setConfirmTarget] = useState<ConfirmTarget | null>(null);
   const [couponPreview, setCouponPreview] = useState<CouponPreview | null>(null);
   const [couponPreviewError, setCouponPreviewError] = useState<string | null>(null);
@@ -103,18 +115,23 @@ export default function SubscriptionScreen() {
     const seq = ++loadSeq.current;
     if (!quiet) setError(null);
     try {
-      const [meResult, plansResult, featuresResult, historyResult] = await Promise.all([
+      const [meResult, plansResult, featuresResult, historyResult, pricingResult] = await Promise.all([
         subscriptionApi.getMe(),
         subscriptionApi.getPlans(),
         subscriptionApi.getFeatures(),
         subscriptionApi.getHistory(),
+        // A backend before the 2026 pricing has no /pricing: rebuild it.
+        subscriptionApi.getPricing({ force: !quiet }).catch((err) => {
+          if (err instanceof ApiError && err.kind === "notFound") return null;
+          throw err;
+        }),
       ]);
       if (seq !== loadSeq.current) return;
       hasDataRef.current = true;
       setMe(meResult);
-      setPlans(plansResult);
       setFeatures(featuresResult);
       setHistory(historyResult);
+      setPricing(pricingResult ?? pricingFromCatalog(plansResult, featuresResult));
       setError(null);
     } catch (err) {
       if (seq !== loadSeq.current || quiet) return;
@@ -204,56 +221,77 @@ export default function SubscriptionScreen() {
 
   const activeEntitlements = (me?.entitlements ?? []).filter((e) => e.status === "active");
   const activePlanEntitlement = activeEntitlements.find((e) => e.source === "plan");
-  const premiumFeatures = features.filter((f) => f.isPremium);
   const pricingOff = me !== null && !me.subscriptionEnabled;
+  const premiumStatus = me?.premium?.active ? me.premium : null;
 
-  const featureName = (key: string) => features.find((f) => f.key === key)?.name ?? key;
-  const planUnlocked = (plan: SubscriptionPlan) => plan.features.every(isUnlocked) && plan.features.length > 0;
+  const premium = pricing?.premium;
+  const premiumCard = period === "yearly" ? (premium?.yearly ?? premium?.monthly) : (premium?.monthly ?? premium?.yearly);
+  const comparison = premium?.yearly?.comparison ?? null;
+  const founding = premium?.founding ?? null;
+  const addOns = pricing?.allowFeatureWisePurchase === false ? [] : (pricing?.addOns ?? []);
+  // The Monthly / Yearly switch lives on the Premium card, so it shows only
+  // when Premium is sold both ways.
+  const showPeriodSwitch = Boolean(premium?.monthly && premium?.yearly);
 
-  // What a plan is compared with for its "Save N%" badge: the same features
-  // on a monthly plan (for a yearly one), else buying them one by one.
-  const savingsFor = (plan: SubscriptionPlan): number | null => {
-    if (plan.billingCycle === "one_time" || plan.price <= 0) return null;
-    const sameSet = (p: SubscriptionPlan) =>
-      p.features.length === plan.features.length && p.features.every((k) => plan.features.includes(k));
-    let reference: number | null = null;
-    if (plan.billingCycle === "yearly") {
-      const monthly = plans.find((p) => p._id !== plan._id && p.billingCycle === "monthly" && sameSet(p));
-      if (monthly) reference = monthly.price * 12;
-    }
-    if (reference === null && plan.features.length > 1) {
-      let total = 0;
-      for (const key of plan.features) {
-        const f = features.find((x) => x.key === key);
-        if (!f || !f.isPremium) return null;
-        if (f.billingCycle === plan.billingCycle) total += f.price;
-        else if (f.billingCycle === "monthly" && plan.billingCycle === "yearly") total += f.price * 12;
-        else return null;
-      }
-      reference = total;
-    }
-    if (!reference || reference <= plan.price) return null;
-    const pct = Math.round(((reference - plan.price) / reference) * 100);
-    return pct >= 5 ? pct : null;
+  const confirmPremium = (card: NonNullable<typeof premiumCard>, extra: Partial<ConfirmTarget> = {}) =>
+    openConfirm({
+      key: card.planId,
+      payload: { source: "plan", planId: card.planId },
+      label: card.name,
+      description: card.description,
+      price: card.price,
+      cycleSuffix: CYCLE_SUFFIX[card.billingCycle],
+      billingCycle: card.billingCycle,
+      // Buying again while Premium is live extends it (the server starts the
+      // new period when the current one ends).
+      startsAt: premiumStatus?.until ?? null,
+      ...extra,
+    });
+
+  const foundingTerms = (offer: NonNullable<typeof founding>) => {
+    const limit = offer.maxMembers ? `the first ${offer.maxMembers} members` : null;
+    const until = offer.endsAt ? `until ${formatShortDate(offer.endsAt)}` : null;
+    const window = limit && until ? ` Open to ${limit}, ${until}.` : limit ? ` Open to ${limit}.` : until ? ` Open ${until}.` : "";
+    return `For new Premium members, once per person.${window}`;
   };
 
-  const buyablePlans = plans.filter((p) => !planUnlocked(p));
-  const recommendedPlan =
-    plans.find((p) => !!p.badge) ??
-    [...plans].sort((a, b) => (savingsFor(b) ?? 0) - (savingsFor(a) ?? 0) || b.features.length - a.features.length)[0];
-  const selectedPlan =
-    buyablePlans.find((p) => p._id === selectedPlanId) ??
-    (recommendedPlan && !planUnlocked(recommendedPlan) ? recommendedPlan : buyablePlans[0]);
-
-  const confirmPlan = (plan: SubscriptionPlan) =>
-    openConfirm({
-      key: plan._id,
-      payload: { source: "plan", planId: plan._id },
-      label: plan.name,
-      description: plan.description,
-      price: plan.price,
-      cycleSuffix: CYCLE_SUFFIX[plan.billingCycle],
-    });
+  const fairUse = pricing?.fairUse;
+  const goodToKnow = [
+    {
+      icon: "calendar-outline",
+      title: "Paid ahead, nothing to cancel",
+      body: "Each purchase covers 30 days or 12 months and doesn't renew by itself. Buy again whenever you like.",
+    },
+    {
+      icon: "medkit-outline",
+      title: "Doctor consultations are separate",
+      body: "Each consultation is paid on its own, at the doctor's fee shown before you book. Premium doesn't include them.",
+    },
+    ...(fairUse?.enabled
+      ? [
+          {
+            icon: "speedometer-outline",
+            title: "Fair use",
+            body: `Free: up to ${plural(fairUse.aiMessagesPerDay?.free, "Nura AI message", "Nura AI messages")} a day. Premium: up to ${plural(fairUse.aiMessagesPerDay?.premium, "message", "messages")} a day, ${plural(fairUse.documentsPerMonth?.premium, "document", "documents")} a month (up to ${plural(fairUse.maxPagesPerDocument?.premium, "page", "pages")} each) and ${plural(fairUse.doctorReportsPerMonth?.premium, "doctor report", "doctor reports")} a month. Urgent health questions are never limited.`,
+          },
+        ]
+      : []),
+    {
+      icon: "information-circle-outline",
+      title: "Nura AI is not a doctor",
+      body: "Its answers are general health information, not a diagnosis. For anything that worries you, talk to a doctor.",
+    },
+    {
+      icon: "lock-closed-outline",
+      title: "Your health data stays yours",
+      body: "Paying never changes who can see your health data.",
+    },
+    {
+      icon: "help-circle-outline",
+      title: "Need help with a payment?",
+      body: "Go to Profile → Help & support and pick Payments / Subscription.",
+    },
+  ];
 
   const heroTitle = pricingOff
     ? "Everything is free right now"
@@ -262,16 +300,18 @@ export default function SubscriptionScreen() {
       : activeEntitlements.length > 0
         ? `${activeEntitlements.length} ${activeEntitlements.length === 1 ? "feature" : "features"} unlocked`
         : "Free plan";
+  const premiumUntil = premiumStatus?.until ?? activePlanEntitlement?.expiresAt ?? null;
   const heroBody = pricingOff
     ? "Premium pricing isn't active, so every feature is open to you."
     : activePlanEntitlement
-      ? activePlanEntitlement.expiresAt
-        ? `Renews or expires ${formatShortDate(activePlanEntitlement.expiresAt)}`
+      ? premiumUntil
+        ? `Active until ${formatShortDate(premiumUntil)}. It doesn't renew by itself.`
         : "Active, never expires"
       : activeEntitlements.length > 0
-        ? "Bundle more into a plan and save."
-        : "Unlock premium care with a plan, or one feature at a time.";
+        ? "Get every Premium feature in one plan."
+        : "Tracking, predictions and safety guidance are always free.";
   const heroGradient = getHeroGradient(colors, isDark) as [string, string, string];
+  const usage = usageLines(me?.usage);
 
   const historyStatus: Record<Entitlement["status"], { icon: string; tone: { fg: string; bg: string }; label: string }> = {
     active: { icon: "checkmark-circle-outline", tone: { fg: colors.success, bg: colors.successLight }, label: "Active" },
@@ -279,6 +319,7 @@ export default function SubscriptionScreen() {
     failed: { icon: "close-circle-outline", tone: { fg: colors.danger, bg: colors.dangerLight }, label: "Failed" },
     expired: { icon: "hourglass-outline", tone: { fg: colors.mutedText, bg: colors.surfaceSoft }, label: "Expired" },
     cancelled: { icon: "remove-circle-outline", tone: { fg: colors.mutedText, bg: colors.surfaceSoft }, label: "Cancelled" },
+    refunded: { icon: "return-down-back-outline", tone: { fg: colors.mutedText, bg: colors.surfaceSoft }, label: "Refunded" },
   };
 
   const sectionGap = 32;
@@ -317,7 +358,7 @@ export default function SubscriptionScreen() {
             bottomOffset={24}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 12, paddingBottom: selectedPlan ? 140 : 48 }}
+            contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 12, paddingBottom: 48 }}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
           >
             {/* Hero: current plan status */}
@@ -363,118 +404,129 @@ export default function SubscriptionScreen() {
               ) : null}
             </LinearGradient>
 
-            {/* Plans */}
-            {plans.length > 0 ? (
+            {/* Your usage (only while fair use is on) */}
+            {usage.length > 0 ? (
               <>
-                <SectionHeader title="Choose a plan" style={{ marginTop: sectionGap }} />
-                <View style={{ gap: 14 }}>
-                  {plans.map((plan) => {
-                    const unlocked = planUnlocked(plan);
-                    const isSelected = selectedPlan?._id === plan._id;
-                    const isRecommended = recommendedPlan?._id === plan._id && !unlocked;
-                    const savings = savingsFor(plan);
-                    const shown = plan.features.slice(0, 4);
-                    const more = plan.features.length - shown.length;
-                    return (
-                      <TouchableOpacity
-                        key={plan._id}
-                        activeOpacity={0.85}
-                        disabled={unlocked}
-                        onPress={() => setSelectedPlanId(plan._id)}
-                        accessibilityRole="radio"
-                        accessibilityState={{ selected: isSelected, disabled: unlocked }}
-                        accessibilityLabel={`${plan.name}, ₹${plan.price} ${PERIOD_LABEL[plan.billingCycle]}${savings ? `, save ${savings}%` : ""}${unlocked ? ", current plan" : ""}`}
-                        style={{
-                          borderRadius: 24, borderCurve: "continuous",
-                          padding: 18,
-                          paddingTop: isRecommended ? 26 : 18,
-                          backgroundColor: isSelected ? colors.primaryLight : colors.surface,
-                          borderWidth: isSelected ? 2 : 1,
-                          borderColor: isSelected ? colors.primary : colors.border,
-                          ...getShadow(colors, isDark),
-                        }}
+                <SectionHeader title="Your usage" style={{ marginTop: sectionGap }} />
+                <View style={{ backgroundColor: colors.surface, borderRadius: 22, borderCurve: "continuous", paddingVertical: 4, ...getShadow(colors, isDark) }}>
+                  {usage.map((line, index) => (
+                    <View key={line.key} style={{ paddingHorizontal: 16, paddingVertical: 13 }}>
+                      {index > 0 ? <View style={{ position: "absolute", top: 0, left: 16, right: 0, height: 1, backgroundColor: colors.track }} /> : null}
+                      <View className="flex-row items-center justify-between" style={{ gap: 10 }}>
+                        <Text numberOfLines={1} style={{ flexShrink: 1, color: colors.foreground, fontSize: 14.5, fontWeight: "700", fontFamily: fonts.body }}>{line.label}</Text>
+                        <Text style={{ color: line.low ? colors.warning : colors.mutedText, fontSize: 13, fontWeight: line.low ? "700" : "400", fontFamily: fonts.body }}>{line.text}</Text>
+                      </View>
+                      <View
+                        style={{ height: 6, borderRadius: 3, backgroundColor: colors.track, marginTop: 8, overflow: "hidden" }}
+                        accessibilityLabel={`${line.label}: ${line.text}`}
                       >
-                        {isRecommended ? (
-                          <View
-                            className="flex-row items-center"
-                            style={{ position: "absolute", top: -11, left: 18, gap: 4, paddingHorizontal: 10, height: 22, borderRadius: 11, backgroundColor: colors.primary }}
-                          >
-                            <Icon set="ion" name="star" size={11} color={colors.buttonText} />
-                            <Text numberOfLines={1} style={{ color: colors.buttonText, fontSize: 11.5, fontWeight: "800", letterSpacing: 0.4, textTransform: "uppercase", fontFamily: fonts.body }}>
-                              {plan.badge || "Recommended"}
-                            </Text>
-                          </View>
-                        ) : null}
-
-                        <View className="flex-row items-start" style={{ gap: 12 }}>
-                          <View className="flex-1">
-                            <View className="flex-row items-center flex-wrap" style={{ gap: 8 }}>
-                              <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={{ flexShrink: 1, color: colors.foreground, fontSize: 17, fontWeight: "800", fontFamily: fonts.heading }}>
-                                {plan.name}
-                              </Text>
-                              {plan.badge && !isRecommended ? (
-                                <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: colors.primaryLight }}>
-                                  <Text style={{ color: colors.primaryDark, fontSize: 13, fontWeight: "800", fontFamily: fonts.body }}>{plan.badge}</Text>
-                                </View>
-                              ) : null}
-                            </View>
-                            {plan.description ? (
-                              <Text numberOfLines={2} style={{ color: colors.mutedText, fontSize: 13, lineHeight: 18, marginTop: 3, fontFamily: fonts.body }}>
-                                {plan.description}
-                              </Text>
-                            ) : null}
-                          </View>
-                          {unlocked ? (
-                            <View className="flex-row items-center" style={{ gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: colors.successLight }}>
-                              <Icon set="ion" name="checkmark-circle" size={14} color={colors.success} />
-                              <Text style={{ color: colors.success, fontSize: 13.5, fontWeight: "800", fontFamily: fonts.body }}>Current</Text>
-                            </View>
-                          ) : (
-                            <Icon set="ion" name={isSelected ? "radio-button-on" : "radio-button-off"} size={24} color={isSelected ? colors.primary : colors.mutedText} />
-                          )}
-                        </View>
-
-                        <View className="flex-row items-end flex-wrap" style={{ marginTop: 14, gap: 8 }}>
-                          <Text style={{ color: colors.foreground, fontSize: 30, lineHeight: 34, fontFamily: fonts.monoSemiBold }}>₹{plan.price}</Text>
-                          <Text style={{ color: colors.mutedText, fontSize: 13.5, marginBottom: 4, fontFamily: fonts.body }}>{PERIOD_LABEL[plan.billingCycle]}</Text>
-                          {savings ? (
-                            <View style={{ marginBottom: 5, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: colors.successLight }}>
-                              <Text style={{ color: colors.success, fontSize: 13, fontWeight: "800", fontFamily: fonts.body }}>Save {savings}%</Text>
-                            </View>
-                          ) : null}
-                        </View>
-                        {plan.billingCycle === "yearly" && plan.price > 0 ? (
-                          <Text style={{ color: colors.mutedText, fontSize: 13, marginTop: 2, fontFamily: fonts.body }}>
-                            {`That's about ₹${Math.round(plan.price / 12)} a month`}
-                          </Text>
-                        ) : null}
-
-                        {shown.length > 0 ? (
-                          <View style={{ marginTop: 14, gap: 8, paddingTop: 14, borderTopWidth: 1, borderTopColor: colors.border }}>
-                            {shown.map((key) => (
-                              <View key={key} className="flex-row items-center" style={{ gap: 10 }}>
-                                <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: colors.successLight, alignItems: "center", justifyContent: "center" }}>
-                                  <Icon set="ion" name="checkmark" size={13} color={colors.success} />
-                                </View>
-                                <Text numberOfLines={1} style={{ flex: 1, color: colors.foreground, fontSize: 14, fontFamily: fonts.body }}>
-                                  {featureName(key)}
-                                </Text>
-                              </View>
-                            ))}
-                            {more > 0 ? (
-                              <Text style={{ color: colors.mutedText, fontSize: 13, marginLeft: 30, fontFamily: fonts.body }}>{`+ ${more} more`}</Text>
-                            ) : null}
-                          </View>
-                        ) : null}
-                      </TouchableOpacity>
-                    );
-                  })}
+                        <View style={{ width: `${Math.min(100, (line.used / Math.max(1, line.limit)) * 100)}%`, height: 6, borderRadius: 3, backgroundColor: line.low ? colors.warning : colors.primary }} />
+                      </View>
+                      <Text style={{ color: colors.mutedText, fontSize: 13, marginTop: 6, fontFamily: fonts.body }}>
+                        {`Resets ${formatShortDate(line.resetsAt)}`}
+                      </Text>
+                    </View>
+                  ))}
                 </View>
               </>
             ) : null}
 
+            {/* Nura Premium */}
+            {!pricingOff && premiumCard ? (
+              <>
+                <SectionHeader title="Nura Premium" style={{ marginTop: sectionGap }} />
+                <View style={{ borderRadius: 24, borderCurve: "continuous", padding: 18, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, ...getShadow(colors, isDark) }}>
+                  {showPeriodSwitch && premium?.monthly && premium?.yearly ? (
+                    <SegmentedControl<Period>
+                      segments={[
+                        { key: "monthly", label: `Monthly ${formatRupees(premium.monthly.price)}`, accessibilityLabel: `Monthly, ${formatRupees(premium.monthly.price)} for 30 days` },
+                        { key: "yearly", label: `Yearly ${formatRupees(premium.yearly.price)}`, accessibilityLabel: `Yearly, ${formatRupees(premium.yearly.price)} for 12 months` },
+                      ]}
+                      value={period}
+                      onChange={setPeriod}
+                      style={{ marginBottom: 16 }}
+                    />
+                  ) : null}
+
+                  <View className="flex-row items-end flex-wrap" style={{ gap: 8 }}>
+                    <Text style={{ color: colors.foreground, fontSize: 32, lineHeight: 36, fontFamily: fonts.monoSemiBold }}>{formatRupees(premiumCard.price)}</Text>
+                    <Text style={{ color: colors.mutedText, fontSize: 14, marginBottom: 4, fontFamily: fonts.body }}>
+                      {premiumCard.billingCycle === "yearly" ? "for 12 months" : "for 30 days"}
+                    </Text>
+                  </View>
+                  {premiumCard.billingCycle === "yearly" && comparison ? (
+                    <Text style={{ color: colors.mutedText, fontSize: 13.5, lineHeight: 19, marginTop: 4, fontFamily: fonts.body }}>
+                      {`Billed once a year. About ${formatRupees(comparison.monthlyEquivalent)} a month${comparison.saving ? `, ${formatRupees(comparison.saving)} less than 12 monthly payments (${comparison.savingPercent}%)` : ""}.`}
+                    </Text>
+                  ) : null}
+
+                  {(premium?.features.length ?? 0) > 0 ? (
+                    <View style={{ marginTop: 14, gap: 8, paddingTop: 14, borderTopWidth: 1, borderTopColor: colors.border }}>
+                      {premium!.features.map((f) => (
+                        <View key={f.key} className="flex-row items-center" style={{ gap: 10 }}>
+                          <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: colors.successLight, alignItems: "center", justifyContent: "center" }}>
+                            <Icon set="ion" name="checkmark" size={13} color={colors.success} />
+                          </View>
+                          <Text numberOfLines={2} style={{ flex: 1, color: colors.foreground, fontSize: 14, fontFamily: fonts.body }}>
+                            {f.name}
+                          </Text>
+                        </View>
+                      ))}
+                      <Text style={{ color: colors.mutedText, fontSize: 13, lineHeight: 18, marginTop: 2, fontFamily: fonts.body }}>
+                        Cycle tracking, predictions, logging and safety guidance stay free for everyone.
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  <Button
+                    label={premiumStatus ? `Extend Premium · ${formatRupees(premiumCard.price)}` : `Get Premium · ${formatRupees(premiumCard.price)}${CYCLE_SUFFIX[premiumCard.billingCycle]}`}
+                    onPress={() => confirmPremium(premiumCard)}
+                    loading={purchasingKey === premiumCard.planId}
+                    disabled={purchasingKey !== null && purchasingKey !== premiumCard.planId}
+                    fullWidth
+                    style={{ marginTop: 16 }}
+                  />
+                  {premiumStatus?.until ? (
+                    <Text style={{ color: colors.mutedText, fontSize: 13, textAlign: "center", marginTop: 8, fontFamily: fonts.body }}>
+                      {`You have Premium until ${formatShortDate(premiumStatus.until)}. Extending adds time after that.`}
+                    </Text>
+                  ) : null}
+                </View>
+
+                {founding ? (
+                  <View style={{ marginTop: 14, borderRadius: 24, borderCurve: "continuous", padding: 18, backgroundColor: colors.primaryLight, borderWidth: 1, borderColor: colors.primary }}>
+                    <Text style={{ color: colors.primaryDark, fontSize: 11.5, fontWeight: "800", letterSpacing: 0.6, textTransform: "uppercase", fontFamily: fonts.body }}>
+                      Founding member offer
+                    </Text>
+                    <Text style={{ color: colors.foreground, fontSize: 17, fontWeight: "800", marginTop: 4, fontFamily: fonts.heading }}>
+                      {`${formatRupees(founding.price)} for your first year of Premium`}
+                    </Text>
+                    <Text style={{ color: colors.foreground, fontSize: 13.5, lineHeight: 19, marginTop: 6, fontFamily: fonts.body }}>
+                      {foundingTerms(founding)}
+                    </Text>
+                    <Text style={{ color: colors.mutedText, fontSize: 13, lineHeight: 18, marginTop: 4, fontFamily: fonts.body }}>
+                      {founding.renewalPrice
+                        ? `After the first year, Premium is ${formatRupees(founding.renewalPrice)}/year if you choose to continue. Nothing renews by itself.`
+                        : "Nothing renews by itself."}
+                    </Text>
+                    <Button
+                      label={`Get the founding offer · ${formatRupees(founding.price)}`}
+                      variant="secondary"
+                      onPress={() =>
+                        confirmPremium(founding, { renewalPrice: founding.renewalPrice, description: "Founding member offer, first year of Premium" })
+                      }
+                      loading={purchasingKey === founding.planId}
+                      disabled={purchasingKey !== null && purchasingKey !== founding.planId}
+                      fullWidth
+                      style={{ marginTop: 14 }}
+                    />
+                  </View>
+                ) : null}
+              </>
+            ) : null}
+
             {/* Coupon */}
-            {!pricingOff && (plans.length > 0 || premiumFeatures.length > 0) ? (
+            {!pricingOff && (premiumCard || addOns.length > 0) ? (
               <>
                 <SectionHeader title="Coupon" style={{ marginTop: sectionGap }} />
                 <View
@@ -515,57 +567,69 @@ export default function SubscriptionScreen() {
               </>
             ) : null}
 
-            {/* Individual features */}
-            {premiumFeatures.length > 0 ? (
+            {/* Single features */}
+            {!pricingOff && addOns.length > 0 ? (
               <>
-                <SectionHeader title="Or unlock one feature" style={{ marginTop: sectionGap }} />
+                <SectionHeader
+                  title="Or pick single features"
+                  subtitle={
+                    showPeriodSwitch && addOns.some((a) => a.yearlyPrice)
+                      ? `Prices ${period === "yearly" ? "for 12 months" : "for 30 days"}, matching the switch above.`
+                      : undefined
+                  }
+                  style={{ marginTop: sectionGap }}
+                />
                 <View style={{ backgroundColor: colors.surface, borderRadius: 22, borderCurve: "continuous", paddingVertical: 4, ...getShadow(colors, isDark) }}>
-                  {premiumFeatures.map((feature, index) => {
-                    const unlocked = isUnlocked(feature.key);
+                  {addOns.map((addOn, index) => {
+                    const feature = features.find((f) => f.key === addOn.key);
+                    const { price, billingCycle } = addOnPrice(addOn, period);
+                    const inPremium = Boolean(premiumStatus) && addOn.includedInPremium;
+                    const unlocked = inPremium || isUnlocked(addOn.key);
                     return (
-                      <View
-                        key={feature.key}
-                        className="flex-row items-center"
-                        style={{ gap: 12, paddingHorizontal: 16, paddingVertical: 14 }}
-                      >
+                      <View key={addOn.key} className="flex-row items-center" style={{ gap: 12, paddingHorizontal: 16, paddingVertical: 14 }}>
                         {index > 0 ? <View style={{ position: "absolute", top: 0, left: 70, right: 0, height: 1, backgroundColor: colors.track }} /> : null}
-                        <IconCircle icon={feature.icon} fallback="star-outline" tone={{ fg: colors.gold, bg: colors.goldLight }} size={42} />
+                        <IconCircle icon={feature?.icon} fallback="star-outline" tone={{ fg: colors.gold, bg: colors.goldLight }} size={42} />
                         <View className="flex-1" style={{ minWidth: 0 }}>
                           <Text numberOfLines={1} maxFontSizeMultiplier={1.4} style={{ color: colors.foreground, fontSize: 15, fontWeight: "700", fontFamily: fonts.heading }}>
-                            {feature.name}
+                            {addOn.name}
                           </Text>
-                          {feature.description ? (
-                            <Text numberOfLines={1} maxFontSizeMultiplier={1.4} style={{ color: colors.mutedText, fontSize: 13, lineHeight: 18, marginTop: 1, fontFamily: fonts.body }}>
-                              {feature.description}
+                          {addOn.description ? (
+                            <Text numberOfLines={2} maxFontSizeMultiplier={1.4} style={{ color: colors.mutedText, fontSize: 13, lineHeight: 18, marginTop: 1, fontFamily: fonts.body }}>
+                              {addOn.description}
                             </Text>
                           ) : null}
                           <Text style={{ color: colors.foreground, fontSize: 13.5, marginTop: 4, fontFamily: fonts.monoSemiBold }}>
-                            ₹{feature.price}
-                            <Text style={{ color: colors.mutedText, fontFamily: fonts.body, fontSize: 13.5 }}>{` ${PERIOD_LABEL[feature.billingCycle]}`}</Text>
+                            {formatRupees(price)}
+                            <Text style={{ color: colors.mutedText, fontFamily: fonts.body, fontSize: 13.5 }}>{` ${PERIOD_LABEL[billingCycle]}`}</Text>
                           </Text>
                         </View>
                         {unlocked ? (
                           <View className="flex-row items-center" style={{ gap: 4 }}>
                             <Icon set="ion" name="checkmark-circle" size={16} color={colors.success} />
-                            <Text style={{ color: colors.success, fontSize: 13, fontWeight: "800", fontFamily: fonts.body }}>Unlocked</Text>
+                            <Text style={{ color: colors.success, fontSize: 13, fontWeight: "800", fontFamily: fonts.body }}>{inPremium ? "In Premium" : "Unlocked"}</Text>
                           </View>
                         ) : (
                           <TouchableOpacity
                             hitSlop={6}
                             onPress={() =>
                               openConfirm({
-                                key: feature.key,
-                                payload: { source: "feature", featureKey: feature.key },
-                                label: feature.name,
-                                description: feature.description,
-                                price: feature.price,
-                                cycleSuffix: CYCLE_SUFFIX[feature.billingCycle],
+                                key: addOn.key,
+                                payload: {
+                                  source: "feature",
+                                  featureKey: addOn.key,
+                                  ...(billingCycle === "yearly" ? { billingCycle: "yearly" as const } : {}),
+                                },
+                                label: addOn.name,
+                                description: addOn.description,
+                                price,
+                                cycleSuffix: CYCLE_SUFFIX[billingCycle],
+                                billingCycle,
                               })
                             }
                             disabled={purchasingKey !== null}
                             activeOpacity={0.85}
                             accessibilityRole="button"
-                            accessibilityLabel={`Unlock ${feature.name} for ₹${feature.price}`}
+                            accessibilityLabel={`Unlock ${addOn.name} for ${formatRupees(price)} ${PERIOD_LABEL[billingCycle]}`}
                             style={{ height: 36, paddingHorizontal: 16, borderRadius: 18, justifyContent: "center", backgroundColor: colors.primaryLight }}
                           >
                             <Text style={{ color: colors.primaryDark, fontSize: 13.5, fontWeight: "800", fontFamily: fonts.body }}>Unlock</Text>
@@ -578,10 +642,29 @@ export default function SubscriptionScreen() {
               </>
             ) : null}
 
-            {plans.length === 0 && premiumFeatures.length === 0 && !pricingOff ? (
+            {!premiumCard && addOns.length === 0 && !pricingOff ? (
               <View style={{ marginTop: sectionGap }}>
                 <EmptyState icon="tag-outline" title="No plans available" message="Pricing will show here once it's set up. Pull down to refresh." compact />
               </View>
+            ) : null}
+
+            {/* Good to know */}
+            {!pricingOff ? (
+              <>
+                <SectionHeader title="Good to know" style={{ marginTop: sectionGap }} />
+                <View style={{ backgroundColor: colors.surface, borderRadius: 22, borderCurve: "continuous", paddingVertical: 4, ...getShadow(colors, isDark) }}>
+                  {goodToKnow.map((item, index) => (
+                    <View key={item.title} className="flex-row" style={{ gap: 12, paddingHorizontal: 16, paddingVertical: 13 }}>
+                      {index > 0 ? <View style={{ position: "absolute", top: 0, left: 58, right: 0, height: 1, backgroundColor: colors.track }} /> : null}
+                      <Icon set="ion" name={item.icon} size={20} color={colors.primary} />
+                      <View className="flex-1" style={{ minWidth: 0 }}>
+                        <Text style={{ color: colors.foreground, fontSize: 14.5, fontWeight: "700", fontFamily: fonts.body }}>{item.title}</Text>
+                        <Text style={{ color: colors.mutedText, fontSize: 13, lineHeight: 18, marginTop: 2, fontFamily: fonts.body }}>{item.body}</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </>
             ) : null}
 
             {/* Purchase history */}
@@ -606,8 +689,8 @@ export default function SubscriptionScreen() {
                           {`${formatShortDate(e.createdAt)} · ${status.label}`}
                         </Text>
                       </View>
-                      <Text style={{ color: e.status === "failed" ? colors.mutedText : colors.foreground, fontSize: 14, fontFamily: fonts.monoSemiBold, textDecorationLine: e.status === "failed" ? "line-through" : "none" }}>
-                        {`₹${e.amount}`}
+                      <Text style={{ color: e.status === "failed" || e.status === "refunded" ? colors.mutedText : colors.foreground, fontSize: 14, fontFamily: fonts.monoSemiBold, textDecorationLine: e.status === "failed" || e.status === "refunded" ? "line-through" : "none" }}>
+                        {formatRupees(e.amount)}
                       </Text>
                     </View>
                   );
@@ -618,32 +701,6 @@ export default function SubscriptionScreen() {
             <PaymentTrustFooter />
           </KeyboardAwareScrollView>
 
-          {/* Sticky CTA for the selected plan */}
-          {selectedPlan ? (
-            <View
-              style={{
-                position: "absolute",
-                left: 0,
-                right: 0,
-                bottom: 0,
-                paddingHorizontal: 24,
-                paddingTop: 12,
-                paddingBottom: 12,
-                backgroundColor: colors.background,
-                borderTopWidth: 1,
-                borderTopColor: colors.border,
-              }}
-            >
-              <Button
-                label={`Continue with ${selectedPlan.name} · ₹${selectedPlan.price}${CYCLE_SUFFIX[selectedPlan.billingCycle]}`}
-                onPress={() => confirmPlan(selectedPlan)}
-                loading={purchasingKey === selectedPlan._id}
-                disabled={purchasingKey !== null && purchasingKey !== selectedPlan._id}
-                accessibilityLabel={`Continue with ${selectedPlan.name}, ₹${selectedPlan.price} ${PERIOD_LABEL[selectedPlan.billingCycle]}`}
-                fullWidth
-              />
-            </View>
-          ) : null}
           </View>
           )}
         </LoadingErrorState>
@@ -658,6 +715,9 @@ export default function SubscriptionScreen() {
         itemDescription={confirmTarget?.description}
         originalAmount={confirmTarget?.price ?? 0}
         cycleSuffix={confirmTarget?.cycleSuffix ?? ""}
+        billingCycle={confirmTarget?.billingCycle}
+        renewalPrice={confirmTarget?.renewalPrice}
+        startsAt={confirmTarget?.startsAt}
         couponPreview={couponPreview}
         couponNote={
           previewingCoupon

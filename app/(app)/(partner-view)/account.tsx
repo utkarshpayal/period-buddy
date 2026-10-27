@@ -338,14 +338,40 @@ export default function PartnerViewAccount() {
               />
             </TouchableOpacity>
 
-            <TouchableOpacity accessibilityRole="button"
+            <TouchableOpacity
               activeOpacity={0.7}
-              onPress={() =>
-                alert(
-                  "Help & Support",
-                  "Reach us anytime at hello@thenura.care — we typically reply within a day.",
-                )
-              }
+              onPress={() => router.push("/privacy")}
+              accessibilityRole="button"
+              className="flex-row items-center px-4 py-4 border-b"
+              style={{ borderColor: colors.border }}
+            >
+              <View
+                className="p-2.5 rounded-xl mr-4"
+                style={{ backgroundColor: softTints.pink }}
+              >
+                <Icon set="ion"
+                  name="shield-checkmark-outline"
+                  size={18}
+                  color={colors.primary}
+                />
+              </View>
+              <Text
+                className="flex-1 text-sm font-bold"
+                style={{ color: colors.foreground, fontFamily: fonts.body }}
+              >
+                Privacy & security
+              </Text>
+              <Icon set="feather"
+                name="chevron-right"
+                size={16}
+                color={colors.mutedText}
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => router.push("/support-tickets")}
+              accessibilityRole="button"
               className="flex-row items-center px-4 py-4"
             >
               <View

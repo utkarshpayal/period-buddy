@@ -26,6 +26,21 @@ there.
 | [FEATURES-AND-PITCH.md](./FEATURES-AND-PITCH.md) | The feature list written as a pitch. |
 | [FEATURES.html](./FEATURES.html) | Printable export of the product guide (from 2026-09-21; FEATURES.md is newer). |
 
+## Audit and plan (2026-10)
+
+| Doc | For |
+|---|---|
+| [product-audit.md](./product-audit.md) | What exists, gaps, risks, ranked recommendations. |
+| [improvement-roadmap.md](./improvement-roadmap.md) | The backlog: problem, evidence, files, effort, risk, tests per item. |
+| [implementation-report.md](./implementation-report.md) | What was changed and what wasn't. |
+| [testing-report.md](./testing-report.md) | Checks actually run, and what still needs a device. |
+
+## Pricing
+
+| Doc | For |
+|---|---|
+| [pricing-2026.md](./pricing-2026.md) | The 2026 pricing across backend, app and website: what was built, what isn't sold and why, blockers, and the staging/production rollout checklist. |
+
 ## History
 
 | Doc | For |

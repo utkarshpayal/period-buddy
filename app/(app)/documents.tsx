@@ -52,6 +52,8 @@ import {
   type MedicalDocument,
 } from "../../lib/api";
 import { generateAndShareHealthReport } from "../../lib/healthReport";
+import { showToast } from "../../lib/toast";
+import { formatShortDate } from "../../lib/format";
 import { useContentWidth } from "../../lib/layout";
 import { useSecureScreen } from "../../lib/screenPrivacy";
 import { cleanupTempFiles } from "../../lib/tempFiles";
@@ -447,7 +449,7 @@ export default function DocumentsScreen() {
     if (!reportRange.start || !reportRange.end || generatingReport) return;
     try {
       setGeneratingReport(true);
-      await generateAndShareHealthReport({
+      const { summaryLimit } = await generateAndShareHealthReport({
         startDate: reportRange.start,
         endDate: reportRange.end,
         language: reportLanguage,
@@ -455,6 +457,9 @@ export default function DocumentsScreen() {
         age: computeAge(user?.dateOfBirth),
       });
       setReportVisible(false);
+      if (summaryLimit) {
+        showToast(`Your report has your logs. This month's AI summary is used up; it's back on ${formatShortDate(summaryLimit.resetsAt)}.`);
+      }
     } catch (error) {
       alert("Couldn't create report", getFriendlyErrorMessage(error));
     } finally {

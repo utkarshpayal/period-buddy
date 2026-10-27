@@ -5,6 +5,8 @@
  * urgent-safety entry in particular must keep winning over "that's normal".
  */
 
+import { isUrgentQuestion, URGENT_REPLY, urgentReplyFor } from "./urgentSafety";
+
 export const DEFAULT_SUGGESTED_QUESTIONS = [
   "Is brown period blood normal?",
   "Why are cramps worse this month?",
@@ -40,8 +42,7 @@ const KNOWLEDGE_BASE: KnowledgeEntry[] = [
       "kill myself",
       "want to die",
     ],
-    response:
-      "This could need urgent help. If you are soaking pads quickly, feeling faint, have fever with pelvic pain, severe one-sided or unbearable pain, or bleeding during pregnancy, go to the nearest hospital or call 112 now. If you are having thoughts of harming yourself, you are not alone: call Tele-MANAS on 14416 (free, 24 hours) or 112, and tell someone you trust.",
+    response: URGENT_REPLY,
     source: URGENT_SAFETY_SOURCE,
   },
   {
@@ -90,6 +91,8 @@ const COMPILED = KNOWLEDGE_BASE.map((entry) => ({
 export function matchLocalAnswer(question: string): { text: string; source?: string } | null {
   const query = question.trim().toLowerCase();
   if (!query) return null;
+  // The backend's red-flag patterns first, then the keywords below as well.
+  if (isUrgentQuestion(query)) return { text: urgentReplyFor(query), source: URGENT_SAFETY_SOURCE };
   for (const entry of COMPILED) {
     if (entry.patterns.some((pattern) => pattern.test(query))) {
       return { text: entry.response, source: entry.source };
@@ -116,4 +119,13 @@ export function isSpokenConfirmation(transcript: string): boolean {
  */
 export function isAiConsentRequired(err: unknown): boolean {
   return typeof err === "object" && err !== null && (err as { code?: unknown }).code === "AI_CONSENT_REQUIRED";
+}
+
+/**
+ * 429 `FAIR_USE_LIMIT`: the person used up today's Nura AI messages (the
+ * backend's middleware/subscriptionMiddleware.js#fairUse). Duck-typed on
+ * `code`, like isAiConsentRequired.
+ */
+export function isFairUseLimit(err: unknown): boolean {
+  return typeof err === "object" && err !== null && (err as { code?: unknown }).code === "FAIR_USE_LIMIT";
 }
