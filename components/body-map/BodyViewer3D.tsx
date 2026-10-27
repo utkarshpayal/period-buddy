@@ -421,7 +421,9 @@ function PainDot({
   });
 
   return (
-    <group position={point}>
+    // A plain array, not the Vector3: R3F bundles its own copy of three.js, so it
+    // doesn't recognise ours and tries to replace the read-only `position`.
+    <group position={[point.x, point.y, point.z]}>
       <sprite ref={glowRef} renderOrder={3}>
         <spriteMaterial map={glow} color={color} transparent depthTest={false} depthWrite={false} blending={THREE.AdditiveBlending} />
       </sprite>
