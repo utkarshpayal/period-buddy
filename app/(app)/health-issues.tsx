@@ -43,6 +43,7 @@ import {
 import { MedicalReviewBadge } from "../../components/MedicalReviewBadge";
 import { pickMedicalReview } from "../../lib/medicalReview";
 import { Icon } from "../../components/Icon";
+import { RichContent } from "../../components/content/RichContent";
 
 // --- BACKEND API LAYER SCHEMAS & CONTRACTS ---
 interface HealthIssue {
@@ -483,7 +484,7 @@ export default function HealthIssues() {
                   .map((section) => (
                     <DetailSection key={section.label} icon={section.icon} tone={section.tone} title={section.label}>
                       <WellbeingCard style={{ padding: 16 }}>
-                        <Text style={{ color: colors.foreground, fontSize: 15, lineHeight: 23, fontWeight: "400", fontFamily: fonts.body }}>{section.value}</Text>
+                        <RichContent content={section.value!} size="compact" />
                       </WellbeingCard>
                     </DetailSection>
                   ))}

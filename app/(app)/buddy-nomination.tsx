@@ -717,7 +717,7 @@ function BuddyNomination() {
                             : `No messages yet. Say hi to ${activeBuddyData.name.split(" ")[0]}!`}
                         </Text>
                         {lastBuddyMessage ? (
-                          <Text style={{ fontSize: 12, color: colors.mutedText, fontFamily: fonts.body }}>{lastBuddyMessage.time}</Text>
+                          <Text style={{ fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}>{lastBuddyMessage.time}</Text>
                         ) : null}
                       </View>
 

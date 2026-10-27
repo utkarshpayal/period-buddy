@@ -77,6 +77,8 @@ the shared `ApiError` shape (`kind`: `network`/`timeout`/`server`/
 |---|---|---|
 | GET | `/api/forest/status` | Current tree growth stage/health |
 | POST | `/api/forest/care` | Log care for today (race-safe "new day" bonus) |
+| GET | `/api/forest/garden` | The tree-care game state (moisture, food, health, weeds, bugs, dry leaves, supplies, level) |
+| POST | `/api/forest/garden/action` | A care action: water (seconds), weed/shoo/prune (id), fertilize, mulch |
 | GET | `/api/forest/logs` | Cycle Tree Logs history |
 
 ## `consultationApi` — doctor booking
@@ -133,6 +135,8 @@ summary isn't shown) and returns `analysisLocked` / `analysisLimit`.
 | GET | `/api/partner/notifications?page=&limit=` | In-app notification list, paged, with `unreadCount` on the envelope (lives here for historical reasons) |
 | POST | `/api/partner/notifications/:id/read` | Mark a notification read |
 | POST | `/api/partner/notifications/read-all` | Mark all read |
+| GET | `/api/notifications/preferences` | Automatic notification settings (`notificationsApi.getPreferences`) |
+| PUT | `/api/notifications/preferences` | Save push / time / days before / categories (`notificationsApi.savePreferences`) |
 
 ## `buddyApi` — anonymous peer support
 
@@ -235,10 +239,10 @@ match → AI → fallback) documented in the backend's `AI_ML_OVERVIEW.md`.
 | Method | Endpoint | Purpose |
 |---|---|---|
 | POST | `/api/voice-agent/converse` | One turn of the in-app voice/text agent (structured JSON reply) |
-| POST | `/api/voice-agent/checkin-call` | Trigger an outbound "call me now" (no longer called from the UI) |
+| POST | `/api/voice-agent/checkin-call` | An on-demand outbound check-in call (not called from the app) |
 | GET | `/api/voice-agent/checkin-call/schedule` | Get the recurring-call schedule |
 | PUT | `/api/voice-agent/checkin-call/schedule` | Save the recurring-call schedule |
-| GET | `/api/voice-agent/checkin-call/history?limit=` | Past check-in calls |
+| GET | `/api/voice-agent/checkin-call/history?limit=` | Past check-in calls (each with `failureKind` when it failed) |
 
 ## `uploadApi`, `documentApi`, `speechApi`
 

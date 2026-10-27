@@ -309,7 +309,7 @@ export default function PartnerViewAccount() {
               />
             </View>
 
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               activeOpacity={0.7}
               onPress={() => router.push("/app-lock")}
               className="flex-row items-center px-4 py-4 border-b"
@@ -400,7 +400,7 @@ export default function PartnerViewAccount() {
 
           {/* Disconnect */}
           {isConnected && (
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               onPress={handleDisconnect}
               activeOpacity={0.85}
               disabled={isDisconnecting}
@@ -421,7 +421,7 @@ export default function PartnerViewAccount() {
           )}
 
           {/* Logout */}
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             onPress={handleLogout}
             activeOpacity={0.7}
             disabled={isLoggingOut}

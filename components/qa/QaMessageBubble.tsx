@@ -5,6 +5,8 @@ import type { ChatMessage } from "../../hooks/useQaConversation";
 import { URGENT_SAFETY_SOURCE } from "../../lib/qaFallback";
 import { EMERGENCY_NUMBER, TELE_MANAS_NUMBER } from "../../lib/urgentSafety";
 import { Button } from "../Button";
+import { hasRichMarkup } from "../../lib/richText";
+import { RichContent } from "../content/RichContent";
 import { NuraAvatar } from "../NuraAvatar";
 import { useTheme } from "../theme";
 import { Icon } from "../Icon";
@@ -77,12 +79,17 @@ export const QaMessageBubble = memo(function QaMessageBubble({
         {isUrgent || message.personalized ? (
           <View className="mb-1.5 flex-row items-center" style={{ gap: 5 }}>
             <Icon set="ion" name={isUrgent ? "warning-outline" : "calendar-outline"} size={14} color={isUrgent ? colors.danger : colors.primary} />
-            <Text style={{ color: isUrgent ? colors.danger : colors.primary, fontSize: 12.5, fontWeight: "700", fontFamily: fonts.body }}>
+            <Text style={{ color: isUrgent ? colors.danger : colors.primary, fontSize: 13.5, fontWeight: "700", fontFamily: fonts.body }}>
               {isUrgent ? "Please get care soon" : "Based on your logs"}
             </Text>
           </View>
         ) : null}
-        <Text style={{ color: colors.foreground, fontSize: 15, lineHeight: 22, fontFamily: fonts.body }}>{message.text}</Text>
+        {hasRichMarkup(message.text) ? (
+          // Curated Q&A answers (and some AI replies) are rich text.
+          <RichContent content={message.text} size="compact" />
+        ) : (
+          <Text style={{ color: colors.foreground, fontSize: 15, lineHeight: 22, fontFamily: fonts.body }}>{message.text}</Text>
+        )}
         {isUrgent ? (
           // The reply says "call 112": make that one tap, not a number to remember.
           <View className="flex-row flex-wrap" style={{ gap: 8, marginTop: 12 }}>
@@ -105,7 +112,7 @@ export const QaMessageBubble = memo(function QaMessageBubble({
           </View>
         ) : null}
         {isUrgent && message.disclaimer ? (
-          <Text style={{ color: colors.mutedText, fontSize: 12.5, lineHeight: 17, marginTop: 8, fontFamily: fonts.body }}>{message.disclaimer}</Text>
+          <Text style={{ color: colors.mutedText, fontSize: 13.5, lineHeight: 17, marginTop: 8, fontFamily: fonts.body }}>{message.disclaimer}</Text>
         ) : null}
         {message.action === "retry" ? (
           // An offline answer: say so, since it wasn't saved and isn't Nura AI's real reply.

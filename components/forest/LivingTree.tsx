@@ -19,7 +19,7 @@ const BLOOM_START = 0.86;
 
 type Palette = { dark: string; mid: string; light: string; trunk: string; trunkDark: string; stem: string };
 
-const PALETTES: Record<ForestVitality, Palette> = {
+export const PALETTES: Record<ForestVitality, Palette> = {
   new: { dark: "#2E6B34", mid: "#3F9447", light: "#9CCC65", trunk: "#7A5741", trunkDark: "#4E3629", stem: "#5DAA4E" },
   thriving: { dark: "#2E6B34", mid: "#3F9447", light: "#9CCC65", trunk: "#7A5741", trunkDark: "#4E3629", stem: "#5DAA4E" },
   thirsty: { dark: "#4C7A33", mid: "#6FA043", light: "#B5D67A", trunk: "#7C5B45", trunkDark: "#533B2D", stem: "#78A94F" },

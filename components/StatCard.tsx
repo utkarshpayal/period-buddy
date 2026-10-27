@@ -93,7 +93,7 @@ export default function StatCard({
       <Icon set="ion" name={icon} size={12} color={iconColor} style={{ marginRight: 5 }} />
       <Text
         style={{
-          fontSize: 12.5,
+          fontSize: 13.5,
           fontWeight: "800",
           color: valueColor,
           fontFamily: valueFontFamily,

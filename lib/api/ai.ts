@@ -138,6 +138,8 @@ export type CheckinCallRecord = {
   loggedFields?: string[];
   /** When Buddy will try again (no answer / callback requested). */
   retryAt?: string;
+  /** Why a failed call failed: our calling service refused it, calling isn't set up on the server, or no phone number. */
+  failureKind?: "provider" | "not_configured" | "no_phone" | null;
   endedAt?: string;
   createdAt: string;
 };

@@ -210,7 +210,7 @@ export default function PartnerViewOverview() {
                     </Text>
                     {phase ? (
                       <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.18)" }}>
-                        <Text style={{ color: "#FFFFFF", fontSize: 11.5, fontWeight: "700", fontFamily: fonts.body }}>{phase.medical}</Text>
+                        <Text style={{ color: "#FFFFFF", fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}>{phase.medical}</Text>
                       </View>
                     ) : null}
                   </View>

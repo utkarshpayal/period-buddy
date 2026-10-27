@@ -395,7 +395,7 @@ export default function SubscriptionScreen() {
                       <Text numberOfLines={1} style={{ flex: 1, color: "#FFFFFF", fontSize: 14, fontWeight: "700", fontFamily: fonts.body }}>
                         {entitlementLabel(e)}
                       </Text>
-                      <Text style={{ color: "rgba(255,255,255,0.85)", fontSize: 12.5, fontFamily: fonts.body }}>
+                      <Text style={{ color: "rgba(255,255,255,0.85)", fontSize: 13.5, fontFamily: fonts.body }}>
                         {e.expiresAt ? `Until ${formatShortDate(e.expiresAt)}` : "Lifetime"}
                       </Text>
                     </View>
@@ -600,7 +600,7 @@ export default function SubscriptionScreen() {
                           ) : null}
                           <Text style={{ color: colors.foreground, fontSize: 13.5, marginTop: 4, fontFamily: fonts.monoSemiBold }}>
                             {formatRupees(price)}
-                            <Text style={{ color: colors.mutedText, fontFamily: fonts.body, fontSize: 12.5 }}>{` ${PERIOD_LABEL[billingCycle]}`}</Text>
+                            <Text style={{ color: colors.mutedText, fontFamily: fonts.body, fontSize: 13.5 }}>{` ${PERIOD_LABEL[billingCycle]}`}</Text>
                           </Text>
                         </View>
                         {unlocked ? (

@@ -132,12 +132,12 @@ function BannerCard({ banner, width, onDismiss }: { banner: PromoBanner; width: 
     return (
       <TouchableOpacity activeOpacity={tappable ? 0.85 : 1} disabled={!tappable} onPress={onPress} {...a11y}
         style={{ width, backgroundColor: bg, borderRadius: 14, borderCurve: "continuous", paddingVertical: 11, paddingHorizontal: 14, paddingRight: banner.dismissible ? 36 : 14, flexDirection: "row", alignItems: "center" }}>
-        <Text style={{ flex: 1, color: fg, fontSize: 12.5, fontWeight: "800", fontFamily: fonts.body }} numberOfLines={1}>
+        <Text style={{ flex: 1, color: fg, fontSize: 13.5, fontWeight: "800", fontFamily: fonts.body }} numberOfLines={1}>
           {banner.title}
         </Text>
         {banner.ctaLabel && tappable ? (
           <View style={{ flexDirection: "row", alignItems: "center", marginLeft: 8 }}>
-            <Text style={{ color: fg, fontSize: 12.5, fontWeight: "800", fontFamily: fonts.body }}>{banner.ctaLabel}</Text>
+            <Text style={{ color: fg, fontSize: 13.5, fontWeight: "800", fontFamily: fonts.body }}>{banner.ctaLabel}</Text>
             <Icon set="ion" name="arrow-forward" size={13} color={fg} style={{ marginLeft: 3 }} />
           </View>
         ) : null}
@@ -154,13 +154,13 @@ function BannerCard({ banner, width, onDismiss }: { banner: PromoBanner; width: 
           {banner.title}
         </Text>
         {banner.subtitle ? (
-          <Text style={{ color: fg, opacity: 0.9, fontSize: 12, marginTop: 3, fontFamily: fonts.body, lineHeight: 16 }} numberOfLines={2}>
+          <Text style={{ color: fg, opacity: 0.9, fontSize: 13, marginTop: 3, fontFamily: fonts.body, lineHeight: 16 }} numberOfLines={2}>
             {banner.subtitle}
           </Text>
         ) : null}
         {banner.ctaLabel && tappable ? (
           <View style={{ alignSelf: "flex-start", marginTop: 10, backgroundColor: fg, borderRadius: 999, paddingVertical: 5, paddingHorizontal: 12 }}>
-            <Text style={{ color: bg, fontSize: 12.5, fontWeight: "800", fontFamily: fonts.body }}>{banner.ctaLabel}</Text>
+            <Text style={{ color: bg, fontSize: 13.5, fontWeight: "800", fontFamily: fonts.body }}>{banner.ctaLabel}</Text>
           </View>
         ) : null}
       </View>

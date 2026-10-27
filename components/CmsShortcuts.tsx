@@ -139,7 +139,7 @@ function Shortcut({ tile }: { tile: HubTile }) {
       <Text
         numberOfLines={2}
         maxFontSizeMultiplier={1.3}
-        style={{ marginTop: 8, fontSize: 12, lineHeight: 16, fontWeight: "500", color: colors.foreground, textAlign: "center", fontFamily: fonts.body, opacity: dim }}
+        style={{ marginTop: 8, fontSize: 13, lineHeight: 16, fontWeight: "500", color: colors.foreground, textAlign: "center", fontFamily: fonts.body, opacity: dim }}
       >
         {label}
       </Text>

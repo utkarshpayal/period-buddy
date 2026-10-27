@@ -18,7 +18,7 @@ export function SupportStatusPill({ status }: { status: SupportTicketStatus }) {
           : [colors.surfaceSoft, colors.mutedText];
   return (
     <View className="rounded-full px-2.5" style={{ backgroundColor: bg, paddingVertical: 3 }}>
-      <Text maxFontSizeMultiplier={1.3} style={{ color: fg, fontSize: 12, fontWeight: "800", fontFamily: fonts.body }}>
+      <Text maxFontSizeMultiplier={1.3} style={{ color: fg, fontSize: 13, fontWeight: "800", fontFamily: fonts.body }}>
         {STATUS_LABELS[status]}
       </Text>
     </View>

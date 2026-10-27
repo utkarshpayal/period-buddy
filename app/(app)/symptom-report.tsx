@@ -1,304 +1,239 @@
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import React from "react";
-import { RefreshControl, ScrollView, StatusBar, Text, View } from "react-native";
+import { useRouter } from "expo-router";
+import React, { useMemo, useState } from "react";
+import { Pressable, RefreshControl, ScrollView, StatusBar, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { chartColor } from "../../components/charts/chartColors";
 import { EmptyState } from "../../components/EmptyState";
+import { Icon } from "../../components/Icon";
 import { LoadingErrorState } from "../../components/LoadingErrorState";
 import { ScreenHeader } from "../../components/ScreenHeader";
+import { SegmentedControl } from "../../components/SegmentedControl";
 import { SkeletonCard } from "../../components/Skeleton";
 import { useTheme } from "../../components/theme";
-import { getShadow, getSoftTints } from "../../components/ui-tokens";
+import { getShadow, MOOD_OPTIONS, withAlpha } from "../../components/ui-tokens";
 import { useAsyncLoad } from "../../hooks/useAsyncLoad";
-import { reportApi, type HealthReportCycleStats, type ReportCountItem } from "../../lib/api";
-import { getDateKey } from "../../lib/format";
+import { useTodayKey } from "../../hooks/useTodayKey";
+import { cycleApi } from "../../lib/api";
+import { buildSymptomReport, mainFlow, type Count, type FlowKey } from "../../lib/symptomReport";
+import { shiftKey } from "../../lib/chartData";
 import { useSecureScreen } from "../../lib/screenPrivacy";
-import { Icon } from "../../components/Icon";
 
-const RANGE_DAYS = 90;
+/**
+ * Symptom Report (Graphs & Reports → Symptom report): what you logged, how
+ * often. Counted on the phone from the day logs (lib/symptomReport.ts), no AI
+ * call. One 30/90-day filter, three summary numbers, then symptoms, moods and
+ * flow, each with a plain sentence first. When symptoms happen is Symptom
+ * Trends' job (linked at the bottom), and sleep/water live on Graphs & Reports,
+ * so neither is repeated here.
+ */
 
-async function loadReport(): Promise<HealthReportCycleStats> {
-  const today = new Date();
-  const start = new Date(today);
-  start.setDate(start.getDate() - RANGE_DAYS);
-  const result = await reportApi.getHealthReport({
-    startDate: getDateKey(start),
-    endDate: getDateKey(today),
-    // Only the counts are shown here; skip the AI summary.
-    includeAnalysis: false,
-  });
-  return result.cycle;
-}
+const RANGES = [
+  { key: "30", label: "30 days", days: 30 },
+  { key: "90", label: "90 days", days: 90 },
+] as const;
+const MOOD_LABELS = new Map(MOOD_OPTIONS.map((m) => [m.value as string, m.label]));
+const FLOW_ORDER: FlowKey[] = ["spotting", "light", "medium", "heavy"];
+const FLOW_LABEL: Record<FlowKey, string> = { spotting: "Spotting", light: "Light", medium: "Medium", heavy: "Heavy" };
+/** Light → deep, one hue (heavier flow, deeper colour). */
+const FLOW_RAMP_LIGHT = ["#F7C6D7", "#EE8DB0", "#D9487E", "#A82457"];
+const FLOW_RAMP_DARK = ["#5A2B42", "#8C3359", "#C2426F", "#F07DA6"];
+const TOP_N = 6;
 
-function CountBarList({
-  items,
-  color,
-  trackColor,
-  fonts,
-  textColor,
-  mutedColor,
-}: {
-  items: ReportCountItem[];
-  color: string;
-  trackColor: string;
-  fonts: { body: string; mono: string };
-  textColor: string;
-  mutedColor: string;
-}) {
-  if (items.length === 0) return null;
-  const max = Math.max(...items.map((item) => item.value), 1);
-
-  return (
-    <View style={{ gap: 14 }}>
-      {items.slice(0, 8).map((item, idx) => {
-        const pct = Math.max((item.value / max) * 100, 6);
-        return (
-          <View key={`${item.label}-${idx}`}>
-            <View style={{ flexDirection: "row", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
-              <Text
-                numberOfLines={1}
-                style={{ flex: 1, color: textColor, fontSize: 14, fontWeight: "700", fontFamily: fonts.body }}
-              >
-                {item.label}
-              </Text>
-              {/* Values wear text ink, not the bar colour, so they stay legible
-                  in both themes; the bar beside them carries the category hue. */}
-              <Text style={{ color: textColor, fontSize: 15, fontWeight: "800", fontFamily: fonts.mono }}>
-                {item.value}
-                <Text style={{ color: mutedColor, fontSize: 12, fontWeight: "600" }}>{item.value === 1 ? " day" : " days"}</Text>
-              </Text>
-            </View>
-            <View style={{ height: 10, borderRadius: 999, overflow: "hidden", backgroundColor: trackColor }}>
-              <View style={{ width: `${pct}%`, height: "100%", backgroundColor: color, borderRadius: 999 }} />
-            </View>
-          </View>
-        );
-      })}
-    </View>
-  );
-}
-
-function SectionCard({
-  title,
-  icon,
-  iconColor,
-  iconBg,
-  children,
-}: {
-  title: string;
-  icon: React.ComponentProps<typeof MaterialCommunityIcons>["name"];
-  iconColor: string;
-  iconBg: string;
-  children: React.ReactNode;
-}) {
-  const { colors, isDark, fonts } = useTheme();
-  return (
-    <View
-      style={{
-        backgroundColor: colors.surface,
-        borderColor: isDark ? colors.surfaceStrong : colors.border,
-        borderWidth: 1.5,
-        borderRadius: 24, borderCurve: "continuous",
-        padding: 20,
-        marginBottom: 14,
-        ...getShadow(colors, isDark),
-      }}
-    >
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 16 }}>
-        <View style={{ width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: iconBg }}>
-          <Icon set="mci" name={icon} size={19} color={iconColor} />
-        </View>
-        <Text style={{ color: colors.foreground, fontSize: 16, fontWeight: "800", fontFamily: fonts.heading }}>
-          {title}
-        </Text>
-      </View>
-      {children}
-    </View>
-  );
+async function loadLogs(todayKey: string) {
+  const year = Number(todayKey.slice(0, 4));
+  const earliest = Number(shiftKey(todayKey, -90).slice(0, 4));
+  const years = earliest < year ? [earliest, year] : [year];
+  return (await Promise.all(years.map((y) => cycleApi.getYearLogs(y)))).flat();
 }
 
 export default function SymptomReportScreen() {
   useSecureScreen("symptom-report");
   const { colors, isDark, fonts } = useTheme();
-  const softTints = getSoftTints(colors);
-
-  const { data, loading, refreshing, error, offline, reload } = useAsyncLoad<HealthReportCycleStats>(
-    loadReport,
-    [],
-    { refreshOn: ["cycle"] },
+  const router = useRouter();
+  const todayKey = useTodayKey();
+  const [rangeKey, setRangeKey] = useState<"30" | "90">("30");
+  const days = RANGES.find((r) => r.key === rangeKey)!.days;
+  const { data: logs, loading, refreshing, error, offline, reload } = useAsyncLoad(() => loadLogs(todayKey), [todayKey], { refreshOn: ["cycle"] });
+  const report = useMemo(
+    () => buildSymptomReport(logs ?? [], todayKey, days, (v) => MOOD_LABELS.get(v) ?? v),
+    [logs, todayKey, days],
   );
-
-  const hasAnyData =
-    !!data &&
-    (data.symptomCounts.length > 0 ||
-      data.moodCounts.length > 0 ||
-      data.flowCounts.length > 0 ||
-      data.daysLogged > 0);
+  const flowMain = mainFlow(report.flow);
+  const flowRamp = isDark ? FLOW_RAMP_DARK : FLOW_RAMP_LIGHT;
+  const card = { backgroundColor: colors.surface, borderRadius: 24, borderCurve: "continuous" as const, borderWidth: 1, borderColor: colors.border, padding: 16, marginBottom: 14, ...getShadow(colors, isDark) };
+  const titleStyle = { fontSize: 17, fontWeight: "800" as const, color: colors.text, fontFamily: fonts.heading };
+  const sentence = { fontSize: 14.5, lineHeight: 21, color: colors.text, fontFamily: fonts.body, marginTop: 6, marginBottom: 14 };
 
   return (
     <>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
       <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
         <ScreenHeader title="Symptom Report" />
-
         <LoadingErrorState
           loading={loading}
           error={error}
           offline={offline}
           onRetry={() => reload()}
-          loadingLabel="Reviewing your logged symptoms…"
-          errorTitle="Couldn't load your symptom report"
+          loadingLabel="Counting what you logged…"
+          errorTitle="Couldn't load your report"
           skeleton={
             <View className="gap-4 px-6 pt-4">
-              <SkeletonCard />
               <SkeletonCard />
               <SkeletonCard />
             </View>
           }
         >
-          {data ? (
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: 60 }}
-              refreshControl={
-                <RefreshControl refreshing={refreshing} onRefresh={() => reload(true)} tintColor={colors.primary} />
-              }
-            >
-              <View style={{ paddingHorizontal: 24, paddingTop: 18 }}>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 10,
-                    padding: 14,
-                    borderRadius: 18, borderCurve: "continuous",
-                    backgroundColor: softTints.pink,
-                    marginBottom: 18,
-                  }}
-                >
-                  <Icon set="feather" name="calendar" size={16} color={colors.primary} />
-                  <Text style={{ flex: 1, color: colors.foreground, fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}>
-                    Last {RANGE_DAYS} days · {data.daysLogged} day{data.daysLogged === 1 ? "" : "s"} logged ·{" "}
-                    {data.periodDays} period day{data.periodDays === 1 ? "" : "s"}
-                  </Text>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 60 }}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => reload(true)} tintColor={colors.primary} />}
+          >
+            <SegmentedControl
+              segments={RANGES.map((r) => ({ key: r.key, label: r.label, accessibilityLabel: `The last ${r.label}` }))}
+              value={rangeKey}
+              onChange={setRangeKey}
+              style={{ marginBottom: 14 }}
+            />
+
+            {report.daysLogged === 0 ? (
+              <View style={card}>
+                <EmptyState icon="clipboard-text-outline" title={`Nothing logged in the last ${days} days`} message="Log how you feel in the tracker and your report fills in here." compact />
+              </View>
+            ) : (
+              <>
+                {/* The three numbers */}
+                <View style={{ ...card, flexDirection: "row", paddingVertical: 14 }}>
+                  {[
+                    { n: report.daysLogged, l: report.daysLogged === 1 ? "day logged" : "days logged" },
+                    { n: report.periodDays, l: report.periodDays === 1 ? "period day" : "period days" },
+                    { n: report.symptoms.length, l: report.symptoms.length === 1 ? "symptom" : "symptoms" },
+                  ].map((s, i) => (
+                    <View key={s.l} style={{ flex: 1, alignItems: "center", borderLeftWidth: i ? 1 : 0, borderLeftColor: colors.border }}>
+                      <Text style={{ fontSize: 26, fontWeight: "800", color: colors.text, fontFamily: fonts.heading, letterSpacing: -0.5 }}>{s.n}</Text>
+                      <Text numberOfLines={1} style={{ fontSize: 13.5, color: colors.mutedText, fontFamily: fonts.body }}>
+                        {s.l}
+                      </Text>
+                    </View>
+                  ))}
                 </View>
 
-                {!hasAnyData ? (
-                  <EmptyState
-                    icon="clipboard-text-search-outline"
-                    title="Nothing logged yet"
-                    message="Log symptoms, mood, and flow in your tracker and they'll show up here as a review of your cycle."
-                  />
-                ) : (
-                  <>
-                    {data.symptomCounts.length > 0 ? (
-                      <SectionCard title="Top symptoms" icon="pulse" iconColor={colors.warning} iconBg={softTints.amber}>
-                        <CountBarList
-                          items={data.symptomCounts}
-                          color={colors.warning}
-                          trackColor={isDark ? colors.track : softTints.amber}
-                          fonts={fonts}
-                          textColor={colors.foreground}
-                          mutedColor={colors.mutedText}
-                        />
-                      </SectionCard>
-                    ) : null}
+                {/* Symptoms */}
+                <View style={card}>
+                  <Text style={titleStyle}>Symptoms</Text>
+                  {report.symptoms.length ? (
+                    <>
+                      <Text style={sentence}>
+                        <Text style={{ fontWeight: "800" }}>{report.symptoms[0].label}</Text>
+                        {` was your most common, on ${report.symptoms[0].days} of the ${report.daysLogged} days you logged.`}
+                      </Text>
+                      <RankedBars items={report.symptoms} total={report.daysLogged} color={chartColor("cycle", isDark)} />
+                    </>
+                  ) : (
+                    <Text style={sentence}>No symptoms logged. That&apos;s a good stretch.</Text>
+                  )}
+                </View>
 
-                    {data.moodCounts.length > 0 ? (
-                      <SectionCard title="Mood patterns" icon="emoticon-outline" iconColor={colors.accentText} iconBg={softTints.mint}>
-                        <CountBarList
-                          items={data.moodCounts}
-                          color={colors.accentText}
-                          trackColor={isDark ? colors.track : softTints.mint}
-                          fonts={fonts}
-                          textColor={colors.foreground}
-                          mutedColor={colors.mutedText}
-                        />
-                      </SectionCard>
-                    ) : null}
+                {/* Moods */}
+                <View style={card}>
+                  <Text style={titleStyle}>Moods</Text>
+                  {report.moods.length ? (
+                    <>
+                      <Text style={sentence}>
+                        {"You felt "}
+                        <Text style={{ fontWeight: "800" }}>{report.moods[0].label.toLowerCase()}</Text>
+                        {` most often, on ${report.moods[0].days} day${report.moods[0].days === 1 ? "" : "s"}.`}
+                      </Text>
+                      <RankedBars items={report.moods} total={report.daysLogged} color={chartColor("sleep", isDark)} />
+                    </>
+                  ) : (
+                    <Text style={sentence}>No moods logged in this time.</Text>
+                  )}
+                </View>
 
-                    {data.flowCounts.length > 0 ? (
-                      <SectionCard title="Flow days" icon="water" iconColor={colors.rose} iconBg={softTints.rose}>
-                        <CountBarList
-                          items={data.flowCounts}
-                          color={colors.rose}
-                          trackColor={isDark ? colors.track : softTints.rose}
-                          fonts={fonts}
-                          textColor={colors.foreground}
-                          mutedColor={colors.mutedText}
-                        />
-                      </SectionCard>
-                    ) : null}
-
-                    <SectionCard title="Averages" icon="chart-bar" iconColor={colors.sky} iconBg={softTints.sky}>
-                      <View style={{ flexDirection: "row", gap: 10 }}>
-                        {[
-                          { label: "Sleep", value: data.averages.sleepHours, unit: "hrs" },
-                          { label: "Water", value: data.averages.waterIntake, unit: "ml" },
-                          { label: "Stress", value: data.averages.stressLevel, unit: "/10" },
-                        ].map((stat) => (
-                          <View
-                            key={stat.label}
-                            style={{
-                              flex: 1,
-                              paddingVertical: 12,
-                              paddingHorizontal: 10,
-                              borderRadius: 16, borderCurve: "continuous",
-                              backgroundColor: softTints.sky,
-                              borderWidth: 1,
-                              borderColor: `${colors.sky}33`,
-                            }}
-                          >
-                            <Text
-                              numberOfLines={1}
-                              maxFontSizeMultiplier={1.3}
-                              style={{ color: colors.mutedText, fontSize: 11.5, fontWeight: "800", letterSpacing: 0.6, fontFamily: fonts.body }}
-                            >
-                              {stat.label.toUpperCase()}
-                            </Text>
-                            <Text
-                              numberOfLines={1}
-                              adjustsFontSizeToFit
-                              maxFontSizeMultiplier={1.3}
-                              style={{ color: colors.foreground, marginTop: 4, fontFamily: fonts.mono }}
-                            >
-                              <Text style={{ fontSize: 22, fontWeight: "800" }}>
-                                {stat.value != null ? `${Math.round(stat.value * 10) / 10}` : "—"}
-                              </Text>
-                              {stat.value != null ? (
-                                <Text style={{ fontSize: 12, fontWeight: "700", color: colors.mutedText }}>{` ${stat.unit}`}</Text>
-                              ) : null}
-                            </Text>
+                {/* Flow */}
+                <View style={card}>
+                  <Text style={titleStyle}>Flow</Text>
+                  {report.periodDays && flowMain ? (
+                    <>
+                      <Text style={sentence}>
+                        {`${report.periodDays} period day${report.periodDays === 1 ? "" : "s"}, mostly `}
+                        <Text style={{ fontWeight: "800" }}>{FLOW_LABEL[flowMain].toLowerCase()}</Text>.
+                      </Text>
+                      <View style={{ flexDirection: "row", height: 14, gap: 2, borderRadius: 7, overflow: "hidden" }} accessibilityLabel={FLOW_ORDER.map((f) => `${FLOW_LABEL[f]} ${report.flow[f]} days`).join(", ")}>
+                        {FLOW_ORDER.filter((f) => report.flow[f]).map((f) => (
+                          <View key={f} style={{ flex: report.flow[f], backgroundColor: flowRamp[FLOW_ORDER.indexOf(f)] }} />
+                        ))}
+                      </View>
+                      <View style={{ flexDirection: "row", marginTop: 12 }}>
+                        {FLOW_ORDER.map((f, i) => (
+                          <View key={f} style={{ flex: 1, gap: 2 }}>
+                            <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: flowRamp[i] }} />
+                              <Text style={{ fontSize: 13.5, color: colors.mutedText, fontFamily: fonts.body }}>{FLOW_LABEL[f]}</Text>
+                            </View>
+                            <Text style={{ fontSize: 15, fontWeight: "800", color: colors.text, fontFamily: fonts.body }}>{`${report.flow[f]} ${report.flow[f] === 1 ? "day" : "days"}`}</Text>
                           </View>
                         ))}
                       </View>
-                    </SectionCard>
-                  </>
-                )}
-
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "flex-start",
-                    gap: 10,
-                    padding: 14,
-                    borderRadius: 18, borderCurve: "continuous",
-                    backgroundColor: colors.surface,
-                    borderWidth: 1,
-                    borderColor: colors.border,
-                    marginTop: 6,
-                  }}
-                >
-                  <Icon set="feather" name="info" size={14} color={colors.mutedText} style={{ marginTop: 1 }} />
-                  <Text style={{ flex: 1, color: colors.mutedText, fontSize: 12.5, lineHeight: 16, fontFamily: fonts.body }}>
-                    A summary of what you&apos;ve logged — educational only, not a diagnosis. For a
-                    shareable clinical summary, use Download doctor report on the Graphs & Reports screen.
-                  </Text>
+                    </>
+                  ) : (
+                    <Text style={sentence}>No period logged in this time.</Text>
+                  )}
                 </View>
-              </View>
-            </ScrollView>
-          ) : null}
+
+                {/* Where "when" lives */}
+                <Pressable
+                  onPress={() => router.push("/(app)/symptom-predictions" as never)}
+                  accessibilityRole="button"
+                  style={{ ...card, flexDirection: "row", alignItems: "center", gap: 12 }}
+                >
+                  <View style={{ width: 40, height: 40, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: withAlpha(chartColor("cycle", isDark), 0.12) }}>
+                    <Icon set="ion" name="pulse-outline" size={19} color={chartColor("cycle", isDark)} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 15, fontWeight: "700", color: colors.text, fontFamily: fonts.body }}>When do they happen?</Text>
+                    <Text style={{ fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}>See your symptoms across your cycle</Text>
+                  </View>
+                  <Icon set="feather" name="chevron-right" size={18} color={colors.mutedText} />
+                </Pressable>
+              </>
+            )}
+          </ScrollView>
         </LoadingErrorState>
       </SafeAreaView>
     </>
+  );
+}
+
+/** Ranked rows: name, how many days (and the share), a thin bar. Top 6, then "Show all". */
+function RankedBars({ items, total, color }: { items: Count[]; total: number; color: string }) {
+  const { colors, fonts } = useTheme();
+  const [all, setAll] = useState(false);
+  const max = Math.max(1, ...items.map((i) => i.days));
+  const shown = all ? items : items.slice(0, TOP_N);
+  return (
+    <View style={{ gap: 14 }}>
+      {shown.map((it) => (
+        <View key={it.key} accessible accessibilityLabel={`${it.label}: ${it.days} of ${total} days`}>
+          <View style={{ flexDirection: "row", alignItems: "baseline", marginBottom: 6 }}>
+            <Text numberOfLines={1} style={{ flex: 1, fontSize: 14.5, fontWeight: "600", color: colors.text, fontFamily: fonts.body }}>
+              {it.label}
+            </Text>
+            <Text style={{ fontSize: 14.5, fontWeight: "800", color: colors.text, fontVariant: ["tabular-nums"], fontFamily: fonts.body }}>
+              {it.days}
+              <Text style={{ fontSize: 13.5, fontWeight: "600", color: colors.mutedText }}>{` ${it.days === 1 ? "day" : "days"}`}</Text>
+            </Text>
+          </View>
+          <View style={{ height: 8, borderRadius: 4, backgroundColor: colors.surfaceSoft, overflow: "hidden" }}>
+            <View style={{ width: `${Math.max(4, (it.days / max) * 100)}%`, height: 8, borderRadius: 4, backgroundColor: color }} />
+          </View>
+        </View>
+      ))}
+      {items.length > TOP_N ? (
+        <Pressable onPress={() => setAll((v) => !v)} accessibilityRole="button" hitSlop={8} style={{ alignSelf: "flex-start" }}>
+          <Text style={{ fontSize: 14, fontWeight: "700", color: colors.primaryDark, fontFamily: fonts.body }}>{all ? "Show fewer" : `Show all ${items.length}`}</Text>
+        </Pressable>
+      ) : null}
+    </View>
   );
 }

@@ -42,7 +42,7 @@ export function OverviewHeader({
           </Text>
           <Text
             numberOfLines={1}
-            style={{ fontSize: 12.5, fontWeight: "700", color: colors.mutedText, fontFamily: fonts.body }}
+            style={{ fontSize: 13.5, fontWeight: "700", color: colors.mutedText, fontFamily: fonts.body }}
           >
             {subtitle}
           </Text>
@@ -56,7 +56,7 @@ export function OverviewHeader({
           >
             <Icon set="ion" name="flame" size={13} color={colors.primary} style={{ marginRight: 4 }} />
             <Text
-              style={{ fontSize: 12.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.body }}
+              style={{ fontSize: 13.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.body }}
             >
               {streakCount}
             </Text>

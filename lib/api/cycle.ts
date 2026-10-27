@@ -334,7 +334,48 @@ export const habitsApi = {
 
 };
 
+/** The tree-care game (backend utils/garden.js), advanced to now by the server. */
+export type GardenActionType = "water" | "weed" | "shoo" | "prune" | "fertilize" | "mulch";
+export type ForestGardenState = {
+  moisture: number;
+  nutrients: number;
+  health: number;
+  soggy: boolean;
+  mulched: boolean;
+  mulchHoursLeft: number;
+  hoursUntilThirsty: number;
+  weeds: { id: number; x: number; z: number }[];
+  /** `leaf` is a slot (0–999) the app maps onto one of its tree's leaves. */
+  pests: { id: number; leaf: number }[];
+  deadLeaves: { id: number; leaf: number }[];
+  compost: number;
+  mulch: number;
+  xp: number;
+  level: number;
+  levelProgress: number;
+  xpToNextLevel: number;
+  xpToday: number;
+  dailyXpCap: number;
+  decorations: string[];
+  nextDecoration: { key: string; level: number; label: string } | null;
+  needs: { key: string; label: string; urgent: boolean }[];
+};
+export type GardenActionResult = {
+  garden: ForestGardenState;
+  xp: number;
+  message: string;
+  tokensEarned: number;
+  /** Set after watering (it also counts as the day's water task). */
+  status: ForestStatus | null;
+};
+
 export const forestApi = {
+  getGarden: (today?: string) => apiRequest<ForestGardenState>(`/api/forest/garden${toQuery({ today })}`),
+
+  gardenAction: (action: { type: GardenActionType; id?: number; seconds?: number; today?: string }) =>
+    apiRequest<GardenActionResult>("/api/forest/garden/action", { body: JSON.stringify(action), method: "POST" }),
+
+
   /** `today` is the device's local YYYY-MM-DD, so "today's tasks" match the day logs are saved under. */
   getStatus: (today?: string, options?: { timeoutMs?: number }) =>
     apiRequest<ForestStatus>(`/api/forest/status${toQuery({ today })}`, options),
