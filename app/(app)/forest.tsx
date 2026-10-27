@@ -8,7 +8,7 @@ import Animated, { FadeIn, FadeInDown, FadeOut } from "react-native-reanimated";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { BottomSheet } from "../../components/BottomSheet";
 import { CareDock, CareFeedback, CareLevel, NextNeed } from "../../components/forest/CareHud";
-import { Forest3D } from "../../components/forest/Forest3D";
+import type { Forest3D as Forest3DComponent } from "../../components/forest/Forest3D";
 import { useGarden } from "../../hooks/useGarden";
 import { dayPartFor, ForestHabitat, type DayPart } from "../../components/forest/ForestHabitat";
 import { hasWebGL } from "../../components/three/glSupport";
@@ -58,6 +58,14 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useSecureScreen } from "../../lib/screenPrivacy";
 import { Icon } from "../../components/Icon";
 import { Button } from "../../components/Button";
+
+// Loaded only when the build has expo-gl: the 3D scene imports it at the top,
+// and Expo Router loads every screen at start-up, so a static import would
+// crash any older build on launch.
+const Forest3D: typeof Forest3DComponent | null = hasWebGL()
+  ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("../../components/forest/Forest3D").Forest3D
+  : null;
 
 // Your Forest: one tree grows from a seed to full bloom as you do three
 // small tasks a day (log your day, finish a habit, water the tree). Each
@@ -208,13 +216,13 @@ const TweenedHabitat = forwardRef<
   HabitatHandle,
   Omit<React.ComponentProps<typeof ForestHabitat>, "growth"> &
     { target: number; tweenMs: number } &
-    Pick<React.ComponentProps<typeof Forest3D>, "garden" | "pouring" | "onCare" | "explore">
+    Pick<React.ComponentProps<typeof Forest3DComponent>, "garden" | "pouring" | "onCare" | "explore">
 >(function TweenedHabitat({ target, tweenMs, garden, pouring, onCare, explore, ...props }, ref) {
   const tween = useTween(target, tweenMs);
   useImperativeHandle(ref, () => ({ replay: tween.replay, jump: tween.jump }), [tween.replay, tween.jump]);
   const [failed3D, setFailed3D] = useState(false);
   const use3D = useMemo(hasWebGL, []) && !failed3D;
-  if (use3D) {
+  if (use3D && Forest3D) {
     return (
       <Scene3DBoundary onError={() => setFailed3D(true)}>
         <Forest3D {...props} growth={tween.value} garden={garden} pouring={pouring} onCare={onCare} explore={explore} />
