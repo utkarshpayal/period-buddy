@@ -8,6 +8,7 @@ import type { ForestGardenState, ForestVitality, GardenActionType } from "../../
 import { forestLayout, wildlifeFor, worldRadius, type TreeSpot, type Wildlife } from "../../lib/forestWorld";
 import { buildTree, emptyPose, poseTree, rng, type Tree3 } from "../../lib/tree3d";
 import { FiberCanvas, useFrame } from "../three/FiberCanvas";
+import { GlHealthy, useGl3dGuard } from "../three/GlGuard";
 import { radialTexture } from "../three/textures";
 import { dayPartFor, type DayPart, type ForestHabitatProps } from "./ForestHabitat";
 import { PALETTES } from "./LivingTree";
@@ -87,6 +88,7 @@ export const Forest3D = memo(function Forest3D({
   /** Tapped a weed (weed), bug (shoo) or dry leaf (prune). */
   onCare?: (type: GardenActionType, id: number) => void;
 }) {
+  useGl3dGuard();
   const reduced = useReducedMotion();
   const [part, setPart] = useState<DayPart>(() => dayPart ?? dayPartFor());
   useEffect(() => {
@@ -262,6 +264,7 @@ export const Forest3D = memo(function Forest3D({
         }}
         style={{ flex: 1, backgroundColor: "transparent" }}
       >
+        <GlHealthy />
         <SceneContent
           sky={sky}
           growthRef={growthRef}

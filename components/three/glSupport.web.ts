@@ -6,3 +6,6 @@ export function hasWebGL(): boolean {
     return false;
   }
 }
+
+export function gl3dStarting() {}
+export function gl3dWorked() {}
