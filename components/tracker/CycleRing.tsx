@@ -206,7 +206,7 @@ export function CycleRing({
           fit
           style={{ color: colors.foreground, fontSize: 40, fontWeight: "800", letterSpacing: -1.2, fontVariant: ["tabular-nums"], fontFamily: fonts.heading }}
         />
-        {sub ? <Roll text={sub.text} height={16} style={{ color: sub.color, fontSize: 12, fontWeight: sub.bold ? "700" : "400", fontFamily: fonts.body }} /> : null}
+        {sub ? <Roll text={sub.text} height={16} style={{ color: sub.color, fontSize: 13, fontWeight: sub.bold ? "700" : "400", fontFamily: fonts.body }} /> : null}
       </View>
     </View>
   );

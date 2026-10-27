@@ -151,7 +151,7 @@ export function DateField({ value, placeholder, onPress, label }: { value: strin
       }}
     >
       {label ? (
-        <Text maxFontSizeMultiplier={1.3} style={{ fontSize: 12, color: colors.mutedText, fontFamily: fonts.body }}>
+        <Text maxFontSizeMultiplier={1.3} style={{ fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}>
           {label}
         </Text>
       ) : null}

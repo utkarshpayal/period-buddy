@@ -117,7 +117,7 @@ export function SupportTicketSheet({
   };
   const label = (text: string) => (
     <Text
-      style={{ color: colors.mutedText, fontSize: 12, fontWeight: "700", letterSpacing: 0.4, fontFamily: fonts.body, marginBottom: 8 }}
+      style={{ color: colors.mutedText, fontSize: 13, fontWeight: "700", letterSpacing: 0.4, fontFamily: fonts.body, marginBottom: 8 }}
     >
       {text.toUpperCase()}
     </Text>
@@ -266,7 +266,7 @@ export function SupportTicketSheet({
             className="rounded-2xl border px-4 py-3"
             style={{ ...inputStyle, minHeight: 120, fontSize: 15, textAlignVertical: "top" }}
           />
-          <Text className="text-right mt-1" style={{ color: colors.mutedText, fontSize: 12, fontFamily: fonts.body }}>
+          <Text className="text-right mt-1" style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body }}>
             {message.length}/{MESSAGE_MAX}
           </Text>
 

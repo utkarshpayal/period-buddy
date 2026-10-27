@@ -84,23 +84,23 @@ export const DoctorCard = memo(function DoctorCard({
             {doctor.ratingCount ? (
               <View className="flex-row items-center rounded-full" style={{ gap: 3, backgroundColor: colors.warningLight, paddingHorizontal: 8, paddingVertical: 3 }}>
                 <Icon set="mci" name="star" size={12} color={colors.warning} />
-                <Text style={{ fontSize: 12, fontWeight: "700", color: colors.warning, fontFamily: fonts.body }}>{ratingLabel(doctor, true)}</Text>
+                <Text style={{ fontSize: 13, fontWeight: "700", color: colors.warning, fontFamily: fonts.body }}>{ratingLabel(doctor, true)}</Text>
               </View>
             ) : (
               <View className="rounded-full" style={{ backgroundColor: colors.successLight, paddingHorizontal: 8, paddingVertical: 3 }}>
-                <Text style={{ fontSize: 12, fontWeight: "700", color: colors.success, fontFamily: fonts.body }}>New</Text>
+                <Text style={{ fontSize: 13, fontWeight: "700", color: colors.success, fontFamily: fonts.body }}>New</Text>
               </View>
             )}
             {experience ? (
               <View className="rounded-full" style={{ backgroundColor: colors.background, paddingHorizontal: 8, paddingVertical: 3 }}>
-                <Text style={{ fontSize: 12, fontWeight: "600", color: colors.foreground, fontFamily: fonts.body }}>{experience}</Text>
+                <Text style={{ fontSize: 13, fontWeight: "600", color: colors.foreground, fontFamily: fonts.body }}>{experience}</Text>
               </View>
             ) : null}
           </View>
           {languages ? (
             <View className="flex-row items-center" style={{ gap: 5, marginTop: 6 }}>
               <Icon set="feather" name="globe" size={12} color={colors.mutedText} />
-              <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 12.5, color: colors.mutedText, fontFamily: fonts.body }}>{languages}</Text>
+              <Text numberOfLines={1} style={{ flexShrink: 1, fontSize: 13.5, color: colors.mutedText, fontFamily: fonts.body }}>{languages}</Text>
             </View>
           ) : null}
         </View>
@@ -115,7 +115,7 @@ export const DoctorCard = memo(function DoctorCard({
         {fee && !existing ? (
           <View style={{ flexShrink: 1 }}>
             <Text numberOfLines={1} style={{ fontSize: 18, lineHeight: 24, fontWeight: "700", color: colors.foreground, fontFamily: fonts.heading }}>{fee}</Text>
-            <Text numberOfLines={1} style={{ fontSize: 12, color: colors.mutedText, fontFamily: fonts.body }}>per session</Text>
+            <Text numberOfLines={1} style={{ fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}>per session</Text>
           </View>
         ) : (
           <Text numberOfLines={2} style={{ flexShrink: 1, fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}>

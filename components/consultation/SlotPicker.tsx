@@ -133,7 +133,7 @@ export function SlotPicker({
                 <Text
                   numberOfLines={1}
                   maxFontSizeMultiplier={1.2}
-                  style={{ ...body, fontSize: 12, fontWeight: "600", color: isSelected ? colors.foreground : colors.mutedText }}
+                  style={{ ...body, fontSize: 13, fontWeight: "600", color: isSelected ? colors.foreground : colors.mutedText }}
                 >
                   {chip.top}
                 </Text>
@@ -212,7 +212,7 @@ export function SlotPicker({
               </View>
             );
           })}
-          <Text style={{ ...label, fontSize: 12, marginTop: 20 }}>
+          <Text style={{ ...label, fontSize: 13, marginTop: 20 }}>
             Times are in your time zone{zoneName ? ` (${zoneName})` : ""}
           </Text>
         </View>
@@ -283,7 +283,7 @@ export function SlotPicker({
           >
             {selectedSlotStart ? formatSessionWhen(selectedSlotStart) : "Select a time"}
           </Text>
-          <Text numberOfLines={1} style={{ ...label, fontSize: 12, marginTop: 2 }}>
+          <Text numberOfLines={1} style={{ ...label, fontSize: 13, marginTop: 2 }}>
             {fee ? `${fee} · 1 session` : "Booking isn't open yet"}
           </Text>
         </View>

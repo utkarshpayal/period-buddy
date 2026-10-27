@@ -97,7 +97,7 @@ export function TrackerSearchModal({
             <>
               <Text
                 style={{
-                  fontSize: 12.5,
+                  fontSize: 13.5,
                   fontWeight: "700",
                   color: colors.mutedText,
                   fontFamily: fonts.body,

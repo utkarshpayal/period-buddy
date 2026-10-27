@@ -4,6 +4,9 @@ const { withNativeWind } = require('nativewind/metro');
 
 const config = getDefaultConfig(__dirname)
 
+// The Body Map's 3D model (assets/models/female-body.glb).
+config.resolver.assetExts.push("glb");
+
 // App code's `react-native` imports go through lib/react-native-shim.tsx, which
 // gives Text/TextInput Manrope as the default font (React 19 dropped
 // `defaultProps` on function components). node_modules and the shim itself

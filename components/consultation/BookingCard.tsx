@@ -65,7 +65,7 @@ export const BookingCard = memo(function BookingCard({
           </Text>
         </View>
         <View className="self-start rounded-full" style={{ backgroundColor: pill.bg, paddingHorizontal: 10, paddingVertical: 4 }}>
-          <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: "700", color: pill.fg, fontFamily: fonts.body }}>{statusText}</Text>
+          <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: "700", color: pill.fg, fontFamily: fonts.body }}>{statusText}</Text>
         </View>
       </TouchableOpacity>
 
@@ -117,7 +117,7 @@ export const BookingCard = memo(function BookingCard({
           </TouchableOpacity>
         </View>
         {video && !video.open && video.note ? (
-          <Text style={{ fontSize: 12.5, color: colors.mutedText, fontFamily: fonts.body, textAlign: "center" }}>{video.note}</Text>
+          <Text style={{ fontSize: 13.5, color: colors.mutedText, fontFamily: fonts.body, textAlign: "center" }}>{video.note}</Text>
         ) : null}
         {canCancel && (
           <TouchableOpacity

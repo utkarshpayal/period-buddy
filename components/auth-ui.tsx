@@ -179,7 +179,7 @@ export function AuthDivider({ label = "OR CONTINUE WITH" }: { label?: string }) 
       <View className="h-[1px] flex-1" style={{ backgroundColor: colors.border }} />
       <Text
         className="mx-3 font-semibold"
-        style={{ fontSize: 12.5, color: colors.mutedText, letterSpacing: 0.4, fontFamily: fonts.body }}
+        style={{ fontSize: 13.5, color: colors.mutedText, letterSpacing: 0.4, fontFamily: fonts.body }}
       >
         {label}
       </Text>

@@ -473,7 +473,7 @@ export default function Predictions() {
                       const latest = i === view.history.length - 1;
                       return (
                         <View key={i} style={{ flex: 1, alignItems: "center", justifyContent: "flex-end", height: "100%" }}>
-                          <Text style={{ fontSize: 12.5, fontWeight: latest ? "800" : "600", color: colors.foreground, fontFamily: fonts.mono, marginBottom: 4 }}>{len}</Text>
+                          <Text style={{ fontSize: 13.5, fontWeight: latest ? "800" : "600", color: colors.foreground, fontFamily: fonts.mono, marginBottom: 4 }}>{len}</Text>
                           <View
                             style={{
                               width: "70%",

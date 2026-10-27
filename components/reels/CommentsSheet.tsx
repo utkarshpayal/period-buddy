@@ -361,7 +361,7 @@ export function CommentsSheet({
             style={{ flex: 1, color: colors.foreground, fontFamily: fonts.body, fontSize: 14, maxHeight: 100, paddingVertical: 10 }}
           />
           {remaining <= 50 ? (
-            <Text style={{ color: remaining <= 10 ? colors.danger : colors.mutedText, fontFamily: fonts.mono, fontSize: 12, paddingBottom: 11, marginLeft: 6 }}>
+            <Text style={{ color: remaining <= 10 ? colors.danger : colors.mutedText, fontFamily: fonts.mono, fontSize: 13, paddingBottom: 11, marginLeft: 6 }}>
               {remaining}
             </Text>
           ) : null}

@@ -307,7 +307,7 @@ export function MonthCalendar({ selectedKey, onSelect, highlightLength, minDate,
         {WEEKDAY_LABELS.map((label, index) => (
           <Text
             key={`${label}-${index}`}
-            style={{ flex: 1, textAlign: "center", color: colors.mutedText, fontSize: 12.5, fontWeight: "700", fontFamily: fonts.body, paddingVertical: 6 }}
+            style={{ flex: 1, textAlign: "center", color: colors.mutedText, fontSize: 13.5, fontWeight: "700", fontFamily: fonts.body, paddingVertical: 6 }}
           >
             {label}
           </Text>

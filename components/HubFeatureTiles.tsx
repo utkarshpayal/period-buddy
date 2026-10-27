@@ -199,7 +199,7 @@ function BookHero({ tile }: { tile: HubTile }) {
               style={{ flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "rgba(255,255,255,0.14)", borderWidth: 1, borderColor: "rgba(255,255,255,0.22)", borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 }}
             >
               <Icon set="ion" name={icon} size={13} color="#FFFFFF" />
-              <Text maxFontSizeMultiplier={1.3} style={{ fontSize: 12, fontWeight: "600", color: "#FFFFFF", fontFamily: fonts.body }}>
+              <Text maxFontSizeMultiplier={1.3} style={{ fontSize: 13, fontWeight: "600", color: "#FFFFFF", fontFamily: fonts.body }}>
                 {label}
               </Text>
             </View>

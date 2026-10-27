@@ -12,6 +12,7 @@ there.
 | [WORKFLOW.md](./WORKFLOW.md) | **How changes move** in every repo: environments, branches, PRs, checks, secrets, releases, cross-repo contracts, and the rules for Claude Code. |
 | [SETUP.md](./SETUP.md) | Run the app and backend locally; every environment variable. |
 | [API_REFERENCE.md](./API_REFERENCE.md) | Every backend endpoint the app calls, grouped by `lib/api/` object. |
+| [BODY_MAP.md](./BODY_MAP.md) | The Body Map: data sources, the CC0 3D model and how to regenerate it, rendering, safety. |
 | [security-implementation.md](./security-implementation.md) | How the app side of security and privacy works (keystore, screen privacy, sessions, AI consent, exports). |
 | [../CLAUDE.md](../CLAUDE.md) | The most detailed, always-current technical notes for this repo. |
 

@@ -354,7 +354,7 @@ export default function SubscriptionScreen() {
                       <Text numberOfLines={1} style={{ flex: 1, color: "#FFFFFF", fontSize: 14, fontWeight: "700", fontFamily: fonts.body }}>
                         {entitlementLabel(e)}
                       </Text>
-                      <Text style={{ color: "rgba(255,255,255,0.85)", fontSize: 12.5, fontFamily: fonts.body }}>
+                      <Text style={{ color: "rgba(255,255,255,0.85)", fontSize: 13.5, fontFamily: fonts.body }}>
                         {e.expiresAt ? `Until ${formatShortDate(e.expiresAt)}` : "Lifetime"}
                       </Text>
                     </View>
@@ -414,7 +414,7 @@ export default function SubscriptionScreen() {
                               </Text>
                               {plan.badge && !isRecommended ? (
                                 <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: colors.primaryLight }}>
-                                  <Text style={{ color: colors.primaryDark, fontSize: 12, fontWeight: "800", fontFamily: fonts.body }}>{plan.badge}</Text>
+                                  <Text style={{ color: colors.primaryDark, fontSize: 13, fontWeight: "800", fontFamily: fonts.body }}>{plan.badge}</Text>
                                 </View>
                               ) : null}
                             </View>
@@ -427,7 +427,7 @@ export default function SubscriptionScreen() {
                           {unlocked ? (
                             <View className="flex-row items-center" style={{ gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: colors.successLight }}>
                               <Icon set="ion" name="checkmark-circle" size={14} color={colors.success} />
-                              <Text style={{ color: colors.success, fontSize: 12.5, fontWeight: "800", fontFamily: fonts.body }}>Current</Text>
+                              <Text style={{ color: colors.success, fontSize: 13.5, fontWeight: "800", fontFamily: fonts.body }}>Current</Text>
                             </View>
                           ) : (
                             <Icon set="ion" name={isSelected ? "radio-button-on" : "radio-button-off"} size={24} color={isSelected ? colors.primary : colors.mutedText} />
@@ -439,7 +439,7 @@ export default function SubscriptionScreen() {
                           <Text style={{ color: colors.mutedText, fontSize: 13.5, marginBottom: 4, fontFamily: fonts.body }}>{PERIOD_LABEL[plan.billingCycle]}</Text>
                           {savings ? (
                             <View style={{ marginBottom: 5, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: colors.successLight }}>
-                              <Text style={{ color: colors.success, fontSize: 12, fontWeight: "800", fontFamily: fonts.body }}>Save {savings}%</Text>
+                              <Text style={{ color: colors.success, fontSize: 13, fontWeight: "800", fontFamily: fonts.body }}>Save {savings}%</Text>
                             </View>
                           ) : null}
                         </View>
@@ -541,7 +541,7 @@ export default function SubscriptionScreen() {
                           ) : null}
                           <Text style={{ color: colors.foreground, fontSize: 13.5, marginTop: 4, fontFamily: fonts.monoSemiBold }}>
                             ₹{feature.price}
-                            <Text style={{ color: colors.mutedText, fontFamily: fonts.body, fontSize: 12.5 }}>{` ${PERIOD_LABEL[feature.billingCycle]}`}</Text>
+                            <Text style={{ color: colors.mutedText, fontFamily: fonts.body, fontSize: 13.5 }}>{` ${PERIOD_LABEL[feature.billingCycle]}`}</Text>
                           </Text>
                         </View>
                         {unlocked ? (

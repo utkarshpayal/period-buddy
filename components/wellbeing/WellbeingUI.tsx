@@ -6,6 +6,8 @@ import { useTheme, type ThemeColors } from "../theme";
 import { getShadow } from "../ui-tokens";
 import { Icon } from "../Icon";
 import { Button } from "../Button";
+import { RichContent, RichInline } from "../content/RichContent";
+import { hasRichMarkup, richTextToPlain } from "../../lib/richText";
 
 /**
  * Shared building blocks for the wellbeing screens (health-issues, hygiene,
@@ -308,7 +310,7 @@ export function KeyPointList({ points, tone }: { points: string[]; tone?: Wellbe
           <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: check.bg, alignItems: "center", justifyContent: "center", marginTop: 1 }}>
             <Icon set="ion" name="checkmark" size={14} color={check.fg} />
           </View>
-          <Text style={{ flex: 1, color: colors.foreground, fontSize: 15, lineHeight: 23, fontWeight: "400", fontFamily: fonts.body }}>{point}</Text>
+          <RichInline text={point} style={{ flex: 1, color: colors.foreground, fontSize: 15, lineHeight: 23, fontWeight: "400", fontFamily: fonts.body }} />
         </View>
       ))}
     </WellbeingCard>
@@ -323,7 +325,7 @@ export function BulletList({ items, color }: { items: string[]; color: string })
       {items.map((item, idx) => (
         <View key={idx} className="flex-row items-start" style={{ gap: 10 }}>
           <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color, marginTop: 9 }} />
-          <Text style={{ flex: 1, color: colors.foreground, fontSize: 15, lineHeight: 23, fontWeight: "400", fontFamily: fonts.body }}>{item}</Text>
+          <RichInline text={item} style={{ flex: 1, color: colors.foreground, fontSize: 15, lineHeight: 23, fontWeight: "400", fontFamily: fonts.body }} />
         </View>
       ))}
     </View>
@@ -509,7 +511,7 @@ export function DoctorCallout({
   return (
     <View
       accessible
-      accessibilityLabel={`${title}. ${body}`}
+      accessibilityLabel={`${title}. ${richTextToPlain(body)}`}
       className="flex-row items-start"
       style={[
         { gap: 12, padding: 16, borderRadius: 20, backgroundColor: colors.dangerLight, borderWidth: 1, borderColor: colors.border },
@@ -521,7 +523,13 @@ export function DoctorCallout({
       </View>
       <View className="flex-1" style={{ minWidth: 0 }}>
         <Text style={{ color: colors.foreground, fontSize: 15, lineHeight: 21, fontWeight: "700", fontFamily: fonts.heading }}>{title}</Text>
-        <Text style={{ color: colors.foreground, fontSize: 15, lineHeight: 22, fontWeight: "400", fontFamily: fonts.body, marginTop: 4 }}>{body}</Text>
+        {hasRichMarkup(body) ? (
+          <View style={{ marginTop: 4 }}>
+            <RichContent content={body} size="compact" />
+          </View>
+        ) : (
+          <Text style={{ color: colors.foreground, fontSize: 15, lineHeight: 22, fontWeight: "400", fontFamily: fonts.body, marginTop: 4 }}>{body}</Text>
+        )}
       </View>
     </View>
   );

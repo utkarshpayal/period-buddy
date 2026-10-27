@@ -127,7 +127,7 @@ export function IntroView({ history, onStart }: { history: ScreeningHistoryItem[
                     </Text>
                   </View>
                   <View style={{ borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: risk.bg }}>
-                    <Text maxFontSizeMultiplier={1.2} style={{ fontSize: 12.5, fontWeight: "800", color: risk.color, fontFamily: fonts.body }}>
+                    <Text maxFontSizeMultiplier={1.2} style={{ fontSize: 13.5, fontWeight: "800", color: risk.color, fontFamily: fonts.body }}>
                       {risk.label}
                     </Text>
                   </View>
@@ -290,7 +290,7 @@ export function ConditionPicker({
                 <Text maxFontSizeMultiplier={1.3} numberOfLines={3} style={{ marginTop: 4, fontSize: 13, lineHeight: 18, color: colors.mutedText, fontFamily: fonts.body, flexGrow: 1 }}>
                   {item.signs}
                 </Text>
-                <Text maxFontSizeMultiplier={1.2} style={{ marginTop: 10, fontSize: 12.5, fontWeight: "700", color: tint.fg, fontFamily: fonts.body }}>
+                <Text maxFontSizeMultiplier={1.2} style={{ marginTop: 10, fontSize: 13.5, fontWeight: "700", color: tint.fg, fontFamily: fonts.body }}>
                   8 questions · ~2 min
                 </Text>
               </PressableScale>
@@ -496,7 +496,7 @@ export function ResultView({
                 {risk.headline}
               </Text>
               <View style={{ alignSelf: "flex-start", marginTop: 8, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, backgroundColor: "rgba(255,255,255,0.2)" }}>
-                <Text maxFontSizeMultiplier={1.2} style={{ color: "#fff", fontSize: 12.5, fontWeight: "800", fontFamily: fonts.body }}>
+                <Text maxFontSizeMultiplier={1.2} style={{ color: "#fff", fontSize: 13.5, fontWeight: "800", fontFamily: fonts.body }}>
                   {risk.label}
                 </Text>
               </View>
