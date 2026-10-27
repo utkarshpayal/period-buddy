@@ -314,15 +314,14 @@ export const BodyViewer3D = forwardRef<BodyViewer3DHandle, Props>(function BodyV
             {geometries.map((g) =>
               g.name === "Body" ? (
                 <mesh key={g.name} geometry={g.geometry}>
-                  <meshPhysicalMaterial
+                  {/* Standard, not physical: the sheen/clearcoat shader fails to
+                      compile on many phone GPUs, and three.js then silently skips
+                      the body (taps still hit it, nothing is drawn). */}
+                  <meshStandardMaterial
                     vertexColors={g.vertexColors}
                     color={g.vertexColors ? "#ffffff" : g.color}
-                    roughness={0.58}
+                    roughness={0.62}
                     metalness={0}
-                    sheen={0.6}
-                    sheenRoughness={0.6}
-                    sheenColor="#ffb9a8"
-                    clearcoat={0.04}
                   />
                 </mesh>
               ) : (
