@@ -6,6 +6,7 @@ import { BODY_ANCHORS, BODY_MODEL_HEIGHT, type BodyView } from "../../lib/bodyMo
 import { nearestAnchor, type BodyMarker } from "../../lib/bodyRegions";
 import type { GlbMesh } from "../../lib/glb";
 import { FiberCanvas, useFrame } from "../three/FiberCanvas";
+import { GlHealthy, useGl3dGuard } from "../three/GlGuard";
 import { radialTexture } from "../three/textures";
 import { loadBodyModel } from "./loadBodyModel";
 import { PAIN_COLORS } from "./painColors";
@@ -73,6 +74,7 @@ export const BodyViewer3D = forwardRef<BodyViewer3DHandle, Props>(function BodyV
   { markers, selectedKey, active, reduceMotion, onTapAnchor, onError, onReady },
   ref,
 ) {
+  useGl3dGuard();
   const [meshes, setMeshes] = useState<GlbMesh[] | null>(null);
   const stateRef = useRef<{ camera: THREE.Camera; invalidate: () => void } | null>(null);
   const bodyRef = useRef<THREE.Object3D | null>(null);
@@ -303,6 +305,7 @@ export const BodyViewer3D = forwardRef<BodyViewer3DHandle, Props>(function BodyV
           }}
           style={{ flex: 1, backgroundColor: "transparent" }}
         >
+          <GlHealthy />
           <hemisphereLight args={["#fff4ee", "#8f7488", 0.9]} />
           <directionalLight position={[-1.4, 2.6, 3]} intensity={1.6} color="#fff1e6" />
           <directionalLight position={[2, 1.2, 1.5]} intensity={0.45} color="#f3e6ff" />

@@ -31,7 +31,10 @@ function TextInput(props: React.ComponentProps<typeof RN.TextInput>) {
 }
 TextInput.displayName = "TextInput";
 // Static helper some code reaches for (TextInput.State.currentlyFocusedInput()).
-TextInput.State = RN.TextInput.State;
+// Read lazily: this file can load while React Native's TextInput module is
+// still loading (the order depends on the bundle), and reading it here then
+// throws "Cannot read property 'State' of undefined" at launch.
+Object.defineProperty(TextInput, "State", { get: () => RN.TextInput.State, enumerable: true });
 
 // One soft dim for every tap that doesn't pick its own.
 const DEFAULT_ACTIVE_OPACITY = 0.7;
