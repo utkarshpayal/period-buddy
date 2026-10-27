@@ -18,11 +18,11 @@
     // library to clear these.
     "GHSA-22p9-wv53-3rq4",
     "GHSA-v245-v573-v5vm",
-    // braces (via Metro, Jest and tailwindcss file watching): a deeply nested
-    // glob pattern can exhaust the stack. Only our own build config's
-    // patterns reach it, at build time. No fixed release yet (3.0.3 is the
-    // latest); remove once one ships.
-    "GHSA-vfj7-8cjw-p6xm",
+    // markdown-it 10 itself (same path): quadratic-time smartquotes parsing.
+    // Same reasoning: only Content Studio text and AI answers to the
+    // person's own question are rendered. Fixed in markdown-it 14, which
+    // react-native-markdown-display 7 doesn't support.
+    "GHSA-r7fv-28h4-cvq7",
     // node-forge (via the Expo CLI's dev-server HTTPS certs): lax RSA
     // signature checks. Runs only on a developer's machine, never in the
     // app. No fixed release yet (1.4.0 is the latest).
