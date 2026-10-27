@@ -6,7 +6,7 @@ import { AppState, Pressable, ScrollView, Text, View } from "react-native";
 import { useReducedMotion } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BodyViewer2D } from "./BodyViewer2D";
-import { BodyViewer3D, type BodyViewer3DHandle } from "./BodyViewer3D";
+import type { BodyViewer3D as BodyViewer3DComponent, BodyViewer3DHandle } from "./BodyViewer3D";
 import { PAIN_COLORS } from "./painColors";
 import { SymptomDetailSheet } from "./SymptomDetailSheet";
 import { hasWebGL } from "../three/glSupport";
@@ -30,6 +30,14 @@ import {
   type SymptomSide,
 } from "../../lib/bodyRegions";
 import { haptics } from "../../lib/haptics";
+
+// Loaded only when the build has expo-gl (the 3D viewer imports it at the
+// top; Expo Router loads every screen at start-up, so a static import would
+// crash any older build on launch).
+const BodyViewer3D: typeof BodyViewer3DComponent | null = hasWebGL()
+  ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("./BodyViewer3D").BodyViewer3D
+  : null;
 
 /**
  * "Where": the person's logged symptoms on a 3D body (2D when 3D can't run),
@@ -90,7 +98,7 @@ export function BodyMapSection({ refreshKey }: { refreshKey: number }) {
 
   const webgl = useMemo(() => hasWebGL(), []);
   const [modelFailed, setModelFailed] = useState(false);
-  const show3D = webgl && !modelFailed;
+  const show3D = webgl && !modelFailed && BodyViewer3D != null;
   const viewer = useRef<BodyViewer3DHandle>(null);
   const [view, setView] = useState<BodyView>("front");
   const [selected, setSelected] = useState<string | null>(null);
@@ -136,7 +144,7 @@ export function BodyMapSection({ refreshKey }: { refreshKey: number }) {
   return (
     <View style={{ flex: 1 }}>
         <LinearGradient colors={gradient} style={{ flex: 1 }}>
-          {loading && !logs ? null : show3D ? (
+          {loading && !logs ? null : show3D && BodyViewer3D ? (
             <ViewerBoundary onError={onModelError}>
               <BodyViewer3D
                 ref={viewer}
