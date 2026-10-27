@@ -1,7 +1,7 @@
 {
   "name": "period-buddy",
   "main": "expo-router/entry",
-  "version": "1.1.7",
+  "version": "1.2.0",
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
