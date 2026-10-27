@@ -318,7 +318,7 @@ export default function SignUp() {
                         />
                         <Text
                           style={{
-                            fontSize: 12.5,
+                            fontSize: 13.5,
                             fontWeight: "700",
                             color: met ? colors.success : colors.mutedText,
                             fontFamily: fonts.body,
@@ -351,7 +351,7 @@ export default function SignUp() {
                 className="text-center"
                 style={{
                   marginTop: 14,
-                  fontSize: 12.5,
+                  fontSize: 13.5,
                   lineHeight: 17,
                   color: colors.mutedText,
                   fontFamily: fonts.body,
@@ -393,7 +393,7 @@ export default function SignUp() {
                   <TouchableOpacity>
                     <Text
                       style={{
-                        fontSize: 12.5,
+                        fontSize: 13.5,
                         fontWeight: "800",
                         color: colors.primary,
                         fontFamily: fonts.body,

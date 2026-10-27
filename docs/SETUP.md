@@ -20,7 +20,7 @@ cp .env.example .env    # then fill in the values below
 npm run dev              # nodemon index.js — auto-restarts on change
 ```
 
-Runs on `http://localhost:5000` by default (`PORT` in `.env`).
+Runs on `http://localhost:5000` by default (`PORT` in `.env`); the app's dev build looks for it on 5001, so set `PORT=5001`.
 
 ### Required to boot at all
 
@@ -134,7 +134,7 @@ npx expo start           # press w for web, a for Android, i for iOS
 
 | Variable | What it's for |
 |---|---|
-| `EXPO_PUBLIC_API_BASE_URL` | Which backend to use. On a phone, `localhost` is the phone itself, so use `http://<your computer's LAN IP>:5000` for a local backend, or leave it out: in `__DEV__` without it, `lib/api/` derives the host from the Expo dev server's own address on port 5000. Overrides `EXPO_PUBLIC_APP_ENV`. |
+| `EXPO_PUBLIC_API_BASE_URL` | Which backend to use. On a phone, `localhost` is the phone itself, so use `http://<your computer's LAN IP>:5001` for a local backend, or leave it out: in `__DEV__` without it, `lib/api/` derives the host from the Expo dev server's own address on port 5001. Overrides `EXPO_PUBLIC_APP_ENV`. |
 | `EXPO_PUBLIC_APP_ENV` | `prod` or `stage`: picks the backend from `app.json` → `extra.apiBaseUrls`. Unset: prod in a release build, the local backend in `__DEV__`. |
 | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` / `_IOS_CLIENT_ID` / `_ANDROID_CLIENT_ID` / `_EXPO_CLIENT_ID` | Google sign-in OAuth client IDs; must match the backend's `GOOGLE_*_CLIENT_ID`. Optional: without them the app uses `app.json` → `extra.googleClientIds` (the real, public IDs; also in `.env.example` and `eas.json`). |
 
@@ -147,9 +147,9 @@ section for how EAS Build sources these in the cloud.
 ## Running both together
 
 Start the backend first (`npm run dev` in `The-Nura-Backend`), confirm it's
-up (`curl http://localhost:5000/health`), then start the frontend
+up (`curl http://localhost:5001/health`), then start the frontend
 (`npx expo start` in `The-Nura-App`) pointed at it via
-`EXPO_PUBLIC_API_BASE_URL=http://localhost:5000`. Web (`w`) is the fastest
+`EXPO_PUBLIC_API_BASE_URL=http://localhost:5001`. Web (`w`) is the fastest
 loop for UI work; native builds are only needed when testing something
 platform-specific (camera, biometrics, push notifications, native modules).
 

@@ -24,6 +24,7 @@ test("more specific paths win over their prefixes", () => {
   assert.deepEqual(topicsForMutation("POST", "/api/circles/abc/vibes"), ["circles"]);
   assert.deepEqual(topicsForMutation("POST", "/api/support/tickets"), ["support"]);
   assert.deepEqual(topicsForMutation("POST", "/api/support/tickets/abc/reply"), ["support"]);
+  assert.deepEqual(topicsForMutation("PUT", "/api/notifications/preferences"), ["profile", "cycle"]);
   assert.deepEqual(topicsForMutation("PATCH", "/api/reels/abc/follow"), ["dashboard"]);
   assert.deepEqual(topicsForMutation("POST", "/api/reels/abc/vote"), ["dashboard"]);
   assert.deepEqual(topicsForMutation("POST", "/api/reels/abc/like"), []);
@@ -49,4 +50,9 @@ test("subscribers receive emitted topics until they unsubscribe", () => {
   unsubscribe();
   emitDataChange("habits");
   assert.deepEqual(seen, [["cycle", "dashboard"]]);
+});
+
+test("habit suggestion dismissals refresh nothing; habit writes still do", () => {
+  assert.deepEqual(topicsForMutation("POST", "/api/habits/suggestions/walk/dismiss"), []);
+  assert.deepEqual(topicsForMutation("PATCH", "/api/habits/abc/toggle"), ["habits", "dashboard"]);
 });

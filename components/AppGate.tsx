@@ -253,7 +253,7 @@ function UpdateSheet({ prompt, onDismiss }: { prompt: UpdatePrompt; onDismiss: (
           <AppIconBadge icon="arrow-up" tint={colors.primary} />
           {prompt.version ? (
             <View style={{ marginTop: 14, borderRadius: 999, backgroundColor: colors.primaryLight, paddingHorizontal: 12, paddingVertical: 4 }}>
-              <Text style={{ fontSize: 12, fontWeight: "800", color: colors.primary, fontFamily: fonts.mono }}>Version {prompt.version}</Text>
+              <Text style={{ fontSize: 13, fontWeight: "800", color: colors.primary, fontFamily: fonts.mono }}>Version {prompt.version}</Text>
             </View>
           ) : null}
           <Text
@@ -327,7 +327,7 @@ function BlockingScreen({
         <AppIconBadge icon={isMaintenance ? "construct" : "arrow-up"} tint={isMaintenance ? colors.warning : colors.primary} />
         {!isMaintenance ? (
           <View style={{ marginTop: 16, borderRadius: 999, backgroundColor: colors.primaryLight, paddingHorizontal: 12, paddingVertical: 4 }}>
-            <Text style={{ fontSize: 12, fontWeight: "800", color: colors.primary, fontFamily: fonts.body }}>Update required</Text>
+            <Text style={{ fontSize: 13, fontWeight: "800", color: colors.primary, fontFamily: fonts.body }}>Update required</Text>
           </View>
         ) : null}
         <Text

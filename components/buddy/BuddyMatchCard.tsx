@@ -116,7 +116,7 @@ export function BuddyMatchCard({
             </View>
             <View className="flex-row items-center mt-1" style={{ gap: 6, flexWrap: "wrap" }}>
               <View className="rounded-full px-2.5 py-0.5" style={{ backgroundColor: tint.light }}>
-                <Text style={{ fontSize: 12, fontWeight: "700", color: tint.color, fontFamily: fonts.body }}>
+                <Text style={{ fontSize: 13, fontWeight: "700", color: tint.color, fontFamily: fonts.body }}>
                   {PHASE_LABELS[phase]}
                 </Text>
               </View>
@@ -150,13 +150,13 @@ export function BuddyMatchCard({
               {!expanded &&
                 traits.map((trait) => (
                   <View key={trait} className="rounded-full px-2.5 py-1" style={{ backgroundColor: colors.surfaceSoft }}>
-                    <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: "600", color: colors.foreground, fontFamily: fonts.body }}>
+                    <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: "600", color: colors.foreground, fontFamily: fonts.body }}>
                       {trait}
                     </Text>
                   </View>
                 ))}
               {!expanded && hiddenTraits > 0 && (
-                <Text style={{ fontSize: 12, fontWeight: "700", color: colors.mutedText, fontFamily: fonts.body, alignSelf: "center" }}>
+                <Text style={{ fontSize: 13, fontWeight: "700", color: colors.mutedText, fontFamily: fonts.body, alignSelf: "center" }}>
                   +{hiddenTraits}
                 </Text>
               )}

@@ -389,7 +389,7 @@ export default function Home() {
           const tint = day.isToday ? null : day.isPeriod ? { bg: colors.roseLight, fg: colors.primaryDark } : day.isFertile ? { bg: colors.secondaryLight, fg: colors.info } : null;
           return (
             <View key={idx} className="items-center" style={{ flex: 1, gap: 8 }}>
-              <Text style={{ fontSize: 12, lineHeight: 16, fontWeight: day.isToday ? "800" : "600", letterSpacing: 0.4, color: day.isToday ? colors.primaryDark : colors.mutedText, fontFamily: fonts.body }}>
+              <Text style={{ fontSize: 13, lineHeight: 16, fontWeight: day.isToday ? "800" : "600", letterSpacing: 0.4, color: day.isToday ? colors.primaryDark : colors.mutedText, fontFamily: fonts.body }}>
                 {day.letter}
               </Text>
               <View
@@ -445,7 +445,7 @@ export default function Home() {
             <View className="flex-1" style={{ gap: 4 }}>
               <Text
                 style={{
-                  fontSize: 12,
+                  fontSize: 13,
                   lineHeight: 16,
                   fontWeight: "700",
                   color: "#fff",
@@ -495,7 +495,7 @@ export default function Home() {
                 key={item.label}
                 style={{ flex: 1, backgroundColor: "rgba(255,255,255,0.14)", borderWidth: 1, borderColor: "rgba(255,255,255,0.22)", borderRadius: 16, borderCurve: "continuous", paddingVertical: 11, paddingHorizontal: 13, gap: 2 }}
               >
-                <Text numberOfLines={2} maxFontSizeMultiplier={1.3} style={{ fontSize: 12, lineHeight: 16, fontWeight: "600", color: "#fff", opacity: 0.8, fontFamily: fonts.body }}>
+                <Text numberOfLines={2} maxFontSizeMultiplier={1.3} style={{ fontSize: 13, lineHeight: 16, fontWeight: "600", color: "#fff", opacity: 0.8, fontFamily: fonts.body }}>
                   {item.label}
                 </Text>
                 <Text numberOfLines={2} maxFontSizeMultiplier={1.3} style={{ fontSize: 15, lineHeight: 20, fontWeight: "800", letterSpacing: -0.2, color: "#fff", fontFamily: fonts.body }}>
@@ -574,7 +574,7 @@ export default function Home() {
                     {treeHealth}
                   </Text>
                   <View style={{ backgroundColor: healthTone.bg, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 }}>
-                    <Text style={{ fontSize: 12, fontWeight: "700", color: healthTone.color, fontFamily: fonts.body }}>
+                    <Text style={{ fontSize: 13, fontWeight: "700", color: healthTone.color, fontFamily: fonts.body }}>
                       {healthTone.label}
                     </Text>
                   </View>
@@ -587,7 +587,7 @@ export default function Home() {
                   <Circle cx="30" cy="30" r="26" fill="none" stroke={colors.primary} strokeWidth={6} strokeLinecap="round" strokeDasharray={`${(treeHealth / 100) * 163.4} 163.4`} transform="rotate(-90 30 30)" />
                 </Svg>
                 <View style={{ position: "absolute", inset: 0, justifyContent: "center", alignItems: "center" }}>
-                  <Text style={{ fontSize: 12, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>
+                  <Text style={{ fontSize: 13, fontWeight: "700", color: colors.foreground, fontFamily: fonts.body }}>
                     {treeHealth}%
                   </Text>
                 </View>
@@ -611,7 +611,7 @@ export default function Home() {
                   <Text style={{ fontSize: 18, lineHeight: 24, fontWeight: "800", letterSpacing: -0.3, fontVariant: ["tabular-nums"], color: colors.foreground, fontFamily: fonts.heading }}>
                     {stat.value}
                   </Text>
-                  <ColumnLabel style={{ fontSize: 12, color: colors.mutedText, fontFamily: fonts.body }}>{stat.label}</ColumnLabel>
+                  <ColumnLabel style={{ fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}>{stat.label}</ColumnLabel>
                 </View>
               ))}
             </View>
@@ -633,7 +633,7 @@ export default function Home() {
               accessibilityLabel={recentLengths.length ? `Last cycles: ${recentLengths.join(", ")} days` : "No past cycles yet"}
             >
               {recentLengths.length === 0 ? (
-                <Text style={{ fontSize: 12, color: colors.mutedText, fontFamily: fonts.body }}>Shows after your next period</Text>
+                <Text style={{ fontSize: 13, color: colors.mutedText, fontFamily: fonts.body }}>Shows after your next period</Text>
               ) : (
                 recentLengths.map((length, idx) => (
                   <View

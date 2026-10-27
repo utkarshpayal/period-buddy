@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { isAiConsentRequired, isSpokenConfirmation, matchLocalAnswer, URGENT_SAFETY_SOURCE } from "../qaFallback";
+import { isAiConsentRequired, isFairUseLimit, isSpokenConfirmation, matchLocalAnswer, URGENT_SAFETY_SOURCE } from "../qaFallback";
 
 test("urgent symptoms get the urgent-safety answer, even alongside 'normal' keywords", () => {
   for (const question of [
@@ -55,4 +55,10 @@ test("isAiConsentRequired reads the error code", () => {
   assert.equal(isAiConsentRequired({ code: "FEATURE_LOCKED" }), false);
   assert.equal(isAiConsentRequired(new Error("x")), false);
   assert.equal(isAiConsentRequired(null), false);
+});
+
+test("isFairUseLimit reads the error code", () => {
+  assert.equal(isFairUseLimit({ code: "FAIR_USE_LIMIT" }), true);
+  assert.equal(isFairUseLimit({ code: "AI_CONSENT_REQUIRED" }), false);
+  assert.equal(isFairUseLimit(null), false);
 });

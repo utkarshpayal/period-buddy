@@ -60,6 +60,8 @@ const MUTATION_TOPICS: [RegExp, DataTopic[] | null][] = [
   [/^\/api\/auth\/profile/, ["profile", "dashboard"]],
   [/^\/api\/(auth\/|logout)/, null],
   [/^\/api\/cycle\//, ["cycle", "dashboard"]],
+  // "Not for me" only changes the Habits screen's own picks.
+  [/^\/api\/habits\/suggestions\//, null],
   [/^\/api\/habits/, ["habits", "dashboard"]],
   [/^\/api\/forest\//, ["forest", "dashboard"]],
   [/^\/api\/consultation/, ["consultations"]],
@@ -76,6 +78,8 @@ const MUTATION_TOPICS: [RegExp, DataTopic[] | null][] = [
   [/^\/api\/scheme-applications/, ["schemeApplications"]],
   [/^\/api\/circles/, ["circles"]],
   [/^\/api\/support\//, ["support"]],
+  // Push on/off is on the profile; the reminder switches are cycle settings.
+  [/^\/api\/notifications\/preferences/, ["profile", "cycle"]],
   // Following a creator / voting on a reel's poll earns wallet points.
   [/^\/api\/reels\/[^/]+\/(follow|vote)$/, ["dashboard"]],
   // Likes, saves, comments and views only show on the reels screen itself,

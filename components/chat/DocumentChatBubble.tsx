@@ -97,7 +97,7 @@ export const DocumentChatBubble = memo(function DocumentChatBubble({
                   )}
                   <Text style={{ fontSize: 13, fontWeight: "700", color: colors.primaryDark, fontFamily: fonts.body }}>{playing ? "Pause" : "Listen"}</Text>
                 </TouchableOpacity>
-                <Text style={{ color: colors.mutedText, fontSize: 12, fontFamily: fonts.body }}>{formatTime(message.createdAt)}</Text>
+                <Text style={{ color: colors.mutedText, fontSize: 13, fontFamily: fonts.body }}>{formatTime(message.createdAt)}</Text>
               </View>
             </View>
           </View>
@@ -118,7 +118,7 @@ export const DocumentChatBubble = memo(function DocumentChatBubble({
             }}
           >
             <Text style={{ color: colors.buttonText, fontSize: 15, lineHeight: 22, fontFamily: fonts.body }}>{message.text}</Text>
-            <Text style={{ color: colors.buttonText, opacity: 0.75, fontSize: 12, textAlign: "right", marginTop: 4, fontFamily: fonts.body }}>
+            <Text style={{ color: colors.buttonText, opacity: 0.75, fontSize: 13, textAlign: "right", marginTop: 4, fontFamily: fonts.body }}>
               {message._id.startsWith("pending_") ? "Sending…" : formatTime(message.createdAt)}
             </Text>
           </LinearGradient>

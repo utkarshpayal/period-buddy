@@ -9,7 +9,8 @@ dist/
 web-build/
 expo-env.d.ts
 .vscode/
-.claude/
+# Personal Claude Code settings (the shared .claude/settings.json and hooks are tracked)
+.claude/settings.local.json
 # Native
 .kotlin/
 *.orig.*

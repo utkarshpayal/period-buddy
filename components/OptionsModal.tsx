@@ -113,7 +113,7 @@ export default function OptionsModal({
               style={{
                 color: colors.mutedText,
                 fontFamily: fonts.body,
-                fontSize: 12.5,
+                fontSize: 13.5,
                 fontWeight: "600",
                 lineHeight: 16,
                 marginTop: 2,
@@ -137,7 +137,7 @@ export default function OptionsModal({
                 style={{
                   color: colors.mutedText,
                   fontFamily: fonts.body,
-                  fontSize: 12.5,
+                  fontSize: 13.5,
                   fontWeight: "800",
                 }}
               >
@@ -265,7 +265,7 @@ export default function OptionsModal({
               style={{
                 color: colors.foreground,
                 fontFamily: fonts.body,
-                fontSize: 12,
+                fontSize: 13,
                 fontWeight: "800",
               }}
             >
@@ -275,7 +275,7 @@ export default function OptionsModal({
               style={{
                 color: colors.mutedText,
                 fontFamily: fonts.body,
-                fontSize: 12.5,
+                fontSize: 13.5,
                 fontWeight: "600",
                 lineHeight: 16,
                 marginTop: 4,

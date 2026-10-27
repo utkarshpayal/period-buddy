@@ -16,8 +16,10 @@ import {
   DEFAULT_SUGGESTED_QUESTIONS,
   FALLBACK_HINT,
   isAiConsentRequired,
+  isFairUseLimit,
   isSpokenConfirmation,
   matchLocalAnswer,
+  URGENT_SAFETY_SOURCE,
 } from "../lib/qaFallback";
 
 export interface ChatMessage {
@@ -216,6 +218,11 @@ export function useQaConversation({
           return null;
         }
         if (isAiConsentRequired(error)) return companion(CONSENT_TEXT, { action: "privacy" });
+        // Today's messages are used up: say so, unless it's a red flag, which
+        // falls through to the offline safety answer below.
+        if (isFairUseLimit(error) && matchLocalAnswer(question)?.source !== URGENT_SAFETY_SOURCE) {
+          return companion(getFriendlyErrorMessage(error));
+        }
       }
     }
 

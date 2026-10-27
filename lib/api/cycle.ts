@@ -155,6 +155,8 @@ export type Predictions = {
   isStale?: boolean;
 };
 
+export type HabitDay = { dateKey: string; done: boolean };
+
 export type Habit = {
   _id?: string;
   color: string;
@@ -169,6 +171,29 @@ export type Habit = {
   title: string;
   /** @deprecated use rewardPoints */
   tokens: number;
+  /** Why it was suggested, for habits added from a suggestion. */
+  reason?: string;
+  /** The last 7 local days, oldest first, ending today. */
+  week?: HabitDay[];
+};
+
+export type HabitSuggestion = {
+  key: string;
+  title: string;
+  /** Ionicons name, drawn through components/Icon.tsx. */
+  icon: string;
+  category: "care" | "mind" | "movement" | "nutrition" | "sleep";
+  rewardPoints: number;
+  /** One line on why it was picked, from the person's logs. */
+  reason: string;
+};
+
+export type HabitSuggestions = {
+  dateKey: string;
+  source: "ai" | "rules";
+  /** Nothing logged lately, so nothing to pick from: ask her to log instead. */
+  needsLogs?: boolean;
+  suggestions: HabitSuggestion[];
 };
 
 export type ForestTree = {
@@ -313,9 +338,28 @@ export const cycleApi = {
 export const habitsApi = {
   getHabits: () => apiRequest<Habit[]>("/api/habits"),
 
+  /**
+   * Today's picks from recent logs, phase and goal. The server makes them on
+   * the first call of the local day (AI when allowed, else rules) and serves
+   * the same set all day, minus habits already added.
+   */
+  getSuggestions: () =>
+    // The day's first call waits on the AI.
+    apiRequest<HabitSuggestions>("/api/habits/suggestions", { timeoutMs: 45_000 }),
+
+  /** "Not for me": hidden today and not suggested again for two weeks. */
+  dismissSuggestion: (key: string) =>
+    apiRequest<null>(`/api/habits/suggestions/${encodeURIComponent(key)}/dismiss`, { method: "POST" }),
+
   createHabit: (payload: {
     color?: string;
     icon?: string;
+    rewardPoints?: number;
+    /** The suggestion's reason, kept on the habit so its card can say why. */
+    reason?: string;
+    /** The suggestion it came from, for the backend's acceptance stats. */
+    suggestionKey?: string;
+    suggestionSource?: HabitSuggestions["source"];
     title: string;
     tokens?: number;
   }) =>
@@ -332,9 +376,54 @@ export const habitsApi = {
       tokensAwarded: number;
     }>(`/api/habits/${id}/toggle`, { method: "PATCH" }),
 
+  /** Removes a habit (the server keeps its past completions). */
+  deleteHabit: (id: string) =>
+    apiRequest<null>(`/api/habits/${id}`, { method: "DELETE" }),
+
+};
+
+/** The tree-care game (backend utils/garden.js), advanced to now by the server. */
+export type GardenActionType = "water" | "weed" | "shoo" | "prune" | "fertilize" | "mulch";
+export type ForestGardenState = {
+  moisture: number;
+  nutrients: number;
+  health: number;
+  soggy: boolean;
+  mulched: boolean;
+  mulchHoursLeft: number;
+  hoursUntilThirsty: number;
+  weeds: { id: number; x: number; z: number }[];
+  /** `leaf` is a slot (0–999) the app maps onto one of its tree's leaves. */
+  pests: { id: number; leaf: number }[];
+  deadLeaves: { id: number; leaf: number }[];
+  compost: number;
+  mulch: number;
+  xp: number;
+  level: number;
+  levelProgress: number;
+  xpToNextLevel: number;
+  xpToday: number;
+  dailyXpCap: number;
+  decorations: string[];
+  nextDecoration: { key: string; level: number; label: string } | null;
+  needs: { key: string; label: string; urgent: boolean }[];
+};
+export type GardenActionResult = {
+  garden: ForestGardenState;
+  xp: number;
+  message: string;
+  tokensEarned: number;
+  /** Set after watering (it also counts as the day's water task). */
+  status: ForestStatus | null;
 };
 
 export const forestApi = {
+  getGarden: (today?: string) => apiRequest<ForestGardenState>(`/api/forest/garden${toQuery({ today })}`),
+
+  gardenAction: (action: { type: GardenActionType; id?: number; seconds?: number; today?: string }) =>
+    apiRequest<GardenActionResult>("/api/forest/garden/action", { body: JSON.stringify(action), method: "POST" }),
+
+
   /** `today` is the device's local YYYY-MM-DD, so "today's tasks" match the day logs are saved under. */
   getStatus: (today?: string, options?: { timeoutMs?: number }) =>
     apiRequest<ForestStatus>(`/api/forest/status${toQuery({ today })}`, options),

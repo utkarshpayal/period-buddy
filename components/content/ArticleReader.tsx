@@ -1,7 +1,6 @@
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import { ActivityIndicator, ScrollView, Text, TouchableOpacity, View, type ScrollViewProps } from "react-native";
 import Animated, { FadeInDown, FadeOutDown, useAnimatedStyle, useSharedValue } from "react-native-reanimated";
-import Markdown from "react-native-markdown-display";
 import type { Language, LanguageCode, MedicalReview } from "../../lib/api";
 import { formatReviewDate } from "../../lib/medicalReview";
 import { FilterChips } from "../FilterChips";
@@ -10,6 +9,7 @@ import { HeaderIconButton } from "../ScreenHeader";
 import { SkeletonBlock } from "../Skeleton";
 import { useTheme } from "../theme";
 import { MediaCover, type MediaTone } from "./MediaTile";
+import { RichContent } from "./RichContent";
 import { Icon } from "../Icon";
 import { motion } from "../motion";
 import { Button } from "../Button";
@@ -105,36 +105,6 @@ export function ArticleReader(props: ArticleReaderProps) {
     scrollProps?.onScroll?.(e);
   };
 
-  // Stable between renders: a new object makes Markdown re-parse the whole article.
-  const markdownStyles = useMemo(() => ({
-    body: { color: colors.foreground, fontFamily: fonts.body, fontSize: 16, lineHeight: 26, fontWeight: "400" as const },
-    paragraph: { marginTop: 0, marginBottom: 14 },
-    heading1: { color: colors.foreground, fontFamily: fonts.heading, fontSize: 22, lineHeight: 29, fontWeight: "800" as const, marginTop: 24, marginBottom: 10 },
-    heading2: { color: colors.foreground, fontFamily: fonts.heading, fontSize: 18, lineHeight: 25, fontWeight: "700" as const, marginTop: 24, marginBottom: 8 },
-    heading3: { color: colors.foreground, fontFamily: fonts.heading, fontSize: 16, lineHeight: 23, fontWeight: "700" as const, marginTop: 18, marginBottom: 6 },
-    heading4: { color: colors.foreground, fontFamily: fonts.heading, fontSize: 16, lineHeight: 23, fontWeight: "700" as const, marginTop: 14, marginBottom: 6 },
-    strong: { fontWeight: "700" as const },
-    em: { fontStyle: "italic" as const },
-    bullet_list: { marginBottom: 14 },
-    ordered_list: { marginBottom: 14 },
-    list_item: { marginBottom: 6 },
-    bullet_list_icon: { color: colors.primaryDark, fontWeight: "800" as const, marginLeft: 2, marginRight: 10 },
-    ordered_list_icon: { color: colors.primaryDark, fontWeight: "700" as const, marginRight: 8 },
-    link: { color: colors.primaryDark, fontWeight: "600" as const, textDecorationLine: "underline" as const },
-    blockquote: {
-      backgroundColor: colors.surfaceSoft,
-      borderLeftWidth: 3,
-      borderLeftColor: colors.primary,
-      paddingHorizontal: 14,
-      paddingVertical: 10,
-      marginVertical: 8,
-      marginLeft: 0,
-    },
-    hr: { backgroundColor: colors.border, height: 1, marginVertical: 18 },
-    code_inline: { backgroundColor: colors.surfaceSoft, color: colors.foreground, borderRadius: 4, paddingHorizontal: 4 },
-    table: { borderColor: colors.border },
-    tr: { borderColor: colors.border },
-  }), [colors, fonts]);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -225,7 +195,7 @@ export function ArticleReader(props: ArticleReaderProps) {
                 <SkeletonBlock width="82%" height={14} />
               </View>
             ) : content ? (
-              <Markdown style={markdownStyles}>{content}</Markdown>
+              <RichContent content={content} />
             ) : summary ? (
               <Text style={{ color: colors.foreground, fontSize: 16, lineHeight: 26, fontWeight: "400", fontFamily: fonts.body }}>{summary}</Text>
             ) : null}

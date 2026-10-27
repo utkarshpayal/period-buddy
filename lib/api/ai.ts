@@ -138,6 +138,8 @@ export type CheckinCallRecord = {
   loggedFields?: string[];
   /** When Buddy will try again (no answer / callback requested). */
   retryAt?: string;
+  /** Why a failed call failed: our calling service refused it, calling isn't set up on the server, or no phone number. */
+  failureKind?: "provider" | "not_configured" | "no_phone" | null;
   endedAt?: string;
   createdAt: string;
 };
@@ -369,6 +371,10 @@ export type HealthReportCycleStats = {
 
 export type HealthReportResponse = {
   analysis: string | null;
+  /** The AI summary needs `health_reports` (older backends leave these out). */
+  analysisLocked?: boolean;
+  /** Set when this month's AI summaries are used up. */
+  analysisLimit?: { limit: number; resetsAt: string } | null;
   cycle: HealthReportCycleStats;
   documentCount: number;
   documents: { docType: DocType; documentDate: string; id: string; title: string }[];
@@ -379,7 +385,9 @@ export const reportApi = {
    * Aggregated cycle-log stats + document breakdown + an AI analysis of both,
    * computed server-side in one round trip for the downloadable PDF report.
    */
-  getHealthReport: (payload: { endDate: string; language?: LanguageCode; startDate: string }) =>
+  /** `includeAnalysis: false` skips the AI summary (the free stats screens
+   * don't show it, and it costs an AI call); the doctor PDF leaves it on. */
+  getHealthReport: (payload: { endDate: string; includeAnalysis?: boolean; language?: LanguageCode; startDate: string }) =>
     apiRequest<HealthReportResponse>("/api/reports/health-report", {
       body: JSON.stringify(payload),
       method: "POST",

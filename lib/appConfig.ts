@@ -247,7 +247,7 @@ export const FEATURE_REGISTRY: FeatureDefinition[] = [
   // Care & Insights
   { key: "predictions", title: "Predictions", description: "Cycle forecasts & trends", icon: "trending-up-outline", route: "/(app)/predictions", placement: "care_hub", size: "small", colorKey: "primary" },
   { key: "insights", title: "Daily Insights", description: "Mood, hormone & energy", icon: "bulb-outline", route: "/(app)/insights", placement: "care_hub", size: "small", colorKey: "secondary" },
-  { key: "symptomTrends", title: "Symptom Trends", description: "Likely by cycle phase", icon: "pulse-outline", route: "/(app)/symptom-predictions", placement: "care_hub", size: "small", colorKey: "accent" },
+  { key: "symptomTrends", title: "Symptom Trends", description: "Where and when they show up", icon: "pulse-outline", route: "/(app)/symptom-predictions", placement: "care_hub", size: "small", colorKey: "accent" },
   { key: "symptomChecker", title: "Symptom Checker", description: "PCOS, thyroid & more", icon: "clipboard-outline", route: "/(app)/symptom-checker", placement: "care_hub", size: "small", colorKey: "info" },
   { key: "graphsReports", title: "Graphs & Reports", description: "Cycle history at a glance", icon: "bar-chart-outline", route: "/(app)/graphs-reports", placement: "care_hub", size: "small", colorKey: "gold" },
   { key: "documents", title: "Documents", description: "Reports, prescriptions & chat", icon: "document-text-outline", route: "/documents", placement: "care_hub", size: "small", colorKey: "primary" },

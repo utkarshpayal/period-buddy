@@ -346,6 +346,7 @@ export function OnboardingFlow({ userId, firstName, onSubmit, onFinish }: Onboar
               <>
                 <StepTitle
                   title="When's your birthday?"
+                  subtitle="So Nura's advice and answers fit your age."
                 />
                 <BirthdayInput autoFocus value={draft.dateOfBirth} onChange={onBirthdayChange} />
               </>

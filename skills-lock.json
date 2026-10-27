@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "threejs-skills": {
+      "source": "sickn33/agentic-awesome-skills",
+      "sourceType": "github",
+      "skillPath": "skills/threejs-skills/SKILL.md",
+      "computedHash": "e0369dac35647d22dc386a710e0a8f2538283998dc803d196622b8656fca566b"
+    }
+  }
+}

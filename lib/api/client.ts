@@ -6,7 +6,7 @@ import { loadSessionToken } from "../sessionStore";
 import type { QuestionAnswer } from "./ai";
 import type { AuthUser } from "./auth";
 
-const LOCAL_DEV_API_PORT = "5000";
+const LOCAL_DEV_API_PORT = "5001";
 const envApiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
 // Backend URLs per environment, from app.json's `extra.apiBaseUrls`.
 const configApiBaseUrls = Constants.expoConfig?.extra?.apiBaseUrls as { prod?: string; stage?: string } | undefined;

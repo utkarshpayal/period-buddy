@@ -1,9 +1,10 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../theme";
 import { PaymentTrustFooter } from "./PaymentTrustFooter";
-import type { CouponPreview } from "../../lib/api";
+import { subscriptionApi, type BillingCycle, type CouponPreview, type TaxSettings } from "../../lib/api";
+import { DEFAULT_TAX, formatRupees, purchaseDisclosure, taxBreakdown } from "../../lib/pricing";
 import { BottomSheet } from "../BottomSheet";
 import { Icon } from "../Icon";
 import { Button } from "../Button";
@@ -11,6 +12,9 @@ import { Button } from "../Button";
 /**
  * "Confirm your purchase" step shown between tapping Buy and the checkout UI
  * opening (docs/fixes.md 6.2). How to pay is picked next, on PaymentSheet.
+ * Before anyone pays it states the amount, how long it lasts, the GST and
+ * that nothing renews by itself (lib/pricing.ts#purchaseDisclosure), using
+ * the live tax settings from GET /api/subscriptions/pricing.
  */
 export function PurchaseConfirmSheet({
   visible,
@@ -18,6 +22,9 @@ export function PurchaseConfirmSheet({
   itemDescription,
   originalAmount,
   cycleSuffix,
+  billingCycle,
+  renewalPrice,
+  startsAt,
   couponPreview,
   couponNote,
   confirming,
@@ -29,6 +36,12 @@ export function PurchaseConfirmSheet({
   itemDescription?: string;
   originalAmount: number;
   cycleSuffix: string;
+  /** How long it lasts, for the disclosure (absent = shown without it). */
+  billingCycle?: BillingCycle;
+  /** A promo plan's normal price after its first period. */
+  renewalPrice?: number | null;
+  /** Set when the buyer already has this: the new period follows it. */
+  startsAt?: string | null;
   /** Only set when the coupon was actually previewed against this exact item. */
   couponPreview: CouponPreview | null;
   /** Shown instead when a coupon code is entered but wasn't previewed against this item (e.g. a plan on PaywallModal). */
@@ -40,7 +53,23 @@ export function PurchaseConfirmSheet({
   const { colors, fonts } = useTheme();
   const insets = useSafeAreaInsets();
 
-  const total = couponPreview ? couponPreview.finalAmount : originalAmount;
+  const [tax, setTax] = useState<TaxSettings>(DEFAULT_TAX);
+  useEffect(() => {
+    if (!visible) return;
+    let live = true;
+    subscriptionApi
+      .getPricing()
+      .then((pricing) => live && setTax(pricing.tax))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [visible]);
+
+  // The list price after any coupon; GST is worked out from it.
+  const listAmount = couponPreview ? couponPreview.originalAmount - couponPreview.discountAmount : originalAmount;
+  const total = taxBreakdown(listAmount, tax).total;
+  const disclosure = billingCycle ? purchaseDisclosure({ amount: listAmount, billingCycle, tax, renewalPrice, startsAt }) : [];
 
   return (
     <BottomSheet
@@ -101,13 +130,22 @@ export function PurchaseConfirmSheet({
               Total
             </Text>
             <Text className="text-sm font-bold" style={{ color: colors.foreground, fontFamily: fonts.heading }}>
-              {couponPreview?.free ? "₹0" : `₹${total}${cycleSuffix}`}
+              {couponPreview?.free ? "₹0" : `${formatRupees(total)}${cycleSuffix}`}
             </Text>
           </View>
+          {!couponPreview?.free && disclosure.length > 0 ? (
+            <View style={{ marginTop: 10, gap: 4 }} accessibilityRole="summary">
+              {disclosure.map((line) => (
+                <Text key={line} style={{ color: colors.mutedText, fontSize: 13, lineHeight: 18, fontFamily: fonts.body }}>
+                  {line}
+                </Text>
+              ))}
+            </View>
+          ) : null}
         </View>
       </View>
 
-      <Button label={couponPreview?.free ? "Unlock — free" : `Confirm & pay ₹${total}`} onPress={onConfirm} loading={confirming} fullWidth style={{ marginTop: 20 }} />
+      <Button label={couponPreview?.free ? "Unlock — free" : `Confirm & pay ${formatRupees(total)}`} onPress={onConfirm} loading={confirming} fullWidth style={{ marginTop: 20 }} />
 
       <PaymentTrustFooter compact />
     </BottomSheet>

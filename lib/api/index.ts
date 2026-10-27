@@ -33,6 +33,7 @@ export * from "./consultation";
 export * from "./content";
 export * from "./cycle";
 export * from "./genz";
+export * from "./notifications";
 export * from "./partner";
 export * from "./schemes";
 export * from "./subscription";
