@@ -1220,8 +1220,9 @@ function Poof({ pos, color, at, glow }: { pos: THREE.Vector3; color: string; at:
       ((c as THREE.Sprite).material as THREE.SpriteMaterial).opacity = Math.max(0, 1 - t / 0.9);
     });
   });
+  // Position as an array, not the Vector3: R3F's own three.js copy can't copy ours.
   return (
-    <group ref={group} position={pos}>
+    <group ref={group} position={[pos.x, pos.y, pos.z]}>
       {Array.from({ length: 8 }, (_, i) => (
         <sprite key={i} scale={[0.07, 0.07, 1]}>
           <spriteMaterial map={glow} color={color} transparent depthWrite={false} blending={THREE.AdditiveBlending} />
