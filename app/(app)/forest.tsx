@@ -3,10 +3,16 @@ import { useIsFocused } from "@react-navigation/native";
 import { requireOptionalNativeModule } from "expo";
 import { useRouter } from "expo-router";
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { AppState, InteractionManager, Platform, RefreshControl, ScrollView, StatusBar, Text, TouchableOpacity, View } from "react-native";
+import { AppState, Dimensions, InteractionManager, Platform, Pressable, RefreshControl, ScrollView, StatusBar, Text, TouchableOpacity, View } from "react-native";
 import Animated, { FadeIn, FadeInDown, FadeOut, useReducedMotion } from "react-native-reanimated";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { ForestHabitat } from "../../components/forest/ForestHabitat";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { BottomSheet } from "../../components/BottomSheet";
+import { CareDock, CareFeedback, CareLevel, NextNeed } from "../../components/forest/CareHud";
+import { Forest3D } from "../../components/forest/Forest3D";
+import { useGarden } from "../../hooks/useGarden";
+import { dayPartFor, ForestHabitat, type DayPart } from "../../components/forest/ForestHabitat";
+import { hasWebGL } from "../../components/three/glSupport";
+import { nextWildlife, wildlifeFor, wildlifeLine } from "../../lib/forestWorld";
 import { LivingTree } from "../../components/forest/LivingTree";
 import { ScreenHeader, SectionHeader } from "../../components/ScreenHeader";
 import { SkeletonBlock } from "../../components/Skeleton";
@@ -25,6 +31,7 @@ import {
   type ForestStatus,
   type ForestTaskKey,
   type ForestVitality,
+  type GardenActionType,
 } from "../../lib/api";
 import { formatShortDate, getDateKey } from "../../lib/format";
 import {
@@ -222,16 +229,43 @@ function isLowDetailDevice(): boolean {
 
 type HabitatHandle = { replay: (ms: number) => void; jump: (v: number) => void };
 
+/** Falls back to the drawn scene if the 3D one throws. */
+class Scene3DBoundary extends React.Component<{ onError: () => void; children: React.ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch() {
+    this.props.onError();
+  }
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
+
 /**
  * The scene with its growth tween. The tween's per-frame state lives here, so
- * only the scene redraws while the tree grows, not the whole page.
+ * only the scene redraws while the tree grows, not the whole page. The 3D
+ * scene (components/forest/Forest3D.tsx) when the build has expo-gl / the
+ * browser has WebGL, else the drawn one (ForestHabitat).
  */
 const TweenedHabitat = forwardRef<
   HabitatHandle,
-  Omit<React.ComponentProps<typeof ForestHabitat>, "growth"> & { target: number; tweenMs: number }
->(function TweenedHabitat({ target, tweenMs, ...props }, ref) {
+  Omit<React.ComponentProps<typeof ForestHabitat>, "growth"> &
+    { target: number; tweenMs: number } &
+    Pick<React.ComponentProps<typeof Forest3D>, "garden" | "pouring" | "onCare" | "explore">
+>(function TweenedHabitat({ target, tweenMs, garden, pouring, onCare, explore, ...props }, ref) {
   const tween = useTween(target, tweenMs);
   useImperativeHandle(ref, () => ({ replay: tween.replay, jump: tween.jump }), [tween.replay, tween.jump]);
+  const [failed3D, setFailed3D] = useState(false);
+  const use3D = useMemo(hasWebGL, []) && !failed3D;
+  if (use3D) {
+    return (
+      <Scene3DBoundary onError={() => setFailed3D(true)}>
+        <Forest3D {...props} growth={tween.value} garden={garden} pouring={pouring} onCare={onCare} explore={explore} />
+      </Scene3DBoundary>
+    );
+  }
   return <ForestHabitat {...props} growth={tween.value} />;
 });
 
@@ -351,6 +385,9 @@ export default function Forest() {
     };
   }, []);
   const [showAllTrees, setShowAllTrees] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const insets = useSafeAreaInsets();
+  const [sceneHeight, setSceneHeight] = useState(() => Dimensions.get("window").height);
   const [refreshing, setRefreshing] = useState(false);
   const [watering, setWatering] = useState(false);
   const [waterKey, setWaterKey] = useState(0);
@@ -577,6 +614,48 @@ export default function Forest() {
     }
   }
 
+  // Dev builds only: pin the scene's time of day (the store app follows the clock).
+  // Dev builds open in daylight so the scene is easy to test; the chip cycles it.
+  const [testDayPart, setTestDayPart] = useState<DayPart | undefined>(__DEV__ ? "day" : undefined);
+  const nextDayPart = () =>
+    setTestDayPart((p) => (p === undefined ? "dawn" : p === "dawn" ? "day" : p === "day" ? "dusk" : p === "dusk" ? "night" : undefined));
+
+  // The care game (hooks/useGarden.ts): watering there also counts as today's water task.
+  const [pouring, setPouring] = useState(false);
+  const care = useGarden({
+    active: focused && hasLoaded,
+    onOfflineWater: () => handleWater(),
+    onResult: (r) => {
+      if (!r.status) return;
+      applyStatus(r.status, ++statusSeq.current);
+      if (userId) writeForestCache(userId, r.status);
+    },
+  });
+  const careAct = useCallback(
+    (type: Parameters<typeof care.act>[0], opts?: Parameters<typeof care.act>[1]) => {
+      ownWriteAt.current = Date.now();
+      return care.act(type, opts);
+    },
+    [care],
+  );
+  const onCare = useCallback((type: GardenActionType, id: number) => careAct(type, { id }), [careAct]);
+
+  /** Today's water task: the game's watering can when it's there (a 2 s pour), else the plain watering. */
+  const waterTask = () => {
+    if (!care.available || !care.garden) return handleWater();
+    setPouring(true);
+    setTimeout(() => {
+      setPouring(false);
+      careAct("water", { seconds: 2 });
+    }, 1400);
+  };
+
+  const game = care.available ? care.garden : null;
+  // Walk round the whole forest (3D only); the care toolbar hides meanwhile.
+  const [explore, setExplore] = useState(false);
+  const can3D = useMemo(hasWebGL, []);
+  const wildlife = useMemo(() => wildlifeFor(growth?.treesGrown ?? 0, growth?.vitality ?? "new"), [growth?.treesGrown, growth?.vitality]);
+  const nextAnimal = nextWildlife(growth?.treesGrown ?? 0);
   const hideHint = useCallback(() => setShowHint(false), []);
   const doneToday = growth?.today.done ?? 0;
   const taskDone = (key: ForestTaskKey) => growth?.today.tasks.find((t) => t.key === key)?.done ?? false;
@@ -606,15 +685,22 @@ export default function Forest() {
 
   return (
     <>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.background} />
-      <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
-        <ScreenHeader title="Your Forest" />
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 6, paddingBottom: 48 }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
-        >
-          {loadError ? (
+      {/* The scene runs under the status bar: light icons over a dusk/night sky. */}
+      <StatusBar
+        barStyle={hasLoaded && sceneReady && !loadError ? (["dusk", "night"].includes(testDayPart ?? dayPartFor()) ? "light-content" : "dark-content") : isDark ? "light-content" : "dark-content"}
+        translucent
+        backgroundColor="transparent"
+      />
+      <View style={{ flex: 1, backgroundColor: colors.background }}>
+        {loadError || !hasLoaded || !sceneReady ? (
+          <SafeAreaView className="flex-1" style={{ backgroundColor: colors.background }}>
+            <ScreenHeader title="Your Forest" />
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 6, paddingBottom: 48 }}
+              refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+            >
+              {loadError ? (
             <View style={{ alignItems: "center", paddingVertical: 56, paddingHorizontal: 12 }}>
               <View style={{ width: 120, height: 120, borderRadius: 60, alignItems: "center", justifyContent: "flex-end", overflow: "hidden", backgroundColor: colors.successLight }}>
                 <LivingTree growth={0.3} seed={1} size={100} lowDetail vitality="wilting" />
@@ -627,10 +713,138 @@ export default function Forest() {
               </Text>
               <Button label="Try again" icon="refresh" size="md" onPress={retry} style={{ marginTop: 20 }} />
             </View>
-          ) : !hasLoaded || !sceneReady ? (
-            <ForestSkeleton />
-          ) : (
-          <Animated.View entering={FadeIn.duration(350)}>
+              ) : (
+                <ForestSkeleton />
+              )}
+            </ScrollView>
+          </SafeAreaView>
+        ) : (
+          <Animated.View entering={FadeIn.duration(350)} style={{ flex: 1 }} onLayout={(e) => setSceneHeight(e.nativeEvent.layout.height)}>
+            {/* The living scene, full screen */}
+                <TweenedHabitat
+                  ref={habitatRef}
+                  height={sceneHeight}
+                  target={target}
+                  tweenMs={tweenMs}
+                  vitality={growth?.vitality ?? "new"}
+                  treeSeed={(growth?.treesGrown ?? 0) + 1}
+                  grownSeeds={grownSeeds}
+                  waterKey={waterKey}
+                  celebrateKey={celebrateKey}
+                  onInteract={hideHint}
+                  lowDetail={lowDetail}
+                  active={focused}
+                  garden={care.garden}
+                  pouring={pouring}
+                  onCare={onCare}
+                  dayPart={testDayPart}
+                  explore={explore}
+                />
+                {/* Top: back · status · explore */}
+                <View
+                  pointerEvents="box-none"
+                  style={{ position: "absolute", left: 14, right: 14, top: insets.top + 8, flexDirection: "row", alignItems: "center", gap: 10 }}
+                >
+                  <TouchableOpacity
+                    onPress={() => (explore ? setExplore(false) : router.back())}
+                    accessibilityRole="button"
+                    accessibilityLabel={explore ? "Back to my tree" : "Back"}
+                    hitSlop={4}
+                    style={[{ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" }, chip]}
+                  >
+                    <Icon set="ion" name="chevron-back" size={22} color="#1F3B24" />
+                  </TouchableOpacity>
+                  <View style={{ flex: 1, alignItems: "center" }}>
+                    <View
+                      accessible
+                      accessibilityLabel={`${growth ? STAGE_LABEL[growth.stage] : "Seed"}. ${game ? `Health ${game.health} percent.` : VITALITY_LINE[growth?.vitality ?? "new"]}`}
+                      style={[{ flexDirection: "row", alignItems: "center", gap: 8, height: 44, paddingHorizontal: 16, borderRadius: 22, maxWidth: "100%" }, chip]}
+                    >
+                      <Text numberOfLines={1} style={{ flexShrink: 1, color: "#1F3B24", fontSize: 15, fontWeight: "800", fontFamily: fonts.heading }}>
+                        {explore ? "Your forest" : growth ? STAGE_LABEL[growth.stage] : "Seed"}
+                      </Text>
+                      {!explore ? (
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                          {game ? (
+                            <>
+                              <Icon set="ion" name="heart" size={13} color={game.health >= 70 ? "#2E7D32" : game.health >= 45 ? "#B26A00" : "#C62828"} />
+                              <Text style={{ color: "#4B5E4E", fontSize: 13, fontWeight: "700", fontVariant: ["tabular-nums"], fontFamily: fonts.body }}>{`${game.health}%`}</Text>
+                            </>
+                          ) : (
+                            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: vitalityColor }} />
+                          )}
+                        </View>
+                      ) : null}
+                    </View>
+                  </View>
+                  {can3D ? (
+                    <TouchableOpacity
+                      onPress={() => {
+                        setExplore((v) => !v);
+                        hideHint();
+                      }}
+                      accessibilityRole="button"
+                      accessibilityLabel={explore ? "Back to my tree" : "Walk around your forest"}
+                      hitSlop={4}
+                      style={[{ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" }, chip]}
+                    >
+                      <Icon set="ion" name={explore ? "leaf" : "walk"} size={20} color="#1F3B24" />
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={{ width: 44 }} />
+                  )}
+                </View>
+
+                {/* The one message spot: a toast, else the action's feedback, else the hint */}
+                <View pointerEvents="none" style={{ position: "absolute", left: 16, right: 16, top: insets.top + 64, alignItems: "center" }}>
+                  {toast ? (
+                    <Animated.View
+                      entering={FadeInDown.springify().damping(14)}
+                      exiting={FadeOut}
+                      accessibilityLiveRegion="polite"
+                      style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, backgroundColor: "rgba(31,59,36,0.92)" }}
+                    >
+                      <Icon set="ion" name="leaf" size={15} color="#A5D6A7" />
+                      <Text style={{ color: "#FFFFFF", fontSize: 14, fontWeight: "700", fontFamily: fonts.body }}>{toast}</Text>
+                    </Animated.View>
+                  ) : care.feedback ? (
+                    <CareFeedback feedback={care.feedback} />
+                  ) : showHint ? (
+                    <Animated.View
+                      entering={FadeInDown.delay(900).duration(400)}
+                      exiting={FadeOut.duration(300)}
+                      style={{ flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 18, backgroundColor: "rgba(20,32,24,0.62)" }}
+                    >
+                      <Icon set="ion" name="hand-left-outline" size={14} color="#FFFFFF" />
+                      <Text style={{ color: "#FFFFFF", fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}>
+                        {explore ? "Drag up to walk · sideways to turn" : "Drag to turn · pinch to zoom"}
+                      </Text>
+                    </Animated.View>
+                  ) : null}
+                </View>
+
+                {/* Bottom: the next thing to do, then one dock */}
+                {!explore ? (
+                  <View pointerEvents="box-none" style={{ position: "absolute", left: 12, right: 12, bottom: insets.bottom + 12, gap: 10 }}>
+                    {game ? <NextNeed garden={game} onAct={careAct} /> : null}
+                    <CareDock
+                      garden={game}
+                      busy={care.busy}
+                      onAct={careAct}
+                      onPouring={setPouring}
+                      onWaterTap={waterTask}
+                      onMore={() => setDetailsOpen(true)}
+                    />
+                  </View>
+                ) : null}
+
+            <BottomSheet visible={detailsOpen} onClose={() => setDetailsOpen(false)} backdropLabel="Close details">
+              <ScrollView
+                style={{ maxHeight: sceneHeight * 0.82 }}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 24 }}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+              >
           {syncLine ? (
             <View
               accessible
@@ -643,97 +857,41 @@ export default function Forest() {
               </Text>
             </View>
           ) : null}
-          {/* The living scene */}
-          <View style={{ borderRadius: 28, borderCurve: "continuous", overflow: "hidden", backgroundColor: colors.surface, ...getShadow(colors, isDark) }}>
-            {(
-              <View>
-                <TweenedHabitat
-                  ref={habitatRef}
-                  height={SCENE_HEIGHT}
-                  target={target}
-                  tweenMs={tweenMs}
-                  vitality={growth?.vitality ?? "new"}
-                  treeSeed={(growth?.treesGrown ?? 0) + 1}
-                  grownSeeds={grownSeeds}
-                  waterKey={waterKey}
-                  celebrateKey={celebrateKey}
-                  onInteract={hideHint}
-                  lowDetail={lowDetail}
-                  active={focused}
-                />
-                <View
-                  pointerEvents="box-none"
-                  style={{ position: "absolute", left: 14, right: 14, top: 14, flexDirection: "row", justifyContent: "space-between", gap: 8 }}
-                >
-                  <View style={[{ flexShrink: 1, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 14 }, chip]}>
-                    <Text numberOfLines={1} style={{ color: "#1F3B24", fontSize: 15, fontWeight: "800", fontFamily: fonts.heading }}>
-                      {growth ? STAGE_LABEL[growth.stage] : "Seed"}
-                    </Text>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 }}>
-                      <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: vitalityColor }} />
-                      <Text numberOfLines={1} style={{ flexShrink: 1, color: "#4B5E4E", fontSize: 12.5, fontWeight: "600", fontFamily: fonts.body }}>
-                        {VITALITY_LINE[growth?.vitality ?? "new"]}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 6 }}>
-                    <TouchableOpacity
-                      hitSlop={6}
-                      onPress={() => habitatRef.current?.replay(4200)}
-                      accessibilityRole="button"
-                      accessibilityLabel="Watch your tree grow"
-                      activeOpacity={0.8}
-                      style={[{ width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" }, chip]}
-                    >
-                      <Icon set="ion" name="play" size={15} color="#1F3B24" />
-                    </TouchableOpacity>
-                    <View
-                      accessible
-                      accessibilityLabel={`${growth?.treesGrown ?? 0} trees grown`}
-                      style={[{ flexDirection: "row", alignItems: "center", gap: 5, height: 36, paddingHorizontal: 12, borderRadius: 18 }, chip]}
-                    >
-                      <Icon set="ion" name="leaf" size={14} color="#2E7D32" />
-                      <Text style={{ color: "#1F3B24", fontSize: 14, fontWeight: "800", fontFamily: fonts.body }}>{growth?.treesGrown ?? 0}</Text>
-                    </View>
-                  </View>
-                </View>
-                {showHint && !toast ? (
-                  <Animated.View
-                    entering={FadeInDown.delay(900).duration(400)}
-                    exiting={FadeOut.duration(300)}
-                    pointerEvents="none"
-                    style={{ position: "absolute", left: 0, right: 0, bottom: 16, alignItems: "center" }}
-                  >
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 18, borderCurve: "continuous", backgroundColor: "rgba(20,32,24,0.62)" }}>
-                      <Icon set="ion" name="hand-left-outline" size={14} color="#FFFFFF" />
-                      <Text style={{ color: "#FFFFFF", fontSize: 13, fontWeight: "700", fontFamily: fonts.body }}>Drag to look around · tap your tree</Text>
-                    </View>
-                  </Animated.View>
-                ) : null}
-                {toast ? (
-                  <Animated.View
-                    entering={FadeInDown.springify().damping(14)}
-                    exiting={FadeOut}
-                    pointerEvents="none"
-                    style={{ position: "absolute", left: 16, right: 16, bottom: 16, alignItems: "center" }}
-                  >
-                    <View
-                      accessibilityLiveRegion="polite"
-                      style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, borderCurve: "continuous", backgroundColor: "rgba(31,59,36,0.92)" }}
-                    >
-                      <Icon set="ion" name="leaf" size={15} color="#A5D6A7" />
-                      <Text style={{ color: "#FFFFFF", fontSize: 14, fontWeight: "700", fontFamily: fonts.body }}>{toast}</Text>
-                    </View>
-                  </Animated.View>
-                ) : null}
+            {/* Who lives in the forest (more as it gets denser) */}
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 12, padding: 14, marginBottom: 12, borderRadius: 20, backgroundColor: colors.successLight }}>
+              <Icon set="mci" name="paw" size={22} color={colors.success} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: colors.foreground, fontSize: 15, fontWeight: "800", fontFamily: fonts.heading }}>
+                  {wildlifeLine(wildlife) || "No animals yet"}
+                </Text>
+                <Text style={{ color: colors.mutedText, fontSize: 13, marginTop: 2, fontFamily: fonts.body }}>
+                  {nextAnimal
+                    ? `${nextAnimal.label} move in at ${nextAnimal.at} grown tree${nextAnimal.at === 1 ? "" : "s"}`
+                    : "Your forest is as wild as it gets"}
+                  {growth?.vitality === "wilting" || growth?.vitality === "dry" ? " · a thirsty forest scares them off" : ""}
+                </Text>
               </View>
-            )}
-
+            </View>
+            {game ? (
+              <View style={{ marginBottom: 12 }}>
+                <CareLevel garden={game} />
+              </View>
+            ) : null}
+            {__DEV__ ? (
+              <Pressable
+                onPress={nextDayPart}
+                accessibilityRole="button"
+                accessibilityLabel="Test: change time of day"
+                style={{ alignSelf: "flex-start", marginBottom: 12, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: colors.surfaceSoft }}
+              >
+                <Text style={{ color: colors.text, fontSize: 13, fontWeight: "700" }}>{`Test · time of day: ${testDayPart ?? "clock"}`}</Text>
+              </Pressable>
+            ) : null}
             {/* Stage: where the tree is, how far to the next, and the whole journey */}
-            <View style={{ paddingHorizontal: 18, paddingTop: 16, paddingBottom: 18 }}>
+            <View style={{ paddingTop: 8, paddingBottom: 4 }}>
               <View style={{ flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: 8 }}>
                 <View style={{ flexShrink: 1 }}>
-                  <Text style={{ color: colors.mutedText, fontSize: 12, fontWeight: "700", letterSpacing: 0.6, fontFamily: fonts.body }}>
+                  <Text style={{ color: colors.mutedText, fontSize: 13, fontWeight: "700", letterSpacing: 0.6, fontFamily: fonts.body }}>
                     {`STAGE ${stageIndex + 1} OF ${stageCount}`}
                   </Text>
                   <Text numberOfLines={1} style={{ color: colors.foreground, fontSize: 19, fontWeight: "800", marginTop: 2, fontFamily: fonts.heading }}>
@@ -781,7 +939,6 @@ export default function Forest() {
                 })}
               </View>
             </View>
-          </View>
 
           {/* Today's care */}
           <SectionHeader title="Today's care" style={{ marginTop: 28 }} />
@@ -804,7 +961,7 @@ export default function Forest() {
                   <TouchableOpacity
                     activeOpacity={0.7}
                     disabled={done || (isWater && watering) || !hasLoaded}
-                    onPress={() => (isWater ? handleWater() : task.route ? router.push(task.route as never) : undefined)}
+                    onPress={() => (isWater ? waterTask() : task.route ? router.push(task.route as never) : undefined)}
                     accessibilityRole="button"
                     accessibilityState={{ checked: done }}
                     accessibilityLabel={`${task.title}${done ? ", done" : ""}`}
@@ -841,7 +998,7 @@ export default function Forest() {
                     </View>
                     {done ? (
                       <View style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, backgroundColor: colors.successLight }}>
-                        <Text style={{ color: colors.success, fontSize: 12.5, fontWeight: "800", fontFamily: fonts.body }}>+1 growth</Text>
+                        <Text style={{ color: colors.success, fontSize: 13.5, fontWeight: "800", fontFamily: fonts.body }}>+1 growth</Text>
                       </View>
                     ) : isWater ? (
                       <View
@@ -884,7 +1041,7 @@ export default function Forest() {
                       <Text style={{ color: colors.foreground, fontSize: 15, fontWeight: "800", fontFamily: fonts.heading }}>
                         {streak ? `${streak}-day streak` : "Start a streak"}
                       </Text>
-                      <Text style={{ color: colors.mutedText, fontSize: 12.5, fontFamily: fonts.body }}>
+                      <Text style={{ color: colors.mutedText, fontSize: 13.5, fontFamily: fonts.body }}>
                         {streak ? "Keep it going today" : "Do one task a day"}
                       </Text>
                     </View>
@@ -905,7 +1062,7 @@ export default function Forest() {
                         <View style={{ width: 22, height: 52, borderRadius: 11, justifyContent: "flex-end", overflow: "hidden", backgroundColor: colors.surfaceSoft, borderWidth: isToday ? 2 : 0, borderColor: colors.success }}>
                           {fill > 0 ? <View style={{ height: `${fill * 100}%`, borderRadius: 9, backgroundColor: fill === 1 ? colors.success : colors.secondary }} /> : null}
                         </View>
-                        <Text style={{ color: isToday ? colors.foreground : colors.mutedText, fontSize: 12.5, fontWeight: isToday ? "800" : "600", fontFamily: fonts.body }}>
+                        <Text style={{ color: isToday ? colors.foreground : colors.mutedText, fontSize: 13.5, fontWeight: isToday ? "800" : "600", fontFamily: fonts.body }}>
                           {WEEKDAY[new Date(`${day.dateKey}T12:00:00`).getDay()]}
                         </Text>
                       </View>
@@ -933,7 +1090,7 @@ export default function Forest() {
                   </LinearGradient>
                   <View style={{ paddingHorizontal: 10, paddingVertical: 10, alignItems: "center" }}>
                     <Text style={{ color: colors.foreground, fontSize: 13.5, fontWeight: "800", fontFamily: fonts.body }}>{`Tree ${tree.number}`}</Text>
-                    <Text style={{ color: colors.mutedText, fontSize: 12.5, marginTop: 1, fontFamily: fonts.body }}>{formatShortDate(`${tree.grownOn}T12:00:00`)}</Text>
+                    <Text style={{ color: colors.mutedText, fontSize: 13.5, marginTop: 1, fontFamily: fonts.body }}>{formatShortDate(`${tree.grownOn}T12:00:00`)}</Text>
                   </View>
                 </View>
               ))}
@@ -963,10 +1120,11 @@ export default function Forest() {
               </View>
             </View>
           )}
+              </ScrollView>
+            </BottomSheet>
           </Animated.View>
-          )}
-        </ScrollView>
-      </SafeAreaView>
+        )}
+      </View>
     </>
   );
 }

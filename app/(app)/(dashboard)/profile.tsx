@@ -257,13 +257,6 @@ export default function Profile() {
   const settingsOpen = activeMenuId === "settings";
   const preferenceRows: { label: string; hint: string; value: boolean; disabled?: boolean; onChange: (v: boolean) => void }[] = [
     {
-      label: "Cycle notifications",
-      hint: "",
-      value: notificationsEnabled,
-      disabled: savingPreference === "notificationsEnabled",
-      onChange: (next) => handleTogglePreference("notificationsEnabled", next),
-    },
-    {
       label: "Anonymous community mode",
       hint: "Hide my name on posts",
       value: anonymousMode,
@@ -387,7 +380,7 @@ export default function Profile() {
                 {m.value.toLocaleString("en-US")}
               </Text>
             </View>
-            <ColumnLabel style={{ color: colors.mutedText, fontSize: 12.5, fontWeight: "600", fontFamily: fonts.body, marginTop: 3 }}>
+            <ColumnLabel style={{ color: colors.mutedText, fontSize: 13.5, fontWeight: "600", fontFamily: fonts.body, marginTop: 3 }}>
               {m.label}
             </ColumnLabel>
           </View>
@@ -416,10 +409,20 @@ export default function Profile() {
           )}
           {menuRow(
             {
-              icon: "options-outline",
-              label: "Notifications & display",
+              icon: "notifications-outline",
+              label: "Notifications",
               tint: softTints.pink,
               color: colors.primary,
+              onPress: () => router.push("/notification-settings"),
+            },
+            false,
+          )}
+          {menuRow(
+            {
+              icon: "options-outline",
+              label: "Display & community",
+              tint: softTints.mint,
+              color: colors.accent,
               onPress: () => setActiveMenuId(settingsOpen ? null : "settings"),
             },
             !settingsOpen,
@@ -534,7 +537,7 @@ export default function Profile() {
                         <Text style={{ fontSize: 13.5, fontWeight: "800", color: colors.foreground, fontFamily: fonts.body }} numberOfLines={1}>
                           {b.title}
                         </Text>
-                        <Text style={{ fontSize: 12.5, color: colors.mutedText, marginTop: 3, fontFamily: fonts.body }} numberOfLines={2}>
+                        <Text style={{ fontSize: 13.5, color: colors.mutedText, marginTop: 3, fontFamily: fonts.body }} numberOfLines={2}>
                           {b.description}
                         </Text>
                       </View>

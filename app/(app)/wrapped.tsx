@@ -255,7 +255,7 @@ function PersonaCard({ w }: { w: CycleWrapped }) {
         {stats.map((s) => (
           <View key={s.label} className="rounded-2xl px-4 py-3" style={{ backgroundColor: "rgba(255,255,255,0.18)", minWidth: "46%", flexGrow: 1 }}>
             <Text style={{ color: WHITE, fontSize: 22, fontFamily: fonts.monoSemiBold }}>{s.value}</Text>
-            <Text style={{ color: WHITE, opacity: 0.85, fontSize: 12, fontFamily: fonts.body, fontWeight: "700", marginTop: 2 }}>{s.label}</Text>
+            <Text style={{ color: WHITE, opacity: 0.85, fontSize: 13, fontFamily: fonts.body, fontWeight: "700", marginTop: 2 }}>{s.label}</Text>
           </View>
         ))}
       </View>
@@ -372,19 +372,19 @@ function Story({ wrapped, range, onRange }: { wrapped: CycleWrapped; range: Rang
             {RANGES.map((r) => {
               const active = r.key === range;
               return (
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   key={r.key}
                   onPress={() => onRange(r.key)}
                   activeOpacity={0.8}
                   className="rounded-full px-3 py-1.5"
                   style={{ backgroundColor: active ? WHITE : "rgba(255,255,255,0.18)" }}
                 >
-                  <Text style={{ color: active ? "#3A0CA3" : WHITE, fontSize: 12, fontFamily: fonts.body, fontWeight: "800" }}>{r.label}</Text>
+                  <Text style={{ color: active ? "#3A0CA3" : WHITE, fontSize: 13, fontFamily: fonts.body, fontWeight: "800" }}>{r.label}</Text>
                 </TouchableOpacity>
               );
             })}
           </View>
-          <TouchableOpacity onPress={() => router.back()} accessibilityLabel="Close" hitSlop={12}>
+          <TouchableOpacity accessibilityRole="button" onPress={() => router.back()} accessibilityLabel="Close" hitSlop={12}>
             <Icon set="feather" name="x" size={24} color={WHITE} />
           </TouchableOpacity>
         </View>
@@ -404,14 +404,14 @@ function Story({ wrapped, range, onRange }: { wrapped: CycleWrapped; range: Rang
 
           {/* Tap zones sit over the slide; the share card needs its buttons, so they stop above them. */}
           <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: isLast ? 120 : 0, flexDirection: "row" }}>
-            <Pressable style={{ flex: 1 }} onPress={() => go(index - 1)} onPressIn={pause} onPressOut={resume} accessibilityLabel="Previous" />
-            <Pressable style={{ flex: 2 }} onPress={() => go(index + 1)} onPressIn={pause} onPressOut={resume} accessibilityLabel="Next" />
+            <Pressable accessibilityRole="button" style={{ flex: 1 }} onPress={() => go(index - 1)} onPressIn={pause} onPressOut={resume} accessibilityLabel="Previous" />
+            <Pressable accessibilityRole="button" style={{ flex: 2 }} onPress={() => go(index + 1)} onPressIn={pause} onPressOut={resume} accessibilityLabel="Next" />
           </View>
         </View>
 
         {isLast ? (
           <View className="px-6 pb-6" style={{ gap: 10 }}>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               onPress={share}
               disabled={sharing}
               activeOpacity={0.85}
@@ -423,7 +423,7 @@ function Story({ wrapped, range, onRange }: { wrapped: CycleWrapped; range: Rang
                 {sharing ? "Getting it ready…" : "Share to your story"}
               </Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => go(0)} activeOpacity={0.8} className="items-center py-2">
+            <TouchableOpacity accessibilityRole="button" onPress={() => go(0)} activeOpacity={0.8} className="items-center py-2">
               <Text style={{ color: WHITE, fontSize: 14, fontFamily: fonts.body, fontWeight: "700" }}>Watch again</Text>
             </TouchableOpacity>
           </View>
@@ -469,7 +469,7 @@ export default function WrappedScreen() {
               />
               <View className="flex-row justify-center pb-8" style={{ gap: 8 }}>
                 {RANGES.filter((r) => r.key !== range).map((r) => (
-                  <TouchableOpacity key={r.key} onPress={() => setRange(r.key)} className="rounded-full px-4 py-2" style={{ backgroundColor: colors.surface }}>
+                  <TouchableOpacity accessibilityRole="button" key={r.key} onPress={() => setRange(r.key)} className="rounded-full px-4 py-2" style={{ backgroundColor: colors.surface }}>
                     <Text style={{ color: colors.foreground, fontWeight: "700" }}>{`Try ${r.label.toLowerCase()}`}</Text>
                   </TouchableOpacity>
                 ))}

@@ -132,7 +132,7 @@ export default function CustomizeHome() {
   const divider = <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: compact ? 16 : 16 + 36 + 12 }} />;
   const panel = { paddingLeft: compact ? 16 : 16 + 36 + 12, paddingRight: 16, paddingBottom: 14, gap: 12 };
   const row = { flexDirection: "row" as const, alignItems: "center" as const, paddingLeft: 16, paddingRight: 10, paddingVertical: 11 };
-  const caption = { color: colors.mutedText, fontSize: 12, fontWeight: "700" as const, fontFamily: fonts.body, letterSpacing: 0.3 };
+  const caption = { color: colors.mutedText, fontSize: 13, fontWeight: "700" as const, fontFamily: fonts.body, letterSpacing: 0.3 };
 
   const sectionTitle = (title: string, hint?: string) => (
     <View style={{ marginTop: 22, marginBottom: 10 }}>
@@ -426,7 +426,7 @@ export default function CustomizeHome() {
                       })}
                     </View>
                   ) : null}
-                  <Text numberOfLines={3} style={{ color: on ? colors.primary : colors.mutedText, fontSize: 12, fontWeight: "700", fontFamily: fonts.body, marginTop: 8 }}>
+                  <Text numberOfLines={3} style={{ color: on ? colors.primary : colors.mutedText, fontSize: 13, fontWeight: "700", fontFamily: fonts.body, marginTop: 8 }}>
                     {[...extras, previews.length ? `${previews.length} shortcuts` : null].filter(Boolean).join(" · ")}
                   </Text>
                 </View>

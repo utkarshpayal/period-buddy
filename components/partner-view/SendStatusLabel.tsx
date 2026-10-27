@@ -10,7 +10,7 @@ export function SendStatusLabel({ status, onRetry }: { status?: SendStatus; onRe
   if (!status) return null;
   if (status === "sending") {
     return (
-      <Text style={{ fontSize: 12, marginTop: 3, marginHorizontal: 6, color: colors.mutedText, fontFamily: fonts.body }}>
+      <Text style={{ fontSize: 13, marginTop: 3, marginHorizontal: 6, color: colors.mutedText, fontFamily: fonts.body }}>
         Sending…
       </Text>
     );

@@ -179,7 +179,7 @@ export default function QA() {
                 className="flex-row items-center"
                 style={{ gap: 3, marginTop: 1 }}
               >
-                <Text numberOfLines={1} style={{ color: colors.mutedText, fontSize: 12.5, fontFamily: fonts.body }}>
+                <Text numberOfLines={1} style={{ color: colors.mutedText, fontSize: 13.5, fontFamily: fonts.body }}>
                   {voice.selectedLanguage.label}
                 </Text>
                 <Icon set="ion" name="chevron-down" size={12} color={colors.mutedText} />

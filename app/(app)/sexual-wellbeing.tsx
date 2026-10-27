@@ -383,7 +383,7 @@ export default function SexualWellbeing() {
                   style={{ gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.18)", borderWidth: 1, borderColor: "rgba(255,255,255,0.3)" }}
                 >
                   <Icon set="ion" name={chip.icon as never} size={12} color="#fff" />
-                  <Text maxFontSizeMultiplier={1.3} style={{ color: "#fff", fontSize: 12.5, fontWeight: "700", fontFamily: fonts.body }}>{chip.label}</Text>
+                  <Text maxFontSizeMultiplier={1.3} style={{ color: "#fff", fontSize: 13.5, fontWeight: "700", fontFamily: fonts.body }}>{chip.label}</Text>
                 </View>
               ))}
             </View>
@@ -445,7 +445,7 @@ export default function SexualWellbeing() {
                   </View>
                 );
                 const countLabel = (
-                  <Text maxFontSizeMultiplier={1.2} style={{ color: "#fff", opacity: 0.9, fontSize: 12.5, fontWeight: "700", fontFamily: fonts.body }}>
+                  <Text maxFontSizeMultiplier={1.2} style={{ color: "#fff", opacity: 0.9, fontSize: 13.5, fontWeight: "700", fontFamily: fonts.body }}>
                     {deck.count > 0 ? `${deck.count} cards` : "Soon"}
                   </Text>
                 );

@@ -79,7 +79,7 @@ export default function SupportTicketScreen() {
           }}
         >
           {!mine ? (
-            <Text style={{ color: colors.primary, fontSize: 12.5, fontWeight: "800", fontFamily: fonts.body, marginBottom: 3 }}>
+            <Text style={{ color: colors.primary, fontSize: 13.5, fontWeight: "800", fontFamily: fonts.body, marginBottom: 3 }}>
               Nura support
             </Text>
           ) : null}
@@ -87,7 +87,7 @@ export default function SupportTicketScreen() {
             {text}
           </Text>
         </View>
-        <Text style={{ color: colors.mutedText, fontSize: 12, marginTop: 4, fontFamily: fonts.body }}>{ticketTimeLabel(at)}</Text>
+        <Text style={{ color: colors.mutedText, fontSize: 13, marginTop: 4, fontFamily: fonts.body }}>{ticketTimeLabel(at)}</Text>
       </View>
     );
   };

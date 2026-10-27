@@ -184,7 +184,7 @@ export default function PartnerViewOverview() {
           ) : (
             <>
               {/* Book a consultation quick-action */}
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 activeOpacity={0.85}
                 onPress={() => router.push("/(app)/consultation")}
                 className="flex-row items-center rounded-3xl p-4 mb-4"
@@ -301,7 +301,7 @@ export default function PartnerViewOverview() {
 
               {/* Send a check-in — jumps to the Chat tab with a starter message */}
               {isConnected && (
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   activeOpacity={0.85}
                   onPress={() => router.push("/(app)/(partner-view)/chat?prefill=1")}
                   className="flex-row items-center justify-between rounded-3xl p-4 mb-4"
@@ -420,7 +420,7 @@ export default function PartnerViewOverview() {
                               {wellbeingBits.join(" · ")}
                             </Text>
                           ) : (
-                            <TouchableOpacity
+                            <TouchableOpacity accessibilityRole="button"
                               onPress={() => setExpandedLogs((prev) => ({ ...prev, [logKey]: true }))}
                               className="mt-1"
                             >
@@ -628,7 +628,7 @@ export default function PartnerViewOverview() {
                 <SectionLabel>Knowledge & resources</SectionLabel>
                 <View className="flex-row flex-wrap justify-between" style={{ gap: 10 }}>
                   {knowledgeLinks.map((link) => (
-                    <TouchableOpacity
+                    <TouchableOpacity accessibilityRole="button"
                       key={link.title}
                       activeOpacity={0.7}
                       onPress={() => router.push(link.route as any)}

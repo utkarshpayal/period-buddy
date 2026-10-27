@@ -296,7 +296,7 @@ export function CalendarModal({
                 <View style={{ flexDirection: "row", marginBottom: 4 }}>
                   {WEEKDAY_LABELS.map((label, index) => (
                     <View key={index} style={{ width: CELL_WIDTH, alignItems: "center" }}>
-                      <Text style={{ fontSize: 12, fontWeight: "700", color: colors.mutedText, fontFamily: fonts.body }}>{label}</Text>
+                      <Text style={{ fontSize: 13, fontWeight: "700", color: colors.mutedText, fontFamily: fonts.body }}>{label}</Text>
                     </View>
                   ))}
                 </View>
