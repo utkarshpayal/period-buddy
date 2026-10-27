@@ -471,7 +471,7 @@ export default function SexualWellbeing() {
                   >
                     {compact ? (
                       // Narrow phones: one full-width row per game.
-                      <GradientCard colors={deck.gradient} radius={24} style={{ padding: 16, flexDirection: "row", alignItems: "center", gap: 14 }}>
+                      <GradientCard colors={deck.gradient} radius={24} style={{ padding: 16, minHeight: 112, flexDirection: "row", alignItems: "center", gap: 14 }}>
                         {fan}
                         <View style={{ flex: 1, minWidth: 0 }}>
                           {titleText}
@@ -481,7 +481,9 @@ export default function SexualWellbeing() {
                         {playPill}
                       </GradientCard>
                     ) : (
-                      <GradientCard colors={deck.gradient} radius={26} style={{ padding: 16, minHeight: 210 }}>
+                      // flex: 1 on both layers: the row stretches each pressable to the
+                      // taller card, and the gradient fills it, so both decks match.
+                      <GradientCard colors={deck.gradient} radius={26} containerStyle={{ flex: 1 }} style={{ flex: 1, padding: 16, minHeight: 210 }}>
                         <View style={{ marginBottom: 14 }}>{fan}</View>
                         {titleText}
                         <View style={{ flexGrow: 1 }}>{description}</View>

@@ -6,6 +6,7 @@ import { BODY_ANCHORS, BODY_MODEL_HEIGHT, type BodyView } from "../../lib/bodyMo
 import { nearestAnchor, type BodyMarker } from "../../lib/bodyRegions";
 import type { GlbMesh } from "../../lib/glb";
 import { FiberCanvas, useFrame } from "../three/FiberCanvas";
+import { isLowDetailDevice } from "../three/deviceTier";
 import { GlHealthy, useGl3dGuard } from "../three/GlGuard";
 import { radialTexture } from "../three/textures";
 import { loadBodyModel } from "./loadBodyModel";
@@ -63,6 +64,8 @@ const VIEW_YAW: Record<BodyView, number> = { front: 0, back: Math.PI, left: Math
 const MARKER_LIFT = 0.012;
 const TAP_SLOP = 8;
 const TAP_RADIUS_PX = 30;
+/** The dots' pulse redraws at this rate, not 60 fps: half the GPU work and battery. */
+const PULSE_FPS = 30;
 
 const anchorPoint = (key: string) => {
   const a = BODY_ANCHORS[key];
@@ -75,6 +78,8 @@ export const BodyViewer3D = forwardRef<BodyViewer3DHandle, Props>(function BodyV
   ref,
 ) {
   useGl3dGuard();
+  // Old/low-memory phones: per-vertex lighting and one light fewer.
+  const low = useMemo(isLowDetailDevice, []);
   const [meshes, setMeshes] = useState<GlbMesh[] | null>(null);
   const stateRef = useRef<{ camera: THREE.Camera; invalidate: () => void } | null>(null);
   const bodyRef = useRef<THREE.Object3D | null>(null);
@@ -284,14 +289,20 @@ export const BodyViewer3D = forwardRef<BodyViewer3DHandle, Props>(function BodyV
     }
   };
 
-  // The dots pulse, so render continuously while there are dots on screen.
+  // The dots pulse, so redraw at PULSE_FPS while there are dots on screen;
+  // otherwise only on demand (camera moves, prop changes).
   const animate = active && !reduceMotion && markers.length > 0;
+  useEffect(() => {
+    if (!animate) return;
+    const id = setInterval(() => stateRef.current?.invalidate(), 1000 / PULSE_FPS);
+    return () => clearInterval(id);
+  }, [animate]);
 
   return (
     <View style={{ flex: 1 }} onLayout={onLayout} {...responder.panHandlers}>
       {geometries ? (
         <FiberCanvas
-          frameloop={!active ? "never" : animate ? "always" : "demand"}
+          frameloop={active ? "demand" : "never"}
           camera={{ fov: FOV, near: 0.05, far: 20, position: [0, TARGET_Y, home.current.distance] }}
           onCreated={(state: any) => {
             state.gl.setClearColor(0x000000, 0);
@@ -308,26 +319,33 @@ export const BodyViewer3D = forwardRef<BodyViewer3DHandle, Props>(function BodyV
           <GlHealthy />
           <hemisphereLight args={["#fff4ee", "#8f7488", 0.9]} />
           <directionalLight position={[-1.4, 2.6, 3]} intensity={1.6} color="#fff1e6" />
-          <directionalLight position={[2, 1.2, 1.5]} intensity={0.45} color="#f3e6ff" />
+          {low ? null : <directionalLight position={[2, 1.2, 1.5]} intensity={0.45} color="#f3e6ff" />}
           <directionalLight position={[0.5, 2, -3]} intensity={0.9} color="#ffd9cf" />
           <group ref={bodyRef as any}>
             {geometries.map((g) =>
               g.name === "Body" ? (
                 <mesh key={g.name} geometry={g.geometry}>
-                  <meshPhysicalMaterial
-                    vertexColors={g.vertexColors}
-                    color={g.vertexColors ? "#ffffff" : g.color}
-                    roughness={0.58}
-                    metalness={0}
-                    sheen={0.6}
-                    sheenRoughness={0.6}
-                    sheenColor="#ffb9a8"
-                    clearcoat={0.04}
-                  />
+                  {/* Standard, not physical: the sheen/clearcoat shader fails to
+                      compile on many phone GPUs, and three.js then silently skips
+                      the body (taps still hit it, nothing is drawn). */}
+                  {low ? (
+                    <meshLambertMaterial vertexColors={g.vertexColors} color={g.vertexColors ? "#ffffff" : g.color} />
+                  ) : (
+                    <meshStandardMaterial
+                      vertexColors={g.vertexColors}
+                      color={g.vertexColors ? "#ffffff" : g.color}
+                      roughness={0.62}
+                      metalness={0}
+                    />
+                  )}
                 </mesh>
               ) : (
                 <mesh key={g.name} geometry={g.geometry}>
-                  <meshStandardMaterial vertexColors={g.vertexColors} color={g.vertexColors ? "#ffffff" : g.color} roughness={0.2} />
+                  {low ? (
+                    <meshLambertMaterial vertexColors={g.vertexColors} color={g.vertexColors ? "#ffffff" : g.color} />
+                  ) : (
+                    <meshStandardMaterial vertexColors={g.vertexColors} color={g.vertexColors ? "#ffffff" : g.color} roughness={0.2} />
+                  )}
                 </mesh>
               ),
             )}
@@ -403,7 +421,9 @@ function PainDot({
   });
 
   return (
-    <group position={point}>
+    // A plain array, not the Vector3: R3F bundles its own copy of three.js, so it
+    // doesn't recognise ours and tries to replace the read-only `position`.
+    <group position={[point.x, point.y, point.z]}>
       <sprite ref={glowRef} renderOrder={3}>
         <spriteMaterial map={glow} color={color} transparent depthTest={false} depthWrite={false} blending={THREE.AdditiveBlending} />
       </sprite>
@@ -416,7 +436,7 @@ function PainDot({
         </sprite>
       ) : null}
       <mesh ref={coreRef} renderOrder={6}>
-        <sphereGeometry args={[base, 24, 18]} />
+        <sphereGeometry args={[base, 14, 10]} />
         <meshStandardMaterial
           color={color}
           emissive={color}

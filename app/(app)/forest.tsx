@@ -1,9 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
-import { requireOptionalNativeModule } from "expo";
 import { useRouter } from "expo-router";
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { AppState, Dimensions, InteractionManager, Platform, Pressable, RefreshControl, ScrollView, StatusBar, Text, TouchableOpacity, View } from "react-native";
+import { AppState, Dimensions, InteractionManager, Pressable, RefreshControl, ScrollView, StatusBar, Text, TouchableOpacity, View } from "react-native";
 import Animated, { FadeIn, FadeInDown, FadeOut } from "react-native-reanimated";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { BottomSheet } from "../../components/BottomSheet";
@@ -11,6 +10,7 @@ import { CareDock, CareFeedback, CareLevel, NextNeed } from "../../components/fo
 import type { Forest3D as Forest3DComponent } from "../../components/forest/Forest3D";
 import { useGarden } from "../../hooks/useGarden";
 import { dayPartFor, ForestHabitat, type DayPart } from "../../components/forest/ForestHabitat";
+import { isLowDetailDevice } from "../../components/three/deviceTier";
 import { hasWebGL } from "../../components/three/glSupport";
 import { nextWildlife, wildlifeFor, wildlifeLine } from "../../lib/forestWorld";
 import { LivingTree } from "../../components/forest/LivingTree";
@@ -48,7 +48,6 @@ import {
   careStreak,
   lastSyncedLabel,
   rollCachedDay,
-  shouldUseLowDetail,
   STAGE_GROWTH,
   weekTotals,
   withOfflineWater,
@@ -170,24 +169,6 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
       },
     );
   });
-}
-
-let lowDetailDevice: boolean | undefined;
-/** Low-end phone (little memory or an old model): draw the lighter scene. */
-function isLowDetailDevice(): boolean {
-  if (lowDetailDevice !== undefined) return lowDetailDevice;
-  lowDetailDevice = false;
-  if (Platform.OS === "web") return lowDetailDevice;
-  try {
-    if (requireOptionalNativeModule("ExpoDevice")) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const Device = require("expo-device") as typeof import("expo-device");
-      lowDetailDevice = shouldUseLowDetail({ memoryBytes: Device.totalMemory, yearClass: Device.deviceYearClass });
-    }
-  } catch {
-    lowDetailDevice = false;
-  }
-  return lowDetailDevice;
 }
 
 type HabitatHandle = { replay: (ms: number) => void; jump: (v: number) => void };
