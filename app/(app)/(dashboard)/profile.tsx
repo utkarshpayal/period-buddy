@@ -252,6 +252,7 @@ export default function Profile() {
   const privacyRows: typeof accountRows = [
     { icon: "finger-print-outline", label: "App lock", tint: softTints.lavender, color: colors.secondary, onPress: () => router.push("/app-lock") },
     { icon: "shield-checkmark-outline", label: "Data privacy & security", tint: softTints.mint, color: colors.accent, onPress: () => router.push("/privacy") },
+    { icon: "cloud-upload-outline", label: "Import from Clue or Flo", tint: softTints.pink, color: colors.primary, onPress: () => router.push("/import-data") },
     { icon: "help-circle-outline", label: "Help & support", tint: softTints.blue, color: colors.info, onPress: () => setSupportModalVisible(true) },
   ];
   const settingsOpen = activeMenuId === "settings";

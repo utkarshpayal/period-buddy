@@ -38,7 +38,8 @@ const ago = (iso: string) => {
 
 /**
  * Privacy & security: how data is protected, the AI consent switch,
- * "Download my data", and the signed-in devices (sign one out, or all).
+ * Import from Clue or Flo, "Download my data", and the signed-in devices
+ * (sign one out, or all).
  * Reached from Profile → Data privacy & security.
  */
 export default function PrivacySettings() {
@@ -319,6 +320,20 @@ export default function PrivacySettings() {
 
           {section("Your data")}
           <View style={card}>
+            <TouchableOpacity
+              accessibilityRole="button"
+              activeOpacity={0.7}
+              onPress={() => router.push("/import-data")}
+              className="flex-row items-center"
+              style={{ gap: 12 }}
+            >
+              <Icon set="ion" name="cloud-upload-outline" size={20} color={colors.primary} />
+              <View className="flex-1">
+                <Text style={[body, { fontWeight: "700" }]}>Import from Clue or Flo</Text>
+                <Text style={muted}>Bring your period history from another app.</Text>
+              </View>
+              <Icon set="feather" name="chevron-right" size={18} color={colors.mutedText} />
+            </TouchableOpacity>
             <TouchableOpacity
               accessibilityRole="button"
               activeOpacity={0.7}
