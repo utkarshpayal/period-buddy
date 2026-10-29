@@ -1,6 +1,14 @@
 import type { AuthUser } from "./auth";
 import { apiRequest, type Pagination, toQuery } from "./client";
 
+export type CommunityExpert = {
+  verified: boolean;
+  showName: boolean;
+  name?: string | null;
+  specialty?: string | null;
+  avatarUrl?: string | null;
+};
+
 export type CommunityComment = {
   _id?: string;
   attachments?: CommunityAttachment[];
@@ -10,6 +18,7 @@ export type CommunityComment = {
   isAnonymous?: boolean;
   likes?: number;
   userId?: string | (Pick<AuthUser, "firstName" | "lastName" | "profilePicture"> & { isOwn?: boolean });
+  expert?: CommunityExpert | null;
 };
 
 export type CommunityAttachment = {
@@ -42,6 +51,7 @@ export type CommunityPost = {
   comments?: CommunityComment[];
   /** @deprecated use commentCount */
   commentsCount: number;
+  expertAnswerCount?: number;
   content: string;
   createdAt?: string;
   id: string;

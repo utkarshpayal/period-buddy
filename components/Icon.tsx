@@ -261,6 +261,8 @@ const LUCIDE: Record<string, LucideIcon> = {
   "arrow-up-outline": ArrowUp,
   "at-sign": AtSign,
   "award": Award,
+  "badge-check": BadgeCheck,
+  "badge-check-outline": BadgeCheck,
   "baby-face-outline": Baby,
   "bandage-outline": Bandage,
   "bar-chart-2": ChartColumn,
