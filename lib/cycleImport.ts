@@ -18,8 +18,10 @@ export { ZipPasswordError } from "./zipReader";
  * - Flo: a JSON (or .zip of one) with `operationalData.cycles` (period start
  *   and end dates) and `point_events_manual*` (`{ date, category, subcategory }`).
  *
- * Anything Nura has no place for (Clue's collection method, PMS, hair…) is
- * left out and listed in `unsupported`.
+ * Nothing logged is dropped: sleep, water, medication and the person's own
+ * notes go into those fields, and anything Nura has no field for (Clue's
+ * period products, PMS, tags…) is written into that day's note as
+ * "From Clue: PMS: Yes; Tags: Travelling" and listed in `savedAsNotes`.
  */
 
 export type ImportSource = "clue" | "flo";
@@ -38,6 +40,10 @@ export type ImportedDay = Pick<
   | "skins"
   | "discharge"
   | "exercise"
+  | "sleepHours"
+  | "waterIntake"
+  | "medication"
+  | "note"
 >;
 
 export type ImportPreview = {
@@ -49,8 +55,8 @@ export type ImportPreview = {
   periods: number;
   firstDateKey: string | null;
   lastDateKey: string | null;
-  /** Readable names of the categories that weren't imported. */
-  unsupported: string[];
+  /** Readable names of the categories written into day notes, as Nura has no field for them. */
+  savedAsNotes: string[];
 };
 
 export class ImportFormatError extends Error {}
@@ -58,7 +64,12 @@ export class ImportFormatError extends Error {}
 // Unzipped files over this are refused (a zip can expand a lot).
 const MAX_UNZIPPED_BYTES = 50 * 1024 * 1024;
 
-type Effect = Partial<Omit<ImportedDay, "dateKey">>;
+// The backend's CycleLog.note limit.
+const NOTE_MAX = 1000;
+
+const SOURCE_NAMES: Record<ImportSource, string> = { clue: "Clue", flo: "Flo" };
+
+type Effect = Partial<Omit<ImportedDay, "dateKey" | "note">>;
 type Flow = NonNullable<DayEntry["flow"]>;
 
 /** "Tender breasts", "tender-breasts", "TenderBreasts" → "tender_breasts". */
@@ -248,12 +259,13 @@ export function mapOption(categoryRaw: string, optionRaw: string): Effect | null
   if (/^(stool|poop)$/.test(category)) return STOOL[option] ?? OPTIONS[option] ?? null;
   if (/craving/.test(category)) return tag("cravings");
   if (category === "pain" && option === "ovulation") return null;
+  if (/^(medication|meds)$/.test(category)) return { medication: [readable(optionRaw)] };
+  if (/^(pill|injection|patch|ring|iud)$/.test(category)) return { medication: [`${labelFor(categoryRaw)}: ${readable(optionRaw).toLowerCase()}`] };
   return OPTIONS[option] ?? null;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
   collection_method: "Period products",
-  ovulation_pain: "Ovulation pain",
   pms: "PMS",
   mind: "Mind",
   hair: "Hair",
@@ -271,7 +283,13 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 const labelFor = (category: string) =>
   CATEGORY_LABELS[normalizeKey(category)] ??
-  normalizeKey(category).replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+  (normalizeKey(category).replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase()) || "Other");
+
+/** "pain_killer" → "Pain killer"; text someone typed ("Date night", "NYC") is kept as is. */
+function readable(value: string): string {
+  const text = value.trim();
+  return /[A-Z\s]/.test(text) ? text : text.replace(/[_-]+/g, " ").replace(/^./, (c) => c.toUpperCase());
+}
 
 /** The YYYY-MM-DD at the start of a date string ("2026-10-29", "2026-10-29 00:00:00", "2026-10-29T00:00:00Z"). */
 function dayKeyOf(value: unknown): string | null {
@@ -292,19 +310,48 @@ const FLOW_RANK: Record<Flow, number> = { none: 0, spotting: 1, light: 2, medium
 /** Collects effects per day, then turns them into the preview. */
 class DayCollector {
   private days = new Map<string, ImportedDay>();
-  private skipped = new Set<string>();
+  /** The person's own notes, per day. */
+  private notes = new Map<string, string[]>();
+  /** Values with no Nura field, per day: label → values, in the order logged. */
+  private kept = new Map<string, Map<string, string[]>>();
+  private keptLabels = new Set<string>();
 
   constructor(private todayKey: string) {}
 
-  apply(dateKey: string | null, effect: Effect | null, categoryForSkip?: string) {
-    if (!dateKey || dateKey > this.todayKey) return;
-    if (!effect) {
-      if (categoryForSkip) this.skipped.add(labelFor(categoryForSkip));
-      return;
-    }
+  private inRange(dateKey: string | null): dateKey is string {
+    return !!dateKey && dateKey <= this.todayKey;
+  }
+
+  /** `effect` when Nura has a field for it, else `shown` goes into the day's note under `category`. */
+  put(dateKey: string | null, effect: Effect | null, category: string, shown?: unknown) {
+    if (effect) return this.apply(dateKey, effect);
+    if (shown !== undefined && shown !== null && String(shown).trim()) this.keep(dateKey, category, String(shown));
+  }
+
+  keep(dateKey: string | null, category: string, value: string) {
+    if (!this.inRange(dateKey)) return;
+    const label = labelFor(category);
+    const byLabel = this.kept.get(dateKey) ?? new Map<string, string[]>();
+    const values = byLabel.get(label) ?? [];
+    const shown = readable(value);
+    if (!values.includes(shown)) values.push(shown);
+    byLabel.set(label, values);
+    this.kept.set(dateKey, byLabel);
+    this.keptLabels.add(label);
+  }
+
+  note(dateKey: string | null, text: unknown) {
+    if (!this.inRange(dateKey) || typeof text !== "string" || !text.trim()) return;
+    const notes = this.notes.get(dateKey) ?? [];
+    if (!notes.includes(text.trim())) notes.push(text.trim());
+    this.notes.set(dateKey, notes);
+  }
+
+  apply(dateKey: string | null, effect: Effect | null) {
+    if (!this.inRange(dateKey) || !effect) return;
     const day = this.days.get(dateKey) ?? { dateKey };
     if (effect.flow && FLOW_RANK[effect.flow] > FLOW_RANK[day.flow ?? "none"]) day.flow = effect.flow;
-    for (const key of ["symptoms", "moods", "digestions", "skins", "exercise"] as const) {
+    for (const key of ["symptoms", "moods", "digestions", "skins", "exercise", "medication"] as const) {
       const values = effect[key] as string[] | undefined;
       if (values?.length) (day as unknown as Record<string, string[]>)[key] = Array.from(new Set([...((day[key] as string[]) ?? []), ...values]));
     }
@@ -313,6 +360,8 @@ class DayCollector {
     if (effect.isIntimate) day.isIntimate = true;
     if (effect.weight !== undefined) day.weight = effect.weight;
     if (effect.temperature !== undefined) day.temperature = effect.temperature;
+    if (effect.sleepHours !== undefined) day.sleepHours = effect.sleepHours;
+    if (effect.waterIntake !== undefined) day.waterIntake = Math.min(20000, (day.waterIntake ?? 0) + effect.waterIntake);
     this.days.set(dateKey, day);
   }
 
@@ -327,6 +376,17 @@ class DayCollector {
   }
 
   preview(source: ImportSource): ImportPreview {
+    for (const dateKey of new Set([...this.notes.keys(), ...this.kept.keys()])) {
+      const lines = [...(this.notes.get(dateKey) ?? [])];
+      const kept = this.kept.get(dateKey);
+      if (kept?.size) {
+        const parts = [...kept].map(([label, values]) => `${label}: ${values.join(", ")}`);
+        lines.push(`From ${SOURCE_NAMES[source]}: ${parts.join("; ")}`);
+      }
+      const day = this.days.get(dateKey) ?? { dateKey };
+      day.note = lines.join("\n").slice(0, NOTE_MAX);
+      this.days.set(dateKey, day);
+    }
     const days = [...this.days.values()]
       .filter((day) => Object.keys(day).length > 1)
       .sort((a, b) => (a.dateKey < b.dateKey ? -1 : 1));
@@ -344,7 +404,7 @@ class DayCollector {
       periods,
       firstDateKey: days[0]?.dateKey ?? null,
       lastDateKey: days[days.length - 1]?.dateKey ?? null,
-      unsupported: [...this.skipped].sort(),
+      savedAsNotes: [...this.keptLabels].sort(),
     };
   }
 }
@@ -376,16 +436,52 @@ function weightEffect(value: unknown): Effect | null {
   return num !== null && num > 0 && num < 500 ? { weight: num } : null;
 }
 
+/** Hours slept from a number (minutes when over 24) or a Clue range like "6-9" or ">9". */
+function sleepEffect(value: unknown): Effect | null {
+  let hours = numberOf(value);
+  if (hours !== null && hours > 24) hours = Math.round((hours / 60) * 10) / 10;
+  if (hours === null) {
+    const option = optionsOf(value)[0]?.trim() ?? "";
+    const range = /^(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)$/.exec(option);
+    const bound = /^[<>]\s*(\d+(?:\.\d+)?)$/.exec(option);
+    if (range) hours = (Number(range[1]) + Number(range[2])) / 2;
+    else if (bound) hours = Number(bound[1]);
+  }
+  return hours !== null && hours > 0 && hours <= 24 ? { sleepHours: hours } : null;
+}
+
+/** Water in ml (a value of 10 or less is read as litres). */
+function waterEffect(value: unknown): Effect | null {
+  const num = numberOf(value);
+  if (num === null || num <= 0) return null;
+  const ml = Math.round(num <= 10 ? num * 1000 : num);
+  return ml <= 20000 ? { waterIntake: ml } : null;
+}
+
+/** Free text out of `"text"` or `{ text }`. */
+function textOf(value: unknown): string | null {
+  if (typeof value === "string") return value;
+  const text = value && typeof value === "object" ? (value as Record<string, unknown>).text ?? (value as Record<string, unknown>).note : null;
+  return typeof text === "string" ? text : null;
+}
+
+/** What a measurement shows in a note when it has no Nura field: its options, number or text. */
+function shownValue(value: unknown): string | undefined {
+  const options = optionsOf(value);
+  if (options.length) return options.join(", ");
+  return (numberOf(value) ?? textOf(value))?.toString();
+}
+
 function applyMeasurement(days: DayCollector, dateKey: string | null, type: string, value: unknown) {
   const category = normalizeKey(type);
-  if (/^(bbt|temperature|basal_body_temperature)$/.test(category)) return days.apply(dateKey, temperatureEffect(value), type);
-  if (category === "weight") return days.apply(dateKey, weightEffect(value), type);
+  if (/^(bbt|temperature|basal_body_temperature)$/.test(category)) return days.put(dateKey, temperatureEffect(value), type, shownValue(value));
+  if (category === "weight") return days.put(dateKey, weightEffect(value), type, shownValue(value));
+  if (/^sleep(_duration|_hours)?$/.test(category)) return days.put(dateKey, sleepEffect(value), type, shownValue(value));
+  if (/^water(_intake)?$/.test(category)) return days.put(dateKey, waterEffect(value), type, shownValue(value));
+  if (/^notes?$/.test(category)) return days.note(dateKey, textOf(value));
   const options = optionsOf(value);
-  if (options.length === 0) return days.apply(dateKey, null, type);
-  for (const option of options) {
-    const skippedAs = category === "pain" && normalizeKey(option) === "ovulation" ? "ovulation_pain" : type;
-    days.apply(dateKey, mapOption(type, option), skippedAs);
-  }
+  if (options.length === 0) return days.put(dateKey, null, type, shownValue(value));
+  for (const option of options) days.put(dateKey, mapOption(type, option), type, option);
 }
 
 /** Clue's current export: `measurements.json`. */
@@ -426,18 +522,40 @@ export function parseFlo(data: Record<string, unknown>, todayKey: string): Impor
       const dateKey = dayKeyOf(e.date ?? e.day ?? e.event_date);
       const category = String(e.category ?? e.type ?? "");
       const option = e.subcategory ?? e.value ?? e.name;
-      if (/temperature|bbt/i.test(category)) days.apply(dateKey, temperatureEffect(option ?? e.amount), category);
-      else if (/weight/i.test(category)) days.apply(dateKey, weightEffect(option ?? e.amount), category);
-      else if (typeof option === "string") days.apply(dateKey, mapOption(category, option) ?? mapOption("", option), category || option);
+      const amount = e.amount ?? option;
+      const text = textOf(e.text ?? e.note);
+      if (/^notes?$/i.test(category.trim())) days.note(dateKey, text ?? option);
+      else if (/temperature|bbt/i.test(category)) days.put(dateKey, temperatureEffect(amount), category, amount);
+      else if (/weight/i.test(category)) days.put(dateKey, weightEffect(amount), category, amount);
+      else if (/water/i.test(category)) days.put(dateKey, waterEffect(amount), category, amount);
+      else if (/sleep/i.test(category)) days.put(dateKey, sleepEffect(amount), category, amount);
+      else if (typeof option === "string") days.put(dateKey, mapOption(category, option) ?? mapOption("", option), category, option);
+      else days.put(dateKey, null, category, text ?? amount);
     }
   }
 
+  for (const entry of Array.isArray(root.notes) ? root.notes : []) {
+    if (!entry || typeof entry !== "object") continue;
+    const n = entry as Record<string, unknown>;
+    days.note(dayKeyOf(n.date ?? n.day), textOf(n.text ?? n.note ?? n.value));
+  }
+
   // Period ranges go last, so a logged intensity wins over the fallback.
-  const cycles = Array.isArray(root.cycles) ? root.cycles : [];
-  for (const cycle of cycles) {
-    if (!cycle || typeof cycle !== "object") continue;
-    const c = cycle as Record<string, unknown>;
-    days.applyPeriod(dayKeyOf(c.period_start_date ?? c.periodStartDate ?? c.start_date), dayKeyOf(c.period_end_date ?? c.periodEndDate ?? c.end_date), "medium");
+  const ranges = (Array.isArray(root.cycles) ? root.cycles : [])
+    .filter((cycle): cycle is Record<string, unknown> => !!cycle && typeof cycle === "object")
+    .map((c) => ({
+      start: dayKeyOf(c.period_start_date ?? c.periodStartDate ?? c.start_date),
+      end: dayKeyOf(c.period_end_date ?? c.periodEndDate ?? c.end_date),
+    }));
+  // A period with no end yet (the current one) lasts her usual length.
+  const lengths = ranges
+    .filter((r) => r.start && r.end && r.end >= r.start)
+    .map((r) => Math.round((Date.parse(r.end!) - Date.parse(r.start!)) / 86400000) + 1)
+    .filter((n) => n <= 15)
+    .sort((a, b) => a - b);
+  const usual = lengths.length ? lengths[Math.floor(lengths.length / 2)] : 5;
+  for (const { start, end } of ranges) {
+    days.applyPeriod(start, end ?? (start ? addDays(start, usual - 1) : null), "medium");
   }
   return days.preview("flo");
 }
