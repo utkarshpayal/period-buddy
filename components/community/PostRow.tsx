@@ -108,6 +108,20 @@ export const PostRow = React.memo(function PostRow({
                     </Text>
                   </View>
                 ) : null}
+                {Boolean(post.expertAnswerCount && post.expertAnswerCount > 0) && (
+                  <View
+                    className="flex-row items-center gap-1 rounded-full px-2 py-[1px]"
+                    style={{ backgroundColor: colors.successLight }}
+                  >
+                    <Icon name="badge-check" size={11} color={colors.success} />
+                    <Text
+                      className="text-[10.5px] font-bold"
+                      style={{ color: colors.success, fontFamily: fonts.body }}
+                    >
+                      Doctor answered
+                    </Text>
+                  </View>
+                )}
               </View>
             </View>
           </View>

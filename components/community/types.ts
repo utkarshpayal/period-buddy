@@ -1,4 +1,4 @@
-import type { CommunityAttachment, CommunityPoll } from "../../lib/api";
+import type { CommunityAttachment, CommunityExpert, CommunityPoll } from "../../lib/api";
 
 export type PendingAttachment = {
   uri: string;
@@ -10,10 +10,12 @@ export interface Comment {
   id: string;
   author: string;
   avatar: string;
+  avatarUrl?: string | null;
   content: string;
   attachment?: CommunityAttachment;
   time: string;
   isOwner: boolean; // true when this comment belongs to the logged-in user
+  expert?: CommunityExpert | null;
 }
 
 export interface Post {
@@ -27,6 +29,7 @@ export interface Post {
   tags: string[];
   likes: number;
   commentsCount: number;
+  expertAnswerCount?: number;
   comments: Comment[];
   time: string;
   isOwner: boolean; // true when this post belongs to the logged-in user

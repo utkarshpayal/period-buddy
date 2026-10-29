@@ -32,8 +32,19 @@ import { getGlow } from "../ui-tokens";
 // can't present one Modal while another is still dismissing.
 const PAYWALL_DISMISS_MS = 500;
 
-function withComments(post: Post, comments: Comment[], commentsCount: number): Post {
-  return { ...post, comments, commentsCount };
+function withComments(
+  post: Post,
+  comments: Comment[],
+  commentsCount: number,
+  expertAnswerCount?: number,
+): Post {
+  return {
+    ...post,
+    comments,
+    commentsCount,
+    expertAnswerCount:
+      expertAnswerCount ?? comments.filter((c) => Boolean(c.expert?.verified)).length,
+  };
 }
 
 // Shared between the owner dashboard (app/(app)/(dashboard)/community.tsx)
@@ -161,7 +172,7 @@ export default function CommunityScreen() {
         if (activePostIdRef.current !== post.id) return;
         setActivePost((current) =>
           current && current.id === full.id
-            ? withComments(current, full.comments, full.commentsCount)
+            ? withComments(current, full.comments, full.commentsCount, full.expertAnswerCount)
             : current,
         );
       } catch {
@@ -204,7 +215,9 @@ export default function CommunityScreen() {
           // refetching page 1 of the feed, which would collapse loaded pages.
           try {
             const fresh = mapCommunityPost(await communityApi.getPostById(postId));
-            updatePost(postId, (item) => withComments(item, fresh.comments, fresh.commentsCount));
+            updatePost(postId, (item) =>
+              withComments(item, fresh.comments, fresh.commentsCount, fresh.expertAnswerCount),
+            );
           } catch {
             // Best-effort resync; local state stays as-is until next reload.
           }
