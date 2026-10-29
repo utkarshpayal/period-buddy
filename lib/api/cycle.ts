@@ -303,6 +303,17 @@ export const cycleApi = {
       method: "POST",
     }),
 
+  /**
+   * Day logs read from a Clue or Flo export (`lib/cycleImport.ts`). New days
+   * are added; a day already logged here only gets what it's missing. No
+   * reward points. Send at most 5000 days per call; the screen sends 500.
+   */
+  importLogs: (source: "clue" | "flo", logs: Omit<DayEntry, "cycleDay" | "phase" | "tokensEarned">[]) =>
+    apiRequest<{ received: number; added: number; updated: number; unchanged: number; skipped: number }>(
+      "/api/cycle/import",
+      { body: JSON.stringify({ source, logs }), method: "POST", timeoutMs: 60_000 },
+    ),
+
   getMonthLogs: (month?: string) =>
     apiRequest<DayEntry[]>(`/api/cycle/logs${toQuery({ month })}`),
 

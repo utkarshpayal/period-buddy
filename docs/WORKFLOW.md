@@ -113,6 +113,7 @@ Change both sides in the same piece of work, or the other side silently ignores 
 | Admin notification icons | App `ADMIN_NOTIFICATION_ICONS` ↔ backend `NOTIFICATION_ICONS` |
 | Support categories/limits | App `lib/support.ts` ↔ backend `utils/supportTicket.js` |
 | Password rules | App `lib/password.ts` ↔ backend `validatePasswordStrength` |
+| Day-log tags and values the Clue/Flo import writes | App `lib/cycleImport.ts` (option → tag maps, from `components/logOptions.ts` and the day-log modal) ↔ backend `utils/cycleImport.js` (allowed fields and enums, same as `CycleLog`) |
 | Pricing rules and copy | Backend `utils/pricing.js` (rules, `PRICING_2026`) ↔ app `lib/pricing.ts` ↔ website `src/lib/pricing.js` (fallback prices). Live prices are database rows; the website and app read `GET /api/subscriptions/pricing` |
 | Rich text format (colors, chart blocks) | Admin `src/lib/richText.ts` + editor ↔ website `src/lib/richText.js` ↔ app `lib/richText.ts` ↔ backend `utils/richText.js` |
 | A new site/origin | Backend `ALLOWED_ORIGINS` in the matching secret |

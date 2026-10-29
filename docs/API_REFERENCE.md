@@ -58,6 +58,7 @@ the shared `ApiError` shape (`kind`: `network`/`timeout`/`server`/
 | GET | `/api/cycle/predictions` | Next period/ovulation/fertile window, confidence-banded |
 | GET | `/api/cycle/symptom-predictions` | Per-symptom likelihood by cycle phase (frequency-based, not AI) |
 | POST | `/api/cycle/log` | Upsert a day's log (flow, symptoms, mood, etc.) |
+| POST | `/api/cycle/import` | Day logs from a Clue/Flo export (`{ source, logs }`); fills gaps, never overwrites, no points |
 | GET | `/api/cycle/logs?month=` | A month's logs |
 | GET | `/api/cycle/log/:dateKey` | One day's log |
 | GET | `/api/cycle/stats` | Aggregate stats (days logged, top symptoms, period days) |
