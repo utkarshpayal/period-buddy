@@ -47,13 +47,14 @@ test("a Clue zip becomes Nura day logs", () => {
       symptoms: ["cravings", "headache", "sex-drive-high", "sex-masturbation"],
       moods: ["moodSwings", "apathetic", "confused"],
       flow: "light",
+      note: "From Clue: Period products: Tampon; Pain: Ovulation; PMS: Yes",
     },
   ]);
   assert.equal(preview.periodDays, 2);
   assert.equal(preview.periods, 1, "flow days 2 days apart are one period");
   assert.equal(preview.firstDateKey, "2026-10-26");
   assert.equal(preview.lastDateKey, "2026-10-29", "future days are dropped");
-  assert.deepEqual(preview.unsupported, ["Ovulation pain", "PMS", "Period products"]);
+  assert.deepEqual(preview.savedAsNotes, ["PMS", "Pain", "Period products"]);
 });
 
 test("Clue's measurements.json also works on its own", () => {
@@ -107,7 +108,60 @@ test("a Flo export fills period ranges and maps logged events", () => {
   assert.deepEqual(byDate["2026-09-14"].symptoms, ["sex-unprotected"]);
   assert.equal(byDate["2026-09-14"].isIntimate, true);
   assert.deepEqual(byDate["2026-09-20"].symptoms, ["pregnancy-negative"]);
-  assert.deepEqual(preview.unsupported, ["Lifestyle"]);
+  assert.equal(byDate["2026-09-21"].note, "From Flo: Lifestyle: Party", "nothing logged is dropped");
+  assert.deepEqual(preview.savedAsNotes, ["Lifestyle"]);
+});
+
+test("sleep, water, medication and notes come across too", () => {
+  const clue = [
+    { type: "sleep", date: "2026-10-01", value: { option: "6-9" } },
+    { type: "sleep", date: "2026-10-02", value: { option: ">9" } },
+    { type: "medication", date: "2026-10-01", value: [{ option: "pain_killer" }, { option: "antibiotic" }] },
+    { type: "pill", date: "2026-10-01", value: { option: "taken" } },
+    { type: "notes", date: "2026-10-01", value: { text: "Long day at work" } },
+    { type: "tags", date: "2026-10-01", value: [{ option: "Travelling" }] },
+    { type: "pain", date: "2026-10-02", value: [{ option: "dizziness" }] },
+  ];
+  const preview = parseImportFile(strToU8(JSON.stringify(clue)), "measurements.json", TODAY);
+  const byDate = Object.fromEntries(preview.days.map((d) => [d.dateKey, d]));
+  assert.equal(byDate["2026-10-01"].sleepHours, 7.5);
+  assert.equal(byDate["2026-10-02"].sleepHours, 9);
+  assert.deepEqual(byDate["2026-10-01"].medication, ["Pain killer", "Antibiotic", "Pill: taken"]);
+  assert.equal(byDate["2026-10-01"].note, "Long day at work\nFrom Clue: Tags: Travelling");
+  assert.equal(byDate["2026-10-02"].note, "From Clue: Pain: Dizziness", "an unknown option in a known category is kept");
+
+  const flo = {
+    operationalData: {
+      cycles: [
+        { period_start_date: "2026-09-01", period_end_date: "2026-09-04" },
+        { period_start_date: "2026-10-27" },
+      ],
+      point_events_manual_v2: [
+        { date: "2026-09-10", category: "Water", amount: 1.5 },
+        { date: "2026-09-10", category: "Water", amount: 500 },
+        { date: "2026-09-10", category: "Sleep", amount: 450 },
+        { date: "2026-09-10", category: "Note", text: "Felt great" },
+      ],
+      notes: [{ date: "2026-09-11", text: "Started new pills" }],
+    },
+  };
+  const floPreview = parseImportFile(strToU8(JSON.stringify(flo)), "flo.json", TODAY);
+  const floDays = Object.fromEntries(floPreview.days.map((d) => [d.dateKey, d]));
+  assert.equal(floDays["2026-09-10"].waterIntake, 2000);
+  assert.equal(floDays["2026-09-10"].sleepHours, 7.5);
+  assert.equal(floDays["2026-09-10"].note, "Felt great");
+  assert.equal(floDays["2026-09-11"].note, "Started new pills");
+  // The open period lasts her usual 4 days, but not past today.
+  assert.deepEqual(
+    floPreview.days.filter((d) => d.flow && d.dateKey >= "2026-10-01").map((d) => d.dateKey),
+    ["2026-10-27", "2026-10-28", "2026-10-29"],
+  );
+});
+
+test("a long note is cut to the backend's 1000 characters", () => {
+  const clue = [{ type: "notes", date: "2026-10-01", value: { text: "a".repeat(1200) } }];
+  const [day] = parseImportFile(strToU8(JSON.stringify(clue)), "measurements.json", TODAY).days;
+  assert.equal(day.note?.length, 1000);
 });
 
 test("mapOption reads tests, discharge and skin by category", () => {
@@ -127,7 +181,7 @@ test("files that aren't an export are refused with a clear message", () => {
     ImportFormatError,
   );
   assert.throws(
-    () => parseImportFile(strToU8(JSON.stringify([{ type: "pms", date: "2026-10-01", value: { option: "yes" } }])), "m.json", TODAY),
+    () => parseImportFile(strToU8(JSON.stringify([{ type: "period", date: "2026-11-05", value: { option: "light" } }])), "m.json", TODAY),
     /nothing in this file/,
   );
 });

@@ -198,8 +198,8 @@ export default function ImportData() {
         {stat(preview.periods.toLocaleString("en-IN"), preview.periods === 1 ? "period" : "periods")}
         {stat(preview.periodDays.toLocaleString("en-IN"), "period days")}
       </View>
-      {preview.unsupported.length > 0 && (
-        <Text style={muted}>Not imported, as Nura doesn&apos;t track them yet: {preview.unsupported.join(", ")}.</Text>
+      {preview.savedAsNotes.length > 0 && (
+        <Text style={muted}>Saved in each day&apos;s note, as Nura has no field for them: {preview.savedAsNotes.join(", ")}.</Text>
       )}
     </View>
   );
