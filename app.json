@@ -76,7 +76,7 @@
     },
     "web": {
       "bundler": "metro",
-      "output": "static",
+      "output": "single",
       "favicon": "./assets/images/brand/app-icon.png"
     },
     "plugins": [
