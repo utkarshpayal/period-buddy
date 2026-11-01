@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover" />
+    <title>The Nura</title>
+    <meta name="description" content="Your personal women's health companion." />
+
+    <!-- PWA: manifest + install metadata (files live in public/) -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#8E3A65" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Nura" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+
+    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
+    <style id="expo-reset">
+      /* These styles make the body full-height */
+      html,
+      body {
+        height: 100%;
+      }
+      /* These styles disable body scrolling if you are using <ScrollView> */
+      body {
+        overflow: hidden;
+        /* No browser pull-to-refresh / bounce when installed as an app */
+        overscroll-behavior: none;
+        background-color: #FBF6F8;
+      }
+      /* These styles make the root element full-height */
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+    </style>
+  <link rel="preload" href="/_expo/static/css/web-29282729d9cedfdd5a62b93bbc34958c.css" as="style"><link rel="stylesheet" href="/_expo/static/css/web-29282729d9cedfdd5a62b93bbc34958c.css"><link rel="icon" href="/favicon.ico" /></head>
+
+  <body>
+    <noscript>
+      You need to enable JavaScript to run this app.
+    </noscript>
+    <!-- The root element for your Expo app. -->
+    <div id="root"></div>
+    <script>
+      // Register the service worker for exported builds only. The Metro dev
+      // server's bundle URL carries `dev=true` and isn't content-hashed, so a
+      // cache there would serve stale code.
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", function () {
+          if (document.querySelector('script[src*="dev=true"]')) return;
+          navigator.serviceWorker.register("/sw.js").catch(function () {});
+        });
+      }
+    </script>
+  <script src="/_expo/static/js/web/entry-74d7c6c7a3e7bb1453c9f352956b100a.js" defer></script>
+</body>
+</html>
