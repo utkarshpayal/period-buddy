@@ -17,6 +17,7 @@ import Animated, { useAnimatedStyle, useReducedMotion, withTiming } from "react-
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../components/auth-context";
 import { Loader } from "../components/Loader";
+import { peekGoogleRedirectResult } from "../lib/googleWebAuth";
 import { ThemeToggle, useTheme, type ThemeColors } from "../components/theme";
 import { getScreenGradient, getShadow } from "../components/ui-tokens";
 import { useContentWidth } from "../lib/layout";
@@ -108,6 +109,18 @@ export default function Index() {
     }
   }, [isAuthenticated, isFocused, router, user?.partnerRole]);
 
+  // Web: back from Google's sign-in page (lib/googleWebAuth.ts). Reopen the
+  // login/signup screen it started from; its Google button finishes it.
+  const [googleReturn, setGoogleReturn] = useState(() => peekGoogleRedirectResult());
+  useEffect(() => {
+    if (!googleReturn || isAuthenticated) return;
+    const timer = setTimeout(() => {
+      router.push(googleReturn.returnPath as Parameters<typeof router.push>[0]);
+      setGoogleReturn(null);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [googleReturn, isAuthenticated, router]);
+
   // onScroll (not onMomentumScrollEnd) so the dots follow the swipe live.
   function onScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
     const raw = Math.round(event.nativeEvent.contentOffset.x / contentWidth);
@@ -120,7 +133,7 @@ export default function Index() {
   // render here — a logged-in user should never see the logged-out landing
   // page flash by. Show the branded loader instead while the redirect effect
   // above sends them into the app.
-  if (isAuthenticated) {
+  if (isAuthenticated || googleReturn) {
     return <Loader fullscreen label="Getting things ready…" />;
   }
 
