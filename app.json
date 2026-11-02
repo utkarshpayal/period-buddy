@@ -202,6 +202,13 @@
       },
       "eas": {
         "projectId": "b1582d15-6e00-455c-b5d9-97d0435c04af"
+      },
+      "firebaseWeb": {
+        "apiKey": "",
+        "appId": "",
+        "projectId": "the-nura-2b4a2",
+        "messagingSenderId": "916000783427",
+        "vapidKey": ""
       }
     },
     "owner": "utkarsh-payal"

@@ -4,6 +4,12 @@ import { Linking, Platform } from 'react-native';
 import { authApi, type AppNotification } from './api';
 import { showPermissionModal } from './modal-host';
 import { notificationStoreUrl, storeUrlCandidates } from './storeLink';
+import {
+  getWebPushToken,
+  needsHomeScreenForPush,
+  requestWebPushPermission,
+  webPushPermission,
+} from './webPush';
 
 // Configure notification behavior for when the app is in the foreground.
 // This module is imported statically by app/_layout.tsx (for
@@ -54,7 +60,12 @@ export type NotificationPermissionResult = { granted: boolean; canAskAgain: bool
  * permission prompt is only shown once at least one channel exists.
  */
 export async function requestNotificationPermissionAsync(): Promise<NotificationPermissionResult> {
-  if (Platform.OS === 'web') return { granted: true, canAskAgain: true };
+  if (Platform.OS === 'web') {
+    // Browser prompt (web push, lib/webPush.web.ts). Unsupported browsers
+    // and an unconfigured build answer "not granted, can't ask".
+    const permission = await requestWebPushPermission();
+    return { granted: permission === 'granted', canAskAgain: permission === 'default' };
+  }
 
   await ensureAndroidNotificationChannelAsync().catch(() => {});
 
@@ -78,7 +89,21 @@ export async function requestNotificationPermissionAsync(): Promise<Notification
  * an app update or reinstall). Returns the token, or null if unavailable.
  */
 export async function registerForPushNotificationsAsync(): Promise<string | null> {
-  if (Platform.OS === 'web') return null;
+  if (Platform.OS === 'web') {
+    // Runs on every launch without a tap, so it never prompts: browsers
+    // (Safari especially) only allow the prompt from a tap. Onboarding's
+    // finish screen and the Notifications switch ask instead.
+    try {
+      if (webPushPermission() !== 'granted') return null;
+      const token = await getWebPushToken();
+      if (!token) return null;
+      await authApi.updateFcmToken(token, 'web');
+      return token;
+    } catch (error) {
+      console.warn('Failed to register for web push:', error);
+      return null;
+    }
+  }
 
   try {
     if (!Device.isDevice) {
@@ -106,9 +131,9 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
  * never throws, and gives up after `timeoutMs` so logout is never blocked.
  */
 export async function getCurrentPushTokenQuietlyAsync(timeoutMs = 1500): Promise<string | null> {
-  if (Platform.OS === 'web') return null;
   const lookup = (async () => {
     try {
+      if (Platform.OS === 'web') return await getWebPushToken();
       if (!Device.isDevice) return null;
       const { granted } = await Notifications.getPermissionsAsync();
       if (!granted) return null;
@@ -136,7 +161,18 @@ export async function getCurrentPushTokenQuietlyAsync(timeoutMs = 1500): Promise
  * Settings page) and make sure this device's token is registered.
  */
 export async function enablePushOnDeviceAsync(): Promise<void> {
-  if (Platform.OS === 'web') return;
+  if (Platform.OS === 'web' && needsHomeScreenForPush()) {
+    showPermissionModal({
+      title: 'Add The Nura to your Home Screen',
+      message:
+        "On iPhone and iPad, notifications work once The Nura is on your Home Screen: tap Share, then Add to Home Screen, and open it from there.",
+      icon: 'notifications-outline',
+    });
+    return;
+  }
+  // A browser without web push (or a build without the Firebase web config):
+  // nothing to ask, and nothing blocked to point at.
+  if (Platform.OS === 'web' && webPushPermission() === 'unsupported') return;
   try {
     const { granted, canAskAgain } = await requestNotificationPermissionAsync();
     if (!granted) {
@@ -146,7 +182,9 @@ export async function enablePushOnDeviceAsync(): Promise<void> {
       showPermissionModal({
         title: 'Notifications are blocked',
         message:
-          "Allow notifications for The Nura in your phone's Settings to get period, ovulation and reminder alerts.",
+          Platform.OS === 'web'
+            ? "Allow notifications for this site in your browser's settings (the icon beside the address) to get period, ovulation and reminder alerts."
+            : "Allow notifications for The Nura in your phone's Settings to get period, ovulation and reminder alerts.",
         icon: 'notifications-outline',
       });
       return;

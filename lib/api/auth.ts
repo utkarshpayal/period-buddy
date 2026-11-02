@@ -156,9 +156,11 @@ export const authApi = {
       force: opts.force,
     }),
 
-  updateFcmToken: (token: string) =>
+  // `platform: "web"` stores a browser (web app / PWA) token next to the
+  // phone's instead of replacing it.
+  updateFcmToken: (token: string, platform?: "web") =>
     apiEnvelopeRequest<{ notificationToken: string }>("/api/auth/fcm-token", {
-      body: JSON.stringify({ token }),
+      body: JSON.stringify(platform ? { token, platform } : { token }),
       method: "POST",
     }),
 

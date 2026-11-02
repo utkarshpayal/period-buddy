@@ -33,7 +33,7 @@ the shared `ApiError` shape (`kind`: `network`/`timeout`/`server`/
 | POST | `/api/auth/onboarding` | Save cycle length/last period/goals after signup |
 | GET | `/api/auth/profile` | Get the current user |
 | PUT | `/api/auth/profile` | Update profile fields (`profileApi` wraps this and `GET` above) |
-| POST | `/api/auth/fcm-token` | Register a push-notification device token |
+| POST | `/api/auth/fcm-token` | Register a push-notification device token (`{ token }` for the phone; `{ token, platform: "web" }` adds a browser token next to it) |
 | POST | `/api/auth/change-password` | Change password (signs out every other device) |
 | DELETE | `/api/auth/delete-account` | Delete account: signed out and hidden at once, erased 30 days later |
 | GET | `/api/auth/dashboard` | Streak/wallet/summary — the single source `useUserStats.ts` fetches once and shares |

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { RefreshControl, ScrollView, StatusBar, Switch, Text, View } from "react-native";
+import { Platform, RefreshControl, ScrollView, StatusBar, Switch, Text, View } from "react-native";
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ScreenHeader, SectionHeader } from "../../components/ScreenHeader";
@@ -18,6 +18,7 @@ import {
   type NotificationPreferences,
 } from "../../lib/api";
 import { enablePushOnDeviceAsync } from "../../lib/notifications";
+import { needsHomeScreenForPush, webPushPermission, webPushSupported } from "../../lib/webPush";
 import { haptics } from "../../lib/haptics";
 import { showErrorToast } from "../../lib/toast";
 
@@ -75,6 +76,12 @@ export default function NotificationSettingsScreen() {
   const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [refreshing, setRefreshing] = useState(false);
+  // Web: whether this browser may show notifications (web push).
+  const [browserPush, setBrowserPush] = useState(() => webPushPermission());
+  const turnOnBrowserPush = useCallback(async () => {
+    await enablePushOnDeviceAsync();
+    setBrowserPush(webPushPermission());
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -169,19 +176,45 @@ export default function NotificationSettingsScreen() {
               </View>
               <View className="flex-1">
                 <Text style={{ fontSize: 16, fontWeight: "800", color: colors.foreground, fontFamily: fonts.heading }}>Allow notifications</Text>
-                <Text style={helper}>{pushOn ? "Reminders come to this phone" : "You'll only see them in the app"}</Text>
+                <Text style={helper}>
+                  {pushOn
+                    ? Platform.OS === "web"
+                      ? "Reminders come to this device"
+                      : "Reminders come to this phone"
+                    : "You'll only see them in the app"}
+                </Text>
               </View>
               <Switch
                 accessibilityLabel="Allow notifications"
                 value={pushOn}
                 onValueChange={(v) => {
-                  if (v) enablePushOnDeviceAsync();
+                  if (v) turnOnBrowserPush();
                   save({ ...prefs, push: v }, { push: v });
                 }}
                 {...switchProps}
               />
             </View>
           </ListGroup>
+
+          {Platform.OS === "web" && pushOn
+            ? needsHomeScreenForPush()
+              ? note(
+                  "phone-portrait-outline",
+                  "On iPhone and iPad, notifications work once The Nura is on your Home Screen: Share, then Add to Home Screen.",
+                )
+              : webPushSupported() && browserPush === "default"
+                ? note(
+                    "notifications-outline",
+                    "Turn on notifications in this browser to get reminders here too.",
+                    <Button label="Turn on" size="sm" variant="tonal" onPress={turnOnBrowserPush} style={{ alignSelf: "flex-start" }} />,
+                  )
+                : webPushSupported() && browserPush === "denied"
+                  ? note(
+                      "notifications-off-outline",
+                      "Notifications are blocked for this site. Allow them in your browser's settings to get reminders here.",
+                    )
+                  : null
+            : null}
 
           {!prefs.cycleSetUp
             ? note(
