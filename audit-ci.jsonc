@@ -23,9 +23,13 @@
     // person's own question are rendered. Fixed in markdown-it 14, which
     // react-native-markdown-display 7 doesn't support.
     "GHSA-r7fv-28h4-cvq7",
-    // node-forge (via the Expo CLI's dev-server HTTPS certs): lax RSA
-    // signature checks. Runs only on a developer's machine, never in the
-    // app. No fixed release yet (1.4.0 is the latest).
-    "GHSA-86w9-cpqp-85rv"
+    // decode-uri-component 0.2 (via query-string 7, via expo-router): slow
+    // (quadratic) decoding of a crafted, very long percent-encoded string.
+    // expo-router decodes our own route URLs and deep links, and incoming
+    // links are first matched against SHAREABLE_ROUTES (lib/deeplink.ts);
+    // the worst case is a slow tap on a hand-made link, no data exposure.
+    // Fixed only in 0.5.1, which is ESM-only and can't be loaded by
+    // query-string 7's require(); goes away with an expo-router upgrade.
+    "GHSA-qr28-fpjm-wq7f"
   ]
 }
