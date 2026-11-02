@@ -36,7 +36,62 @@
         height: 100%;
         flex: 1;
       }
+
+      /* Bear loader shown from the first paint until the app has drawn
+         (app/_layout.tsx removes it), so a load or reload never shows a blank
+         page. Same look as components/Loader.tsx; colours from theme.tsx. */
+      :root {
+        --splash-bg: #FBF6F8;
+        --splash-primary: #D22E66;
+        --splash-accent: #9FD8C9;
+        --splash-border: #EADCE2;
+        --splash-feature: #FFFFFF;
+      }
+      :root[data-theme="dark"] {
+        --splash-bg: #1B1424;
+        --splash-primary: #F48FB5;
+        --splash-accent: #8FD9C4;
+        --splash-border: #4A3D58;
+        --splash-feature: #2A1020;
+      }
+      :root[data-theme="dark"] body { background-color: #1B1424; }
+      #app-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483647;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: var(--splash-bg);
+        transition: opacity 220ms ease-out;
+      }
+      #app-splash.app-splash-hide { opacity: 0; pointer-events: none; }
+      .app-splash-box { position: relative; width: 88px; height: 88px; display: flex; align-items: center; justify-content: center; }
+      .app-splash-halo {
+        position: absolute; inset: 0; border-radius: 50%;
+        background-color: var(--splash-primary);
+        animation: app-splash-halo 1.6s ease-in-out infinite;
+      }
+      .app-splash-ring { position: absolute; inset: 0; animation: app-splash-spin 1.4s linear infinite; }
+      @keyframes app-splash-spin { to { transform: rotate(360deg); } }
+      @keyframes app-splash-halo {
+        0%, 100% { opacity: 0.2; transform: scale(1.025); }
+        50% { opacity: 0.4; transform: scale(1.15); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .app-splash-ring, .app-splash-halo { animation: none; }
+        .app-splash-halo { opacity: 0.2; }
+      }
     </style>
+    <script>
+      // Match the splash to the theme the app will open in (AsyncStorage on
+      // web is localStorage; key from components/theme.tsx).
+      try {
+        if (localStorage.getItem("period-buddy.theme-mode") === "dark") {
+          document.documentElement.setAttribute("data-theme", "dark");
+        }
+      } catch (e) {}
+    </script>
   </head>
 
   <body>
@@ -45,10 +100,40 @@
     </noscript>
     <!-- The root element for your Expo app. -->
     <div id="root"></div>
+    <div id="app-splash" role="progressbar" aria-label="Loading The Nura">
+      <div class="app-splash-box">
+        <div class="app-splash-halo"></div>
+        <svg class="app-splash-ring" width="88" height="88" viewBox="0 0 88 88" aria-hidden="true">
+          <defs>
+            <linearGradient id="app-splash-arc" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" style="stop-color: var(--splash-primary)" />
+              <stop offset="1" style="stop-color: var(--splash-accent); stop-opacity: 0.15" />
+            </linearGradient>
+          </defs>
+          <circle cx="44" cy="44" r="40.92" fill="none" style="stroke: var(--splash-border)" stroke-width="6.16" opacity="0.6" />
+          <circle cx="44" cy="44" r="40.92" fill="none" stroke="url(#app-splash-arc)" stroke-width="6.16" stroke-linecap="round" stroke-dasharray="180 258" />
+        </svg>
+        <svg width="44" height="44" viewBox="0 0 100 100" aria-hidden="true" style="position: relative">
+          <circle cx="22" cy="22" r="14" style="fill: var(--splash-primary)" />
+          <circle cx="78" cy="22" r="14" style="fill: var(--splash-primary)" />
+          <circle cx="50" cy="54" r="38" style="fill: var(--splash-primary)" />
+          <circle cx="36" cy="50" r="4.2" style="fill: var(--splash-feature)" />
+          <circle cx="64" cy="50" r="4.2" style="fill: var(--splash-feature)" />
+          <ellipse cx="50" cy="64" rx="7" ry="5" style="fill: var(--splash-accent)" />
+        </svg>
+      </div>
+    </div>
     <script>
       // Register the service worker for exported builds only. The Metro dev
       // server's bundle URL carries `dev=true` and isn't content-hashed, so a
       // cache there would serve stale code.
+      // Safety net: never leave the loader over the page if the app fails to
+      // start (an error screen is better than a loader that spins forever).
+      setTimeout(function () {
+        var splash = document.getElementById("app-splash");
+        if (splash) splash.remove();
+      }, 20000);
+
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", function () {
           if (document.querySelector('script[src*="dev=true"]')) return;
