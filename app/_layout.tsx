@@ -37,10 +37,13 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { Image as ExpoImage } from "expo-image";
 import { stackScreenOptions } from "../components/motion";
 import { captureGoogleRedirect } from "../lib/googleWebAuth";
+import { captureWebPushTap, subscribeWebPushEvents, takeWebPushTap } from "../lib/webPush";
 
 // Web: read Google's sign-in answer from the URL before the router renders
 // and clear it from the address bar (see lib/googleWebAuth.ts).
 captureGoogleRedirect();
+// Web: a push tapped while no tab was open arrives as ?nuraPush=… (public/sw.js).
+captureWebPushTap();
 
 // Web: fades out and removes public/index.html's bear loader (#app-splash),
 // the web stand-in for the native splash screen.
@@ -202,6 +205,18 @@ function AppShell() {
       subscription.remove();
       received.remove();
     };
+  }, []);
+
+  // Web push (public/sw.js): a tap queues its data exactly like a phone tap
+  // above, and a push arriving refreshes unread badges.
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const initialTap = takeWebPushTap();
+    if (initialTap) setPendingNotification(initialTap);
+    return subscribeWebPushEvents({
+      onTap: (data) => setPendingNotification(data),
+      onReceived: () => emitDataChange("notifications"),
+    });
   }, []);
 
   // Open a queued notification only once the navigator exists, the user is

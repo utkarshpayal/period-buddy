@@ -4,7 +4,7 @@
 // opens offline. It never caches API responses or anything cross-origin:
 // health data stays on the server and in the app's own storage. Bump
 // CACHE_VERSION to drop old caches after a change to this file.
-const CACHE_VERSION = "v1";
+const CACHE_VERSION = "v2";
 const SHELL_CACHE = `nura-shell-${CACHE_VERSION}`;
 const STATIC_CACHE = `nura-static-${CACHE_VERSION}`;
 
@@ -76,4 +76,54 @@ self.addEventListener("fetch", (event) => {
       ),
     );
   }
+});
+
+// ---- Web push (lib/webPush.web.ts) ----
+// FCM delivers each push here as JSON: { notification: { title, body, image },
+// data: { route, type, ... } }. Show it, and tell open tabs so their unread
+// badges refresh. A tap focuses an open tab and hands it the data, so the app
+// routes it exactly like a phone tap (resolveNotificationTarget); with no tab
+// open, it opens the app with ?nuraPush=<data> (lib/webPushData.ts).
+self.addEventListener("push", (event) => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch (e) {
+    payload = {};
+  }
+  const notification = payload.notification || {};
+  const data = payload.data || {};
+  const title = notification.title || data.title || "The Nura";
+  const options = {
+    body: notification.body || data.body || "",
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    data,
+    tag: data.notificationId || undefined,
+  };
+  if (notification.image || data.image) options.image = notification.image || data.image;
+
+  event.waitUntil(
+    Promise.all([
+      self.registration.showNotification(title, options),
+      self.clients
+        .matchAll({ type: "window", includeUncontrolled: true })
+        .then((tabs) => tabs.forEach((tab) => tab.postMessage({ type: "nura-push-received" }))),
+    ]),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const data = event.notification.data || {};
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((tabs) => {
+      const tab = tabs.find((t) => new URL(t.url).origin === self.location.origin);
+      if (tab) {
+        tab.postMessage({ type: "nura-push-tap", data });
+        return tab.focus();
+      }
+      return self.clients.openWindow("/?nuraPush=" + encodeURIComponent(JSON.stringify(data)));
+    }),
+  );
 });
