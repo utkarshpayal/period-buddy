@@ -2,7 +2,7 @@
   "expo": {
     "name": "The Nura",
     "slug": "thenuracare",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "orientation": "portrait",
     "icon": "./assets/images/brand/app-icon.png",
     "splash": {
