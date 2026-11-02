@@ -2,7 +2,7 @@ import * as AuthSession from "expo-auth-session";
 import Constants from "expo-constants";
 import * as Google from "expo-auth-session/providers/google";
 import * as WebBrowser from "expo-web-browser";
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Text, View, Platform } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { PressableScale } from "./PressableScale";
@@ -11,6 +11,7 @@ import { googleAuth } from "../lib/auth";
 import type { AuthUser } from "../lib/api";
 import { useTheme } from "./theme";
 import { getFriendlyErrorMessage } from "../lib/api";
+import { GOOGLE_DENIED_MESSAGE, startGoogleRedirect, takeGoogleRedirectResult } from "../lib/googleWebAuth";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -92,7 +93,67 @@ export function GoogleSignInButton({
     // app correctly without needing an override here.
   });
 
+  // Latest callbacks for the one-time web redirect effect below.
+  const callbacks = useRef({ onError, onSuccess, onBusyChange });
+  callbacks.current = { onError, onSuccess, onBusyChange };
+
+  // Hands Google's ID token to the backend and reports the session. Returns
+  // true when signed in.
+  const finishWithIdToken = useCallback(async (idToken: string, signInRole?: string) => {
+    const { onError: fail, onSuccess: done } = callbacks.current;
+    const authResult = await googleAuth({ idToken, role: signInRole });
+    if (!authResult.token || !authResult.data) {
+      fail("Signed in with Google, but no session was returned.");
+      return false;
+    }
+    done({ token: authResult.token, user: authResult.data });
+    return true;
+  }, []);
+
+  // Web: Google sent the whole page back here (lib/googleWebAuth.ts). Finish
+  // the sign-in this screen started before it left.
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const result = takeGoogleRedirectResult();
+    if (!result) return;
+    if (result.kind === "error") {
+      callbacks.current.onError(result.message);
+      return;
+    }
+    let succeeded = false;
+    setIsExchanging(true);
+    callbacks.current.onBusyChange?.(true);
+    finishWithIdToken(result.idToken, result.role ?? role)
+      .then((ok) => {
+        succeeded = ok;
+      })
+      .catch((error) => callbacks.current.onError(getFriendlyErrorMessage(error)))
+      .finally(() => {
+        setIsExchanging(false);
+        if (!succeeded) callbacks.current.onBusyChange?.(false);
+      });
+    // Runs once per mount; `role` is only the fallback for an old pending entry.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finishWithIdToken]);
+
   const handlePress = async () => {
+    // Web and the installed PWA: a full-page redirect instead of the popup,
+    // which can't report back from an installed PWA (see lib/googleWebAuth.ts).
+    if (Platform.OS === "web") {
+      if (!WEB_CLIENT_ID) {
+        onError("Google sign-in isn't set up for the web app yet.");
+        return;
+      }
+      setIsExchanging(true);
+      try {
+        startGoogleRedirect({ clientId: WEB_CLIENT_ID, role });
+      } catch (error) {
+        setIsExchanging(false);
+        onError(getFriendlyErrorMessage(error));
+      }
+      return;
+    }
+
     let succeeded = false;
     try {
       const result = await promptAsync();
@@ -107,9 +168,7 @@ export function GoogleSignInButton({
         // match what's registered in Google Cloud Console). We can't tell
         // those apart client-side, so point at both.
         if (result.error?.code === "access_denied") {
-          onError(
-            "Google denied this sign-in. If you tapped \"Cancel\" or \"Deny\", try again and allow access. Otherwise this app's Google sign-in isn't authorized yet for your account — contact support.",
-          );
+          onError(GOOGLE_DENIED_MESSAGE);
         } else {
           onError(result.error?.message || "Google sign-in failed. Please try again.");
         }
@@ -143,13 +202,7 @@ export function GoogleSignInButton({
         return;
       }
 
-      const authResult = await googleAuth({ idToken, role });
-      if (!authResult.token || !authResult.data) {
-        onError("Signed in with Google, but no session was returned.");
-        return;
-      }
-      succeeded = true;
-      onSuccess({ token: authResult.token, user: authResult.data });
+      succeeded = await finishWithIdToken(idToken, role);
     } catch (error) {
       onError(
         getFriendlyErrorMessage(error),
@@ -164,7 +217,8 @@ export function GoogleSignInButton({
 
   if (!isConfigured) return null;
 
-  const isBusy = disabled || isExchanging || !request;
+  // The web redirect doesn't use expo-auth-session's request object.
+  const isBusy = disabled || isExchanging || (Platform.OS !== "web" && !request);
 
   return (
     <PressableScale

@@ -36,6 +36,11 @@ import { ScreenPrivacySync } from "../lib/screenPrivacy";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { Image as ExpoImage } from "expo-image";
 import { stackScreenOptions } from "../components/motion";
+import { captureGoogleRedirect } from "../lib/googleWebAuth";
+
+// Web: read Google's sign-in answer from the URL before the router renders
+// and clear it from the address bar (see lib/googleWebAuth.ts).
+captureGoogleRedirect();
 
 // The payload's data fields. The type normally arrives in content.data, but
 // on Android a notification displayed by the FCM SDK itself (app
