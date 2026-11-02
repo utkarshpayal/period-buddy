@@ -42,6 +42,19 @@ import { captureGoogleRedirect } from "../lib/googleWebAuth";
 // and clear it from the address bar (see lib/googleWebAuth.ts).
 captureGoogleRedirect();
 
+// Web: fades out and removes public/index.html's bear loader (#app-splash),
+// the web stand-in for the native splash screen.
+function hideWebSplash() {
+  if (Platform.OS !== "web" || typeof document === "undefined") return;
+  const splash = document.getElementById("app-splash");
+  if (!splash) return;
+  // After the app's first frame is on screen, so there's no blank gap.
+  requestAnimationFrame(() => {
+    splash.classList.add("app-splash-hide");
+    setTimeout(() => splash.remove(), 260);
+  });
+}
+
 // The payload's data fields. The type normally arrives in content.data, but
 // on Android a notification displayed by the FCM SDK itself (app
 // killed/backgrounded) may only carry it in the raw RemoteMessage data.
@@ -220,6 +233,7 @@ function AppShell() {
   useEffect(() => {
     if (hasHydrated) {
       SplashScreen.hideAsync().catch(() => {});
+      hideWebSplash();
     }
   }, [hasHydrated]);
 
